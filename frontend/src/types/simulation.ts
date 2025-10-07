@@ -12,6 +12,7 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~
   name: string;
   caseName: string;
+  description: string | null;
   versionTag?: string | null;
   gitHash?: string | null;
   compset: string;
@@ -40,8 +41,9 @@ export interface SimulationCreate {
 
   // Metadata & audit
   // ~~~~~~~~~~~~~~~~~
-  notesMarkdown?: string | null;
+  keyFeatures?: string | null;
   knownIssues?: string | null;
+  notesMarkdown?: string | null;
 
   // Version control
   // ~~~~~~~~~~~~~~~
@@ -73,6 +75,7 @@ export interface SimulationOut {
   id: string;
   name: string;
   caseName: string;
+  description: string | null;
   versionTag?: string | null;
   gitHash?: string | null;
   compset: string;
@@ -132,5 +135,5 @@ export interface SimulationOut {
  * Adds a joined machine record for frontend convenience.
  */
 export type Simulation = SimulationOut & {
-  machine: Machine | null;
+  machine: Machine
 };

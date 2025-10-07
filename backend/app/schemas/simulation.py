@@ -13,6 +13,7 @@ class SimulationCreate(CamelInModel):
     # ~~~~~~~~~~~~~~
     name: str
     case_name: str
+    description: str | None = None
     version_tag: str | None = None
     git_hash: str | None = None
     compset: str
@@ -41,8 +42,9 @@ class SimulationCreate(CamelInModel):
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
-    notes_markdown: str | None = None
+    key_features: str | None = None
     known_issues: str | None = None
+    notes_markdown: str | None = None
 
     # Version control
     # ~~~~~~~~~~~~~~~
@@ -72,6 +74,7 @@ class SimulationOut(CamelOutModel):
     id: UUID
     name: str
     case_name: str
+    description: str | None = None
     version_tag: str | None = None
     git_hash: str | None = None
     compset: str
@@ -101,8 +104,9 @@ class SimulationOut(CamelOutModel):
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
-    notes_markdown: str | None = None
+    key_features: str | None = None
     known_issues: str | None = None
+    notes_markdown: str | None = None
 
     # Version control
     # ~~~~~~~~~~~~~~~

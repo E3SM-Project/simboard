@@ -23,6 +23,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # ~~~~~~~~~~~~~~
     name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
     case_name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     version_tag: Mapped[str | None] = mapped_column(String(100))
     git_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     compset: Mapped[str] = mapped_column(String(120))
@@ -59,8 +60,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
-    notes_markdown: Mapped[str | None] = mapped_column(Text)
+    key_features: Mapped[str | None] = mapped_column(Text)
     known_issues: Mapped[str | None] = mapped_column(Text)
+    notes_markdown: Mapped[str | None] = mapped_column(Text)
 
     # Version control
     # ~~~~~~~~~~~~~~~
