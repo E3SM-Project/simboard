@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from app.db.artifact import Artifact
     from app.db.link import ExternalLink
     from app.db.machine import Machine
-    from app.db.variable import Variable
 
 
 class Simulation(Base, IDMixin, TimestampMixin):
@@ -89,11 +88,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"
-    )
-
-    # NOTE: This can be stored in extra. It is currently not used.
-    variables: Mapped[list[Variable]] = relationship(
-        secondary="simulation_variables", back_populates="simulations"
     )
 
     # Constraints
