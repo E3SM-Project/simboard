@@ -66,6 +66,35 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
     ]);
     setNewComment('');
   };
+  const links = simulation.links.reduce(
+    (acc, link) => {
+      const kind = link.kind;
+      if (!acc[kind]) {
+        acc[kind] = [];
+      }
+      acc[kind].push({
+        url: link.url,
+        label: link.label || link.url,
+      });
+      return acc;
+    },
+    {} as Record<string, { url: string; label: string }[]>,
+  );
+
+  const artifacts = simulation.artifacts.reduce(
+    (acc, artifact) => {
+      const kind = artifact.kind;
+      if (!acc[kind]) {
+        acc[kind] = [];
+      }
+      acc[kind].push({
+        uri: artifact.uri,
+        label: artifact.label || artifact.uri,
+      });
+      return acc;
+    },
+    {} as Record<string, { uri: string; label: string }[]>,
+  );
 
   // -------------------- Render --------------------
   return (
@@ -163,10 +192,12 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                 <FieldRow label="Experiment Type ID">
                   <ReadonlyInput value={simulation.experimentTypeId} />
                 </FieldRow>
+
                 <FieldRow label="Machine ID">
-                  <ReadonlyInput value={simulation.machine.name} />
+                  {/* FIXME: Need to attach machine to the simulation */}
+                  {/* <ReadonlyInput value={simulation.machine.name} /> */}
                 </FieldRow>
-                <FieldRow label="Variables">
+                {/* <FieldRow label="Variables">
                   {simulation.variables && simulation.variables.length ? (
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{simulation.variables.length}</span>
@@ -192,7 +223,7 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                   ) : (
                     <span className="text-sm">—</span>
                   )}
-                </FieldRow>
+                </FieldRow> */}
                 <FieldRow label="Branch">
                   <ReadonlyInput value={simulation.branch ?? undefined} />
                 </FieldRow>
@@ -211,53 +242,115 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
               </CardContent>
             </Card>
           </div>
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Timeline</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <FieldRow label="Model Start">
-                <span className="text-sm">
-                  {simulation.modelStartDate ? formatDate(simulation.modelStartDate) : '—'}
-                </span>
-              </FieldRow>
-              <FieldRow label="Model End">
-                <span className="text-sm">
-                  {simulation.modelEndDate ? formatDate(simulation.modelEndDate) : '—'}
-                </span>
-              </FieldRow>
-              <FieldRow label="Duration">
-                <span className="text-sm">
-                  {simulation.modelStartDate && simulation.modelEndDate
-                    ? (() => {
-                        return getSimulationDuration(
-                          simulation.modelStartDate,
-                          simulation.modelEndDate,
-                        );
-                      })()
-                    : '—'}
-                </span>
-              </FieldRow>
-              {simulation.calendarStartDate && (
-                <FieldRow label="Calendar Start">
-                  <span className="text-sm">{formatDate(simulation.calendarStartDate)}</span>
-                </FieldRow>
-              )}
-            </CardContent>
-          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Diagnostics & Performance</CardTitle>
-                </div>
+                <CardTitle className="text-base">Timeline</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="mb-4">
+              <CardContent className="space-y-2">
+                <FieldRow label="Simulation Start Date">
+                  <span className="text-sm">
+                    {simulation.simulationStartDate
+                      ? formatDate(simulation.simulationStartDate)
+                      : '—'}
+                  </span>
+                </FieldRow>
+                <FieldRow label="Simulation End Date">
+                  <span className="text-sm">
+                    {simulation.simulationEndDate ? formatDate(simulation.simulationEndDate) : '—'}
+                  </span>
+                </FieldRow>
+                <FieldRow label="Total Duration">
+                  <span className="text-sm">
+                    {simulation.simulationStartDate && simulation.simulationEndDate
+                      ? (() => {
+                          return getSimulationDuration(
+                            simulation.simulationStartDate,
+                            simulation.simulationEndDate,
+                          );
+                        })()
+                      : '—'}
+                  </span>
+                </FieldRow>
+                {simulation.runStartDate && (
+                  <FieldRow label="Run Start Date">
+                    <span className="text-sm">{formatDate(simulation.runStartDate)}</span>
+                  </FieldRow>
+                )}
+                {simulation.runEndDate && (
+                  <FieldRow label="Run End Date">
+                    <span className="text-sm">{formatDate(simulation.runEndDate)}</span>
+                  </FieldRow>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Provenance</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Created:</Label>
+                  <span className="text-sm">
+                    {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
+                  </span>
+                  {simulation.createdBy && (
+                    <span className="text-sm">by {simulation.createdBy}</span>
+                  )}
+                </div>
+                {/* Last edited row */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Last edited:
+                  </Label>
+                  <span className="text-sm">
+                    {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
+                  </span>
+                  {simulation.lastUpdatedBy && (
+                    <span className="text-sm">by {simulation.lastUpdatedBy}</span>
+                  )}
+                </div>
+                {/* Simulation UUID row */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Simulation UUID:
+                  </Label>
+                  <ReadonlyInput
+                    value={
+                      simulation.id
+                        ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`
+                        : undefined
+                    }
+                  />
+                  {simulation.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(simulation.id)}
+                      title="Copy full Simulation ID"
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">External Resources</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
                   <Label className="mb-1 block text-sm">Diagnostics</Label>
-                  {simulation.diagnosticLinks?.length ? (
+                  {links.diagnostic?.length ? (
                     <ul className="list-disc pl-5 text-sm">
-                      {simulation.diagnosticLinks.map((d) => (
+                      {links.diagnostic.map((d) => (
                         <li key={d.url} className="flex items-center gap-2">
                           <a
                             className="text-blue-600 hover:underline flex items-center gap-1"
@@ -288,15 +381,15 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                     </ul>
                   ) : (
                     <div className="mb-2 text-sm text-muted-foreground">
-                      Diagnostics will appear here once available.
+                      Links to diagnostics will appear here once available.
                     </div>
                   )}
                 </div>
                 <div>
                   <Label className="mb-1 block text-sm">Performance</Label>
-                  {simulation.paceLinks?.length ? (
+                  {links.performance?.length ? (
                     <ul className="list-disc pl-5 text-sm">
-                      {simulation.paceLinks.map((p) => (
+                      {links.performance.map((p) => (
                         <li key={p.url} className="flex items-center gap-2">
                           <a
                             className="text-blue-600 hover:underline flex items-center gap-1"
@@ -327,65 +420,52 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                     </ul>
                   ) : (
                     <div className="mb-2 text-sm text-muted-foreground">
-                      Performance metrics will appear here once available.
+                      Links to performance metrics will appear here once available.
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Provenance</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">Upload:</Label>
-                  <span className="text-sm">
-                    {simulation.uploadDate ? formatDate(simulation.uploadDate) : '—'}
-                  </span>
-                  {simulation.uploadedBy && (
-                    <span className="text-sm">by {simulation.uploadedBy}</span>
-                  )}
-                </div>
-                {/* Last edited row */}
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">
-                    Last edited:
-                  </Label>
-                  <span className="text-sm">
-                    {simulation.lastEditedAt ? formatDate(simulation.lastEditedAt) : '—'}
-                  </span>
-                  {simulation.lastEditedBy && (
-                    <span className="text-sm">by {simulation.lastEditedBy}</span>
-                  )}
-                </div>
-                {/* Simulation ID row */}
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">
-                    Simulation ID:
-                  </Label>
-                  <ReadonlyInput
-                    value={
-                      simulation.id
-                        ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`
-                        : undefined
-                    }
-                  />
-                  {simulation.id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(simulation.id)}
-                      title="Copy full Simulation ID"
-                    >
-                      Copy
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              <div>
+                {Object.entries(links)
+                  .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
+                  .map(([key, linkList]) => (
+                    <div key={key} className="mb-4">
+                      <h4 className="text-sm font-medium capitalize">{key}</h4>
+                      <ul className="list-disc pl-5 text-sm">
+                        {linkList.map((link) => (
+                          <li key={link.url} className="flex items-center gap-2">
+                            <a
+                              className="text-blue-600 hover:underline flex items-center gap-1"
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                className="inline-block"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                />
+                              </svg>
+                              {link.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Notes</CardTitle>
@@ -452,24 +532,32 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
         </TabsContent>
         <TabsContent value="outputs" className="space-y-6">
           <SimulationPathCard
-            title="Output Path"
-            paths={simulation.outputPath ? [simulation.outputPath] : []}
-            emptyText="No output path available."
+            kind="output"
+            title="Output Paths"
+            description="These are the primary output files generated by the simulation."
+            paths={artifacts.output?.map((artifact) => artifact.uri) || []}
+            emptyText="No output paths available."
           />
           <SimulationPathCard
+            kind="archive"
             title="Archive Paths"
-            paths={simulation.archivePaths || []}
-            emptyText="No archive path available."
+            description="These paths contain archived data files from the simulation."
+            paths={artifacts.archive?.map((artifact) => artifact.uri) || []}
+            emptyText="No archive artifacts available."
           />
           <SimulationPathCard
+            kind="runScript"
             title="Run Script Paths"
-            paths={simulation.runScriptPaths || []}
-            emptyText="No run script path available."
+            description="Scripts used to run the simulation."
+            paths={artifacts.runScript?.map((artifact) => artifact.uri) || []}
+            emptyText="No run script artifacts available."
           />
           <SimulationPathCard
-            title="Batch Logs"
-            paths={simulation.batchLogPaths || []}
-            emptyText="No batch logs available."
+            kind="batchLog"
+            title="Batch Log Paths"
+            description="Log files generated during the batch processing of the simulation."
+            paths={artifacts.batchLog?.map((artifact) => artifact.uri) || []}
+            emptyText="No batch log artifacts available."
           />
         </TabsContent>
         <TabsContent value="versionControl" className="space-y-6">
@@ -490,10 +578,6 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
               <FieldRow label="Branch">
                 <ReadonlyInput value={simulation.branch ?? undefined} />
               </FieldRow>
-              <FieldRow label="Branch Time">
-                <ReadonlyInput value={simulation.branchTime ?? undefined} />
-              </FieldRow>
-
               {simulation.externalRepoUrl && (
                 <Button asChild variant="outline" size="sm">
                   <a href={simulation.externalRepoUrl} target="_blank" rel="noopener noreferrer">

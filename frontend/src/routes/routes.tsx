@@ -23,10 +23,30 @@ const SimulationDetailsRoute = () => {
 
   const { data: simulation, loading, error } = useSimulation(id || '');
 
-  if (!id) return <div className="p-8">Invalid simulation ID</div>;
-  if (loading) return <div className="p-8">Loading simulation details...</div>;
-  if (error) return <div className="p-8 text-red-600">Error: {error}</div>;
-  if (!simulation) return <div className="p-8">Simulation not found</div>;
+  if (!id)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Invalid simulation ID</div>
+      </div>
+    );
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Loading simulation details...</div>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-red-600">Error: {error}</div>
+      </div>
+    );
+  if (!simulation)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Simulation not found</div>
+      </div>
+    );
 
   return <SimulationDetails simulation={simulation} />;
 };
