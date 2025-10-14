@@ -5,14 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { AIFloatingButton } from '@/pages/Compare/AIFloatingButton';
 import CompareToolbar from '@/pages/Compare/CompareToolbar';
 import { norm, renderCellValue } from '@/pages/Compare/utils';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 interface CompareProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: Simulation[];
+  selectedSimulations: SimulationOut[];
 }
 
 const Compare = ({
@@ -52,19 +52,19 @@ const Compare = ({
   // -------------------- Derived Data --------------------
   const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedSimulationIds[colIdx]));
 
-  const getSimProp = <K extends keyof Simulation>(
+  const getSimProp = <K extends keyof SimulationOut>(
     id: string,
     prop: K,
-    fallback: Simulation[K] | '',
-  ): Simulation[K] => {
+    fallback: SimulationOut[K] | '',
+  ): SimulationOut[K] => {
     const sim = selectedSimulations.find((s) => s.id === id);
-    return (sim?.[prop] ?? fallback) as Simulation[K];
+    return (sim?.[prop] ?? fallback) as SimulationOut[K];
   };
 
-  const makeMetricRow = <T extends keyof Simulation>(
+  const makeMetricRow = <T extends keyof SimulationOut>(
     label: string,
     prop: T,
-    fallback: Simulation[T] | '' = '',
+    fallback: SimulationOut[T] | '' = '',
   ) => ({
     label,
     values: selectedSimulationIds.map((id) => getSimProp(id, prop, fallback)),
@@ -83,7 +83,7 @@ const Compare = ({
     configuration: [
       makeMetricRow('Simulation Name', 'name', ''),
       makeMetricRow('Case Name', 'caseName', ''),
-      makeMetricRow('Model Version', 'versionTag', ''),
+      makeMetricRow('Model Version', 'gitTag', ''),
       makeMetricRow('Compset', 'compset', ''),
       makeMetricRow('Grid Name', 'gridName', ''),
       makeMetricRow('Grid Resolution', 'gridResolution', ''),
@@ -103,35 +103,35 @@ const Compare = ({
           return sim?.machine?.name ?? '';
         }),
       },
-      {
-        label: 'Variables',
-        values: selectedSimulationIds.map((id) => {
-          const sim = selectedSimulations.find((s) => s.id === id);
-          return Array.isArray(sim?.variables) && sim.variables.length ? sim.variables : [];
-        }),
-      },
-      makeMetricRow('Branch', 'branch', ''),
+      // {
+      //   label: 'Variables',
+      //   values: selectedSimulationIds.map((id) => {
+      //     const sim = selectedSimulations.find((s) => s.id === id);
+      //     return Array.isArray(sim?.variables) && sim.variables.length ? sim.variables : [];
+      //   }),
+      // },
+      makeMetricRow('Branch', 'gitBranch', ''),
     ],
     timeline: [
       {
         label: 'Model Start',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'modelStartDate', '');
+          const date = getSimProp(id, 'simulationStartDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
       {
         label: 'Model End',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'modelEndDate', '');
+          const date = getSimProp(id, 'simulationEndDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
       {
         label: 'Duration',
         values: selectedSimulationIds.map((id) => {
-          const start = getSimProp(id, 'modelStartDate', '');
-          const end = getSimProp(id, 'modelEndDate', '');
+          const start = getSimProp(id, 'simulationStartDate', '');
+          const end = getSimProp(id, 'simulationEndDate', '');
           if (start && end) {
             try {
               return getSimulationDuration(start as string, end as string);
@@ -145,7 +145,7 @@ const Compare = ({
       {
         label: 'Calendar Start',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'calendarStartDate', '');
+          const date = getSimProp(id, 'runStartDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
@@ -168,9 +168,9 @@ const Compare = ({
     performance: [makeMetricRow('PACE Links', 'paceLinks', [])],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
-      makeMetricRow('Repository URL', 'externalRepoUrl', ''),
-      makeMetricRow('Version/Tag', 'versionTag', ''),
-      makeMetricRow('Commit Hash', 'gitHash', ''),
+      makeMetricRow('Repository URL', 'gitRepositoryUrl', ''),
+      makeMetricRow('Version/Tag', 'gitTag', ''),
+      makeMetricRow('Commit Hash', 'gitCommitHash', ''),
       makeMetricRow('Branch', 'branch', ''),
       makeMetricRow('Branch Time', 'branchTime', ''),
     ],

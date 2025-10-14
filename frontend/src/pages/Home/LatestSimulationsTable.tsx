@@ -4,9 +4,9 @@ import { ArrowRight, Check, GitBranch } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
-const simulationTypeIcon = (sim: Simulation) => {
+const simulationTypeIcon = (sim: SimulationOut) => {
   if (sim.simulationType === 'production') {
     return (
       <span
@@ -27,13 +27,13 @@ const simulationTypeIcon = (sim: Simulation) => {
 };
 
 interface LatestSimulationsTableProps {
-  latestSimulations: Simulation[];
+  latestSimulations: SimulationOut[];
 }
 
 const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTableProps) => {
   const navigate = useNavigate();
 
-  const tableColumns: ColumnDef<Simulation>[] = [
+  const tableColumns: ColumnDef<SimulationOut>[] = [
     {
       accessorKey: 'name',
       header: 'Name',
@@ -65,7 +65,9 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
       header: 'Version / Git Hash',
       cell: (info) => {
         const sim = info.row.original;
-        return sim.simulationType === 'production' ? sim.versionTag || 'N/A' : sim.gitHash || 'N/A';
+        return sim.simulationType === 'production'
+          ? sim.gitTag || 'N/A'
+          : sim.gitCommitHash || 'N/A';
       },
     },
     {

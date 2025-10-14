@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import LatestSimulationsTable from '@/pages/Home/LatestSimulationsTable';
-import type { Machine, Simulation } from '@/types/index';
+import type { Machine, SimulationOut } from '@/types/index';
 
 interface HomeProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   machines: Machine[];
 }
 

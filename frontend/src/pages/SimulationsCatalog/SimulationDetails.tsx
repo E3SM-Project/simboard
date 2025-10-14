@@ -8,18 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import SimulationPathCard from '@/pages/SimulationsCatalog/SimulationPathCard';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types & Interfaces --------------------
 interface Props {
-  simulation: Simulation;
+  simulation: SimulationOut;
   canEdit?: boolean; // TODO: integate admin or write privilege (authentication/authorization)
 }
 
@@ -109,13 +108,11 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
             <span>•</span>
             <span>Status:</span>
             <SimulationStatusBadge status={simulation.status} />
-            {simulation.versionTag && (
+            {simulation.gitTag && (
               <>
                 <span>•</span>
                 <span>Version/Tag:</span>
-                <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                  {simulation.versionTag}
-                </code>
+                <code className="rounded bg-muted px-2 py-0.5 text-xs">{simulation.gitTag}</code>
               </>
             )}
             <span>•</span>
@@ -136,7 +133,6 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="outputs">Outputs & Logs</TabsTrigger>
-          <TabsTrigger value="versionControl">Version Control</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-6">
@@ -153,7 +149,7 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>
                 <FieldRow label="Model Version">
-                  <ReadonlyInput value={simulation.versionTag ?? undefined} />
+                  <ReadonlyInput value={simulation.gitTag ?? undefined} />
                 </FieldRow>
                 <FieldRow label="Compset">
                   <ReadonlyInput value={simulation.compset ?? undefined} />
@@ -192,10 +188,8 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                 <FieldRow label="Experiment Type ID">
                   <ReadonlyInput value={simulation.experimentTypeId} />
                 </FieldRow>
-
-                <FieldRow label="Machine ID">
-                  {/* FIXME: Need to attach machine to the simulation */}
-                  {/* <ReadonlyInput value={simulation.machine.name} /> */}
+                <FieldRow label="Machine">
+                  <ReadonlyInput value={simulation.machine.name} />
                 </FieldRow>
                 {/* <FieldRow label="Variables">
                   {simulation.variables && simulation.variables.length ? (
@@ -224,21 +218,6 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                     <span className="text-sm">—</span>
                   )}
                 </FieldRow> */}
-                <FieldRow label="Branch">
-                  <ReadonlyInput value={simulation.branch ?? undefined} />
-                </FieldRow>
-
-                <FieldRow label="Version Control">
-                  <Link
-                    to="#"
-                    onClick={() => setActiveTab('versionControl')}
-                    className="text-xs text-blue-600 hover:underline"
-                    tabIndex={0}
-                    aria-label="See version control details"
-                  >
-                    See version control details
-                  </Link>
-                </FieldRow>
               </CardContent>
             </Card>
           </div>
@@ -334,6 +313,38 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                       Copy
                     </Button>
                   )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Git Repository:
+                  </Label>
+                  {simulation.gitRepositoryUrl ? (
+                    <a
+                      href={simulation.gitRepositoryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {simulation.gitRepositoryUrl}
+                    </a>
+                  ) : (
+                    <p className="text-sm">—</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Branch:</Label>
+                  <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Tag:</Label>
+                  <p className="text-sm">{simulation.gitTag ?? '—'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Git Commit Hash:
+                  </Label>
+                  <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
                 </div>
               </CardContent>
             </Card>
@@ -559,34 +570,6 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
             paths={artifacts.batchLog?.map((artifact) => artifact.uri) || []}
             emptyText="No batch log artifacts available."
           />
-        </TabsContent>
-        <TabsContent value="versionControl" className="space-y-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Version Control Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FieldRow label="Repository URL">
-                <ReadonlyInput value={simulation.externalRepoUrl ?? undefined} />
-              </FieldRow>
-              <FieldRow label="Version/Tag">
-                <ReadonlyInput value={simulation.versionTag ?? undefined} />
-              </FieldRow>
-              <FieldRow label="Commit Hash">
-                <ReadonlyInput value={simulation.gitHash ?? undefined} />
-              </FieldRow>
-              <FieldRow label="Branch">
-                <ReadonlyInput value={simulation.branch ?? undefined} />
-              </FieldRow>
-              {simulation.externalRepoUrl && (
-                <Button asChild variant="outline" size="sm">
-                  <a href={simulation.externalRepoUrl} target="_blank" rel="noopener noreferrer">
-                    Open Repository
-                  </a>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

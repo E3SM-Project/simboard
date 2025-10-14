@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from pydantic import AnyUrl, HttpUrl
 
+from app.schemas.machine import MachineOut
 from app.schemas.simulation import SimulationCreate, SimulationOut
 from app.schemas.utils import to_snake_case
 
@@ -107,6 +108,17 @@ class TestSimulationOut:
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+            "machine": MachineOut(
+                id=uuid4(),
+                name="Machine A",
+                site="Data Center 1",
+                architecture="x86_64",
+                scheduler="SLURM",
+                gpu=True,
+                notes="High-performance computing machine",
+                created_at=datetime(2023, 1, 1, 0, 0, 0),
+                updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            ),
         }
 
         # Act: Create a SimulationOut instance
@@ -166,6 +178,17 @@ class TestSimulationOut:
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+            "machine": MachineOut(
+                id=uuid4(),
+                name="Machine A",
+                site="Data Center 1",
+                architecture="x86_64",
+                scheduler="SLURM",
+                gpu=True,
+                notes="High-performance computing machine",
+                created_at=datetime(2023, 1, 1, 0, 0, 0),
+                updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            ),
         }
 
         optional_fields = {

@@ -19,12 +19,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCard {
-  simulation: Simulation;
+  simulation: SimulationOut;
   selected: boolean;
-  handleSelect: (sim: Simulation) => void;
+  handleSelect: (sim: SimulationOut) => void;
 }
 
 const SimulationResultCard = ({ simulation, selected, handleSelect }: SimulationResultCard) => {
@@ -35,11 +35,11 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
   const [showAllVariables, setShowAllVariables] = useState(false);
 
   // -------------------- Derived Data --------------------
-  const startStr = simulation.modelStartDate
-    ? new Date(simulation.modelStartDate).toISOString().slice(0, 10)
+  const startStr = simulation.simulationStartDate
+    ? new Date(simulation.simulationStartDate).toISOString().slice(0, 10)
     : 'N/A';
-  const endStr = simulation.modelEndDate
-    ? new Date(simulation.modelEndDate).toISOString().slice(0, 10)
+  const endStr = simulation.simulationEndDate
+    ? new Date(simulation.simulationEndDate).toISOString().slice(0, 10)
     : 'N/A';
 
   return (
@@ -98,7 +98,8 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
             </dl>
 
             {/* Variables row - remove mt-1 for vertical alignment */}
-            <div className="flex flex-wrap gap-2 items-center mb-4">
+            {/* TODO: Variables are not supported yet */}
+            {/* <div className="flex flex-wrap gap-2 items-center mb-4">
               <span className="text-sm font-medium flex items-center gap-1">
                 <Sigma className="w-4 h-4" />
                 Variables ({simulation.variables.length}):
@@ -143,7 +144,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                   <span className="underline text-blue-700">Show Less</span>
                 </Button>
               )}
-            </div>
+            </div> */}
 
             <div className="w-full my-2 border-t border-gray-200" />
 
@@ -169,7 +170,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
               >
                 <Tag className="w-4 h-4" />
                 Tag:
-                <span className="text-xs px-1 py-1 ml-1">{simulation.versionTag}</span>
+                <span className="text-xs px-1 py-1 ml-1">{simulation.gitTag}</span>
               </Badge>
               <Badge
                 className={`text-xs px-2 py-1 ${
@@ -218,6 +219,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                   <ChevronDown className="w-4 h-4 ml-2" />
                 </summary>
                 <div className="px-2 py-2 space-y-2 text-sm text-gray-700">
+                  {/* FIXME: Fix this field.  */}
                   {/* Key Features */}
                   {simulation.keyFeatures && (
                     <div>
@@ -242,18 +244,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                     </div>
                   )}
 
-                  {/* Annotations */}
-                  {simulation.annotations && simulation.annotations.length > 0 && (
-                    <div>
-                      <span className="font-semibold">Annotations:</span>
-                      <ul className="list-disc ml-6 text-gray-600">
-                        {simulation.annotations.map((a, i) => (
-                          <li key={i}>{a}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
+                  {/* FIXME: Fix this field */}
                   {/* Diagnostic Links */}
                   {simulation.diagnosticLinks && simulation.diagnosticLinks.length > 0 && (
                     <div>
@@ -275,6 +266,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                     </div>
                   )}
 
+                  {/* FIXME: Fix this field */}
                   {/* PACE Links */}
                   {simulation.paceLinks && simulation.paceLinks.length > 0 && (
                     <div>
@@ -297,26 +289,28 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                   )}
 
                   {/* Git Info */}
-                  {(simulation.branch || simulation.gitHash) && (
+                  {(simulation.gitBranch || simulation.gitCommitHash) && (
                     <div>
                       <span className="font-semibold">Git:</span>
                       <span className="ml-1 text-gray-600">
-                        {simulation.branch && (
+                        {simulation.gitBranch && (
                           <>
-                            Branch: <span className="font-mono">{simulation.branch}</span>
+                            Branch: <span className="font-mono">{simulation.gitBranch}</span>
                           </>
                         )}
-                        {simulation.gitHash && (
+                        {simulation.gitCommitHash && (
                           <>
-                            {simulation.branch ? ' | ' : ''}
+                            {simulation.gitBranch ? ' | ' : ''}
                             Hash:{' '}
-                            <span className="font-mono">{simulation.gitHash.slice(0, 8)}</span>
+                            <span className="font-mono">
+                              {simulation.gitCommitHash.slice(0, 8)}
+                            </span>
                           </>
                         )}
                       </span>
                     </div>
                   )}
-
+                  {/* FIXME: Fix this field */}
                   {/* Run Script Paths */}
                   {simulation.runScriptPaths && simulation.runScriptPaths.length > 0 && (
                     <div>
@@ -330,7 +324,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                       </ul>
                     </div>
                   )}
-
+                  {/* FIXME: Fix this field */}
                   {/* Archive Paths */}
                   {simulation.archivePaths && simulation.archivePaths.length > 0 && (
                     <div>
@@ -344,7 +338,7 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                       </ul>
                     </div>
                   )}
-
+                  {/* FIXME: Fix this field */}
                   {/* Postprocessing Scripts */}
                   {simulation.postprocessingScriptPath &&
                     simulation.postprocessingScriptPath.length > 0 && (

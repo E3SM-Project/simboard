@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.deps import get_db, transaction
 from app.db.artifact import Artifact
@@ -81,6 +81,7 @@ def list_simulations(db: Session = Depends(get_db)):
     sims = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )
@@ -114,6 +115,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_db)):
     sim = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )

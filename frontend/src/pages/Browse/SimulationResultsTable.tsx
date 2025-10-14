@@ -34,20 +34,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import BrowseToolbar from '@/pages/Browse/BrowseToolbar';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
 const MAX_SELECTION = 5;
 
 interface SimulationResultsTable {
-  simulations: Simulation[];
-  filteredData: Simulation[];
+  simulations: SimulationOut[];
+  filteredData: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
 }
 
-const columns: ColumnDef<Simulation>[] = [
+const columns: ColumnDef<SimulationOut>[] = [
   {
     id: 'select',
     header: () => null,
@@ -119,18 +119,18 @@ const columns: ColumnDef<Simulation>[] = [
     enableSorting: true,
   },
   {
-    accessorKey: 'versionTag',
+    accessorKey: 'gitTag',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
         Version Tag
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('versionTag')}</div>,
+    cell: ({ row }) => <div>{row.getValue('gitTag')}</div>,
     enableSorting: true,
   },
   {
-    accessorKey: 'modelStartDate',
+    accessorKey: 'simulationStartDate',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
         Model Start Date
@@ -138,7 +138,7 @@ const columns: ColumnDef<Simulation>[] = [
       </Button>
     ),
     cell: ({ row }) => {
-      const start = row.original.modelStartDate;
+      const start = row.original.simulationStartDate;
       return start ? (
         <span>{start}</span>
       ) : (
@@ -148,7 +148,7 @@ const columns: ColumnDef<Simulation>[] = [
     enableSorting: true,
   },
   {
-    accessorKey: 'modelEndDate',
+    accessorKey: 'simulationEndDate',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
         Model End Date
@@ -156,7 +156,7 @@ const columns: ColumnDef<Simulation>[] = [
       </Button>
     ),
     cell: ({ row }) => {
-      const end = row.original.modelEndDate;
+      const end = row.original.simulationEndDate;
       return end ? <span>{end}</span> : <span className="text-muted-foreground italic">N/A</span>;
     },
     enableSorting: true,
@@ -279,7 +279,7 @@ const getStickyLeftOffset = (
   headerOrCell: {
     column: { id: string; columnDef: { meta?: { sticky?: boolean; width?: number } } };
   },
-  table: { getAllLeafColumns: () => Column<Simulation, unknown>[] },
+  table: { getAllLeafColumns: () => Column<SimulationOut, unknown>[] },
 ): number => {
   const all = table.getAllLeafColumns();
   const idx = all.findIndex((c) => c.id === headerOrCell.column.id);
@@ -314,7 +314,7 @@ const SimulationResultsTable = ({
   // -------------------- Derived Data --------------------
   const rowSelection = idsToRowSelection(selectedSimulationIds);
 
-  const renderSelectCheckbox = (row: Row<Simulation>) => {
+  const renderSelectCheckbox = (row: Row<SimulationOut>) => {
     const isSelected = row.getIsSelected();
     const isDisabled =
       !isSelected && Object.values(rowSelection).filter(Boolean).length >= MAX_SELECTION;
@@ -330,14 +330,14 @@ const SimulationResultsTable = ({
     );
   };
 
-  const tableColumns = columns.map((col: ColumnDef<Simulation>) =>
+  const tableColumns = columns.map((col: ColumnDef<SimulationOut>) =>
     col.id === 'select'
       ? {
           ...col,
           cell: ({ row }) => renderSelectCheckbox(row),
         }
       : col,
-  ) as ColumnDef<Simulation>[];
+  ) as ColumnDef<SimulationOut>[];
 
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
 

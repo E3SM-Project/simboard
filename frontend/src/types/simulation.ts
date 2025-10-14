@@ -107,10 +107,10 @@ export interface SimulationOut {
 
   // Version control
   // ~~~~~~~~~~~~~~~
-  repoUrl?: string | null;
-  branch?: string | null;
-  versionTag?: string | null;
-  commitHash?: string | null;
+  gitRepositoryUrl?: string | null;
+  gitBranch?: string | null;
+  gitTag?: string | null;
+  gitCommitHash?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -126,14 +126,7 @@ export interface SimulationOut {
 
   // Relationships
   // ~~~~~~~~~~~~~~
+  machine: Machine
   artifacts: ArtifactOut[];
   links: ExternalLinkOut[];
 }
-
-/**
- * Domain-friendly enriched simulation.
- * Adds a joined machine record for frontend convenience.
- */
-export type Simulation = SimulationOut & {
-  machine: Machine
-};

@@ -6,6 +6,7 @@ from pydantic import Field, HttpUrl
 from app.schemas.artifact import ArtifactCreate, ArtifactOut
 from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.schemas.link import ExternaLinkCreate, ExternalLinkOut
+from app.schemas.machine import MachineOut
 
 
 class SimulationCreate(CamelInBaseModel):
@@ -229,6 +230,9 @@ class SimulationOut(CamelOutBaseModel):
 
     # Relationships
     # ~~~~~~~~~~~~~~
+    machine: MachineOut = Field(
+        description="Machine on which the simulation was executed."
+    )
     artifacts: list[ArtifactOut] = Field(
         default_factory=list,
         description="Optional list of artifacts associated with the simulation",

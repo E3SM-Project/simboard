@@ -35,11 +35,11 @@ import {
 } from '@/components/ui/table';
 import { TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
 interface SimulationsCatalogProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
 }
 
 // -------------------- Pure Helpers --------------------
@@ -50,7 +50,7 @@ const statusColors: Record<string, string> = {
   'not-started': 'bg-gray-100 text-gray-800',
 };
 
-const typeColors: Record<Simulation['simulationType'], string> = {
+const typeColors: Record<SimulationOut['simulationType'], string> = {
   production: 'border-green-600 text-green-700',
   master: 'border-blue-600 text-blue-700',
   experimental: 'border-amber-600 text-amber-700',
@@ -83,13 +83,13 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'uploadDate', desc: true },
+    { id: 'createdAt', desc: true },
     { id: 'name', desc: false },
   ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
 
-  const columns = useMemo<ColumnDef<Simulation>[]>(
+  const columns = useMemo<ColumnDef<SimulationOut>[]>(
     () => [
       {
         accessorKey: 'name',
@@ -133,7 +133,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         ),
         size: 130,
       },
-      { accessorKey: 'versionTag', header: 'Version / Tag', size: 180 },
+      { accessorKey: 'gitTag', header: 'Version / Tag', size: 180 },
       { accessorKey: 'gridName', header: 'Grid', size: 110 },
       {
         accessorKey: 'compset',
@@ -148,7 +148,8 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
       {
         id: 'modelDates',
         header: 'Dates (Model)',
-        accessorFn: (r) => `${formatDate(r.modelStartDate)} → ${formatDate(r.modelEndDate)}`,
+        accessorFn: (r) =>
+          `${formatDate(r.simulationStartDate)} → ${formatDate(r.simulationEndDate)}`,
         size: 220,
       },
       {
@@ -209,14 +210,14 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         size: 150,
       },
       {
-        accessorKey: 'uploadDate',
+        accessorKey: 'createdAt',
         header: 'Submitted',
         cell: ({ getValue }) => formatDate(getValue() as string | undefined),
         size: 140,
       },
       // --- Power columns (hidden by default) ---
       {
-        accessorKey: 'gitHash',
+        accessorKey: 'gitCommitHash',
         header: 'Git',
         cell: ({ getValue }) => (
           <span className="font-mono" title={String(getValue() ?? '')}>
@@ -272,11 +273,11 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
     globalFilterFn: (row, _id, value) => {
       if (!value) return true;
       const v = String(value).toLowerCase();
-      const s: Simulation = row.original as Simulation;
+      const s: SimulationOut = row.original as SimulationOut;
       return [
         s.id,
         s.name,
-        s.versionTag,
+        s.gitTag,
         s.gridName,
         s.compset,
         s.machineId,
@@ -357,7 +358,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
             size="sm"
             onClick={() =>
               setColumnVisibility({
-                gitHash: false,
+                gitCommitHash: false,
                 branch: false,
                 runDate: false,
                 lastEditedAt: false,
@@ -372,7 +373,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
             size="sm"
             onClick={() =>
               setColumnVisibility({
-                gitHash: true,
+                gitCommitHash: true,
                 branch: true,
                 runDate: true,
                 lastEditedAt: true,

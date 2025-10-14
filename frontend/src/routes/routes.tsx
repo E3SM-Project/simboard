@@ -8,14 +8,14 @@ import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
 import Upload from '@/pages/Upload/Upload';
-import type { Machine, Simulation } from '@/types/index';
+import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   machines: Machine[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: Simulation[];
+  selectedSimulations: SimulationOut[];
 }
 
 const SimulationDetailsRoute = () => {

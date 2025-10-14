@@ -79,9 +79,9 @@ const BrowseFiltersSidePanel = ({
 
         <MultiSelectCheckboxGroup
           label="Version / Tag"
-          options={availableFilters.versionTag || []}
-          selected={appliedFilters.versionTag || []}
-          onChange={(next) => handleChange('versionTag', next)}
+          options={availableFilters.gitTag || []}
+          selected={appliedFilters.gitTag || []}
+          onChange={(next) => handleChange('gitTag', next)}
         />
       </CollapsibleGroup>
 

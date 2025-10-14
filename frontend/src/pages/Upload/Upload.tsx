@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import FormSection from '@/pages/Upload/FormSection';
 import FormTokenInput from '@/pages/Upload/FormTokenInput';
 import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
-import { RawSimulation } from '@/types';
+import { SimulationCreate } from '@/types';
 
 // -------------------- Types & Interfaces --------------------
 type OpenKey =
@@ -33,71 +33,52 @@ const REQUIRED_FIELDS = {
   paths: 2,
 };
 
-const initialState: RawSimulation = {
-  // Configuration
-  id: '',
+const initialState: SimulationCreate = {
+  // Required fields
   name: '',
   caseName: '',
-  versionTag: null,
-  compset: null,
-  gridName: null,
-  gridResolution: null,
-  initializationType: null,
-  compiler: null,
-  parentSimulationId: null,
-
-  // Timeline
-  modelStartDate: '',
-  modelEndDate: '',
-  calendarStartDate: null,
-
-  // Model setup (context)
+  compset: '',
+  compsetAlias: '',
+  gridName: '',
+  gridResolution: '',
+  initializationType: '',
   simulationType: 'production',
   status: 'not-started',
-  campaignId: '',
-  experimentTypeId: '',
   machineId: '',
-  variables: [],
+  simulationStartDate: '',
 
-  // Provenance & submission
-  uploadedBy: '',
-  uploadDate: '',
-  lastModified: '',
-  lastEditedBy: '',
-  lastEditedAt: '',
-
-  // Version Control
-  branch: null,
-  branchTime: null,
-  gitHash: null,
-  externalRepoUrl: null,
-
-  // Execution & output
-  runDate: null,
-  outputPath: null,
-  archivePaths: [],
-  runScriptPaths: [],
-  batchLogPaths: null,
-
-  // Postprocessing & diagnostics
-  postprocessingScriptPath: [],
-  diagnosticLinks: [],
-  paceLinks: [],
-
-  // Metadata & audit
+  // Optional fields
+  gitTag: null,
+  gitCommitHash: null,
+  parentSimulationId: null,
+  campaignId: null,
+  experimentTypeId: null,
+  groupName: null,
+  simulationEndDate: null,
+  totalYears: null,
+  runStartDate: null,
+  runEndDate: null,
+  compiler: null,
   notesMarkdown: null,
   knownIssues: null,
-  annotations: [],
+  gitBranch: null,
+  gitRepoUrl: null,
+  createdBy: null,
+  createdAt: null,
+  lastModified: null,
+  lastEditedBy: null,
+  lastEditedAt: null,
+  extra: {},
 
-  // Optional embedded snapshot
-  // @ts-expect-error – provided by backend when present
-  machine: {},
+  // Relationships
+  artifacts: null,
+  links: null,
 };
 
 const Upload = () => {
   // -------------------- Local State --------------------
   const [open, setOpen] = useState<OpenKey>('configuration');
-  const [form, setForm] = useState<RawSimulation>(initialState);
+  const [form, setForm] = useState<SimulationCreate>(initialState);
 
   const [variables, setVariables] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -123,9 +104,9 @@ const Upload = () => {
   }, [form.machineId, form.compiler]);
 
   const versionSat = useMemo(() => {
-    const fields = [form.branch, form.gitHash];
+    const fields = [form.gitBranch, form.gitCommitHash];
     return countValidfields(fields);
-  }, [form.branch, form.gitHash]);
+  }, [form.gitBranch, form.gitCommitHash]);
 
   const pathsSat = useMemo(() => {
     const fields = [
@@ -356,7 +337,7 @@ const Upload = () => {
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
                 name="branch"
-                value={form.branch ?? ''}
+                value={form.gitBranch ?? ''}
                 onChange={handleChange}
                 placeholder="e.g., e3sm-v3"
               />
@@ -367,8 +348,8 @@ const Upload = () => {
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gitHash"
-                value={form.gitHash ?? ''}
+                name="gitCommitHash"
+                value={form.gitCommitHash ?? ''}
                 onChange={handleChange}
                 placeholder="e.g., a1b2c3d"
               />
@@ -390,8 +371,8 @@ const Upload = () => {
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
-                name="externalRepoUrl"
-                value={form.externalRepoUrl ?? ''}
+                name="gitRepositoryUrl"
+                value={form.gitRepoUrl ?? ''}
                 onChange={handleChange}
                 placeholder="https://github.com/org/repo"
               />
@@ -631,13 +612,13 @@ const Upload = () => {
                   <strong>Grid:</strong> {form.gridName || '—'}
                 </div>
                 <div>
-                  <strong>Branch:</strong> {form.branch || '—'}
+                  <strong>Branch:</strong> {form.gitBranch || '—'}
                 </div>
                 <div>
-                  <strong>Git Hash:</strong> {form.gitHash || '—'}
+                  <strong>Git Hash:</strong> {form.gitCommitHash || '—'}
                 </div>
                 <div>
-                  <strong>External Repo:</strong> {form.externalRepoUrl || '—'}
+                  <strong>External Repo:</strong> {form.gitRepoUrl || '—'}
                 </div>
               </div>
             </div>

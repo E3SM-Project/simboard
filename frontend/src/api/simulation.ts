@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import axiosInstance from '@/api/axios';
-import type { Machine, Simulation } from '@/types';
+import type { Machine, SimulationOut } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';
 
 export const fetchSimulations = async (
   url: string = SIMULATIONS_URL
-): Promise<Simulation[]> => {
-  const res = await axiosInstance.get<Simulation[]>(url, {
+): Promise<SimulationOut[]> => {
+  const res = await axiosInstance.get<SimulationOut[]>(url, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
   return res.data;
 };
 
-export const fetchSimulationById = async (id: string): Promise<Simulation> => {
-  const res = await axiosInstance.get<Simulation>(`${SIMULATIONS_URL}/${id}`, {
+export const fetchSimulationById = async (id: string): Promise<SimulationOut> => {
+  const res = await axiosInstance.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
@@ -24,7 +24,7 @@ export const fetchSimulationById = async (id: string): Promise<Simulation> => {
 };
 
 export const useSimulation = (id: string) => {
-  const [data, setData] = useState<Simulation | null>(null);
+  const [data, setData] = useState<SimulationOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +53,7 @@ export const useSimulation = (id: string) => {
 };
 
 export const useSimulations = (url: string = SIMULATIONS_URL) => {
-  const [data, setData] = useState<Simulation[]>([]);
+  const [data, setData] = useState<SimulationOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

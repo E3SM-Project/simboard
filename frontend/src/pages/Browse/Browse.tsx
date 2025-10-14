@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import BrowseFiltersSidePanel from '@/pages/Browse/BrowseFiltersSidePanel';
 import SimulationResultCards from '@/pages/Browse/SimulationResultsCards';
 import SimulationResultsTable from '@/pages/Browse/SimulationResultsTable';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
@@ -20,16 +20,16 @@ export interface FilterState {
   compset: string[];
   gridName: string[];
   simulationType: string[];
-  versionTag: string[];
+  gitTag: string[];
 
   // Execution Details
   status: string[];
-  modelStartDate: string;
-  modelEndDate: string;
+  simulationStartDate: string;
+  simulationEndDate: string;
 }
 
 interface BrowseProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
 }
@@ -50,21 +50,21 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     compset: [],
     gridName: [],
     simulationType: [],
-    versionTag: [],
+    gitTag: [],
     status: [],
-    modelStartDate: '',
-    modelEndDate: '',
+    simulationStartDate: '',
+    simulationEndDate: '',
   });
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // -------------------- Derived Data --------------------
-  const simMachineId = (s: Simulation) =>
+  const simMachineId = (s: SimulationOut) =>
     s.machine?.id ??
     (typeof (s as { machineId?: string }).machineId === 'string'
       ? (s as { machineId?: string }).machineId
       : undefined);
-  const simMachineName = (s: Simulation) => s.machine?.name ?? 'Unknown machine';
+  const simMachineName = (s: SimulationOut) => s.machine?.name ?? 'Unknown machine';
 
   const machineOptions = useMemo(() => {
     const m = new Map<string, string>();
@@ -83,10 +83,10 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       compset: [],
       gridName: [],
       simulationType: [],
-      versionTag: [],
+      gitTag: [],
       status: [],
-      modelStartDate: '',
-      modelEndDate: '',
+      simulationStartDate: '',
+      simulationEndDate: '',
     };
 
     for (const sim of simulations) {
@@ -99,12 +99,12 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
         'compset',
         'gridName',
         'simulationType',
-        'versionTag',
+        'gitTag',
         'status',
       ] as const;
 
       for (const key of keys) {
-        const value = (sim as Simulation)[key];
+        const value = (sim as SimulationOut)[key];
 
         if (Array.isArray(value)) {
           for (const v of value) {
@@ -124,12 +124,12 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
   }, [simulations]);
 
   const filteredData = useMemo(() => {
-    const startModel = parseDate(appliedFilters.modelStartDate);
-    const endModel = parseDate(appliedFilters.modelEndDate);
+    const startModel = parseDate(appliedFilters.simulationStartDate);
+    const endModel = parseDate(appliedFilters.simulationEndDate);
 
     const arrayFilterGetters: Record<
       keyof FilterState,
-      (rec: Simulation) => string | string[] | undefined
+      (rec: SimulationOut) => string | string[] | undefined
     > = {
       machineId: (rec) => simMachineId(rec) ?? '',
       campaignId: (rec) => rec.campaignId ?? [],
@@ -137,10 +137,10 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       compset: (rec) => rec.compset ?? [],
       gridName: (rec) => rec.gridName ?? [],
       simulationType: (rec) => rec.simulationType ?? [],
-      versionTag: (rec) => rec.versionTag ?? [],
+      gitTag: (rec) => rec.gitTag ?? [],
       status: (rec) => rec.status ?? [],
-      modelStartDate: () => undefined,
-      modelEndDate: () => undefined,
+      simulationStartDate: () => undefined,
+      simulationEndDate: () => undefined,
     };
 
     return simulations.filter((record) => {
@@ -155,8 +155,8 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       }
 
       if (startModel || endModel) {
-        const recStart = parseDate((record as Simulation).simulationStartDate);
-        const recEnd = parseDate((record as Simulation).simulationEndDate ?? undefined);
+        const recStart = parseDate((record as SimulationOut).simulationStartDate);
+        const recEnd = parseDate((record as SimulationOut).simulationEndDate ?? undefined);
 
         if (startModel && recStart && recStart < startModel) return false;
         if (endModel && recEnd && recEnd > endModel) return false;
@@ -177,7 +177,7 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       'compset',
       'gridName',
       'simulationType',
-      'versionTag',
+      'gitTag',
       'status',
     ];
 
@@ -217,10 +217,10 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       compset: [],
       gridName: [],
       simulationType: [],
-      versionTag: [],
+      gitTag: [],
       status: [],
-      modelStartDate: '',
-      modelEndDate: '',
+      simulationStartDate: '',
+      simulationEndDate: '',
     });
   };
 
