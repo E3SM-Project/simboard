@@ -33,7 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { SimulationOut } from '@/types/index';
 
@@ -149,7 +148,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         id: 'modelDates',
         header: 'Dates (Model)',
         accessorFn: (r) =>
-          `${formatDate(r.simulationStartDate)} → ${formatDate(r.simulationEndDate)}`,
+          `${formatDate(r.simulationStartDate ?? undefined)} → ${formatDate(r.simulationEndDate ?? undefined)}`,
         size: 220,
       },
       {
@@ -159,33 +158,6 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
           <span title={row.original.machine?.name ?? '—'}>{row.original.machine?.name ?? '—'}</span>
         ),
         size: 140,
-      },
-      {
-        id: 'vars',
-        header: 'Vars',
-        accessorFn: (r) => r.variables?.length ?? 0,
-        cell: ({ row }) => {
-          const vars = row.original.variables;
-          if (!vars || vars.length === 0) return '—';
-
-          return (
-            <TooltipProvider delayDuration={1}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-help">
-                    {vars.length}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  {vars.length <= 10
-                    ? vars.join(', ')
-                    : `${vars.slice(0, 10).join(', ')}, … (${vars.length} total)`}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
-        size: 90,
       },
       {
         id: 'diagnostics',
@@ -217,19 +189,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
       },
       // --- Power columns (hidden by default) ---
       {
-        accessorKey: 'gitCommitHash',
-        header: 'Git',
-        cell: ({ getValue }) => (
-          <span className="font-mono" title={String(getValue() ?? '')}>
-            {String(getValue() ?? '').slice(0, 7) || '—'}
-          </span>
-        ),
-        size: 120,
-        enableHiding: true,
-        meta: { isAdvanced: true },
-      },
-      {
-        accessorKey: 'branch',
+        accessorKey: 'gitBranch',
         header: 'Branch',
         cell: ({ getValue }) => (
           <span className="inline-block max-w-[12ch] truncate" title={String(getValue() ?? '')}>
@@ -241,10 +201,26 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         meta: { isAdvanced: true },
       },
       {
-        accessorKey: 'runDate',
-        header: 'Run Date',
-        cell: ({ getValue }) => formatDate(getValue() as string | undefined),
-        size: 140,
+        accessorKey: 'gitCommitHash',
+        header: 'Git Hash',
+        cell: ({ getValue }) => (
+          <span className="font-mono" title={String(getValue() ?? '')}>
+            {String(getValue() ?? '').slice(0, 7) || '—'}
+          </span>
+        ),
+        size: 120,
+        enableHiding: true,
+        meta: { isAdvanced: true },
+      },
+      {
+        id: 'runDates',
+        header: 'Run Dates',
+        accessorFn: (r) =>
+          r.runStartDate || r.runEndDate
+            ? `${formatDate(r.runStartDate ?? undefined)} → ${formatDate(r.runEndDate ?? undefined)}`
+            : '—',
+        cell: ({ getValue }) => <span>{getValue() as string}</span>,
+        size: 220,
         enableHiding: true,
         meta: { isAdvanced: true },
       },
@@ -252,8 +228,8 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         accessorKey: 'lastEditedAt',
         header: 'Edited',
         cell: ({ row }) => (
-          <span title={`by ${row.original.lastEditedBy || '—'}`}>
-            {formatDate(row.original.lastEditedAt)}
+          <span title={`by ${row.original.lastUpdatedBy || '—'}`}>
+            {formatDate(row.original.updatedAt ?? undefined)}
           </span>
         ),
         size: 170,
@@ -274,15 +250,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
       if (!value) return true;
       const v = String(value).toLowerCase();
       const s: SimulationOut = row.original as SimulationOut;
-      return [
-        s.id,
-        s.name,
-        s.gitTag,
-        s.gridName,
-        s.compset,
-        s.machineId,
-        s.variables?.join(',') ?? '',
-      ]
+      return [s.id, s.name, s.gitTag, s.gridName, s.compset, s.machineId]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(v));
     },

@@ -102,6 +102,7 @@ export interface SimulationOut {
 
   // Metadata & audit
   // ~~~~~~~~~~~~~~~~~
+  keyFeatures?: string | null;
   notesMarkdown?: string | null;
   knownIssues?: string | null;
 

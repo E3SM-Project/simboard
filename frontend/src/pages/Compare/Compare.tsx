@@ -149,6 +149,13 @@ const Compare = ({
           return date ? formatDate(date as string) : '—';
         }),
       },
+      {
+        label: 'Calendar End Date',
+        values: selectedSimulationIds.map((id) => {
+          const date = getSimProp(id, 'runEndDate', '');
+          return date ? formatDate(date as string) : '—';
+        }),
+      },
     ],
     keyFeatures: [makeMetricRow('Key Features', 'keyFeatures', '')],
     knownIssues: [makeMetricRow('Known Issues', 'knownIssues', '')],
@@ -156,23 +163,22 @@ const Compare = ({
       {
         label: 'Output Path',
         values: selectedSimulationIds.map((id) => {
-          const outputPath = getSimProp(id, 'outputPath', '');
+          const outputPath = getSimProp(id, 'output', '');
           return outputPath ? [outputPath] : [];
         }),
       },
-      makeMetricRow('Archive Paths', 'archivePaths', []),
-      makeMetricRow('Run Script Paths', 'runScriptPaths', []),
-      makeMetricRow('Batch Logs', 'batchLogPaths', []),
+      makeMetricRow('Archive Paths', 'archive', []),
+      makeMetricRow('Run Script Paths', 'runScript', []),
+      makeMetricRow('Batch Logs', 'batchLog', []),
     ],
-    diagnostics: [makeMetricRow('Diagnostic Links', 'diagnosticLinks', [])],
-    performance: [makeMetricRow('PACE Links', 'paceLinks', [])],
+    diagnostics: [makeMetricRow('Diagnostic Links', 'diagnostic', [])],
+    performance: [makeMetricRow('PACE Links', 'performance', [])],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
       makeMetricRow('Repository URL', 'gitRepositoryUrl', ''),
+      makeMetricRow('Branch', 'gitBranch', ''),
       makeMetricRow('Version/Tag', 'gitTag', ''),
       makeMetricRow('Commit Hash', 'gitCommitHash', ''),
-      makeMetricRow('Branch', 'branch', ''),
-      makeMetricRow('Branch Time', 'branchTime', ''),
     ],
   };
 
