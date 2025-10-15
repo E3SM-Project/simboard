@@ -2,6 +2,8 @@ import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 
+import { ArtifactOut, ExternalLinkOut, SimulationOut } from '@/types';
+
 export const cn = (...inputs: unknown[]) => twMerge(clsx(inputs));
 
 /**
@@ -69,4 +71,30 @@ export const getSimulationDuration = (
 
   const minutes = Math.floor(ms / (1000 * 60));
   return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+};
+
+
+
+/**
+ * Groups simulation artifacts and links by their `kind` attribute.
+ * Returns an object with `artifacts` and `links` grouped by kind.
+ */
+
+type HasKind = { kind: string };
+type GroupedByKind<T extends HasKind> = Record<string, T[]>;
+
+export const groupFieldByKind = (simulation: SimulationOut): {
+  artifacts: GroupedByKind<ArtifactOut>;
+  links: GroupedByKind<ExternalLinkOut>;
+} => {
+  const group = <T extends HasKind>(items: T[] = []): GroupedByKind<T> =>
+    items.reduce((acc, item) => {
+      (acc[item.kind] ??= []).push(item);
+      return acc;
+    }, {} as GroupedByKind<T>);
+
+  return {
+    artifacts: group(simulation.artifacts),
+    links: group(simulation.links),
+  };
 };

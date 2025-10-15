@@ -6,7 +6,7 @@ import { AIFloatingButton } from '@/pages/Compare/AIFloatingButton';
 import CompareToolbar from '@/pages/Compare/CompareToolbar';
 import { norm, renderCellValue } from '@/pages/Compare/utils';
 import type { SimulationOut } from '@/types/index';
-import { formatDate, getSimulationDuration } from '@/utils/utils';
+import { formatDate, getSimulationDuration, groupFieldByKind } from '@/utils/utils';
 
 interface CompareProps {
   simulations: SimulationOut[];
@@ -65,17 +65,38 @@ const Compare = ({
     label: string,
     prop: T,
     fallback: SimulationOut[T] | '' = '',
-  ) => ({
-    label,
-    values: selectedSimulationIds.map((id) => getSimProp(id, prop, fallback)),
-  });
+  ) => {
+    const values = selectedSimulationIds.map((id) => {
+      const sim = selectedSimulations.find((s) => s.id === id);
+      if (!sim) return fallback;
+      return (sim[prop] ?? fallback) as SimulationOut[T];
+    });
+
+    return { label, values };
+  };
+
+  const makeGroupedMetricRow = (label: string, kind: string, fallback: unknown[] = []) => {
+    const values = selectedSimulationIds.map((id) => {
+      const sim = selectedSimulations.find((s) => s.id === id);
+      if (!sim) return fallback;
+
+      const { artifacts, links } = groupFieldByKind(sim);
+
+      return artifacts[kind] ?? links[kind] ?? fallback;
+    });
+
+    return { label, values };
+  };
 
   const rowHasDiffs = (vals: unknown[]): boolean => {
     if (visibleOrder.length <= 1) return false;
+
     const first = norm(vals[visibleOrder[0]]);
+
     for (let i = 1; i < visibleOrder.length; i++) {
       if (norm(vals[visibleOrder[i]]) !== first) return true;
     }
+
     return false;
   };
 
@@ -160,19 +181,13 @@ const Compare = ({
     keyFeatures: [makeMetricRow('Key Features', 'keyFeatures', '')],
     knownIssues: [makeMetricRow('Known Issues', 'knownIssues', '')],
     locations: [
-      {
-        label: 'Output Path',
-        values: selectedSimulationIds.map((id) => {
-          const outputPath = getSimProp(id, 'output', '');
-          return outputPath ? [outputPath] : [];
-        }),
-      },
-      makeMetricRow('Archive Paths', 'archive', []),
-      makeMetricRow('Run Script Paths', 'runScript', []),
-      makeMetricRow('Batch Logs', 'batchLog', []),
+      makeGroupedMetricRow('Output Paths', 'output'),
+      makeGroupedMetricRow('Archive Paths', 'archive'),
+      makeGroupedMetricRow('Run Script Paths', 'runScript'),
+      makeGroupedMetricRow('Batch Logs', 'batchLog'),
     ],
-    diagnostics: [makeMetricRow('Diagnostic Links', 'diagnostic', [])],
-    performance: [makeMetricRow('PACE Links', 'performance', [])],
+    diagnostics: [makeGroupedMetricRow('Diagnostic Links', 'diagnostic')],
+    performance: [makeGroupedMetricRow('PACE Links', 'performance')],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
       makeMetricRow('Repository URL', 'gitRepositoryUrl', ''),
