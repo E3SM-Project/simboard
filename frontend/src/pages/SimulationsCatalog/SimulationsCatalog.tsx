@@ -147,7 +147,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
       },
       {
         id: 'modelDates',
-        header: 'Dates (Model)',
+        header: 'Simulation Dates',
         accessorFn: (r) =>
           `${formatDate(r.simulationStartDate ?? undefined)} → ${formatDate(r.simulationEndDate ?? undefined)}`,
         size: 220,
@@ -204,8 +204,8 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         meta: { isAdvanced: true },
       },
       {
-        accessorKey: 'lastEditedAt',
-        header: 'Edited',
+        accessorKey: 'lastUpdatedAt',
+        header: 'Last Updated',
         cell: ({ row }) => (
           <span title={`by ${row.original.lastUpdatedBy || '—'}`}>
             {formatDate(row.original.updatedAt ?? undefined)}
@@ -307,9 +307,9 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
               setViewMode('simple');
               setColumnVisibility({
                 gitCommitHash: false,
-                branch: false,
-                runDate: false,
-                lastEditedAt: false,
+                gitBranch: false,
+                runDates: false,
+                lastUpdatedAt: false,
               });
             }}
             title="Hide advanced columns (Git, Branch, Run Date, Edited)"
@@ -323,9 +323,9 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
               setViewMode('advanced');
               setColumnVisibility({
                 gitCommitHash: true,
-                branch: true,
-                runDate: true,
-                lastEditedAt: true,
+                gitBranch: true,
+                runDates: true,
+                lastUpdatedAt: true,
               });
             }}
             title="Show advanced columns (Git, Branch, Run Date, Edited)"
@@ -361,7 +361,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
                       className={cn(
                         'whitespace-nowrap',
                         isName && 'sticky left-10 z-20 bg-background border-r',
-                        isAdvanced && columnVisibility[header.column.id] && 'bg-yellow-100',
+                        isAdvanced && columnVisibility[header.column.id] && 'bg-blue-100',
                       )}
                     >
                       {header.isPlaceholder ? null : (
@@ -419,7 +419,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
                       className={cn(
                         'whitespace-nowrap',
                         isName && 'sticky left-10 z-[5] bg-background border-r',
-                        isAdvanced && columnVisibility[cell.column.id] && 'bg-yellow-50',
+                        isAdvanced && columnVisibility[cell.column.id] && 'bg-blue-50',
                       )}
                     >
                       {typeof cell.column.columnDef.cell === 'function'
