@@ -1,3 +1,5 @@
+import { Funnel } from 'lucide-react';
+
 import { MultiSelect } from '@/components/ui/multi-select';
 import type { FilterState } from '@/pages/Browse/Browse';
 import CollapsibleGroup from '@/pages/Browse/CollapsibleGroup';
@@ -25,7 +27,16 @@ const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="w-[360px] max-w-full bg-background border-r p-6 flex flex-col gap-6 min-h-screen">
+    <aside className="w-[360px] max-w-full bg-background border-r p-6 flex flex-col gap-6 min-h-screen border border-gray-300">
+      <div className="mb-4">
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          Filters <Funnel />
+        </h1>
+        <p className="text-base text-gray-600 mt-1">
+          Use the filters below to refine your search results.
+        </p>
+      </div>
+
       {/* Scientific Goal */}
       <CollapsibleGroup
         title="Scientific Goal"
