@@ -15,13 +15,13 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-t border-gray-200 first:border-t-0">
+    <div>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <motion.div
             layout
             initial={false}
-            className="rounded-lg shadow-sm p-4 cursor-pointer flex items-center justify-between mb-2 transition-shadow"
+            className="rounded-lg shadow-sm p-4 cursor-pointer flex items-center justify-between mb-2 transition-shadow border border-gray-300"
             onClick={() => setOpen((prev) => !prev)}
             whileTap={{ scale: 0.98 }}
           >

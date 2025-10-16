@@ -1,10 +1,10 @@
 import BrowseToolbar from '@/pages/Browse/BrowseToolbar';
 import SimulationResultCard from '@/pages/Browse/SimulationResultCard';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCards {
-  simulations: Simulation[];
-  filteredData: Simulation[];
+  simulations: SimulationOut[];
+  filteredData: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;

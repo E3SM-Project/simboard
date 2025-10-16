@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 interface SelectedSimulationsBreadcrumbProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   buttonText: string;
   onCompareButtonClick: () => void;
   selectedSimulationIds: string[];

@@ -1,4 +1,3 @@
-import { Tooltip } from '@radix-ui/react-tooltip';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   getCoreRowModel,
@@ -33,13 +32,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
 interface SimulationsCatalogProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
 }
 
 // -------------------- Pure Helpers --------------------
@@ -50,7 +48,7 @@ const statusColors: Record<string, string> = {
   'not-started': 'bg-gray-100 text-gray-800',
 };
 
-const typeColors: Record<Simulation['simulationType'], string> = {
+const typeColors: Record<SimulationOut['simulationType'], string> = {
   production: 'border-green-600 text-green-700',
   master: 'border-blue-600 text-blue-700',
   experimental: 'border-amber-600 text-amber-700',
@@ -83,13 +81,14 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'uploadDate', desc: true },
+    { id: 'createdAt', desc: true },
     { id: 'name', desc: false },
   ]);
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
 
-  const columns = useMemo<ColumnDef<Simulation>[]>(
+  const columns = useMemo<ColumnDef<SimulationOut>[]>(
     () => [
       {
         accessorKey: 'name',
@@ -133,7 +132,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         ),
         size: 130,
       },
-      { accessorKey: 'versionTag', header: 'Version / Tag', size: 180 },
+      { accessorKey: 'gitTag', header: 'Version / Tag', size: 180 },
       { accessorKey: 'gridName', header: 'Grid', size: 110 },
       {
         accessorKey: 'compset',
@@ -147,8 +146,9 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
       },
       {
         id: 'modelDates',
-        header: 'Dates (Model)',
-        accessorFn: (r) => `${formatDate(r.modelStartDate)} → ${formatDate(r.modelEndDate)}`,
+        header: 'Simulation Dates',
+        accessorFn: (r) =>
+          `${formatDate(r.simulationStartDate ?? undefined)} → ${formatDate(r.simulationEndDate ?? undefined)}`,
         size: 220,
       },
       {
@@ -160,75 +160,14 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         size: 140,
       },
       {
-        id: 'vars',
-        header: 'Vars',
-        accessorFn: (r) => r.variables?.length ?? 0,
-        cell: ({ row }) => {
-          const vars = row.original.variables;
-          if (!vars || vars.length === 0) return '—';
-
-          return (
-            <TooltipProvider delayDuration={1}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-help">
-                    {vars.length}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  {vars.length <= 10
-                    ? vars.join(', ')
-                    : `${vars.slice(0, 10).join(', ')}, … (${vars.length} total)`}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
-        size: 90,
-      },
-      {
-        id: 'diagnostics',
-        header: 'Diagnostics',
-        accessorFn: (r) => ({
-          diag: r.diagnosticLinks?.length ?? 0,
-          pace: r.paceLinks?.length ?? 0,
-        }),
-        cell: ({ getValue }) => {
-          const v = getValue() as { diag: number; pace: number };
-          return (
-            <div className="flex items-center gap-2">
-              <span title="Diagnostic links" className="inline-flex items-center gap-1">
-                📊 {v.diag}
-              </span>
-              <span title="PACE links" className="inline-flex items-center gap-1">
-                ⚡ {v.pace}
-              </span>
-            </div>
-          );
-        },
-        size: 150,
-      },
-      {
-        accessorKey: 'uploadDate',
+        accessorKey: 'createdAt',
         header: 'Submitted',
         cell: ({ getValue }) => formatDate(getValue() as string | undefined),
         size: 140,
       },
       // --- Power columns (hidden by default) ---
       {
-        accessorKey: 'gitHash',
-        header: 'Git',
-        cell: ({ getValue }) => (
-          <span className="font-mono" title={String(getValue() ?? '')}>
-            {String(getValue() ?? '').slice(0, 7) || '—'}
-          </span>
-        ),
-        size: 120,
-        enableHiding: true,
-        meta: { isAdvanced: true },
-      },
-      {
-        accessorKey: 'branch',
+        accessorKey: 'gitBranch',
         header: 'Branch',
         cell: ({ getValue }) => (
           <span className="inline-block max-w-[12ch] truncate" title={String(getValue() ?? '')}>
@@ -240,19 +179,35 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
         meta: { isAdvanced: true },
       },
       {
-        accessorKey: 'runDate',
-        header: 'Run Date',
-        cell: ({ getValue }) => formatDate(getValue() as string | undefined),
-        size: 140,
+        accessorKey: 'gitCommitHash',
+        header: 'Git Hash',
+        cell: ({ getValue }) => (
+          <span className="font-mono" title={String(getValue() ?? '')}>
+            {String(getValue() ?? '').slice(0, 7) || '—'}
+          </span>
+        ),
+        size: 120,
         enableHiding: true,
         meta: { isAdvanced: true },
       },
       {
-        accessorKey: 'lastEditedAt',
-        header: 'Edited',
+        id: 'runDates',
+        header: 'Run Dates',
+        accessorFn: (r) =>
+          r.runStartDate || r.runEndDate
+            ? `${formatDate(r.runStartDate ?? undefined)} → ${formatDate(r.runEndDate ?? undefined)}`
+            : '—',
+        cell: ({ getValue }) => <span>{getValue() as string}</span>,
+        size: 220,
+        enableHiding: true,
+        meta: { isAdvanced: true },
+      },
+      {
+        accessorKey: 'lastUpdatedAt',
+        header: 'Last Updated',
         cell: ({ row }) => (
-          <span title={`by ${row.original.lastEditedBy || '—'}`}>
-            {formatDate(row.original.lastEditedAt)}
+          <span title={`by ${row.original.lastUpdatedBy || '—'}`}>
+            {formatDate(row.original.updatedAt ?? undefined)}
           </span>
         ),
         size: 170,
@@ -272,16 +227,8 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
     globalFilterFn: (row, _id, value) => {
       if (!value) return true;
       const v = String(value).toLowerCase();
-      const s: Simulation = row.original as Simulation;
-      return [
-        s.id,
-        s.name,
-        s.versionTag,
-        s.gridName,
-        s.compset,
-        s.machineId,
-        s.variables?.join(',') ?? '',
-      ]
+      const s: SimulationOut = row.original as SimulationOut;
+      return [s.id, s.name, s.gitTag, s.gridName, s.compset, s.machineId]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(v));
     },
@@ -353,31 +300,33 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
           </DropdownMenu>
           <span className="text-muted-foreground hidden sm:inline">View:</span>
           <Button
-            variant="secondary"
+            variant={viewMode === 'simple' ? 'default' : 'secondary'}
             size="sm"
-            onClick={() =>
+            onClick={() => {
+              setViewMode('simple');
               setColumnVisibility({
-                gitHash: false,
-                branch: false,
-                runDate: false,
-                lastEditedAt: false,
-              })
-            }
+                gitCommitHash: false,
+                gitBranch: false,
+                runDates: false,
+                lastUpdatedAt: false,
+              });
+            }}
             title="Hide advanced columns (Git, Branch, Run Date, Edited)"
           >
             Simple
           </Button>
           <Button
-            variant="secondary"
+            variant={viewMode === 'advanced' ? 'default' : 'secondary'}
             size="sm"
-            onClick={() =>
+            onClick={() => {
+              setViewMode('advanced');
               setColumnVisibility({
-                gitHash: true,
-                branch: true,
-                runDate: true,
-                lastEditedAt: true,
-              })
-            }
+                gitCommitHash: true,
+                gitBranch: true,
+                runDates: true,
+                lastUpdatedAt: true,
+              });
+            }}
             title="Show advanced columns (Git, Branch, Run Date, Edited)"
           >
             Advanced
@@ -411,7 +360,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
                       className={cn(
                         'whitespace-nowrap',
                         isName && 'sticky left-10 z-20 bg-background border-r',
-                        isAdvanced && columnVisibility[header.column.id] && 'bg-yellow-100',
+                        isAdvanced && columnVisibility[header.column.id] && 'bg-blue-100',
                       )}
                     >
                       {header.isPlaceholder ? null : (
@@ -469,7 +418,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
                       className={cn(
                         'whitespace-nowrap',
                         isName && 'sticky left-10 z-[5] bg-background border-r',
-                        isAdvanced && columnVisibility[cell.column.id] && 'bg-yellow-50',
+                        isAdvanced && columnVisibility[cell.column.id] && 'bg-blue-50',
                       )}
                     >
                       {typeof cell.column.columnDef.cell === 'function'

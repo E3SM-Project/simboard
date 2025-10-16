@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,6 +13,13 @@ from app.db.mixins import IDMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.db.simulation import Simulation
+
+
+class ArtifactKind(str, Enum):
+    OUTPUT = "output"
+    ARCHIVE = "archive"
+    RUN_SCRIPT = "run_script"
+    POSTPROCESSING_SCRIPT = "postprocessing_script"
 
 
 class Artifact(Base, IDMixin, TimestampMixin):
@@ -23,8 +32,16 @@ class Artifact(Base, IDMixin, TimestampMixin):
         nullable=False,
     )
 
-    # outputPath, archivePath, runScriptPath, postprocessingScriptPath
-    kind: Mapped[str] = mapped_column(String(50))
+    kind: Mapped[ArtifactKind] = mapped_column(
+        SAEnum(
+            ArtifactKind,
+            name="artifact_kind_enum",
+            native_enum=False,  # creates CHECK constraint instead of DB enum
+            values_callable=lambda obj: [e.value for e in obj],  # use values not names
+            validate_strings=True,  # ensures Python-side validation
+        ),
+        comment=f"Must be one of: {', '.join([e.value for e in ArtifactKind])}",
+    )
     uri: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))
     checksum: Mapped[Optional[str]] = mapped_column(String(128))

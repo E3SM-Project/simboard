@@ -86,6 +86,10 @@ format:
 	@echo "$(GREEN)Auto-fixing issues with Ruff...$(NC)"
 	poetry run ruff check . --fix
 
+test:
+	@echo "$(GREEN)Running tests with pytest...$(NC)"
+	poetry run pytest tests
+
 # ============================================================
 #  Misc
 # ============================================================

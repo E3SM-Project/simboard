@@ -4,10 +4,10 @@ import { useState } from 'react';
 
 import { fetchAISimAnalysis } from '@/api/compareAPI';
 import { Button } from '@/components/ui/button';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 interface AIFloatingButton {
-  selectedSimulations: Simulation[];
+  selectedSimulations: SimulationOut[];
 }
 
 export const AIFloatingButton = ({ selectedSimulations }: AIFloatingButton) => {

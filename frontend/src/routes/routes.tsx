@@ -1,7 +1,6 @@
-import { RouteObject, useLocation, useParams, useRoutes } from 'react-router-dom';
+import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { useSimulation } from '@/hooks/useSimulation';
+import { useSimulation } from '@/api/simulation';
 import Browse from '@/pages/Browse/Browse';
 import Compare from '@/pages/Compare/Compare';
 import Docs from '@/pages/Docs/Docs';
@@ -9,49 +8,58 @@ import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
 import Upload from '@/pages/Upload/Upload';
-import type { Simulation } from '@/types/index';
+import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
+  machines: Machine[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: Simulation[];
+  selectedSimulations: SimulationOut[];
 }
 
 const SimulationDetailsRoute = () => {
-  const { id = '' } = useParams();
-  const location = useLocation() as { state?: { seed?: Simulation } };
-  const seed = location.state?.seed;
-  const { data, isLoading, error, refetch } = useSimulation(id, seed);
+  const { id } = useParams<{ id: string }>();
 
-  if (isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading simulation…</div>;
-  }
-  if (error || !data) {
+  const { data: simulation, loading, error } = useSimulation(id || '');
+
+  if (!id)
     return (
-      <div className="p-8 space-y-3">
-        <div className="text-base font-semibold">Simulation not found</div>
-        <div className="text-sm text-muted-foreground">
-          We couldn&apos;t load the simulation with id: <code>{id}</code>.
-        </div>
-        <Button size="sm" onClick={() => refetch()}>
-          Retry
-        </Button>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Invalid simulation ID</div>
       </div>
     );
-  }
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Loading simulation details...</div>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-red-600">Error: {error}</div>
+      </div>
+    );
+  if (!simulation)
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">Simulation not found</div>
+      </div>
+    );
 
-  return <SimulationDetails simulation={data} canEdit={false} />;
+  return <SimulationDetails simulation={simulation} />;
 };
 
 const createRoutes = ({
   simulations,
+  machines,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
 }: RoutesProps): RouteObject[] => {
   return [
-    { path: '/', element: <Home simulations={simulations} /> },
+    { path: '/', element: <Home simulations={simulations} machines={machines} /> },
     {
       path: '/browse',
       element: (
@@ -63,7 +71,6 @@ const createRoutes = ({
       ),
     },
     { path: '/simulations', element: <SimulationsCatalog simulations={simulations} /> },
-    // Details page now fetches by :id (no need to pass list)
     { path: '/simulations/:id', element: <SimulationDetailsRoute /> },
     {
       path: '/compare',
@@ -76,7 +83,7 @@ const createRoutes = ({
         />
       ),
     },
-    { path: '/upload', element: <Upload /> },
+    { path: '/upload', element: <Upload machines={machines} /> },
     { path: '/docs', element: <Docs /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },
   ];
@@ -84,12 +91,14 @@ const createRoutes = ({
 
 export const AppRoutes = ({
   simulations,
+  machines,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
 }: RoutesProps) => {
   const routes = createRoutes({
     simulations,
+    machines,
     selectedSimulationIds,
     setSelectedSimulationIds,
     selectedSimulations,

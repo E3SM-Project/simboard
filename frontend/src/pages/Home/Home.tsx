@@ -3,103 +3,17 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import LatestSimulationsTable from '@/pages/Home/LatestSimulationsTable';
-import VariableCard from '@/pages/Home/VariableCard';
-import type { Simulation } from '@/types/index';
+import type { Machine, SimulationOut } from '@/types/index';
 
 interface HomeProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
+  machines: Machine[];
 }
 
-const Home = ({ simulations }: HomeProps) => {
+const Home = ({ simulations, machines }: HomeProps) => {
   const latestSimulations = [...simulations]
-    .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 6);
-
-  const getSimulationCount = (variable: string) =>
-    simulations.filter((sim) => sim.variables?.includes(variable)).length;
-
-  const keyVariables = {
-    tas: {
-      longName: 'Near-surface air temperature',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('tas'),
-      icon: (
-        <span role="img" aria-label="temperature" className="text-2xl">
-          🌡️
-        </span>
-      ),
-    },
-    ta: {
-      longName: 'Air temperature',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('ta'),
-      icon: (
-        <span role="img" aria-label="temperature" className="text-2xl">
-          🌡️
-        </span>
-      ),
-    },
-    tasmax: {
-      longName: 'Daily maximum near-surface air temperature',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('tasmax'),
-      icon: (
-        <span role="img" aria-label="temperature max" className="text-2xl">
-          🌡️
-        </span>
-      ),
-    },
-    pr: {
-      longName: 'Precipitation',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('pr'),
-      icon: (
-        <span role="img" aria-label="precipitation" className="text-2xl">
-          🌧️
-        </span>
-      ),
-    },
-    psl: {
-      longName: 'Sea level pressure',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('psl'),
-      icon: (
-        <span role="img" aria-label="pressure" className="text-2xl">
-          📈
-        </span>
-      ),
-    },
-    uas: {
-      longName: 'Zonal wind',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('uas'),
-      icon: (
-        <span role="img" aria-label="wind" className="text-2xl">
-          💨
-        </span>
-      ),
-    },
-    rsds: {
-      longName: 'Surface downwelling shortwave radiation',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('rsds'),
-      icon: (
-        <span role="img" aria-label="radiation" className="text-2xl">
-          ☀️
-        </span>
-      ),
-    },
-    zg: {
-      longName: 'Geopotential height',
-      description: 'Some lorem ipsum for now',
-      simulationCount: getSimulationCount('zg'),
-      icon: (
-        <span role="img" aria-label="height" className="text-2xl">
-          📏
-        </span>
-      ),
-    },
-  };
 
   return (
     <main className="flex flex-col items-center justify-center min-h-[70vh] bg-white px-4 py-12">
@@ -113,11 +27,14 @@ const Home = ({ simulations }: HomeProps) => {
             EarthFrame provides access to curated Earth system simulations from the Department of
             Energy&apos;s Energy Exascale Earth System Model (E3SM).
           </p>
-          <ul className="list-disc list-inside mb-4 text-base text-muted-foreground">
-            <li>Explore validated production runs and recent latest master</li>
-            <li>Compare output across simulation campaigns, versions, and configurations</li>
-            <li>
-              Explore high-impact variables like temperature, precipitation, and pressure trends
+          <ul className="list-disc list-outside pl-5 mb-4 text-base text-muted-foreground">
+            <li className="pl-1">Explore validated production runs and recent latest master</li>
+            <li className="pl-1">
+              Compare output across simulation campaigns, versions, and configurations
+            </li>
+            <li className="pl-1">
+              Explore diagnostics for high-impact variables such as temperature, precipitation, and
+              pressure trends
             </li>
           </ul>
           <p className="font-semibold mb-6">
@@ -190,27 +107,6 @@ const Home = ({ simulations }: HomeProps) => {
             </Button>
           </div>
         </div>
-        {/* Key Variables */}
-        <div className="mt-12">
-          <h2 className="text-2xl font-bold mb-2">Key Variables</h2>
-          <p className="text-muted-foreground mb-4">
-            Explore key variables commonly used for model evaluation and analysis.
-            <br />
-            Click any variable to view simulations.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {Object.entries(keyVariables).map(([key, variable]) => (
-              <VariableCard
-                key={key}
-                variableKey={key}
-                longName={variable.longName}
-                description={variable.description}
-                simulationCount={variable.simulationCount}
-                icon={variable.icon}
-              />
-            ))}
-          </div>
-        </div>
 
         {/* Recently Added Simulations */}
         <div className="mt-12">
@@ -226,6 +122,48 @@ const Home = ({ simulations }: HomeProps) => {
               </Button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="w-full max-w-7xl mx-auto mt-12">
+        <h2 className="text-2xl font-bold mb-2">Machines</h2>
+        <p className="text-muted-foreground mb-4">
+          Explore the machines used for running E3SM simulations, including their configurations and
+          details.
+        </p>
+        <div className="bg-white border border-muted rounded-xl shadow p-6">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2">Name</th>
+                <th className="text-left p-2">Location</th>
+                <th className="text-left p-2">Architecture</th>
+                <th className="text-left p-2">Scheduler</th>
+                <th className="text-left p-2">GPU</th>
+                <th className="text-left p-2">Simulation Count</th>
+                <th className="text-left p-2">Notes</th>
+                <th className="text-left p-2">Created At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {machines.map((machine) => (
+                <tr key={machine.id} className="border-b">
+                  <td className="p-2">{machine.name}</td>
+                  <td className="p-2">{machine.site || 'N/A'}</td>
+                  <td className="p-2">{machine.architecture || 'N/A'}</td>
+                  <td className="p-2">{machine.scheduler || 'N/A'}</td>
+                  <td className="p-2">{machine.gpu ? 'Yes' : 'No'}</td>
+                  <td className="p-2">
+                    {simulations.filter((sim) => sim.machineId === machine.id).length}
+                  </td>
+                  <td className="p-2">{machine.notes || 'N/A'}</td>
+                  <td className="p-2">
+                    {machine.createdAt ? new Date(machine.createdAt).toLocaleDateString() : 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </main>

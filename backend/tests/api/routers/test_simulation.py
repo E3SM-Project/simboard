@@ -30,19 +30,19 @@ class TestCreateSimulation:
             "simulationType": "control",
             "status": "created",
             "machineId": str(machine.id),
-            "modelStartDate": "2023-01-01T00:00:00Z",
-            "versionTag": "v1.0",
-            "gitHash": "abc123",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "gitTag": "v1.0",
+            "gitCommitHash": "abc123",
             "artifacts": [
                 {
-                    "kind": "outputPath",
+                    "kind": "output",
                     "uri": "http://example.com/artifact1",
                     "label": "artifact1",
                 }
             ],
             "links": [
                 {
-                    "linkType": "diagnosticLinks",
+                    "kind": "diagnostic",
                     "url": "http://example.com/link1",
                     "label": "link1",
                 }
@@ -95,9 +95,9 @@ class TestListSimulations:
             simulation_type="control",
             status="created",
             machine_id=machine.id,
-            model_start_date="2023-01-01T00:00:00Z",
-            version_tag="v1.0",
-            git_hash="abc123",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            git_tag="v1.0",
+            git_commit_hash="abc123",
         )
         db.add(sim)
         db.commit()
@@ -133,9 +133,9 @@ class TestGetSimulation:
             simulation_type="control",
             status="created",
             machine_id=machine.id,
-            model_start_date="2023-01-01T00:00:00Z",
-            version_tag="v1.0",
-            git_hash="abc123",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            git_tag="v1.0",
+            git_commit_hash="abc123",
         )
         db.add(sim)
         db.commit()

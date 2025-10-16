@@ -15,6 +15,9 @@ summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 def analyze_simulations(payload: List[SimulationOut]):
     """
     Analyze a list of simulations and return a summary of their metadata.
+
+    FIXME: This route causes FastAPI to register an extra SimulationOut schema
+    on the OpenAPI docs, which is not ideal.
     """
     try:
         sim_descriptions = [_describe_sim(sim) for sim in payload]
@@ -51,7 +54,7 @@ def _describe_sim(sim: SimulationOut) -> str:
     """
     return (
         f"Name: {sim.name}, Case Name: {sim.case_name}: "
-        f"Tag: {sim.version_tag}, Campaign: {sim.campaign_id}, Compset: {sim.compset}, "
+        f"Tag: {sim.git_tag}, Campaign: {sim.campaign_id}, Compset: {sim.compset}, "
         f"Resolution: {sim.grid_resolution}, Machine: {sim.machine_id}, Notes: {sim.notes_markdown or 'n/a'}"
     )
 

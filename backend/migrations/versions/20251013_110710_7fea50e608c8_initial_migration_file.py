@@ -1,8 +1,8 @@
-"""initial
+"""Initial migration file
 
-Revision ID: 659a7a1b5a2c
+Revision ID: 7fea50e608c8
 Revises: 
-Create Date: 2025-09-26 11:47:58.170070
+Create Date: 2025-10-13 11:07:10.928898
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '659a7a1b5a2c'
+revision: str = '7fea50e608c8'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -39,43 +39,36 @@ def upgrade() -> None:
     sa.Column('label', sa.String(length=100), nullable=False),
     sa.PrimaryKeyConstraint('code', name=op.f('pk_status_lookup'))
     )
-    op.create_table('variables',
-    sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('description', sa.String(length=300), nullable=True),
-    sa.PrimaryKeyConstraint('name', name=op.f('pk_variables'))
-    )
     op.create_table('simulations',
     sa.Column('name', sa.String(length=200), nullable=False),
-    sa.Column('compset', sa.String(length=120), nullable=False),
-    sa.Column('comp_set_alias', sa.String(length=120), nullable=False),
-    sa.Column('grid_name', sa.String(length=200), nullable=False),
-    sa.Column('grid_resolution', sa.String(length=50), nullable=False),
-    sa.Column('initialization_type', sa.String(length=50), nullable=False),
-    sa.Column('simulation_type', sa.String(length=50), nullable=False),
-    sa.Column('status', sa.String(length=50), nullable=False),
-    sa.Column('machine_id', sa.UUID(), nullable=False),
-    sa.Column('model_start_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('case_name', sa.String(length=200), nullable=True),
+    sa.Column('case_name', sa.String(length=200), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
     sa.Column('version_tag', sa.String(length=100), nullable=True),
     sa.Column('git_hash', sa.String(length=64), nullable=True),
+    sa.Column('compset', sa.String(length=120), nullable=False),
+    sa.Column('compset_alias', sa.String(length=120), nullable=False),
+    sa.Column('grid_name', sa.String(length=200), nullable=False),
+    sa.Column('grid_resolution', sa.String(length=50), nullable=False),
     sa.Column('parent_simulation_id', sa.UUID(), nullable=True),
+    sa.Column('simulation_type', sa.String(length=50), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('campaign_id', sa.String(length=100), nullable=True),
     sa.Column('experiment_type_id', sa.String(length=100), nullable=True),
+    sa.Column('initialization_type', sa.String(length=50), nullable=False),
     sa.Column('group_name', sa.String(length=120), nullable=True),
+    sa.Column('machine_id', sa.UUID(), nullable=False),
+    sa.Column('simulation_start_date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('simulation_end_date', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('total_years', sa.Float(), nullable=True),
     sa.Column('run_start_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('run_end_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('compiler', sa.String(length=100), nullable=True),
+    sa.Column('key_features', sa.Text(), nullable=True),
+    sa.Column('known_issues', sa.Text(), nullable=True),
+    sa.Column('notes_markdown', sa.Text(), nullable=True),
     sa.Column('branch', sa.String(length=200), nullable=True),
     sa.Column('external_repo_url', sa.String(length=500), nullable=True),
-    sa.Column('notes_markdown', sa.Text(), nullable=True),
-    sa.Column('known_issues', sa.Text(), nullable=True),
-    sa.Column('uploaded_by', sa.String(length=100), nullable=True),
-    sa.Column('upload_date', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('last_modified', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('last_edited_by', sa.String(length=100), nullable=True),
-    sa.Column('last_edited_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('created_by', sa.String(length=100), nullable=True),
+    sa.Column('last_updated_by', sa.String(length=100), nullable=True),
     sa.Column('extra', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -86,13 +79,14 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_simulations')),
     sa.UniqueConstraint('name', 'version_tag', name='uq_simulation_name_version')
     )
+    op.create_index(op.f('ix_simulations_case_name'), 'simulations', ['case_name'], unique=True)
     op.create_index(op.f('ix_simulations_git_hash'), 'simulations', ['git_hash'], unique=False)
     op.create_index(op.f('ix_simulations_machine_id'), 'simulations', ['machine_id'], unique=False)
-    op.create_index(op.f('ix_simulations_name'), 'simulations', ['name'], unique=False)
+    op.create_index(op.f('ix_simulations_name'), 'simulations', ['name'], unique=True)
     op.create_index(op.f('ix_simulations_status'), 'simulations', ['status'], unique=False)
     op.create_table('artifacts',
     sa.Column('simulation_id', sa.UUID(), nullable=False),
-    sa.Column('kind', sa.String(length=50), nullable=False),
+    sa.Column('kind', sa.Enum('OUTPUT', 'ARCHIVE', 'RUN_SCRIPT', 'POSTPROCESSING_SCRIPT', name='artifact_kind_enum', native_enum=False), nullable=False, comment='Must be one of: output, archive, run_script, postprocessing_script'),
     sa.Column('uri', sa.String(length=1000), nullable=False),
     sa.Column('label', sa.String(length=200), nullable=True),
     sa.Column('checksum', sa.String(length=128), nullable=True),
@@ -106,7 +100,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_artifacts_simulation_id'), 'artifacts', ['simulation_id'], unique=False)
     op.create_table('external_links',
     sa.Column('simulation_id', sa.UUID(), nullable=False),
-    sa.Column('link_type', sa.String(length=50), nullable=False),
+    sa.Column('kind', sa.Enum('DIAGNOSTIC', 'PERFORMANCE', 'DOCS', 'OTHER', name='external_link_kind_enum', native_enum=False), nullable=False, comment='Must be one of: diagnostic, performance, docs, other'),
     sa.Column('url', sa.String(length=1000), nullable=False),
     sa.Column('label', sa.String(length=200), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -115,20 +109,12 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['simulation_id'], ['simulations.id'], name=op.f('fk_external_links_simulation_id_simulations'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_external_links'))
     )
-    op.create_table('simulation_variables',
-    sa.Column('simulation_id', sa.UUID(), nullable=False),
-    sa.Column('variable_name', sa.String(length=100), nullable=False),
-    sa.ForeignKeyConstraint(['simulation_id'], ['simulations.id'], name=op.f('fk_simulation_variables_simulation_id_simulations')),
-    sa.ForeignKeyConstraint(['variable_name'], ['variables.name'], name=op.f('fk_simulation_variables_variable_name_variables')),
-    sa.PrimaryKeyConstraint('simulation_id', 'variable_name', name=op.f('pk_simulation_variables'))
-    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_table('simulation_variables')
     op.drop_table('external_links')
     op.drop_index(op.f('ix_artifacts_simulation_id'), table_name='artifacts')
     op.drop_table('artifacts')
@@ -136,8 +122,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_simulations_name'), table_name='simulations')
     op.drop_index(op.f('ix_simulations_machine_id'), table_name='simulations')
     op.drop_index(op.f('ix_simulations_git_hash'), table_name='simulations')
+    op.drop_index(op.f('ix_simulations_case_name'), table_name='simulations')
     op.drop_table('simulations')
-    op.drop_table('variables')
     op.drop_table('status_lookup')
     op.drop_index(op.f('ix_machines_name'), table_name='machines')
     op.drop_table('machines')

@@ -1,4 +1,3 @@
-from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +14,7 @@ class Settings(BaseSettings):
 
     # Frontend
     # ----------------------------------------
-    frontend_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:5173")
+    frontend_origin: str = "http://localhost:5173"
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------

@@ -1,9 +1,13 @@
+import { Funnel } from 'lucide-react';
+
+import { MultiSelect } from '@/components/ui/multi-select';
 import type { FilterState } from '@/pages/Browse/Browse';
 import CollapsibleGroup from '@/pages/Browse/CollapsibleGroup';
 import MultiSelectCheckboxGroup from '@/pages/Browse/MultiSelectCheckBoxGroup';
+
 interface FilterPanelProps {
   appliedFilters: FilterState;
-  availableFilters: FilterState; // still carries raw string values for non-FK filters
+  availableFilters: FilterState;
   onChange: (next: FilterState) => void;
   machineOptions: { value: string; label: string }[];
 }
@@ -23,31 +27,57 @@ const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="w-[360px] max-w-full bg-background border-r p-6 flex flex-col gap-6 min-h-screen">
+    <aside className="w-[360px] max-w-full bg-background border-r p-6 flex flex-col gap-6 min-h-screen border border-gray-300">
+      <div className="mb-4">
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          Filters <Funnel />
+        </h1>
+        <p className="text-base text-gray-600 mt-1">
+          Use the filters below to refine your search results.
+        </p>
+      </div>
+
       {/* Scientific Goal */}
       <CollapsibleGroup
         title="Scientific Goal"
         description="Filter by high-level scientific purpose, such as campaign, experiment, or outputs."
       >
-        <MultiSelectCheckboxGroup
-          label="Campaign"
-          options={availableFilters.campaignId || []}
-          selected={appliedFilters.campaignId || []}
-          onChange={(next) => handleChange('campaignId', next)}
+        <label className="block text-sm font-medium text-gray-700">Campaign</label>
+        <MultiSelect
+          options={(availableFilters.campaignId || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.campaignId || []}
+          onValueChange={(next) => handleChange('campaignId', next as string[])}
+          placeholder="Select campaigns"
+          resetOnDefaultValueChange={true}
+        />
+
+        <label className="block text-sm font-medium text-gray-700">Experiment Type</label>
+        <MultiSelect
+          options={(availableFilters.experimentTypeId || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.experimentTypeId || []}
+          onValueChange={(next) => handleChange('experimentTypeId', next as string[])}
+          placeholder="Select experiments"
+          resetOnDefaultValueChange={true}
         />
 
         <MultiSelectCheckboxGroup
-          label="Experiment"
-          options={availableFilters.experimentTypeId || []}
-          selected={appliedFilters.experimentTypeId || []}
-          onChange={(next) => handleChange('experimentTypeId', next)}
+          label="Simulation Type"
+          options={availableFilters.simulationType || []}
+          selected={appliedFilters.simulationType || []}
+          onChange={(next) => handleChange('simulationType', next)}
         />
 
         <MultiSelectCheckboxGroup
-          label="Variables"
-          options={availableFilters.variables || []}
-          selected={appliedFilters.variables || []}
-          onChange={(next) => handleChange('variables', next)}
+          label="Initialization Type"
+          options={availableFilters.initializationType || []}
+          selected={appliedFilters.initializationType || []}
+          onChange={(next) => handleChange('initializationType', next)}
         />
 
         {/* Frequency left out for now */}
@@ -57,6 +87,47 @@ const BrowseFiltersSidePanel = ({
       <CollapsibleGroup
         title="Simulation Context"
         description="Refine results based on the technical setup of the simulation."
+      >
+        <label className="block text-sm font-medium text-gray-700">Compset</label>
+        <MultiSelect
+          options={(availableFilters.compset || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.compset || []}
+          onValueChange={(next) => handleChange('compset', next as string[])}
+          placeholder="Select compsets"
+          resetOnDefaultValueChange={true}
+        />
+
+        <label className="block text-sm font-medium text-gray-700">Grid Name</label>
+        <MultiSelect
+          options={(availableFilters.gridName || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.gridName || []}
+          onValueChange={(next) => handleChange('gridName', next as string[])}
+          placeholder="Select grid names"
+          resetOnDefaultValueChange={true}
+        />
+
+        <label className="block text-sm font-medium text-gray-700">Grid Resolution</label>
+        <MultiSelect
+          options={(availableFilters.gridResolution || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.gridResolution || []}
+          onValueChange={(next) => handleChange('gridResolution', next as string[])}
+          placeholder="Select grid resolutions"
+          resetOnDefaultValueChange={true}
+        />
+      </CollapsibleGroup>
+
+      <CollapsibleGroup
+        title="Execution Details"
+        description="Filter by run status or time information."
       >
         <MultiSelectCheckboxGroup
           label="Machine"
@@ -71,24 +142,11 @@ const BrowseFiltersSidePanel = ({
         />
 
         <MultiSelectCheckboxGroup
-          label="Grid Name"
-          options={availableFilters.gridName || []}
-          selected={appliedFilters.gridName || []}
-          onChange={(next) => handleChange('gridName', next)}
+          label="Compiler"
+          options={availableFilters.compiler || []}
+          selected={appliedFilters.compiler || []}
+          onChange={(next) => handleChange('compiler', next)}
         />
-
-        <MultiSelectCheckboxGroup
-          label="Version / Tag"
-          options={availableFilters.versionTag || []}
-          selected={appliedFilters.versionTag || []}
-          onChange={(next) => handleChange('versionTag', next)}
-        />
-      </CollapsibleGroup>
-
-      <CollapsibleGroup
-        title="Execution Details"
-        description="Filter by run status or time information."
-      >
         <MultiSelectCheckboxGroup
           label="Status"
           options={availableFilters.status || []}
@@ -100,12 +158,33 @@ const BrowseFiltersSidePanel = ({
               : option.label
           }
         />
-        {/* Date pickers can go here later */}
       </CollapsibleGroup>
 
-      {/* Metadata */}
-      <CollapsibleGroup title="Metadata" description="Filter by upload information.">
-        <div>{/* Upload date range UI placeholder */}</div>
+      {/* Provenance*/}
+      <CollapsibleGroup title="Provenance" description="Filter by provenance information.">
+        <label className="block text-sm font-medium text-gray-700">Git Version/Tag</label>
+        <MultiSelect
+          options={(availableFilters.gitTag || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.gitTag || []}
+          onValueChange={(next) => handleChange('gitTag', next as string[])}
+          placeholder="Select git tags"
+          resetOnDefaultValueChange={true}
+        />
+
+        <label className="block text-sm font-medium text-gray-700">Created By</label>
+        <MultiSelect
+          options={(availableFilters.createdBy || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.createdBy || []}
+          onValueChange={(next) => handleChange('createdBy', next as string[])}
+          placeholder="Select creators"
+          resetOnDefaultValueChange={true}
+        />
       </CollapsibleGroup>
     </aside>
   );

@@ -2,6 +2,7 @@ import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 
+
 export const cn = (...inputs: unknown[]) => twMerge(clsx(inputs));
 
 /**
@@ -23,8 +24,8 @@ export const formatDate = (date: string | number | Date): string =>
  * Calculates the duration between two dates and returns it as a human-readable string.
  * The duration is expressed in years, months, days, hours, or minutes, depending on the difference.
  *
- * @param modelStartDate - The start date of the simulation. Can be a string, number, or Date object.
- * @param modelEndDate - The end date of the simulation. Can be a string, number, or Date object.
+ * @param simulationStartDate - The start date of the simulation. Can be a string, number, or Date object.
+ * @param simulationEndDate - The end date of the simulation. Can be a string, number, or Date object.
  * @returns A string representing the duration between the two dates in the largest appropriate unit.
  *
  * @example
@@ -40,11 +41,11 @@ export const formatDate = (date: string | number | Date): string =>
  * ```
  */
 export const getSimulationDuration = (
-  modelStartDate: string | number | Date,
-  modelEndDate: string | number | Date,
+  simulationStartDate: string | number | Date,
+  simulationEndDate: string | number | Date,
 ): string => {
-  const start = new Date(modelStartDate);
-  const end = new Date(modelEndDate);
+  const start = new Date(simulationStartDate);
+  const end = new Date(simulationEndDate);
   const ms = end.getTime() - start.getTime();
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
 

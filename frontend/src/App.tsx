@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
-import { useSimulations } from '@/api/simulations';
+import { useMachines, useSimulations } from '@/api/simulation';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
@@ -14,7 +14,17 @@ const App = () => {
   const queryClient = useMemo(() => new QueryClient(), []);
 
   // Fetch simulations data using custom hook.
-  const simulations = useSimulations();
+  const rawSimulations = useSimulations();
+  const machines = useMachines();
+
+  const simulations = useMemo(() => {
+    if (!rawSimulations.data || !machines.data) return [];
+
+    return rawSimulations.data.map((simulation) => ({
+      ...simulation,
+      machine: machines.data.find((machine) => machine.id === simulation.machineId),
+    }));
+  }, [rawSimulations.data, machines.data]);
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -22,8 +32,8 @@ const App = () => {
   });
 
   const selectedSimulations = useMemo(
-    () => (simulations.data ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
-    [simulations.data, selectedSimulationIds],
+    () => (simulations ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
+    [simulations, selectedSimulationIds],
   );
   // -------------------- Effects --------------------
   useEffect(() => {
@@ -36,7 +46,9 @@ const App = () => {
       <BrowserRouter>
         <NavBar selectedSimulationIds={selectedSimulationIds} />
         <AppRoutes
-          simulations={simulations.data}
+          // FIXME: Fix type annotations for AppRoutes
+          simulations={simulations}
+          machines={machines.data}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}
           selectedSimulations={selectedSimulations}

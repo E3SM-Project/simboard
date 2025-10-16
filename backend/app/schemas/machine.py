@@ -1,25 +1,33 @@
 from datetime import datetime
 from uuid import UUID
 
-from app.schemas.base import CamelInModel, CamelOutModel
+from pydantic import Field
+
+from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
-class MachineCreate(CamelInModel):
-    name: str
-    site: str
-    architecture: str
-    scheduler: str
-    gpu: bool = False
-    notes: str | None = None
+class MachineCreate(CamelInBaseModel):
+    name: str = Field(..., description="The name of the machine")
+    site: str = Field(..., description="The site where the machine is located")
+    architecture: str = Field(..., description="The architecture of the machine")
+    scheduler: str = Field(..., description="The scheduler used by the machine")
+    gpu: bool = Field(False, description="Indicates if the machine has a GPU")
+    notes: str | None = Field(None, description="Additional notes about the machine")
 
 
-class MachineOut(CamelOutModel):
-    id: UUID
-    name: str
-    site: str
-    architecture: str
-    scheduler: str
-    gpu: bool
-    created_at: datetime
-    updated_at: datetime
-    notes: str | None = None
+class MachineOut(CamelOutBaseModel):
+    id: UUID = Field(..., description="The unique identifier of the machine")
+
+    name: str = Field(..., description="The name of the machine")
+    site: str = Field(..., description="The site where the machine is located")
+    architecture: str = Field(..., description="The architecture of the machine")
+    scheduler: str = Field(..., description="The scheduler used by the machine")
+    gpu: bool = Field(False, description="Indicates if the machine has a GPU")
+    notes: str | None = Field(None, description="Additional notes about the machine")
+
+    created_at: datetime = Field(
+        ..., description="The timestamp when the machine was created"
+    )
+    updated_at: datetime = Field(
+        ..., description="The timestamp when the machine was last updated"
+    )

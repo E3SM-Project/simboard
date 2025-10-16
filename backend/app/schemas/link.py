@@ -1,25 +1,41 @@
 from datetime import datetime
-from typing import Literal
+from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field, HttpUrl
 
-from app.schemas.utils import to_camel_case
-
-
-class ExternalLinkIn(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel_case, populate_by_name=True)
-
-    link_type: Literal["diagnosticLinks", "paceLinks", "docs", "other"]
-    url: str
-    label: str | None = None
+from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
-class ExternalLinkOut(ExternalLinkIn):
-    model_config = ConfigDict(
-        from_attributes=True, alias_generator=to_camel_case, populate_by_name=True
+class ExternalLinkKind(str, Enum):
+    """Enumeration of possible external link types."""
+
+    DIAGNOSTIC = "diagnostic"
+    PERFORMANCE = "performance"
+    DOCS = "docs"
+    OTHER = "other"
+
+
+class ExternalLinkCreate(CamelInBaseModel):
+    kind: ExternalLinkKind = Field(..., description="The type of the external link.")
+    url: HttpUrl = Field(..., description="The URL of the external link.")
+    label: str | None = Field(
+        None, description="An optional label for the external link."
     )
 
-    id: UUID
-    created_at: datetime
-    updated_at: datetime
+
+class ExternalLinkOut(CamelOutBaseModel):
+    id: UUID = Field(..., description="The unique identifier of the external link.")
+
+    kind: ExternalLinkKind = Field(..., description="The type of the external link.")
+    url: HttpUrl = Field(..., description="The URL of the external link.")
+    label: str | None = Field(
+        None, description="An optional label for the external link."
+    )
+
+    created_at: datetime = Field(
+        ..., description="The timestamp when the external link was created."
+    )
+    updated_at: datetime = Field(
+        ..., description="The timestamp when the external link was last updated."
+    )

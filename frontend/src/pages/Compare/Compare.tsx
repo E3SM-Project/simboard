@@ -5,14 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { AIFloatingButton } from '@/pages/Compare/AIFloatingButton';
 import CompareToolbar from '@/pages/Compare/CompareToolbar';
 import { norm, renderCellValue } from '@/pages/Compare/utils';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 interface CompareProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: Simulation[];
+  selectedSimulations: SimulationOut[];
 }
 
 const Compare = ({
@@ -52,30 +52,49 @@ const Compare = ({
   // -------------------- Derived Data --------------------
   const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedSimulationIds[colIdx]));
 
-  const getSimProp = <K extends keyof Simulation>(
+  const getSimProp = <K extends keyof SimulationOut>(
     id: string,
     prop: K,
-    fallback: Simulation[K] | '',
-  ): Simulation[K] => {
+    fallback: SimulationOut[K] | '',
+  ): SimulationOut[K] => {
     const sim = selectedSimulations.find((s) => s.id === id);
-    return (sim?.[prop] ?? fallback) as Simulation[K];
+    return (sim?.[prop] ?? fallback) as SimulationOut[K];
   };
 
-  const makeMetricRow = <T extends keyof Simulation>(
+  const makeMetricRow = <T extends keyof SimulationOut>(
     label: string,
     prop: T,
-    fallback: Simulation[T] | '' = '',
-  ) => ({
-    label,
-    values: selectedSimulationIds.map((id) => getSimProp(id, prop, fallback)),
-  });
+    fallback: SimulationOut[T] | '' = '',
+  ) => {
+    const values = selectedSimulationIds.map((id) => {
+      const sim = selectedSimulations.find((s) => s.id === id);
+      if (!sim) return fallback;
+      return (sim[prop] ?? fallback) as SimulationOut[T];
+    });
+
+    return { label, values };
+  };
+
+  const makeGroupedMetricRow = (label: string, kind: string, fallback: unknown[] = []) => {
+    const values = selectedSimulationIds.map((id) => {
+      const sim = selectedSimulations.find((s) => s.id === id);
+      if (!sim) return fallback;
+
+      return sim.groupedArtifacts[kind] ?? sim.groupedLinks[kind] ?? fallback;
+    });
+
+    return { label, values };
+  };
 
   const rowHasDiffs = (vals: unknown[]): boolean => {
     if (visibleOrder.length <= 1) return false;
+
     const first = norm(vals[visibleOrder[0]]);
+
     for (let i = 1; i < visibleOrder.length; i++) {
       if (norm(vals[visibleOrder[i]]) !== first) return true;
     }
+
     return false;
   };
 
@@ -83,7 +102,7 @@ const Compare = ({
     configuration: [
       makeMetricRow('Simulation Name', 'name', ''),
       makeMetricRow('Case Name', 'caseName', ''),
-      makeMetricRow('Model Version', 'versionTag', ''),
+      makeMetricRow('Model Version', 'gitTag', ''),
       makeMetricRow('Compset', 'compset', ''),
       makeMetricRow('Grid Name', 'gridName', ''),
       makeMetricRow('Grid Resolution', 'gridResolution', ''),
@@ -103,35 +122,28 @@ const Compare = ({
           return sim?.machine?.name ?? '';
         }),
       },
-      {
-        label: 'Variables',
-        values: selectedSimulationIds.map((id) => {
-          const sim = selectedSimulations.find((s) => s.id === id);
-          return Array.isArray(sim?.variables) && sim.variables.length ? sim.variables : [];
-        }),
-      },
-      makeMetricRow('Branch', 'branch', ''),
+      makeMetricRow('Branch', 'gitBranch', ''),
     ],
     timeline: [
       {
         label: 'Model Start',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'modelStartDate', '');
+          const date = getSimProp(id, 'simulationStartDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
       {
         label: 'Model End',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'modelEndDate', '');
+          const date = getSimProp(id, 'simulationEndDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
       {
         label: 'Duration',
         values: selectedSimulationIds.map((id) => {
-          const start = getSimProp(id, 'modelStartDate', '');
-          const end = getSimProp(id, 'modelEndDate', '');
+          const start = getSimProp(id, 'simulationStartDate', '');
+          const end = getSimProp(id, 'simulationEndDate', '');
           if (start && end) {
             try {
               return getSimulationDuration(start as string, end as string);
@@ -145,7 +157,14 @@ const Compare = ({
       {
         label: 'Calendar Start',
         values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'calendarStartDate', '');
+          const date = getSimProp(id, 'runStartDate', '');
+          return date ? formatDate(date as string) : '—';
+        }),
+      },
+      {
+        label: 'Calendar End Date',
+        values: selectedSimulationIds.map((id) => {
+          const date = getSimProp(id, 'runEndDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
@@ -153,26 +172,19 @@ const Compare = ({
     keyFeatures: [makeMetricRow('Key Features', 'keyFeatures', '')],
     knownIssues: [makeMetricRow('Known Issues', 'knownIssues', '')],
     locations: [
-      {
-        label: 'Output Path',
-        values: selectedSimulationIds.map((id) => {
-          const outputPath = getSimProp(id, 'outputPath', '');
-          return outputPath ? [outputPath] : [];
-        }),
-      },
-      makeMetricRow('Archive Paths', 'archivePaths', []),
-      makeMetricRow('Run Script Paths', 'runScriptPaths', []),
-      makeMetricRow('Batch Logs', 'batchLogPaths', []),
+      makeGroupedMetricRow('Output Paths', 'output'),
+      makeGroupedMetricRow('Archive Paths', 'archive'),
+      makeGroupedMetricRow('Run Script Paths', 'runScript'),
+      makeGroupedMetricRow('Batch Logs', 'batchLog'),
     ],
-    diagnostics: [makeMetricRow('Diagnostic Links', 'diagnosticLinks', [])],
-    performance: [makeMetricRow('PACE Links', 'paceLinks', [])],
+    diagnostics: [makeGroupedMetricRow('Diagnostic Links', 'diagnostic')],
+    performance: [makeGroupedMetricRow('PACE Links', 'performance')],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
-      makeMetricRow('Repository URL', 'externalRepoUrl', ''),
-      makeMetricRow('Version/Tag', 'versionTag', ''),
-      makeMetricRow('Commit Hash', 'gitHash', ''),
-      makeMetricRow('Branch', 'branch', ''),
-      makeMetricRow('Branch Time', 'branchTime', ''),
+      makeMetricRow('Repository URL', 'gitRepositoryUrl', ''),
+      makeMetricRow('Branch', 'gitBranch', ''),
+      makeMetricRow('Version/Tag', 'gitTag', ''),
+      makeMetricRow('Commit Hash', 'gitCommitHash', ''),
     ],
   };
 

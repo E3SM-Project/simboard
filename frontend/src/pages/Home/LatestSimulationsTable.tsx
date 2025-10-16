@@ -1,11 +1,12 @@
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, Check, GitBranch } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
-const simulationTypeIcon = (sim: Simulation) => {
+const simulationTypeIcon = (sim: SimulationOut) => {
   if (sim.simulationType === 'production') {
     return (
       <span
@@ -26,10 +27,81 @@ const simulationTypeIcon = (sim: Simulation) => {
 };
 
 interface LatestSimulationsTableProps {
-  latestSimulations: Simulation[];
+  latestSimulations: SimulationOut[];
 }
 
 const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTableProps) => {
+  const navigate = useNavigate();
+
+  const tableColumns: ColumnDef<SimulationOut>[] = [
+    {
+      accessorKey: 'name',
+      header: 'Name',
+      cell: (info) => info.getValue() || 'N/A',
+    },
+    {
+      accessorKey: 'campaignId',
+      header: 'Campaign',
+      cell: (info) => info.getValue() || 'N/A',
+    },
+    {
+      accessorKey: 'simulationStartDate',
+      header: 'Sim Start Date',
+      cell: (info) => {
+        const value = info.getValue();
+        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
+      },
+    },
+    {
+      accessorKey: 'simulationEndDate',
+      header: 'Sim End Date',
+      cell: (info) => {
+        const value = info.getValue();
+        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
+      },
+    },
+    {
+      id: 'versionOrHash',
+      header: 'Version / Git Hash',
+      cell: (info) => {
+        const sim = info.row.original;
+        return sim.simulationType === 'production'
+          ? sim.gitTag || 'N/A'
+          : sim.gitCommitHash || 'N/A';
+      },
+    },
+    {
+      accessorKey: 'createdAt',
+      header: 'Upload Date',
+      cell: (info) => {
+        const value = info.getValue();
+        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
+      },
+    },
+    {
+      accessorKey: 'simulationType',
+      header: 'Type',
+      cell: (info) => simulationTypeIcon(info.row.original) || 'N/A',
+    },
+    {
+      id: 'details',
+      header: 'Details',
+      cell: (info) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(`/simulations/${info.row.original.id}`)}
+          aria-label="Details"
+          className="p-2"
+        >
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+      ),
+      enableSorting: false,
+      enableColumnFilter: false,
+    },
+  ];
+
   const table = useReactTable({
     data: latestSimulations,
     columns: tableColumns,
@@ -80,68 +152,5 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
     </table>
   );
 };
-
-const tableColumns: ColumnDef<Simulation>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Name',
-    cell: (info) => info.getValue(),
-  },
-  {
-    accessorKey: 'campaignId',
-    header: 'Campaign',
-    cell: (info) => info.getValue(),
-  },
-  {
-    accessorKey: 'variables',
-    header: 'Variables',
-    cell: (info) => {
-      const value = info.getValue();
-      return Array.isArray(value) ? (value as string[]).join(', ') : value;
-    },
-  },
-  {
-    accessorKey: 'modelStartDate',
-    header: 'Start Date',
-    cell: (info) => new Date(info.getValue() as string).toLocaleDateString(),
-  },
-  {
-    id: 'versionOrHash',
-    header: 'Version / Git Hash',
-    cell: (info) => {
-      const sim = info.row.original;
-      return sim.simulationType === 'production' ? sim.versionTag : sim.gitHash;
-    },
-  },
-  {
-    accessorKey: 'uploadDate',
-    header: 'Upload Date',
-    cell: (info) => new Date(info.getValue() as string).toLocaleDateString(),
-  },
-  {
-    accessorKey: 'simulationType',
-    header: 'Type',
-    cell: (info) => simulationTypeIcon(info.row.original),
-  },
-  {
-    id: 'details',
-    header: 'Details',
-    cell: () => (
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          // handle details click, e.g. navigate or open modal
-        }}
-        aria-label="Details"
-        className="p-2"
-      >
-        <ArrowRight className="w-4 h-4" />
-      </Button>
-    ),
-    enableSorting: false,
-    enableColumnFilter: false,
-  },
-];
 
 export default LatestSimulationsTable;

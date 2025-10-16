@@ -1,113 +1,161 @@
-/**
- * Helper: normalize values for comparison in diff highlighting.
- * Converts arrays to JSON, empty/null/undefined to '—', otherwise stringifies.
- */
+import { Copy, ExternalLink } from 'lucide-react';
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+/* -------------------------------------------------------------------------- */
+/*  Helpers                                                                   */
+/* -------------------------------------------------------------------------- */
+
 export const norm = (v: unknown) => {
   if (Array.isArray(v)) return JSON.stringify(v);
   if (v === null || v === undefined || v === '') return '—';
   return String(v);
 };
 
-/**
- * Type for values that could represent a link.
- */
-export type LinkLike =
-  | string
-  | {
-      url?: string;
-      label?: string;
-      href?: string;
-      text?: string;
-      link?: string;
-      name?: string;
-      title?: string;
-      path?: string;
-      value?: string;
-    };
+interface LinkLike {
+  url: string;
+  label: string;
+  isExternal: boolean;
+}
 
 /**
- * Returns true if the string looks like a URL or path.
+ * Normalizes artifacts and links into a consistent [{ url, label, isExternal }] array.
+ * Supports artifacts with { uri, label, name } and links with { url, label }.
  */
-export const looksLikeUrl = (s: string) => /^(https?:\/\/|\/)/i.test(s);
+export const toLinkArray = (value: unknown): LinkLike[] => {
+  if (!value) return [];
 
-/**
- * Extracts a { url, label } object from a LinkLike value, or null if not a link.
- */
-export const extractOneLink = (v: LinkLike): { url: string; label: string } | null => {
-  if (!v) return null;
+  const normalize = (item: unknown): LinkLike[] => {
+    if (!item) return [];
 
-  if (typeof v === 'string') {
-    // If it's an <a ...>...</a> HTML string, pull href + inner text
-    const a = v.match(/<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/i);
-    if (a) return { url: a[1], label: a[2] || a[1] };
-    if (looksLikeUrl(v)) return { url: v, label: v };
-    return null; // plain string, not a link
+    // Plain string (URI or URL)
+    if (typeof item === 'string') {
+      if (item.startsWith('http') || item.startsWith('file:') || item.startsWith('/')) {
+        return [
+          {
+            url: item,
+            label: makeLabelFromPath(item),
+            isExternal: item.startsWith('http'),
+          },
+        ];
+      }
+      return [];
+    }
+
+    // Object (artifact or link)
+    if (typeof item === 'object') {
+      const obj = item as Record<string, string | undefined>;
+      const href = obj.url ?? obj.uri;
+
+      if (!href) return [];
+
+      return [
+        {
+          url: href,
+          label: obj.label ?? obj.name ?? makeLabelFromPath(href),
+          isExternal: href.startsWith('http'),
+        },
+      ];
+    }
+
+    return [];
+  };
+
+  return Array.isArray(value) ? value.flatMap(normalize) : normalize(value);
+};
+
+/** Generate short display label from URI/URL if none provided */
+const makeLabelFromPath = (uri: string) => {
+  if (!uri) return '';
+
+  if (uri.startsWith('http')) {
+    try {
+      const { hostname, pathname } = new URL(uri);
+      const shortPath =
+        pathname.length > 30 ? pathname.slice(0, 27).replace(/\/$/, '') + '…' : pathname;
+
+      return `${hostname}${shortPath}`;
+    } catch {
+      return uri;
+    }
   }
+  const parts = uri.split('/');
+  return parts.at(-1) || uri;
+};
 
-  // object-ish — try common keys
-  const url =
-    (v.url as string) ||
-    (v.href as string) ||
-    (v.link as string) ||
-    (v.path as string) ||
-    (v.value as string) ||
-    '';
+/* -------------------------------------------------------------------------- */
+/*  Cell Renderer                                                             */
+/* -------------------------------------------------------------------------- */
 
-  if (!url) return null;
-
-  const label =
-    (v.label as string) || (v.text as string) || (v.name as string) || (v.title as string) || url;
-
-  return { url, label };
+const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // optional toast or console.warn
+  }
 };
 
 /**
- * Normalize any input into an array of link objects, or [] if none.
- */
-export const toLinkArray = (value: unknown): { url: string; label: string }[] => {
-  const arr = Array.isArray(value) ? value : value != null ? [value] : [];
-  const links: { url: string; label: string }[] = [];
-
-  for (const v of arr as LinkLike[]) {
-    const link = extractOneLink(v);
-    if (link) links.push(link);
-  }
-  return links;
-};
-
-/**
- * Generic cell renderer for table values.
- * Renders links, arrays, or scalars with fallback for empty values.
+ * Renders clickable links (URLs) or plain URIs with tooltips and icons.
  */
 export const renderCellValue = (value: unknown): React.ReactNode => {
-  // Try links first
   const links = toLinkArray(value);
+
   if (links.length > 0) {
     return (
-      <>
-        {links.map((l, i) => (
-          <a
-            key={`${l.url}-${i}`}
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 underline mr-2 break-all"
-          >
-            {l.label}
-          </a>
-        ))}
-      </>
+      <TooltipProvider delayDuration={150}>
+        <div className="flex flex-wrap gap-2">
+          {links.map((l, i) => (
+            <Tooltip key={`${l.url}-${i}`}>
+              <TooltipTrigger asChild>
+                {l.isExternal ? (
+                  // External URLs (Diagnostics / Performance)
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-600 underline break-all hover:text-blue-800"
+                  >
+                    {l.label}
+                    <ExternalLink
+                      size={14}
+                      strokeWidth={1.75}
+                      className="opacity-70 inline-block"
+                    />
+                  </a>
+                ) : (
+                  // Local URIs (Locations)
+                  <span className="inline-flex items-center gap-1 text-gray-700 break-all">
+                    <span>{l.url}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyText(l.url)}
+                      className="p-1 rounded hover:bg-gray-100"
+                      aria-label="Copy path"
+                      title="Copy full path/URI"
+                    >
+                      <Copy size={13} className="text-gray-500" />
+                    </button>
+                  </span>
+                )}
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-[40rem] break-all">
+                {l.url}
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+      </TooltipProvider>
     );
   }
 
-  // Arrays of non-link values → comma-join
   if (Array.isArray(value)) {
     return value.length ? value.join(', ') : <span className="text-gray-400">—</span>;
   }
 
-  // Scalars
   if (value === null || value === undefined || value === '') {
     return <span className="text-gray-400">—</span>;
   }
+
   return String(value);
 };

@@ -7,40 +7,59 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import BrowseFiltersSidePanel from '@/pages/Browse/BrowseFiltersSidePanel';
 import SimulationResultCards from '@/pages/Browse/SimulationResultsCards';
 import SimulationResultsTable from '@/pages/Browse/SimulationResultsTable';
-import type { Simulation } from '@/types/index';
+import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
   // Scientific Goal
   campaignId: string[];
   experimentTypeId: string[];
-  variables: string[];
+  simulationType: string[];
+  initializationType: string[];
 
   // Simulation Context
-  machineId: string[];
   compset: string[];
   gridName: string[];
-  simulationType: string[];
-  versionTag: string[];
+  gridResolution: string[];
 
   // Execution Details
+  machineId: string[];
+  compiler: string[];
   status: string[];
-  modelStartDate: string;
-  modelEndDate: string;
 
-  // Metadata
-  uploadStartDate: string; // ISO Date
-  uploadEndDate: string; // ISO Date
+  // Metadata & Provenance
+  gitTag: string[];
+  createdBy: string[];
 }
 
 interface BrowseProps {
-  simulations: Simulation[];
+  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
 }
 
 // -------------------- Pure Helpers --------------------
-const parseDate = (s?: string) => (s ? new Date(s) : undefined);
+const createEmptyFilters = (): FilterState => ({
+  // Scientific Goal
+  campaignId: [],
+  experimentTypeId: [],
+  simulationType: [],
+  initializationType: [],
+
+  // Simulation Context
+  compset: [],
+  gridName: [],
+  gridResolution: [],
+
+  // Execution Details
+  machineId: [],
+  compiler: [],
+  status: [],
+
+  // Metadata & Provenance
+  gitTag: [],
+  createdBy: [],
+});
 
 const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }: BrowseProps) => {
   // -------------------- Router --------------------
@@ -48,116 +67,100 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
   const navigate = useNavigate();
 
   // -------------------- Local State --------------------
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>({
-    campaignId: [],
-    experimentTypeId: [],
-    variables: [],
-    machineId: [],
-    compset: [],
-    gridName: [],
-    simulationType: [],
-    versionTag: [],
-    status: [],
-    modelStartDate: '',
-    modelEndDate: '',
-    uploadStartDate: '',
-    uploadEndDate: '',
-  });
-
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // -------------------- Derived Data --------------------
-  const simMachineId = (s: Simulation) =>
-    s.machine?.id ??
-    (typeof (s as { machineId?: string }).machineId === 'string'
-      ? (s as { machineId?: string }).machineId
-      : undefined);
-  const simMachineName = (s: Simulation) => s.machine?.name ?? 'Unknown machine';
-
-  const machineOptions = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of simulations) {
-      const id = simMachineId(s);
-      if (id) m.set(id, simMachineName(s));
-    }
-    return Array.from(m, ([value, label]) => ({ value, label }));
-  }, [simulations]);
-
   const availableFilters = useMemo(() => {
-    const initial: FilterState = {
-      campaignId: [],
-      experimentTypeId: [],
-      variables: [],
-      machineId: [],
-      compset: [],
-      gridName: [],
-      simulationType: [],
-      versionTag: [],
-      status: [],
-      modelStartDate: '',
-      modelEndDate: '',
-      uploadStartDate: '',
-      uploadEndDate: '',
-    };
+    // Start with empty filter options.
+    const filters = createEmptyFilters();
 
+    // Populate filter options based on available simulations.
     for (const sim of simulations) {
-      const mid = simMachineId(sim);
-      if (mid && !initial.machineId.includes(mid)) initial.machineId.push(mid);
-
-      const keys = [
-        'campaignId',
-        'experimentTypeId',
-        'variables',
-        'compset',
-        'gridName',
-        'simulationType',
-        'versionTag',
-        'status',
-      ] as const;
+      const keys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
 
       for (const key of keys) {
-        const value = (sim as Simulation)[key];
+        const value = (sim as SimulationOut)[key];
 
+        // Handle both string and string[] fields.
         if (Array.isArray(value)) {
-          for (const v of value) {
-            if (v && !(initial[key] as string[]).includes(v)) {
-              (initial[key] as string[]).push(v);
+          value.forEach((v) => {
+            const filterValues = filters[key] as string[];
+            const isValueValid = v && !filterValues.includes(v);
+
+            if (isValueValid) {
+              filterValues.push(v);
             }
-          }
+          });
         } else if (typeof value === 'string' && value) {
-          if (!(initial[key] as string[]).includes(value)) {
-            (initial[key] as string[]).push(value);
+          const filterValues = filters[key] as string[];
+          const isValueValid = !filterValues.includes(value);
+
+          if (isValueValid) {
+            filterValues.push(value);
           }
         }
       }
     }
 
-    return initial;
+    // Sort all string array filters alphabetically for easier navigation.
+    (Object.keys(filters) as (keyof FilterState)[]).forEach((key) => {
+      const val = filters[key];
+      if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+        (val as string[]).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      }
+    });
+
+    return filters;
+  }, [simulations]);
+
+  const simMachineId = (simulation: SimulationOut) => {
+    if (simulation.machine?.id) {
+      return simulation.machine.id;
+    }
+
+    const legacyMachineId = (simulation as { machineId?: string }).machineId;
+    if (typeof legacyMachineId === 'string') {
+      return legacyMachineId;
+    }
+
+    return undefined;
+  };
+  const simMachineName = (s: SimulationOut) => s.machine?.name ?? 'Unknown machine';
+
+  const machineOptions = useMemo(() => {
+    const machines = new Map<string, string>();
+
+    for (const s of simulations) {
+      const id = simMachineId(s);
+
+      if (id) machines.set(id, simMachineName(s));
+    }
+
+    const sortedMachines = Array.from(machines, ([value, label]) => ({ value, label })).sort(
+      (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+    );
+
+    return sortedMachines;
   }, [simulations]);
 
   const filteredData = useMemo(() => {
-    const startModel = parseDate(appliedFilters.modelStartDate);
-    const endModel = parseDate(appliedFilters.modelEndDate);
-    const startUpload = parseDate(appliedFilters.uploadStartDate);
-    const endUpload = parseDate(appliedFilters.uploadEndDate);
-
     const arrayFilterGetters: Record<
       keyof FilterState,
-      (rec: Simulation) => string | string[] | undefined
+      (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
     > = {
       machineId: (rec) => simMachineId(rec) ?? '',
       campaignId: (rec) => rec.campaignId ?? [],
       experimentTypeId: (rec) => rec.experimentTypeId ?? [],
-      variables: (rec) => rec.variables ?? [],
       compset: (rec) => rec.compset ?? [],
       gridName: (rec) => rec.gridName ?? [],
+      gridResolution: (rec) => rec.gridResolution ?? [],
       simulationType: (rec) => rec.simulationType ?? [],
-      versionTag: (rec) => rec.versionTag ?? [],
+      initializationType: (rec) => rec.initializationType ?? [],
+      compiler: (rec) => rec.compiler ?? [],
       status: (rec) => rec.status ?? [],
-      modelStartDate: () => undefined,
-      modelEndDate: () => undefined,
-      uploadStartDate: () => undefined,
-      uploadEndDate: () => undefined,
+      gitTag: (rec) => rec.gitTag ?? [],
+      createdBy: (rec) => rec.createdBy ?? [],
     };
 
     return simulations.filter((record) => {
@@ -171,19 +174,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
         }
       }
 
-      if (startModel || endModel) {
-        const recStart = parseDate((record as Simulation).modelStartDate);
-        const recEnd = parseDate((record as Simulation).modelEndDate);
-        if (startModel && recStart && recStart < startModel) return false;
-        if (endModel && recEnd && recEnd > endModel) return false;
-      }
-
-      if (startUpload || endUpload) {
-        const recUpload = parseDate((record as Simulation).uploadDate);
-        if (startUpload && recUpload && recUpload < startUpload) return false;
-        if (endUpload && recUpload && recUpload > endUpload) return false;
-      }
-
       return true;
     });
   }, [simulations, appliedFilters]);
@@ -195,12 +185,11 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     const arrayKeys: (keyof FilterState)[] = [
       'campaignId',
       'experimentTypeId',
-      'variables',
       'machineId',
       'compset',
       'gridName',
       'simulationType',
-      'versionTag',
+      'gitTag',
       'status',
     ];
 
@@ -233,21 +222,7 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
 
   // -------------------- Handlers --------------------
   const handleResetFilters = () => {
-    setAppliedFilters({
-      campaignId: [],
-      experimentTypeId: [],
-      variables: [],
-      machineId: [],
-      compset: [],
-      gridName: [],
-      simulationType: [],
-      versionTag: [],
-      status: [],
-      modelStartDate: '',
-      modelEndDate: '',
-      uploadStartDate: '',
-      uploadEndDate: '',
-    });
+    setAppliedFilters(createEmptyFilters());
   };
 
   const handleCompareButtonClick = () => {
@@ -260,7 +235,7 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       <div className="mx-auto max-w-[1440px] px-6 py-8">
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex flex-row w-full gap-6">
-            <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px]">
+            <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
               <BrowseFiltersSidePanel
                 appliedFilters={appliedFilters}
                 availableFilters={availableFilters}

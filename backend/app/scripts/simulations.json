@@ -1,0 +1,385 @@
+[
+  {
+    "name": "E3SM v1.1.0 piControl",
+    "caseName": "E3SMv1_piControl_DECK_r1i1p1f1",
+    "description": "Baseline preindustrial control run for E3SM version 1.1.0.",
+    "compset": "PICNTRL",
+    "compsetAlias": "piControl",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "experimental",
+    "status": "completed",
+    "campaignId": "DECK",
+    "experimentTypeId": "piControl",
+    "initializationType": "restart",
+    "groupName": "E3SM Control Group",
+    "machine": {
+      "name": "perlmutter"
+    },
+    "simulationStartDate": "1900-01-01T00:00:00Z",
+    "simulationEndDate": "1950-12-31T00:00:00Z",
+    "runStartDate": "2019-01-01T00:00:00Z",
+    "runEndDate": "2019-06-01T00:00:00Z",
+    "compiler": "intel",
+    "keyFeatures": "Fully coupled atmosphere, ocean, land, and sea ice components.",
+    "knownIssues": "Occasional model drift after year 45.",
+    "notesMarkdown": "This is the baseline preindustrial control run for E3SM v1.1.0, featuring fully coupled components. Known issues include occasional model drift after year 45.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "main",
+    "gitTag": "v1.1.0",
+    "gitCommitHash": "abc1234",
+    "createdBy": "Alice Smith",
+    "lastUpdatedBy": "Alice Smith",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/piControl/output",
+        "label": "Main output directory"
+      },
+      {
+        "kind": "archive",
+        "uri": "https://data.llnl.gov/e3sm/piControl/archive",
+        "label": "Archived simulation outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://e3sm.org/diagnostics/piControl",
+        "label": "Diagnostics Dashboard"
+      },
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/piControl-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v2.0.0 Historical",
+    "caseName": "E3SMv2_HIST_CMIP6_r2i1p1f1",
+    "description": "E3SM historical simulation for CMIP6 experiments.",
+    "compset": "HIST",
+    "compsetAlias": "historical",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "production",
+    "status": "running",
+    "campaignId": "CMIP6",
+    "experimentTypeId": "historical",
+    "initializationType": "restart",
+    "groupName": "E3SM CMIP6",
+    "machine": {
+      "name": "compy"
+    },
+    "simulationStartDate": "1850-01-01T00:00:00Z",
+    "simulationEndDate": "2014-12-31T00:00:00Z",
+    "runStartDate": "2020-01-01T00:00:00Z",
+    "compiler": "gnu",
+    "notesMarkdown": "This historical simulation for CMIP6 includes updated aerosol and land use forcings. No known issues have been reported.",
+    "keyFeatures": "Includes updated aerosol and land use forcings.",
+    "knownIssues": "None reported.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "release-v2",
+    "gitTag": "v2.0.0",
+    "gitCommitHash": "def5678",
+    "createdBy": "Bob Lee",
+    "lastUpdatedBy": "Bob Lee",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/historical/output",
+        "label": "Output files"
+      },
+      {
+        "kind": "archive",
+        "uri": "https://data.llnl.gov/e3sm/historical/archive",
+        "label": "Archived data"
+      }
+    ],
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://e3sm.org/diagnostics/historical",
+        "label": "Diagnostics"
+      },
+      {
+        "kind": "performance",
+        "url": "https://pace.llnl.gov/e3sm/historical",
+        "label": "PACE Results"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v3.0.0 SSP585",
+    "caseName": "E3SMv3_SSP585_CMIP6_r3i1p1f1",
+    "description": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
+    "compset": "SSP585",
+    "compsetAlias": "ssp585",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "projection",
+    "status": "queued",
+    "campaignId": "CMIP6",
+    "experimentTypeId": "ssp585",
+    "initializationType": "restart",
+    "groupName": "E3SM Future Projections",
+    "machine": {
+      "name": "frontier"
+    },
+    "simulationStartDate": "2015-01-01T00:00:00Z",
+    "simulationEndDate": "2100-12-31T00:00:00Z",
+    "compiler": "intel",
+    "notesMarkdown": "This SSP5-8.5 projection for E3SM v3.0.0 includes updated carbon cycle and aerosol schemes. Pending ocean coupling validation.",
+    "keyFeatures": "Includes updated carbon cycle and aerosol schemes.",
+    "knownIssues": "Pending ocean coupling validation.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "main",
+    "gitTag": "v3.0.0",
+    "gitCommitHash": "7890abc",
+    "createdBy": "Carol Nguyen",
+    "lastUpdatedBy": "Carol Nguyen",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/ssp585/output",
+        "label": "SSP585 outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/ssp585-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v1.2.0 AMIP",
+    "caseName": "E3SMv1_AMIP_DECK_r4i1p1f1",
+    "description": "Atmospheric Model Intercomparison Project (AMIP) simulation for E3SM v1.2.0.",
+    "compset": "AMIP",
+    "compsetAlias": "amip",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "experimental",
+    "status": "completed",
+    "campaignId": "DECK",
+    "experimentTypeId": "amip",
+    "initializationType": "coldstart",
+    "groupName": "E3SM AMIP Group",
+    "machine": {
+      "name": "anvil"
+    },
+    "simulationStartDate": "1979-01-01T00:00:00Z",
+    "simulationEndDate": "2008-12-31T00:00:00Z",
+    "compiler": "gnu",
+    "notesMarkdown": "This AMIP simulation uses prescribed SSTs and sea ice concentrations.",
+    "keyFeatures": "Prescribed SSTs and sea ice concentrations.",
+    "knownIssues": "None reported.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "main",
+    "gitTag": "v1.2.0",
+    "gitCommitHash": "ghi9012",
+    "createdBy": "David Kim",
+    "lastUpdatedBy": "David Kim",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/amip/output",
+        "label": "AMIP outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/amip-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v2.1.0 RCP4.5",
+    "caseName": "E3SMv2_RCP45_CMIP5_r5i1p1f1",
+    "description": "Representative Concentration Pathway 4.5 (RCP4.5) simulation for E3SM v2.1.0.",
+    "compset": "RCP45",
+    "compsetAlias": "rcp45",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "projection",
+    "status": "running",
+    "campaignId": "CMIP5",
+    "experimentTypeId": "rcp45",
+    "initializationType": "restart",
+    "groupName": "E3SM Future Projections",
+    "machine": {
+      "name": "anvil"
+    },
+    "simulationStartDate": "2006-01-01T00:00:00Z",
+    "simulationEndDate": "2100-12-31T00:00:00Z",
+    "compiler": "intel",
+    "notesMarkdown": "This RCP4.5 simulation includes intermediate emissions scenarios.",
+    "keyFeatures": "Intermediate emissions scenario.",
+    "knownIssues": "Pending validation of land use changes.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "release-v2",
+    "gitTag": "v2.1.0",
+    "gitCommitHash": "jkl3456",
+    "createdBy": "Eve Johnson",
+    "lastUpdatedBy": "Eve Johnson",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/rcp45/output",
+        "label": "RCP4.5 outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/rcp45-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v3.1.0 piClim",
+    "caseName": "E3SMv3_piClim_DECK_r6i1p1f1",
+    "description": "Preindustrial climate simulation for E3SM v3.1.0.",
+    "compset": "PICLIM",
+    "compsetAlias": "piClim",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "experimental",
+    "status": "completed",
+    "campaignId": "DECK",
+    "experimentTypeId": "piClim",
+    "initializationType": "coldstart",
+    "groupName": "E3SM Control Group",
+    "machine": {
+      "name": "andes"
+    },
+    "simulationStartDate": "1850-01-01T00:00:00Z",
+    "simulationEndDate": "1900-12-31T00:00:00Z",
+    "compiler": "gnu",
+    "notesMarkdown": "This preindustrial climate simulation serves as a baseline for DECK experiments.",
+    "keyFeatures": "Baseline preindustrial climate simulation.",
+    "knownIssues": "None reported.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitBranch": "main",
+    "gitTag": "v3.1.0",
+    "gitCommitHash": "mno7890",
+    "createdBy": "Frank White",
+    "lastUpdatedBy": "Frank White",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/piclim/output",
+        "label": "piClim outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/piclim-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v3.2.0 SSP126",
+    "caseName": "E3SMv3_SSP126_CMIP6_r7i1p1f1",
+    "description": "Low-emissions scenario (SSP1-2.6) projection using E3SM v3.2.0.",
+    "gitTag": "v3.2.0",
+    "gitCommitHash": "pqr1234",
+    "compset": "SSP126",
+    "compsetAlias": "ssp126",
+    "gridName": "ne30_oECv3",
+    "gridResolution": "1°",
+    "simulationType": "projection",
+    "status": "queued",
+    "campaignId": "CMIP6",
+    "experimentTypeId": "ssp126",
+    "initializationType": "restart",
+    "groupName": "E3SM Future Projections",
+    "machine": {
+      "name": "frontier"
+    },
+    "simulationStartDate": "2015-01-01T00:00:00Z",
+    "simulationEndDate": "2100-12-31T00:00:00Z",
+    "compiler": "intel",
+    "notesMarkdown": "This SSP1-2.6 projection includes low-emissions scenarios with updated land use forcings.",
+    "keyFeatures": "Low-emissions scenario with updated land use forcings.",
+    "knownIssues": "Pending validation of aerosol schemes.",
+    "gitBranch": "main",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "createdBy": "Grace Lee",
+    "lastUpdatedBy": "Grace Lee",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/ssp126/output",
+        "label": "SSP126 outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/ssp126-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  },
+  {
+    "name": "E3SM v3.3.0 HighRes",
+    "caseName": "E3SMv3_HighRes_DECK_r8i1p1f1",
+    "description": "High-resolution simulation for E3SM v3.3.0.",
+    "compset": "HIGHRES",
+    "compsetAlias": "highres",
+    "gridName": "ne120_oRRS18v3",
+    "gridResolution": "0.25°",
+    "simulationType": "experimental",
+    "status": "running",
+    "campaignId": "DECK",
+    "experimentTypeId": "highres",
+    "initializationType": "restart",
+    "groupName": "E3SM HighRes Group",
+    "machine": {
+      "name": "perlmutter"
+    },
+    "simulationStartDate": "2000-01-01T00:00:00Z",
+    "simulationEndDate": "2020-12-31T00:00:00Z",
+    "compiler": "intel",
+    "notesMarkdown": "This high-resolution simulation uses a 0.25° grid for enhanced spatial detail.",
+    "keyFeatures": "Enhanced spatial resolution with 0.25° grid.",
+    "knownIssues": "High computational cost.",
+    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
+    "gitTag": "v3.3.0",
+    "gitCommitHash": "stu5678",
+    "gitBranch": "main",
+    "createdBy": "Henry Adams",
+    "lastUpdatedBy": "Henry Adams",
+    "extra": {},
+    "artifacts": [
+      {
+        "kind": "output",
+        "uri": "https://data.llnl.gov/e3sm/highres/output",
+        "label": "HighRes outputs"
+      }
+    ],
+    "links": [
+      {
+        "kind": "docs",
+        "url": "https://e3sm.org/docs/highres-setup",
+        "label": "Experiment Documentation"
+      }
+    ]
+  }
+]
