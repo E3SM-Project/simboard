@@ -37,7 +37,7 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
             values_callable=lambda obj: [e.value for e in obj],  # use values not names
             validate_strings=True,  # ensures Python-side validation
         ),
-        comment="Must be one of: diagnostic, performance, docs, other",
+        comment=f"Must be one of: {', '.join([e.value for e in ExternalLinkKind])}",
     )
     url: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))

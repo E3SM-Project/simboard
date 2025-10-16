@@ -122,13 +122,6 @@ const Compare = ({
           return sim?.machine?.name ?? '';
         }),
       },
-      // {
-      //   label: 'Variables',
-      //   values: selectedSimulationIds.map((id) => {
-      //     const sim = selectedSimulations.find((s) => s.id === id);
-      //     return Array.isArray(sim?.variables) && sim.variables.length ? sim.variables : [];
-      //   }),
-      // },
       makeMetricRow('Branch', 'gitBranch', ''),
     ],
     timeline: [

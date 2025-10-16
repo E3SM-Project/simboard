@@ -40,7 +40,7 @@ class Artifact(Base, IDMixin, TimestampMixin):
             values_callable=lambda obj: [e.value for e in obj],  # use values not names
             validate_strings=True,  # ensures Python-side validation
         ),
-        comment="Must be one of: output, archive, run_script, postprocessing_script",
+        comment=f"Must be one of: {', '.join([e.value for e in ArtifactKind])}",
     )
     uri: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))

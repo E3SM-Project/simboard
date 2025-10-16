@@ -5,13 +5,10 @@ import {
   FlaskConical,
   GitBranch,
   Lightbulb,
-  MoreHorizontal,
   Rocket,
   Server,
-  Sigma,
   Tag,
 } from 'lucide-react';
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import SimulationStatusBadge from '@/components/shared/SimulationStatusBadge';
@@ -30,9 +27,6 @@ interface SimulationResultCard {
 const SimulationResultCard = ({ simulation, selected, handleSelect }: SimulationResultCard) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
-
-  // -------------------- Local State --------------------
-  const [showAllVariables, setShowAllVariables] = useState(false);
 
   // -------------------- Derived Data --------------------
   const startStr = simulation.simulationStartDate
@@ -96,55 +90,6 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                 </dd>
               </div>
             </dl>
-
-            {/* Variables row - remove mt-1 for vertical alignment */}
-            {/* TODO: Variables are not supported yet */}
-            {/* <div className="flex flex-wrap gap-2 items-center mb-4">
-              <span className="text-sm font-medium flex items-center gap-1">
-                <Sigma className="w-4 h-4" />
-                Variables ({simulation.variables.length}):
-              </span>
-              {simulation.variables.length <= 3 || showAllVariables ? (
-                simulation.variables.map((v) => (
-                  <Badge key={v} variant="outline" className="text-xs px-2 py-1">
-                    {v}
-                  </Badge>
-                ))
-              ) : (
-                <>
-                  {simulation.variables.slice(0, 3).map((v) => (
-                    <Badge key={v} variant="outline" className="text-xs px-2 py-1">
-                      {v}
-                    </Badge>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs px-2 py-1 border border-dashed border-gray-300 bg-gray-50 hover:border-gray-600 hover:bg-gray-100 flex items-center"
-                    style={{
-                      minWidth: 'auto',
-                      height: 'auto',
-                      padding: '0.25rem 0.5rem',
-                    }}
-                    onClick={() => setShowAllVariables(true)}
-                  >
-                    <MoreHorizontal className="w-4 h-4 text-gray-500 mr-1" />
-                    <span className="text-gray-600">{simulation.variables.length - 3}</span>
-                  </Button>
-                </>
-              )}
-              {simulation.variables.length > 3 && showAllVariables && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs px-2 py-1 border border-dashed border-gray-300 bg-gray-50 hover:border-gray-600 hover:bg-gray-100"
-                  style={{ minWidth: 'auto', height: 'auto', padding: '0.25rem 0.5rem' }}
-                  onClick={() => setShowAllVariables(false)}
-                >
-                  <span className="underline text-blue-700">Show Less</span>
-                </Button>
-              )}
-            </div> */}
 
             <div className="w-full my-2 border-t border-gray-200" />
 
@@ -244,49 +189,49 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                     </div>
                   )}
 
-                  {/* FIXME: Fix this field */}
                   {/* Diagnostic Links */}
-                  {simulation.diagnosticLinks && simulation.diagnosticLinks.length > 0 && (
-                    <div>
-                      <span className="font-semibold">Diagnostics:</span>
-                      <ul className="list-disc ml-6">
-                        {simulation.diagnosticLinks.map((d, i) => (
-                          <li key={i}>
-                            <a
-                              href={d.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-700 underline"
-                            >
-                              {d.label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {simulation.groupedLinks.diagnostic &&
+                    simulation.groupedLinks.diagnostic.length > 0 && (
+                      <div>
+                        <span className="font-semibold">Diagnostics:</span>
+                        <ul className="list-disc ml-6">
+                          {simulation.groupedLinks.diagnostic.map((d, i) => (
+                            <li key={i}>
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-700 underline"
+                              >
+                                {d.label}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                  {/* FIXME: Fix this field */}
                   {/* PACE Links */}
-                  {simulation.paceLinks && simulation.paceLinks.length > 0 && (
-                    <div>
-                      <span className="font-semibold">PACE Links:</span>
-                      <ul className="list-disc ml-6">
-                        {simulation.paceLinks.map((p, i) => (
-                          <li key={i}>
-                            <a
-                              href={p.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-700 underline"
-                            >
-                              {p.label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {simulation.groupedLinks.performance &&
+                    simulation.groupedLinks.performance.length > 0 && (
+                      <div>
+                        <span className="font-semibold">PACE Links:</span>
+                        <ul className="list-disc ml-6">
+                          {simulation.groupedLinks.performance.map((p, i) => (
+                            <li key={i}>
+                              <a
+                                href={p.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-700 underline"
+                              >
+                                {p.label}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                   {/* Git Info */}
                   {(simulation.gitBranch || simulation.gitCommitHash) && (
@@ -312,42 +257,42 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
                   )}
                   {/* FIXME: Fix this field */}
                   {/* Run Script Paths */}
-                  {simulation.runScriptPaths && simulation.runScriptPaths.length > 0 && (
-                    <div>
-                      <span className="font-semibold">Run Scripts:</span>
-                      <ul className="list-disc ml-6 text-gray-600">
-                        {simulation.runScriptPaths.map((p, i) => (
-                          <li key={i} className="break-all">
-                            {p}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {/* FIXME: Fix this field */}
+                  {simulation.groupedArtifacts.runScript &&
+                    simulation.groupedArtifacts.runScript.length > 0 && (
+                      <div>
+                        <span className="font-semibold">Run Scripts:</span>
+                        <ul className="list-disc ml-6 text-gray-600">
+                          {simulation.groupedArtifacts.runScript.map((p, i) => (
+                            <li key={i} className="break-all">
+                              {typeof p === 'string' ? p : JSON.stringify(p)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   {/* Archive Paths */}
-                  {simulation.archivePaths && simulation.archivePaths.length > 0 && (
-                    <div>
-                      <span className="font-semibold">Archive Paths:</span>
-                      <ul className="list-disc ml-6 text-gray-600">
-                        {simulation.archivePaths.map((p, i) => (
-                          <li key={i} className="break-all">
-                            {p}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {/* FIXME: Fix this field */}
+                  {simulation.groupedArtifacts.archive &&
+                    simulation.groupedArtifacts.archive.length > 0 && (
+                      <div>
+                        <span className="font-semibold">Archive Paths:</span>
+                        <ul className="list-disc ml-6 text-gray-600">
+                          {simulation.groupedArtifacts.archive.map((p, i) => (
+                            <li key={i} className="break-all">
+                              {typeof p === 'string' ? p : JSON.stringify(p)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   {/* Postprocessing Scripts */}
-                  {simulation.postprocessingScriptPath &&
-                    simulation.postprocessingScriptPath.length > 0 && (
+                  {simulation.groupedArtifacts.postProcessingScript &&
+                    simulation.groupedArtifacts.postProcessingScript.length > 0 && (
                       <div>
                         <span className="font-semibold">Postprocessing Scripts:</span>
                         <ul className="list-disc ml-6 text-gray-600">
-                          {simulation.postprocessingScriptPath.map((p, i) => (
+                          {simulation.groupedArtifacts.postprocessingScript.map((p, i) => (
                             <li key={i} className="break-all">
-                              {p}
+                              {typeof p === 'string' ? p : JSON.stringify(p)}
                             </li>
                           ))}
                         </ul>

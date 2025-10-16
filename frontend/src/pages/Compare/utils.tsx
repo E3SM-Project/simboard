@@ -44,7 +44,7 @@ export const toLinkArray = (value: unknown): LinkLike[] => {
 
     // Object (artifact or link)
     if (typeof item === 'object') {
-      const obj = item as Record<string, any>;
+      const obj = item as Record<string, string | undefined>;
       const href = obj.url ?? obj.uri;
 
       if (!href) return [];

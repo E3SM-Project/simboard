@@ -16,7 +16,7 @@ class ExternalLinkKind(str, Enum):
     OTHER = "other"
 
 
-class ExternaLinkCreate(CamelInBaseModel):
+class ExternalLinkCreate(CamelInBaseModel):
     kind: ExternalLinkKind = Field(..., description="The type of the external link.")
     url: HttpUrl = Field(..., description="The URL of the external link.")
     label: str | None = Field(

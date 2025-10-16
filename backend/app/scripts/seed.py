@@ -22,7 +22,7 @@ from app.db.machine import Machine
 from app.db.session import SessionLocal
 from app.db.simulation import Simulation
 from app.schemas.artifact import ArtifactCreate
-from app.schemas.link import ExternaLinkCreate
+from app.schemas.link import ExternalLinkCreate
 from app.schemas.simulation import SimulationCreate
 
 # --------------------------------------------------------------------
@@ -85,7 +85,9 @@ def seed_from_json(db: Session, json_path: str):
                     ArtifactCreate(**artifact)
                     for artifact in entry.get("artifacts", [])
                 ],
-                "links": [ExternaLinkCreate(**link) for link in entry.get("links", [])],
+                "links": [
+                    ExternalLinkCreate(**link) for link in entry.get("links", [])
+                ],
             }
         )
 

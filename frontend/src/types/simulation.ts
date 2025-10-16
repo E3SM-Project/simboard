@@ -1,6 +1,5 @@
 import type { ArtifactIn, ArtifactOut } from "@/types/artifact";
 import type { ExternalLinkIn, ExternalLinkOut } from "@/types/link";
-import type { Machine } from "@/types/machine";
 
 
 /**
@@ -76,67 +75,15 @@ export interface SimulationCreateForm extends SimulationCreate {
  * API response model for a simulation (from FastAPI / DB).
  * Equivalent to FastAPI SimulationOut schema.
  */
-export interface SimulationOut {
+export interface SimulationOut extends SimulationCreate{
   // Configuration
   // ~~~~~~~~~~~~~~
   id: string;
-  name: string;
-  caseName: string;
-  description: string | null;
-  compset: string;
-  compsetAlias: string;
-  gridName: string;
-  gridResolution: string;
-  parentSimulationId?: string | null;
-
-  // Model setup/context
-  // ~~~~~~~~~~~~~~~~~~~
-  simulationType: string;
-  status: string;
-  campaignId?: string | null;
-  experimentTypeId?: string | null;
-  initializationType: string;
-  groupName?: string | null;
-
-  // Model timeline
-  // ~~~~~~~~~~~~~~
-  machineId: string; // UUID
-  simulationStartDate: string; // ISO datetime
-  simulationEndDate?: string | null;
-  runStartDate?: string | null;
-  runEndDate?: string | null;
-  compiler?: string | null;
-
-  // Metadata & audit
-  // ~~~~~~~~~~~~~~~~~
-  keyFeatures?: string | null;
-  notesMarkdown?: string | null;
-  knownIssues?: string | null;
-
-  // Version control
-  // ~~~~~~~~~~~~~~~
-  gitRepositoryUrl?: string | null;
-  gitBranch?: string | null;
-  gitTag?: string | null;
-  gitCommitHash?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
-  createdBy?: string | null;
-  lastUpdatedBy?: string | null;
-
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
-
-  // Miscellaneous
-  // ~~~~~~~~~~~~~~~~~
-  extra?: Record<string, unknown>;
-
-  // Relationships
-  // ~~~~~~~~~~~~~~
-  machine: Machine
-  artifacts: ArtifactOut[];
-  links: ExternalLinkOut[];
 
   // Computed fields
   // ~~~~~~~~~~~~~~~

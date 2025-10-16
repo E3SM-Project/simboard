@@ -2,7 +2,6 @@ import { clsx } from 'clsx';
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 
-import { ArtifactOut, ExternalLinkOut, SimulationOut } from '@/types';
 
 export const cn = (...inputs: unknown[]) => twMerge(clsx(inputs));
 

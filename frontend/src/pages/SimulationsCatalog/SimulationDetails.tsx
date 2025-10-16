@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import SimulationPathCard from '@/pages/SimulationsCatalog/SimulationPathCard';
 import type { SimulationOut } from '@/types/index';
-import { formatDate, getSimulationDuration, groupFieldByKind } from '@/utils/utils';
+import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types & Interfaces --------------------
 interface Props {
@@ -162,33 +162,6 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                 <FieldRow label="Machine">
                   <ReadonlyInput value={simulation.machine.name} />
                 </FieldRow>
-                {/* <FieldRow label="Variables">
-                  {simulation.variables && simulation.variables.length ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{simulation.variables.length}</span>
-                      <span className="text-xs text-muted-foreground">→</span>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="link"
-                            className="p-0 h-auto text-xs text-blue-600 underline"
-                          >
-                            View list
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="max-w-xs">
-                          <ul className="list-disc pl-5 text-sm max-h-48 overflow-auto">
-                            {simulation.variables.map((v) => (
-                              <li key={v}>{v}</li>
-                            ))}
-                          </ul>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  ) : (
-                    <span className="text-sm">—</span>
-                  )}
-                </FieldRow> */}
               </CardContent>
             </Card>
           </div>

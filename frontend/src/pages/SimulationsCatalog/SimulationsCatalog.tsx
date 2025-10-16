@@ -1,4 +1,3 @@
-import { Tooltip } from '@radix-ui/react-tooltip';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   getCoreRowModel,

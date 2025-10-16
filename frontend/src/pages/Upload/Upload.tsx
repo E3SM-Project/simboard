@@ -131,20 +131,17 @@ const Upload = ({ machines }: UploadProps) => {
   const buildArtifacts = (form: any): ArtifactIn[] => {
     const artifacts: ArtifactIn[] = [];
 
-    if (form.outputPath) artifacts.push({ kind: 'output', path: form.outputPath });
+    if (form.outputPath) artifacts.push({ kind: 'output', uri: form.outputPath });
 
     if (form.archivePaths?.length)
-      form.archivePaths.forEach((p: string) => artifacts.push({ kind: 'archive', path: p }));
+      form.archivePaths.forEach((p: string) => artifacts.push({ kind: 'archive', uri: p }));
 
     if (form.runScriptPaths?.length)
-      form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', path: p }));
-
-    if (form.batchLogPaths?.length)
-      form.batchLogPaths.forEach((p: string) => artifacts.push({ kind: 'batchLog', path: p }));
+      form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', uri: p }));
 
     if (form.postprocessingScriptPath?.length)
       form.postprocessingScriptPath.forEach((p: string) =>
-        artifacts.push({ kind: 'postprocessinScript', path: p }),
+        artifacts.push({ kind: 'postprocessingScript', uri: p }),
       );
 
     return artifacts;
@@ -188,10 +185,12 @@ const Upload = ({ machines }: UploadProps) => {
     setPaceLinks(next);
   };
 
+  // -------------------- Handlers --------------------
   const handleSubmit = async () => {
     const artifacts = buildArtifacts(form);
     const links = buildLinks(diagLinks, paceLinks);
 
+    // TODO: Hook up to API
     const payload: SimulationCreate = {
       ...form,
       artifacts,
@@ -384,7 +383,7 @@ const Upload = ({ machines }: UploadProps) => {
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
-                name="branch"
+                name="gitBranch"
                 value={form.gitBranch ?? ''}
                 onChange={handleChange}
                 placeholder="e.g., e3sm-v3"

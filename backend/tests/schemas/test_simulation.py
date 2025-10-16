@@ -358,7 +358,7 @@ class TestSimulationOut:
 
         grouped = simulation_out.grouped_links
         assert len(grouped()) == 2, "There should be 2 groups of links."
-        assert len(grouped()["diagnostic"]) == 1, "There should be 2 output artifacts."
+        assert len(grouped()["diagnostic"]) == 1, "There should be 2 diagnostic links."
         assert len(grouped()["performance"]) == 1, (
-            "There should be 1 performance artifact."
+            "There should be 2 performance links."
         )
