@@ -7,13 +7,13 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
 from app.db.mixins import IDMixin, TimestampMixin
+from app.db.models.base import Base
 
 if TYPE_CHECKING:
-    from app.db.artifact import Artifact
-    from app.db.link import ExternalLink
-    from app.db.machine import Machine
+    from app.db.models.artifact import Artifact
+    from app.db.models.link import ExternalLink
+    from app.db.models.machine import Machine
 
 
 class Simulation(Base, IDMixin, TimestampMixin):

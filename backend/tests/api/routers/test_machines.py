@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.routers.machine import create_machine, get_machine, list_machines
-from app.db.machine import Machine
+from app.db.models.machine import Machine
 from app.schemas.machine import MachineCreate
 
 

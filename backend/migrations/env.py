@@ -10,7 +10,7 @@ from sqlalchemy import engine_from_config, pool
 from app import db  # noqa: F401  # import all SQLALchemy models so Alembic sees them
 from app._logger import _setup_custom_logger
 from app.core.config import settings
-from app.db.base import Base
+from app.db.models.base import Base
 
 logger = _setup_custom_logger(__name__)
 

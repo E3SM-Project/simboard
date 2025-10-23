@@ -1,13 +1,13 @@
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.machine import Machine
-from app.db.simulation import Simulation
-from app.db.status import Status
+from app.db.models.artifact import Artifact
+from app.db.models.link import ExternalLink
+from app.db.models.machine import Machine
+from app.db.models.simulation import Simulation
+from app.db.models.status import Status
 
 __all__ = [
+    "Simulation",
     "Machine",
     "Status",
     "Artifact",
     "ExternalLink",
-    "Simulation",
 ]

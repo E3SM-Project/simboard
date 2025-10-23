@@ -9,8 +9,8 @@ from app.api.routers.simulation import (
     get_simulation,
     list_simulations,
 )
-from app.db.machine import Machine
-from app.db.simulation import Simulation
+from app.db.models.machine import Machine
+from app.db.models.simulation import Simulation
 from app.schemas.simulation import SimulationCreate
 
 
