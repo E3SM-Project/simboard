@@ -19,15 +19,23 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-alembic = "^1.13.2"
+
+# --- Core backend ---
 fastapi = "^0.111.0"
+uvicorn = { extras = ["standard"], version = "^0.30.1" }
+sqlalchemy = "^2.0.34"
+alembic = "^1.13.2"
 psycopg = { extras = ["binary"], version = "^3.2.1" }
+
+# --- Models & validation ---
 pydantic = "^2.8.2"
 pydantic-settings = "^2.4.0"
 python-dotenv = "^1.0.1"
-sqlalchemy = "^2.0.34"
-uvicorn = { extras = ["standard"], version = "^0.30.1" }
 
+# --- Authentication / Authorization ---
+fastapi-users = { extras = ["sqlalchemy2", "oauth"], version = "^13.0.0" }
+
+# --- AI / NLP tools ---
 transformers = "^4.53.1"
 sentence-transformers = "^5.0.0"
 
