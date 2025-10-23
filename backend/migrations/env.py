@@ -5,12 +5,13 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
+from app.db.models.base import Base
 from sqlalchemy import engine_from_config, pool
 
 from app import db  # noqa: F401  # import all SQLALchemy models so Alembic sees them
 from app._logger import _setup_custom_logger
 from app.core.config import settings
-from app.db.base import Base
+from app.db.utils import _make_sync_url
 
 logger = _setup_custom_logger(__name__)
 
@@ -30,8 +31,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Only set URL if it hasn't already been overridden (e.g., by test code)
+# NOTE: Alembic expects a sync URL, so we convert it here.
 if not config.get_main_option("sqlalchemy.url"):
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    sync_url = _make_sync_url(settings.database_url)
+    config.set_main_option("sqlalchemy.url", sync_url)
 
 
 target_metadata = Base.metadata

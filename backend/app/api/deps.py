@@ -8,13 +8,12 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 
 
-def get_db() -> Generator[Session, None, None]:
-    db: Session = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency that provides an async SQLAlchemy session.
+    """
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 @contextmanager

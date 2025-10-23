@@ -1,17 +1,20 @@
 from uuid import UUID
 
+from app.db.models.machine import Machine
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, transaction
-from app.db.machine import Machine
+from app.db.session import get_async_session
 from app.schemas import MachineCreate, MachineOut
 
 router = APIRouter(prefix="/machines", tags=["Machines"])
 
 
 @router.post("", response_model=MachineOut, status_code=status.HTTP_201_CREATED)
-def create_machine(payload: MachineCreate, db: Session = Depends(get_db)):
+async def create_machine(
+    payload: MachineCreate, db: AsyncSession = Depends(get_async_session)
+):
     """Create a new machine.
 
     This endpoint allows the creation of a new machine in the database.
@@ -36,23 +39,30 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_db)):
         If a machine with the same name already exists, an HTTP 400 Bad Request
         error is raised with an appropriate message.
     """
-    if db.query(Machine).filter(Machine.name == payload.name).first():
+    result = await db.execute(select(Machine).filter(Machine.name == payload.name))
+    existing = result.scalars().first()
+    if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Machine with this name already exists",
         )
 
+    # ✅ Create and persist new machine
     new_machine = Machine(**payload.model_dump())
 
-    with transaction(db):
-        db.add(new_machine)
-        db.flush()
+    db.add(new_machine)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
+    await db.refresh(new_machine)
     return new_machine
 
 
 @router.get("", response_model=list[MachineOut])
-def list_machines(db: Session = Depends(get_db)):
+async def list_machines(db: AsyncSession = Depends(get_async_session)):
     """
     Retrieve a list of machines from the database, ordered by name in ascending
     order.
@@ -67,13 +77,14 @@ def list_machines(db: Session = Depends(get_db)):
     list
         A list of `Machine` objects retrieved from the database.
     """
-    machines = db.query(Machine).order_by(Machine.name.asc()).all()
+    result = await db.execute(select(Machine).order_by(Machine.name.asc()))
+    machines = result.scalars().all()
 
     return machines
 
 
 @router.get("/{machine_id}", response_model=MachineOut)
-def get_machine(machine_id: UUID, db: Session = Depends(get_db)):
+async def get_machine(machine_id: UUID, db: AsyncSession = Depends(get_async_session)):
     """Retrieve a machine by its ID.
 
     Parameters
@@ -94,7 +105,8 @@ def get_machine(machine_id: UUID, db: Session = Depends(get_db)):
         If the machine with the given ID is not found, raises a 404 HTTP exception
         with the message "Machine not found".
     """
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    result = await db.execute(select(Machine).filter(Machine.id == machine_id))
+    machine = result.scalars().first()
 
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")

@@ -1,19 +1,23 @@
 from uuid import UUID
 
+from app.db.models.artifact import Artifact
+from app.db.models.link import ExternalLink
+from app.db.models.simulation import Simulation
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 
-from app.api.deps import get_db, transaction
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.simulation import Simulation
+from app.api.deps import get_async_session
 from app.schemas import SimulationCreate, SimulationOut
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
 
 @router.post("", response_model=SimulationOut, status_code=status.HTTP_201_CREATED)
-def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
+async def create_simulation(
+    payload: SimulationCreate, db: AsyncSession = Depends(get_async_session)
+):
     """Create a new simulation record in the database.
 
     Parameters
@@ -51,18 +55,17 @@ def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
 
             sim.links.append(ExternalLink(**link_data))
 
-    # Start a database transaction to ensure atomicity of the operation
-    with transaction(db):
-        # Add the simulation object to the database session.
-        db.add(sim)
-        # Flush the session to persist the simulation object and generate its ID
-        db.flush()
+    db.add(sim)
+    await db.flush()
+    await db.commit()
+
+    await db.refresh(sim, attribute_names=["artifacts", "links"])
 
     return SimulationOut.model_validate(sim, from_attributes=True)
 
 
 @router.get("", response_model=list[SimulationOut])
-def list_simulations(db: Session = Depends(get_db)):
+async def list_simulations(db: AsyncSession = Depends(get_async_session)):
     """
     Retrieve a list of simulations from the database, ordered by creation date
     in descending order.
@@ -78,21 +81,22 @@ def list_simulations(db: Session = Depends(get_db)):
         A list of `Simulation` objects, ordered by their `created_at` timestamp
         in descending order.
     """
-    sims = (
-        db.query(Simulation)
+    """Retrieve all simulations asynchronously."""
+    result = await db.execute(
+        select(Simulation)
         .options(
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )
         .order_by(Simulation.created_at.desc())
-        .all()
     )
+    sims = result.scalars().all()
     return sims
 
 
 @router.get("/{sim_id}", response_model=SimulationOut)
-def get_simulation(sim_id: UUID, db: Session = Depends(get_db)):
+async def get_simulation(sim_id: UUID, db: AsyncSession = Depends(get_async_session)):
     """Retrieve a simulation by its unique identifier.
 
     Parameters
@@ -112,16 +116,16 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_db)):
     HTTPException
         If the simulation with the given ID is not found, raises a 404 HTTP exception.
     """
-    sim = (
-        db.query(Simulation)
+    result = await db.execute(
+        select(Simulation)
         .options(
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )
         .filter(Simulation.id == sim_id)
-        .first()
     )
+    sim = result.scalars().first()
 
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
