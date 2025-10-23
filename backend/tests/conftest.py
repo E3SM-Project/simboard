@@ -1,18 +1,23 @@
 import os
+from typing import AsyncGenerator
 from urllib.parse import urlparse
 
 import psycopg
 import pytest
+import pytest_asyncio
 from alembic import command
 from alembic.config import Config
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from psycopg.rows import tuple_row
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app._logger import _setup_custom_logger
-from app.api.deps import get_db
 from app.core.config import settings
+from app.db.utils import _make_sync_url
 from app.main import app
 
 logger = _setup_custom_logger(__name__)
@@ -20,86 +25,62 @@ logger = _setup_custom_logger(__name__)
 TEST_DB_URL = settings.test_database_url
 ALEMBIC_INI_PATH = "alembic.ini"
 
-# Set up the SQLAlchemy engine and sessionmaker for testing
-engine = create_engine(TEST_DB_URL, future=True)
+# Set up the SQLAlchemy async engine and sessionmaker for testing
+async_engine = create_async_engine(TEST_DB_URL, future=True, echo=False)
 
-# NOTE: Keep a Sessionmaker here, but bind it per-test to a single connection
+# NOTE: Keep an async Sessionmaker here, but bind it per-test to a single connection
 # that's inside a transaction to ensure isolation.
-TestingSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, expire_on_commit=False, future=True
+TestingSessionLocal = async_sessionmaker(
+    bind=async_engine, expire_on_commit=False, autoflush=False, autocommit=False
 )
 
 
-@pytest.fixture(scope="session")
-def _connection():
-    # Keep a single physical connection open for the whole test session (fast).
-    # Tests will run inside per-test transactions on this connection.
-    with engine.connect() as conn:
-        yield conn
+@pytest_asyncio.fixture(scope="function")
+async def db() -> AsyncGenerator[AsyncSession, None]:
+    """Provides a SQLAlchemy AsyncSession for testing, wrapped in a transaction.
 
-
-@pytest.fixture(scope="function")
-def db(_connection) -> Session:
+    Returns
+    -------
+    AsyncGenerator[AsyncSession, None]
+        An async generator yielding a SQLAlchemy AsyncSession. The session is
+        wrapped in a transaction that is rolled back after the test, ensuring
+        isolation between tests.
     """
-    Provides a new SQLAlchemy session for each test.
+    engine = create_async_engine(settings.test_database_url, echo=False, future=True)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
 
-    This fixture sets up a fresh database session for every test, ensuring
-    isolation and allowing direct access to the test database for assertions.
-
-    Yields
-    ------
-    Session
-        A SQLAlchemy session connected to the test database.
-
-    Notes
-    -----
-    The session is automatically closed after the test completes.
-    """
-    # Begin an outer transaction for this test, and start a SAVEPOINT (nested).
-    # This ensures that any commits inside the test are contained and rolled back.
-    outer_tx = _connection.begin()
-    nested_tx = _connection.begin_nested()
-
-    # Bind the Session to the shared connection (inside the transaction).
-    session: Session = TestingSessionLocal(bind=_connection)
-
-    # After each nested transaction ends (e.g., after a commit),
-    # automatically start a new SAVEPOINT so the Session remains usable.
-    @event.listens_for(session, "after_transaction_end")
-    def _restart_savepoint(sess, txn):
-        if txn.nested and not txn._parent.nested:
-            _connection.begin_nested()
-
-    try:
+    async with async_session() as session:
         yield session
-    finally:
-        # Roll back everything done in the test and close the session.
-        session.close()
 
-        # Safe to call rollback even if already ended.
-        nested_tx.rollback()
-        outer_tx.rollback()
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_client():
+    """Provides an AsyncClient for testing FastAPI endpoints."""
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
-    """Sets up a test database for the application.
+    """Sets up a test database for the application (async-aware).
 
-    This function performs the following steps:
+    Steps:
     1. Sets the `DATABASE_URL` environment variable to the test database URL.
     2. Creates the test database.
-    3. Runs database migrations to ensure the schema is up-to-date.
+    3. Runs Alembic migrations to ensure schema consistency.
+    4. Drops the database when the test session ends.
 
     Yields
     ------
     None
-        This function is a generator and is intended to be used as a fixture
-        or context manager for setting up and tearing down the test database.
+        This fixture runs automatically for the session lifecycle.
     """
-    # Make DATABASE_URL available to the app in case it reads from env.
     os.environ["DATABASE_URL"] = TEST_DB_URL
 
-    # Ensure a clean state by dropping any existing test database.
     _drop_test_database()
     _create_test_database()
     _run_migrations()
@@ -111,23 +92,12 @@ def setup_test_db():
 
 
 def _drop_test_database():
-    """Drops the test database after the test session ends.
-
-    This function ensures that the test database is cleaned up
-    and removed once all tests have completed.
-
-    Notes
-    -----
-    - This function assumes that the `TEST_DB_URL` contains the connection
-        string for the test database.
-    - The function requires the `psycopg` library for PostgreSQL database interaction.
-    """
+    """Drops the test database after the test session ends (PostgreSQL)."""
     logger.info("[pytest teardown] Tearing down test database...")
 
-    TEST_DB_URL = os.environ["DATABASE_URL"]  # or import your constant
+    TEST_DB_URL = os.environ["DATABASE_URL"]
     db_name, user, password, host, port = _parse_db_url(TEST_DB_URL)
 
-    # Connect to a maintenance DB to manage/drop the test DB.
     with psycopg.connect(
         dbname="postgres",
         user=user,
@@ -137,20 +107,20 @@ def _drop_test_database():
         autocommit=True,
     ) as admin_conn:
         with admin_conn.cursor(row_factory=tuple_row) as cur:
-            # Detect server version
             cur.execute("SHOW server_version_num;")
-            (server_version_num,) = cur.fetchone()
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("Could not determine PostgreSQL server version")
+
+            (server_version_num,) = row
             server_version_num = int(server_version_num)
 
             if server_version_num >= 150000:
-                # PostgreSQL 15+ supports FORCE
                 cur.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE);')
                 logger.info(
-                    f"[pytest teardown] Dropped test database with FORCE: {db_name}"
+                    f"[pytest teardown] Dropped test database (FORCE): {db_name}"
                 )
             else:
-                # Pre-15: terminate connections, then drop
-                # 1) Terminate connections to the target DB
                 cur.execute(
                     """
                     SELECT pg_terminate_backend(pid)
@@ -160,69 +130,33 @@ def _drop_test_database():
                     """,
                     (db_name,),
                 )
-                # 2) Drop the database
                 cur.execute(f'DROP DATABASE IF EXISTS "{db_name}";')
                 logger.info(f"[pytest teardown] Dropped test database: {db_name}")
 
 
 def _create_test_database():
-    """Ensures the existence of a test database for use during testing.
+    """Creates the PostgreSQL test database if it does not already exist."""
+    db_name, user, password, host, port = _parse_db_url(TEST_DB_URL)
 
-    This function connects to the PostgreSQL server, checks if the test database
-    specified in the `TEST_DB_URL` already exists, and creates it if it does not.
-    It is intended to be used as part of the pytest setup process.
-
-    Notes
-    -----
-    - The function assumes that the `TEST_DB_URL` environment variable or constant
-      contains the connection string for the test database.
-    - The function requires the `psycopg` library for PostgreSQL database interaction.
-    - The connection is made to the default "postgres" database to perform the check
-      and creation of the test database.
-
-    Raises
-    ------
-    psycopg.OperationalError
-        If there is an issue connecting to the PostgreSQL server.
-    psycopg.DatabaseError
-        If there is an issue executing the SQL commands.
-
-    See Also
-    --------
-    _get_db_name_user_and_password_from_url : Extracts database name, user, and password
-        from the test database URL.
-
-    Examples
-    --------
-    >>> _create_test_database()
-    [pytest setup] Created database: test_db_name
-    """
-    db_name, user, password, _, _ = _parse_db_url(TEST_DB_URL)
-
-    conn = psycopg.connect(
+    with psycopg.connect(
         dbname="postgres",
         user=user,
         password=password,
-        host="localhost",
+        host=host,
+        port=port,
         autocommit=True,
-    )
-    cur = conn.cursor()
-
-    # Check if test DB already exists
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
-    if not cur.fetchone():
-        cur.execute(f'CREATE DATABASE "{db_name}"')
-        logger.info(f"[pytest setup] Created test database: {db_name}")
-    else:
-        logger.info(f"[pytest setup] Using existing test database: {db_name}")
-
-    cur.close()
-    conn.close()
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+            if not cur.fetchone():
+                cur.execute(f'CREATE DATABASE "{db_name}"')
+                logger.info(f"[pytest setup] Created test database: {db_name}")
+            else:
+                logger.info(f"[pytest setup] Using existing test database: {db_name}")
 
 
 def _parse_db_url(db_url: str) -> tuple[str, str | None, str | None, str, int]:
     parsed = urlparse(db_url)
-
     db_name = parsed.path.lstrip("/")
     user = parsed.username
     password = parsed.password
@@ -233,51 +167,9 @@ def _parse_db_url(db_url: str) -> tuple[str, str | None, str | None, str, int]:
 
 
 def _run_migrations():
+    """Runs Alembic migrations on the test database."""
     alembic_cfg = Config(ALEMBIC_INI_PATH)
+    sync_url = _make_sync_url(TEST_DB_URL)
 
-    # Inject test DB URL dynamically into Alembic env.
-    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DB_URL)
-
+    alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
     command.upgrade(alembic_cfg, "head")
-
-
-@pytest.fixture(scope="function")
-def client(db: Session):
-    """Sets up a FastAPI TestClient with a database dependency override.
-
-    This fixture overrides the `get_db` dependency used in FastAPI routes
-    to inject a test database session instead of the production database.
-    This ensures that the application uses the `earthframe_test` database
-    during tests, isolating test data from production data.
-
-    Parameters
-    ----------
-    db : Session
-        A SQLAlchemy session object connected to the test database.
-
-    Yields
-    ------
-    TestClient
-        A FastAPI TestClient instance configured to use the test database.
-
-    Notes
-    -----
-    - The `get_db` dependency is overridden to yield the provided test
-      database session.
-    - After the test client is used, the dependency overrides are cleared
-      and the test database session is closed.
-    """
-
-    def override_get_db():
-        try:
-            # Do not close the session here; the db fixture finalizer will
-            # handle closing and rolling back the transaction/savepoint.
-            yield db
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-
-    app.dependency_overrides.clear()
