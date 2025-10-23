@@ -1,36 +1,37 @@
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import SessionLocal
-
-
-def get_db() -> Generator[Session, None, None]:
-    db: Session = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
+from app.db.session import AsyncSessionLocal
 
 
-@contextmanager
-def transaction(db: Session):
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency that provides an async SQLAlchemy session.
+    """
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+@asynccontextmanager
+async def transaction(session: AsyncSession):
+    """
+    Context manager to run a block of code within a transaction.
+
+    Rolls back on error and raises an HTTPException if a constraint is violated.
+    """
     try:
         yield
-
-        db.commit()
+        await session.commit()
     except IntegrityError as e:
-        db.rollback()
-
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Constraint violation while writing to the database.",
         ) from e
     except Exception:
-        db.rollback()
-
+        await session.rollback()
         raise

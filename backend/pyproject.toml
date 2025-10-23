@@ -33,7 +33,9 @@ pydantic-settings = "^2.4.0"
 python-dotenv = "^1.0.1"
 
 # --- Authentication / Authorization ---
+
 fastapi-users = { extras = ["sqlalchemy2", "oauth"], version = "^13.0.0" }
+python-jose = "^3.5.0"
 
 # --- AI / NLP tools ---
 transformers = "^4.53.1"
