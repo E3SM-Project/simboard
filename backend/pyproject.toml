@@ -26,6 +26,7 @@ uvicorn = { extras = ["standard"], version = "^0.30.1" }
 sqlalchemy = "^2.0.34"
 alembic = "^1.13.2"
 psycopg = { extras = ["binary"], version = "^3.2.1" }
+asyncpg = "^0.30.0"
 
 # --- Models & validation ---
 pydantic = "^2.8.2"
@@ -33,8 +34,7 @@ pydantic-settings = "^2.4.0"
 python-dotenv = "^1.0.1"
 
 # --- Authentication / Authorization ---
-
-fastapi-users = { extras = ["sqlalchemy2", "oauth"], version = "^13.0.0" }
+fastapi-users = { extras = ["sqlalchemy", "oauth"], version = "^13.0.0" }
 python-jose = "^3.5.0"
 
 # --- AI / NLP tools ---
@@ -44,14 +44,21 @@ sentence-transformers = "^5.0.0"
 [tool.poetry.group.dev.dependencies]
 # Run `pre-commit autoupdate` to update these versions
 # in the pre-commit hooks and align the versions here.
-ipykernel = "6.30.1"
-pytest = "7.4.2"
+# --- Testing ---
+pytest = "8.4.2"
 pytest-cov = "7.0.0"
+pytest-asyncio = "1.2.0"
 factory_boy = "3.3.3"
-torch = "2.7.1"
-ruff = "0.13.2"
+
+# --- Development Tools ---
+ruff = "0.14.1"
 pre-commit = "4.3.0"
 mypy = "1.18.2"
+
+# --- Runtime / ML ---
+torch = "2.7.1"
+ipykernel = "7.0.0"
+
 
 [build-system]
 requires = ["poetry-core"]
@@ -121,6 +128,7 @@ convention = "numpy"
 junit_family = "xunit2"
 addopts = "--cov=app --cov-report term --cov-report html:tests_coverage_reports/htmlcov --cov-report xml:tests_coverage_reports/coverage.xml -s"
 python_files = ["tests.py", "test_*.py"]
+asyncio_mode = "strict"
 
 [tool.mypy]
 # Docs: https://mypy.readthedocs.io/en/stable/config_file.html
