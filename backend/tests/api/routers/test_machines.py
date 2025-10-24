@@ -9,7 +9,7 @@ from app.schemas.machine import MachineCreate
 
 
 class TestCreateMachine:
-    def test_create_machine_success(self, client, db: Session):
+    def test_create_machine_success(self, async_client, db: Session):
         payload = {
             "name": "Machine A",
             "site": "Site A",
@@ -36,7 +36,7 @@ class TestCreateMachine:
             "notes": "Another test machine",
         }
 
-        res = client.post("/machines", json=payload2)
+        res = async_client.post("/machines", json=payload2)
 
         assert res.status_code == 201
         data = res.json()
@@ -44,7 +44,7 @@ class TestCreateMachine:
         for key in payload:
             assert data[key] == payload2[key]
 
-    def test_create_machine_duplicate_name(self, db: Session, client):
+    def test_create_machine_duplicate_name(self, db: Session, async_client):
         # Seed an existing machine
         db.add(
             Machine(
@@ -75,13 +75,13 @@ class TestCreateMachine:
             assert str(e) == "400: Machine with this name already exists"
 
         # Test the API endpoint
-        res = client.post("/machines", json=payload)
+        res = async_client.post("/machines", json=payload)
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine with this name already exists"
 
 
 class TestListMachines:
-    def test_list_machines(self, db: Session, client):
+    def test_list_machines(self, db: Session, async_client):
         expected_machines = {
             "aurora",
             "frontier",
@@ -100,7 +100,7 @@ class TestListMachines:
         assert result == expected_machines
 
         # Test the API endpoint
-        res = client.get("/machines")
+        res = async_client.get("/machines")
         assert res.status_code == 200
         data = res.json()
 
@@ -110,7 +110,7 @@ class TestListMachines:
 
 
 class TestGetMachine:
-    def test_get_machine_success(self, db: Session, client):
+    def test_get_machine_success(self, db: Session, async_client):
         expected = Machine(
             name="Machine E",
             site="Site E",
@@ -129,14 +129,14 @@ class TestGetMachine:
         assert result.notes == expected.notes
 
         # Test the API endpoint
-        res = client.get(f"/machines/{expected.id}")
+        res = async_client.get(f"/machines/{expected.id}")
         assert res.status_code == 200
 
         result_api = res.json()
         assert result_api["name"] == expected.name
         assert result_api["notes"] == expected.notes
 
-    def test_get_machine_not_found(self, client, db: Session):
+    def test_get_machine_not_found(self, async_client, db: Session):
         random_id = uuid4()
 
         # Test the actual function
@@ -146,6 +146,6 @@ class TestGetMachine:
             assert str(e) == "404: Machine not found"
 
         # Test the API endpoint
-        res = client.get(f"/machines/{random_id}")
+        res = async_client.get(f"/machines/{random_id}")
         assert res.status_code == 404
         assert res.json()["detail"] == "Machine not found"
