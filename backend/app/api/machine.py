@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from app.db.models.machine import Machine
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.machine import Machine
 from app.db.session import get_async_session
 from app.schemas import MachineCreate, MachineOut
 

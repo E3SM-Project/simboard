@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app._logger import _setup_root_logger
 from app.api.routers import ai, machine, simulation
-from app.core.config import settings
+from app.config import settings
 from app.exceptions import register_exception_handlers
+from app.logger import _setup_root_logger
 
 
 def create_app() -> FastAPI:

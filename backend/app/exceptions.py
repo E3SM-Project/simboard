@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm.exc import FlushError
 
-from app._logger import _setup_custom_logger
+from app.logger import _setup_custom_logger
 
 logger = _setup_custom_logger(__name__)
 

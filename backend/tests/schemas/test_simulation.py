@@ -4,10 +4,10 @@ from uuid import uuid4
 from pydantic import AnyUrl, HttpUrl
 
 from app.schemas.artifact import ArtifactKind, ArtifactOut
+from app.schemas.base import to_snake_case
 from app.schemas.link import ExternalLinkKind, ExternalLinkOut
 from app.schemas.machine import MachineOut
 from app.schemas.simulation import SimulationCreate, SimulationOut
-from app.schemas.utils import to_snake_case
 
 
 class TestSimulationCreate:

@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app._logger import _setup_custom_logger
-from app.core.config import settings
+from app.config import settings
 from app.db.utils import _make_sync_url
+from app.logger import _setup_custom_logger
 from app.main import app
 
 logger = _setup_custom_logger(__name__)

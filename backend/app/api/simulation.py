@@ -1,14 +1,14 @@
 from uuid import UUID
 
-from app.db.models.artifact import Artifact
-from app.db.models.link import ExternalLink
-from app.db.models.simulation import Simulation
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.deps import get_async_session
+from app.db.models.artifact import Artifact
+from app.db.models.link import ExternalLink
+from app.db.models.simulation import Simulation
 from app.schemas import SimulationCreate, SimulationOut
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])

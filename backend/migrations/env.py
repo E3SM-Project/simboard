@@ -5,13 +5,13 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from app.db.models.base import Base
 from sqlalchemy import engine_from_config, pool
 
 from app import db  # noqa: F401  # import all SQLALchemy models so Alembic sees them
-from app._logger import _setup_custom_logger
-from app.core.config import settings
+from app.config import settings
+from app.db.models.base import Base
 from app.db.utils import _make_sync_url
+from app.logger import _setup_custom_logger
 
 logger = _setup_custom_logger(__name__)
 
