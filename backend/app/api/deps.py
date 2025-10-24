@@ -1,11 +1,11 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from contextlib import contextmanager
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.db.session import AsyncSession, AsyncSessionLocal
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

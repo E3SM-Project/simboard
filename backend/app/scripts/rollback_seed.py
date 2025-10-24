@@ -1,34 +1,36 @@
 """Rollback seeded data script from seed.py."""
 
-from sqlalchemy.orm import Session
+import asyncio
 
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.session import SessionLocal
-from app.db.simulation import Simulation
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models.artifact import Artifact
+from app.db.models.link import ExternalLink
+from app.db.models.simulation import Simulation
+from app.db.session import AsyncSessionLocal
 
 
-def rollback_seed(db: Session):
+async def rollback_seed(db: AsyncSession):
     """Rollback all seeded data."""
     print("🔄 Rolling back seeded data...")
     try:
-        db.query(ExternalLink).delete()
-        db.query(Artifact).delete()
-        db.query(Simulation).delete()
-        db.commit()
+        await db.execute(delete(ExternalLink))
+        await db.execute(delete(Artifact))
+        await db.execute(delete(Simulation))
+        await db.commit()
 
         print("✅ Rollback complete.")
     except Exception as e:
-        db.rollback()
-
+        await db.rollback()
         print(f"❌ Rollback failed: {e}")
-
         raise
 
 
+async def main():
+    async with AsyncSessionLocal() as db:
+        await rollback_seed(db)
+
+
 if __name__ == "__main__":
-    db = SessionLocal()
-
-    rollback_seed(db)
-
-    db.close()
+    asyncio.run(main())
