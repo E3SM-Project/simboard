@@ -10,9 +10,9 @@ from psycopg.rows import tuple_row
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from app._logger import _setup_custom_logger
-from app.api.deps import get_db
+from app.common.deps import get_db
 from app.core.config import settings
+from app.core.logger import _setup_custom_logger
 from app.main import app
 
 logger = _setup_custom_logger(__name__)

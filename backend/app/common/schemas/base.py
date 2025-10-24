@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.utils import to_camel_case
+from app.common.schemas.utils import to_camel_case
 
 
 class CamelInBaseModel(BaseModel):

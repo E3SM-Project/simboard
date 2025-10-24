@@ -5,7 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, transaction
+from app.common.deps import get_db
+from app.core.db import transaction
 
 
 class TestGetDb:

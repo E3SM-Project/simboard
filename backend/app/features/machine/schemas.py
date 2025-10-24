@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
+from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
 class MachineCreate(CamelInBaseModel):

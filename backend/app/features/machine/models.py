@@ -1,9 +1,9 @@
 from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
-from app.db.mixins import IDMixin, TimestampMixin
-from app.db.simulation import Simulation
+from app.common.models.base import Base
+from app.common.models.mixins import IDMixin, TimestampMixin
+from app.features.simulation.models import Simulation
 
 
 class Machine(Base, IDMixin, TimestampMixin):

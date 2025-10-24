@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm.exc import FlushError
 
-from app.exceptions import map_sa_exception, pg_detail, register_exception_handlers
+from app.core.exceptions import map_sa_exception, pg_detail, register_exception_handlers
 
 
 class FakePGError(Exception):

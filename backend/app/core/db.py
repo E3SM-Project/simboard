@@ -1,5 +1,9 @@
+from contextlib import contextmanager
+
+from fastapi import HTTPException, status
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
@@ -14,3 +18,19 @@ engine = create_engine(settings.database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(
     bind=engine, autoflush=False, autocommit=False, future=True, expire_on_commit=False
 )
+
+
+@contextmanager
+def transaction(db: Session):
+    try:
+        yield db
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Constraint violation while writing to the database.",
+        ) from e
+    except Exception:
+        db.rollback()
+        raise

@@ -1,19 +1,21 @@
+"""SQLAlchemy ORM models for simulations and related entities."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
-from app.db.mixins import IDMixin, TimestampMixin
+from app.common.models.base import Base
+from app.common.models.mixins import IDMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from app.db.artifact import Artifact
-    from app.db.link import ExternalLink
-    from app.db.machine import Machine
+    from app.features.machine.models import Machine
 
 
 class Simulation(Base, IDMixin, TimestampMixin):
@@ -97,3 +99,82 @@ class Simulation(Base, IDMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("name", "git_tag", name="uq_simulation_name_tag"),
     )
+
+
+class ArtifactKind(str, Enum):
+    OUTPUT = "output"
+    ARCHIVE = "archive"
+    RUN_SCRIPT = "run_script"
+    POSTPROCESSING_SCRIPT = "postprocessing_script"
+
+
+class Artifact(Base, IDMixin, TimestampMixin):
+    __tablename__ = "artifacts"
+
+    simulation_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("simulations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    kind: Mapped[ArtifactKind] = mapped_column(
+        SAEnum(
+            ArtifactKind,
+            name="artifact_kind_enum",
+            native_enum=False,  # creates CHECK constraint instead of DB enum
+            values_callable=lambda obj: [e.value for e in obj],  # use values not names
+            validate_strings=True,  # ensures Python-side validation
+        ),
+        comment=f"Must be one of: {', '.join([e.value for e in ArtifactKind])}",
+    )
+    uri: Mapped[str] = mapped_column(String(1000))
+    label: Mapped[Optional[str]] = mapped_column(String(200))
+    checksum: Mapped[Optional[str]] = mapped_column(String(128))
+    size_bytes: Mapped[Optional[int]] = mapped_column(Integer)
+
+    simulation: Mapped[Simulation] = relationship(
+        back_populates="artifacts",
+        primaryjoin="Artifact.simulation_id==Simulation.id",
+        passive_deletes=True,
+    )
+
+
+class ExternalLinkKind(str, Enum):
+    DIAGNOSTIC = "diagnostic"
+    PERFORMANCE = "performance"
+    DOCS = "docs"
+    OTHER = "other"
+
+
+class ExternalLink(Base, IDMixin, TimestampMixin):
+    __tablename__ = "external_links"
+
+    simulation_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE")
+    )
+
+    kind: Mapped[ExternalLinkKind] = mapped_column(
+        SAEnum(
+            ExternalLinkKind,
+            name="external_link_kind_enum",
+            native_enum=False,  # creates CHECK constraint instead of DB enum
+            values_callable=lambda obj: [e.value for e in obj],  # use values not names
+            validate_strings=True,  # ensures Python-side validation
+        ),
+        comment=f"Must be one of: {', '.join([e.value for e in ExternalLinkKind])}",
+    )
+    url: Mapped[str] = mapped_column(String(1000))
+    label: Mapped[Optional[str]] = mapped_column(String(200))
+
+    simulation: Mapped["Simulation"] = relationship(
+        back_populates="links",
+        primaryjoin="ExternalLink.simulation_id==Simulation.id",
+        passive_deletes=True,
+    )
+
+
+class Status(Base):
+    __tablename__ = "status_lookup"
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)

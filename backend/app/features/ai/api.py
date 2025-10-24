@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 from transformers import pipeline
 
-from app.schemas.simulation import SimulationOut
+from app.features.simulation.schemas import SimulationOut
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 

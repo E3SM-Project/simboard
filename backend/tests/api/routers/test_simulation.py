@@ -4,14 +4,14 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routers.simulation import (
+from app.features.machine.models import Machine
+from app.features.simulation.api import (
     create_simulation,
     get_simulation,
     list_simulations,
 )
-from app.db.machine import Machine
-from app.db.simulation import Simulation
-from app.schemas.simulation import SimulationCreate
+from app.features.simulation.models import Simulation
+from app.features.simulation.schemas import SimulationCreate
 
 
 class TestCreateSimulation:

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from app.schemas.machine import MachineCreate, MachineOut
+from app.features.machine.api import MachineCreate, MachineOut
 
 
 class TestMachineCreate:

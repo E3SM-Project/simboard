@@ -1,13 +1,13 @@
 from datetime import datetime
 from uuid import uuid4
 
+from app.features.simulation.artifact import ArtifactKind, ArtifactOut
+from app.features.simulation.link import ExternalLinkKind, ExternalLinkOut
+from app.schemas.utils import to_snake_case
 from pydantic import AnyUrl, HttpUrl
 
-from app.schemas.artifact import ArtifactKind, ArtifactOut
-from app.schemas.link import ExternalLinkKind, ExternalLinkOut
-from app.schemas.machine import MachineOut
-from app.schemas.simulation import SimulationCreate, SimulationOut
-from app.schemas.utils import to_snake_case
+from app.features.machine.api import MachineOut
+from app.features.simulation.schemas import SimulationCreate, SimulationOut
 
 
 class TestSimulationCreate:

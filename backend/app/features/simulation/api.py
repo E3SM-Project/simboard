@@ -3,11 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.api.deps import get_db, transaction
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.simulation import Simulation
-from app.schemas import SimulationCreate, SimulationOut
+from app.common.deps import get_db
+from app.core.db import transaction
+from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.schemas import SimulationCreate, SimulationOut
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 

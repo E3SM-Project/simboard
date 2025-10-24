@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.api.routers.ai import analyze_simulations, router
+from app.features.ai.api import analyze_simulations, router
 
 client = TestClient(router, raise_server_exceptions=False)
 

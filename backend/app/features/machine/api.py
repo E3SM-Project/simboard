@@ -3,9 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, transaction
-from app.db.machine import Machine
-from app.schemas import MachineCreate, MachineOut
+from app.common.deps import get_db
+from app.core.db import transaction
+from app.features.machine.models import Machine
+from app.features.machine.schemas import MachineCreate, MachineOut
 
 router = APIRouter(prefix="/machines", tags=["Machines"])
 

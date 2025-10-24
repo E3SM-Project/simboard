@@ -3,9 +3,13 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routers.machine import create_machine, get_machine, list_machines
-from app.db.machine import Machine
-from app.schemas.machine import MachineCreate
+from app.features.machine.api import (
+    MachineCreate,
+    create_machine,
+    get_machine,
+    list_machines,
+)
+from app.features.machine.models import Machine
 
 
 class TestCreateMachine:
