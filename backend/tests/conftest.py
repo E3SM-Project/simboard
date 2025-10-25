@@ -1,4 +1,5 @@
 import os
+from typing import Generator
 from urllib.parse import urlparse
 
 import psycopg
@@ -39,7 +40,7 @@ def _connection():
 
 
 @pytest.fixture(scope="function")
-def db(_connection) -> Session:
+def db(_connection) -> Generator[Session, None, None]:
     """
     Provides a new SQLAlchemy session for each test.
 
