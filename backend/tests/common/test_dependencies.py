@@ -13,7 +13,7 @@ class TestGetDb:
     def test_get_database_session(self):
         mock_session = MagicMock(spec=Session)
 
-        with patch("app.common.deps.SessionLocal", return_value=mock_session):
+        with patch("app.common.dependencies.SessionLocal", return_value=mock_session):
             generator = get_database_session()
             db = next(generator)
 
