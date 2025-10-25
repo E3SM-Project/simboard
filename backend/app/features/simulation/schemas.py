@@ -103,7 +103,7 @@ class SimulationCreate(CamelInBaseModel):
     """Schema for creating a new Simulation."""
 
     # Configuration
-    # ~~~~~~~~~~~~~~
+    # --------------
     name: Annotated[str, Field(..., description="Name of the simulation")]
     case_name: Annotated[
         str, Field(..., description="Case name associated with the simulation")
@@ -126,7 +126,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Model setup/context
-    # ~~~~~~~~~~~~~~~~~~~
+    # -------------------
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
     status: Annotated[str, Field(..., description="Current status of the simulation")]
@@ -145,7 +145,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Model timeline
-    # ~~~~~~~~~~~~~~
+    # --------------
     machine_id: Annotated[
         UUID, Field(..., description="ID of the machine used for the simulation")
     ]
@@ -168,7 +168,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Metadata & audit
-    # ~~~~~~~~~~~~~~~~~
+    # -----------------
     key_features: Annotated[
         str | None, Field(None, description="Optional key features of the simulation")
     ]
@@ -181,7 +181,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Version control
-    # ~~~~~~~~~~~~~~~
+    # ---------------
     git_repository_url: Annotated[
         HttpUrl | None, Field(None, description="Optional Git repository URL")
     ]
@@ -202,7 +202,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Provenance & submission
-    # ~~~~~~~~~~~~~~~~~~~~~~~
+    # -----------------------
     created_by: Annotated[
         str | None,
         Field(
@@ -219,7 +219,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Miscellaneous
-    # ~~~~~~~~~~~~~~~~~
+    # -----------------
     extra: Annotated[
         dict,
         Field(
@@ -229,7 +229,7 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
     # Relationships
-    # ~~~~~~~~~~~~~~
+    # --------------
     artifacts: Annotated[
         list[ArtifactCreate],
         Field(
@@ -254,7 +254,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Configuration
-    # ~~~~~~~~~~~~~~
+    # --------------
     name: Annotated[str, Field(..., description="Name of the simulation")]
     case_name: Annotated[
         str, Field(..., description="Case name associated with the simulation")
@@ -277,7 +277,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Model setup/context
-    # ~~~~~~~~~~~~~~~~~~~
+    # -------------------
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
     status: Annotated[str, Field(..., description="Current status of the simulation")]
@@ -296,7 +296,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Model timeline
-    # ~~~~~~~~~~~~~~
+    # --------------
     machine_id: Annotated[
         UUID, Field(..., description="ID of the machine used for the simulation")
     ]
@@ -319,7 +319,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Metadata & audit
-    # ~~~~~~~~~~~~~~~~~
+    # -----------------
     key_features: Annotated[
         str | None, Field(None, description="Optional key features of the simulation")
     ]
@@ -332,7 +332,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Version control
-    # ~~~~~~~~~~~~~~~
+    # ---------------
     git_repository_url: Annotated[
         HttpUrl | None, Field(None, description="Optional Git repository URL")
     ]
@@ -353,7 +353,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Provenance & submission
-    # ~~~~~~~~~~~~~~~~~~~~~~~
+    # -----------------------
     created_at: Annotated[
         datetime, Field(..., description="Timestamp when the simulation was created")
     ]
@@ -377,7 +377,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Miscellaneous
-    # ~~~~~~~~~~~~~~~~~
+    # -----------------
     extra: Annotated[
         dict,
         Field(
@@ -387,7 +387,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Relationships
-    # ~~~~~~~~~~~~~~
+    # --------------
     machine: Annotated[
         MachineOut, Field(description="Machine on which the simulation was executed.")
     ]
@@ -407,7 +407,7 @@ class SimulationOut(CamelOutBaseModel):
     ]
 
     # Computed fields
-    # ~~~~~~~~~~~~~~~
+    # ---------------
     @computed_field(return_type=dict[str, list[ArtifactOut]])
     def grouped_artifacts(self) -> dict[str, list[ArtifactOut]]:
         return self._group_by_kind(self.artifacts)
