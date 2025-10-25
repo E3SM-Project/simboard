@@ -16,14 +16,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.machine import Machine
-from app.db.session import SessionLocal
-from app.db.simulation import Simulation
-from app.schemas.artifact import ArtifactCreate
-from app.schemas.link import ExternalLinkCreate
-from app.schemas.simulation import SimulationCreate
+from app.core.database import SessionLocal
+from app.features.machine.models import Machine
+from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.schemas import (
+    ArtifactCreate,
+    ExternalLinkCreate,
+    SimulationCreate,
+)
 
 # --------------------------------------------------------------------
 # 🧱 Safety check

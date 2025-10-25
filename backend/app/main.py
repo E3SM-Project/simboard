@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app._logger import _setup_root_logger
-from app.api.routers import ai, machine, simulation
 from app.core.config import settings
-from app.exceptions import register_exception_handlers
+from app.core.exceptions import register_exception_handlers
+from app.core.logger import _setup_root_logger
+from app.features.machine.api import router as machine_router
+from app.features.simulation.api import router as simulations_router
 
 
 def create_app() -> FastAPI:
@@ -26,9 +27,8 @@ def create_app() -> FastAPI:
     )
 
     # Register routers.
-    app.include_router(ai.router)
-    app.include_router(simulation.router)
-    app.include_router(machine.router)
+    app.include_router(simulations_router)
+    app.include_router(machine_router)
 
     return app
 

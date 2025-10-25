@@ -104,7 +104,8 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI’s use of Depends(...) in defaults is safe and idiomatic. Ignore B008 (do not call a method in argument defaults) in router files.
-"app/api/routers/*.py" = ["B008"]
+"app/features/*/api.py" = ["B008"]
+"app/features/*/api/*.py" = ["B008"]
 
 [tool.pytest.ini_options]
 # Docs: https://docs.pytest.org/en/7.2.x/reference/customize.html#configuration
@@ -120,3 +121,5 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
+
+plugins = ["pydantic.mypy"]

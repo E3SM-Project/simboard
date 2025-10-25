@@ -2,10 +2,8 @@
 
 from sqlalchemy.orm import Session
 
-from app.db.artifact import Artifact
-from app.db.link import ExternalLink
-from app.db.session import SessionLocal
-from app.db.simulation import Simulation
+from app.core.database import SessionLocal
+from app.features.simulation.models import Artifact, ExternalLink, Simulation
 
 
 def rollback_seed(db: Session):
