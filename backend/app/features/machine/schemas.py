@@ -8,6 +8,8 @@ from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
 class MachineCreate(CamelInBaseModel):
+    """Schema for creating a new Machine."""
+
     name: Annotated[str, Field(..., description="The name of the machine")]
     site: Annotated[
         str, Field(..., description="The site where the machine is located")
@@ -25,6 +27,8 @@ class MachineCreate(CamelInBaseModel):
 
 
 class MachineOut(CamelOutBaseModel):
+    """Schema for representing a Machine object."""
+
     id: Annotated[UUID, Field(..., description="The unique identifier of the machine")]
 
     name: Annotated[str, Field(..., description="The name of the machine")]

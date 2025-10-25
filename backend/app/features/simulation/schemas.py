@@ -29,6 +29,8 @@ class ExternalLinkKind(str, Enum):
 
 
 class ExternalLinkCreate(CamelInBaseModel):
+    """Schema for creating a new External Link."""
+
     kind: Annotated[
         ExternalLinkKind, Field(..., description="The type of the external link.")
     ]
@@ -39,6 +41,8 @@ class ExternalLinkCreate(CamelInBaseModel):
 
 
 class ExternalLinkOut(CamelOutBaseModel):
+    """Schema for representing an External Link object."""
+
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the external link.")
     ]
@@ -62,6 +66,8 @@ class ExternalLinkOut(CamelOutBaseModel):
 
 
 class ArtifactCreate(CamelInBaseModel):
+    """Schema for creating a new Artifact."""
+
     kind: Annotated[ArtifactKind, Field(..., description="The type of the artifact.")]
     uri: Annotated[
         AnyUrl, Field(..., description="The URI where the artifact is located.")
@@ -72,6 +78,8 @@ class ArtifactCreate(CamelInBaseModel):
 
 
 class ArtifactOut(CamelOutBaseModel):
+    """Schema for representing an Artifact object."""
+
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the artifact.")
     ]
