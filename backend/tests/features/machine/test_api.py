@@ -141,7 +141,7 @@ class TestListMachines:
 
 
 class TestGetMachine:
-    def test_function_successfully_gets_machines(self, db: Session):
+    def test_function_successfully_gets_machine(self, db: Session):
         expected = Machine(
             name="Machine E",
             site="Site E",
