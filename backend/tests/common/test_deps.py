@@ -5,16 +5,16 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.common.deps import get_db
-from app.core.db import transaction
+from app.common.dependencies import get_database_session
+from app.core.database import transaction
 
 
 class TestGetDb:
-    def test_get_db(self):
+    def test_get_database_session(self):
         mock_session = MagicMock(spec=Session)
 
         with patch("app.common.deps.SessionLocal", return_value=mock_session):
-            generator = get_db()
+            generator = get_database_session()
             db = next(generator)
 
             assert db == mock_session

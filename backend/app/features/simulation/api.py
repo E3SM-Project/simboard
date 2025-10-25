@@ -3,8 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.common.deps import get_db
-from app.core.db import transaction
+from app.common.dependencies import get_database_session
+from app.core.database import transaction
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationOut
 
@@ -12,7 +12,9 @@ router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
 
 @router.post("", response_model=SimulationOut, status_code=status.HTTP_201_CREATED)
-def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
+def create_simulation(
+    payload: SimulationCreate, db: Session = Depends(get_database_session)
+):
     """Create a new simulation record in the database.
 
     Parameters
@@ -21,7 +23,8 @@ def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
         The data required to create a new simulation, including optional artifacts
         and links.
     db : Session, optional
-        The database session dependency, by default obtained via `Depends(get_db)`.
+        The database session dependency, by default obtained via
+        `Depends(get_database_session)`.
 
     Returns
     -------
@@ -61,7 +64,7 @@ def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[SimulationOut])
-def list_simulations(db: Session = Depends(get_db)):
+def list_simulations(db: Session = Depends(get_database_session)):
     """
     Retrieve a list of simulations from the database, ordered by creation date
     in descending order.
@@ -69,7 +72,8 @@ def list_simulations(db: Session = Depends(get_db)):
     Parameters
     ----------
     db : Session, optional
-        The database session dependency, by default obtained via `Depends(get_db)`.
+        The database session dependency, by default obtained via
+        `Depends(get_database_session)`.
 
     Returns
     -------
@@ -91,7 +95,7 @@ def list_simulations(db: Session = Depends(get_db)):
 
 
 @router.get("/{sim_id}", response_model=SimulationOut)
-def get_simulation(sim_id: UUID, db: Session = Depends(get_db)):
+def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     """Retrieve a simulation by its unique identifier.
 
     Parameters
@@ -99,7 +103,8 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_db)):
     sim_id : UUID
         The unique identifier of the simulation to retrieve.
     db : Session, optional
-        The database session dependency, by default provided by `Depends(get_db)`.
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
 
     Returns
     -------

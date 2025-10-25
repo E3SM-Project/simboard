@@ -11,19 +11,19 @@ from collections.abc import Generator
 
 from sqlalchemy.orm import Session
 
-from app.core.db import SessionLocal
+from app.core.database import SessionLocal
 
 
-def get_db() -> Generator[Session, None, None]:
-    """Provide a SQLAlchemy Session to route handlers.
+def get_database_session() -> Generator[Session, None, None]:
+    """Provide a SQLAlchemy database session to route handlers.
 
     This function is used with FastAPI's dependency injection system
     to provide a database session to path operations. It ensures that the
     session is properly closed after use.
     """
-    db = SessionLocal()
+    db_session = SessionLocal()
 
     try:
-        yield db
+        yield db_session
     finally:
-        db.close()
+        db_session.close()

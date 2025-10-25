@@ -10,7 +10,7 @@ from psycopg.rows import tuple_row
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.common.deps import get_db
+from app.common.dependencies import get_database_session
 from app.core.config import settings
 from app.core.logger import _setup_custom_logger
 from app.main import app
@@ -189,7 +189,7 @@ def _create_test_database():
 
     See Also
     --------
-    _get_db_name_user_and_password_from_url : Extracts database name, user, and password
+    _get_database_session_name_user_and_password_from_url : Extracts database name, user, and password
         from the test database URL.
 
     Examples
@@ -245,7 +245,7 @@ def _run_migrations():
 def client(db: Session):
     """Sets up a FastAPI TestClient with a database dependency override.
 
-    This fixture overrides the `get_db` dependency used in FastAPI routes
+    This fixture overrides the `get_database_session` dependency used in FastAPI routes
     to inject a test database session instead of the production database.
     This ensures that the application uses the `earthframe_test` database
     during tests, isolating test data from production data.
@@ -262,13 +262,13 @@ def client(db: Session):
 
     Notes
     -----
-    - The `get_db` dependency is overridden to yield the provided test
+    - The `get_database_session` dependency is overridden to yield the provided test
       database session.
     - After the test client is used, the dependency overrides are cleared
       and the test database session is closed.
     """
 
-    def override_get_db():
+    def override_get_database_session():
         try:
             # Do not close the session here; the db fixture finalizer will
             # handle closing and rolling back the transaction/savepoint.
@@ -276,7 +276,7 @@ def client(db: Session):
         finally:
             pass
 
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_database_session] = override_get_database_session
     with TestClient(app) as c:
         yield c
 

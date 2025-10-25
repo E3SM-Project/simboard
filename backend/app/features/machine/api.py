@@ -3,8 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.common.deps import get_db
-from app.core.db import transaction
+from app.common.dependencies import get_database_session
+from app.core.database import transaction
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate, MachineOut
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/machines", tags=["Machines"])
 
 
 @router.post("", response_model=MachineOut, status_code=status.HTTP_201_CREATED)
-def create_machine(payload: MachineCreate, db: Session = Depends(get_db)):
+def create_machine(payload: MachineCreate, db: Session = Depends(get_database_session)):
     """Create a new machine.
 
     This endpoint allows the creation of a new machine in the database.
@@ -24,7 +24,7 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_db)):
     payload : MachineCreate
         The data required to create a new machine, including its attributes.
     db : Session, optional
-        The database session dependency, by default provided by `Depends(get_db)`.
+        The database session dependency, by default provided by `Depends(get_database_session)`.
 
     Returns
     -------
@@ -53,7 +53,7 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[MachineOut])
-def list_machines(db: Session = Depends(get_db)):
+def list_machines(db: Session = Depends(get_database_session)):
     """
     Retrieve a list of machines from the database, ordered by name in ascending
     order.
@@ -61,7 +61,7 @@ def list_machines(db: Session = Depends(get_db)):
     Parameters
     ----------
     db : Session, optional
-        The database session dependency, by default provided by `Depends(get_db)`.
+        The database session dependency, by default provided by `Depends(get_database_session)`.
 
     Returns
     -------
@@ -74,7 +74,7 @@ def list_machines(db: Session = Depends(get_db)):
 
 
 @router.get("/{machine_id}", response_model=MachineOut)
-def get_machine(machine_id: UUID, db: Session = Depends(get_db)):
+def get_machine(machine_id: UUID, db: Session = Depends(get_database_session)):
     """Retrieve a machine by its ID.
 
     Parameters
@@ -82,7 +82,7 @@ def get_machine(machine_id: UUID, db: Session = Depends(get_db)):
     machine_id : UUID
         The unique identifier of the machine to retrieve.
     db : Session, optional
-        The database session dependency, by default provided by `Depends(get_db)`.
+        The database session dependency, by default provided by `Depends(get_database_session)`.
 
     Returns
     -------
