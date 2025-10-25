@@ -1,17 +1,22 @@
 from datetime import datetime
 from uuid import uuid4
 
-from app.features.simulation.artifact import ArtifactKind, ArtifactOut
-from app.features.simulation.link import ExternalLinkKind, ExternalLinkOut
-from app.schemas.utils import to_snake_case
 from pydantic import AnyUrl, HttpUrl
 
-from app.features.machine.api import MachineOut
-from app.features.simulation.schemas import SimulationCreate, SimulationOut
+from app.common.schemas.utils import to_snake_case
+from app.features.machine.schemas import MachineOut
+from app.features.simulation.schemas import (
+    ArtifactKind,
+    ArtifactOut,
+    ExternalLinkKind,
+    ExternalLinkOut,
+    SimulationCreate,
+    SimulationOut,
+)
 
 
-class TestSimulationCreate:
-    def test_simulation_create_required_fields(self):
+class TestSimulationCreateSchema:
+    def test_valid_simulation_create_required_fields(self):
         payload = {
             "name": "Test Simulation",
             "caseName": "test_case",
@@ -26,12 +31,12 @@ class TestSimulationCreate:
             "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
         }
 
-        simulation_create = SimulationCreate(**payload)  # type: ignore
+        simulation_create = SimulationCreate(**payload)
         for key, value in payload.items():
             snake_case_key = to_snake_case(key)
             assert getattr(simulation_create, snake_case_key) == value
 
-    def test_simulation_create_optional_fields(self):
+    def test_valid_simulation_create_optional_fields(self):
         payload = {
             "name": "Test Simulation",
             "caseName": "test_case",
@@ -76,7 +81,7 @@ class TestSimulationCreate:
             ],
         }
 
-        simulation_create = SimulationCreate(**payload)  # type: ignore
+        simulation_create = SimulationCreate(**payload)
         for key, value in payload.items():
             snake_case_key = to_snake_case(key)
 
@@ -92,8 +97,8 @@ class TestSimulationCreate:
                 assert getattr(simulation_create, snake_case_key) == value
 
 
-class TestSimulationOut:
-    def test_simulation_out_required_fields(self):
+class TestSimulationOutSchema:
+    def test_valid_simulation_out_required_fields(self):
         # Arrange: Define the required fields
         fields = {
             "id": uuid4(),
@@ -124,7 +129,7 @@ class TestSimulationOut:
         }
 
         # Act: Create a SimulationOut instance
-        simulation_out = SimulationOut(**fields)  # type: ignore
+        simulation_out = SimulationOut(**fields)
 
         # Assert: Validate all fields
         for key, value in fields.items():
@@ -164,7 +169,7 @@ class TestSimulationOut:
             "Field 'links' is not an empty list by default."
         )
 
-    def test_simulation_out_optional_fields(self):
+    def test_valid_simulation_out_optional_fields(self):
         required_fields = {
             "id": uuid4(),
             "name": "Test Simulation",
@@ -236,7 +241,7 @@ class TestSimulationOut:
 
         fields = {**required_fields, **optional_fields}
 
-        simulation_out = SimulationOut(**fields)  # type: ignore
+        simulation_out = SimulationOut(**fields)
 
         for key, value in fields.items():
             if key in ["artifacts", "links"]:
@@ -302,12 +307,12 @@ class TestSimulationOut:
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
                 ),
             ],
-        )  # type: ignore
+        )
 
         grouped = simulation_out.grouped_artifacts
-        assert len(grouped()) == 2, "There should be 2 groups of artifacts."
-        assert len(grouped()["output"]) == 2, "There should be 2 output artifacts."
-        assert len(grouped()["archive"]) == 1, "There should be 1 archive artifact."
+        assert len(grouped) == 2, "There should be 2 groups of artifacts."  # type: ignore
+        assert len(grouped["output"]) == 2, "There should be 2 output artifacts."  # type: ignore
+        assert len(grouped["archive"]) == 1, "There should be 1 archive artifact."  # type: ignore
 
     def test_grouped_links_computed_field(self):
         simulation_out = SimulationOut(
@@ -354,11 +359,9 @@ class TestSimulationOut:
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
                 ),
             ],
-        )  # type: ignore
+        )
 
         grouped = simulation_out.grouped_links
-        assert len(grouped()) == 2, "There should be 2 groups of links."
-        assert len(grouped()["diagnostic"]) == 1, "There should be 2 diagnostic links."
-        assert len(grouped()["performance"]) == 1, (
-            "There should be 2 performance links."
-        )
+        assert len(grouped) == 2, "There should be 2 groups of links."  # type: ignore
+        assert len(grouped["diagnostic"]) == 1, "There should be 2 diagnostic links."  # type: ignore
+        assert len(grouped["performance"]) == 1, "There should be 2 performance links."  # type: ignore

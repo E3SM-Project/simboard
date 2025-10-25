@@ -46,7 +46,7 @@ def to_camel_case(string: str) -> str:
     """
     parts = string.split("_")
 
-    return parts[0] + "".join(p.title() for p in parts[1:])
+    return parts[0].lower() + "".join(p.title() for p in parts[1:])
 
 
 def to_snake_case(camel_str: str) -> str:
@@ -63,4 +63,6 @@ def to_snake_case(camel_str: str) -> str:
     str
         The converted string in snake_case format.
     """
-    return re.sub(r"([A-Z])", r"_\1", camel_str).lower().lstrip("_")
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", camel_str)
+
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()

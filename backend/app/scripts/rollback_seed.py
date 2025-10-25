@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.core.db import SessionLocal
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 
 

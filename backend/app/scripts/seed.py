@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.core.db import SessionLocal
 from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import (

@@ -13,7 +13,7 @@ from app.features.machine.models import Machine
 
 
 class TestCreateMachine:
-    def test_create_machine_success(self, client, db: Session):
+    def test_function_succeeds_with_valid_payload(self, db: Session):
         payload = {
             "name": "Machine A",
             "site": "Site A",
@@ -23,15 +23,14 @@ class TestCreateMachine:
             "notes": "Test machine",
         }
 
-        # Test the actual function
-        machine_create = MachineCreate(**payload)  # type: ignore
+        machine_create = MachineCreate(**payload)
         machine = create_machine(machine_create, db)
 
         for key in payload:
             assert getattr(machine, key) == payload[key]
 
-        # Test the API endpoint
-        payload2 = {
+    def test_endpoint_succeeds_with_valid_payload(self, client):
+        payload = {
             "name": "Machine F",
             "site": "Site F",
             "architecture": "ARM",
@@ -40,16 +39,15 @@ class TestCreateMachine:
             "notes": "Another test machine",
         }
 
-        res = client.post("/machines", json=payload2)
+        res = client.post("/machines", json=payload)
 
         assert res.status_code == 201
         data = res.json()
 
         for key in payload:
-            assert data[key] == payload2[key]
+            assert data[key] == payload[key]
 
-    def test_create_machine_duplicate_name(self, db: Session, client):
-        # Seed an existing machine
+    def test_function_raises_error_for_duplicate_name_(self, db: Session):
         db.add(
             Machine(
                 name="Machine B",
@@ -71,21 +69,41 @@ class TestCreateMachine:
             "notes": "Duplicate machine",
         }
 
-        # Test the actual function
         try:
-            machine_create = MachineCreate(**payload)  # type: ignore
+            machine_create = MachineCreate(**payload)
             create_machine(machine_create, db)
         except HTTPException as e:
             assert str(e) == "400: Machine with this name already exists"
 
-        # Test the API endpoint
+    def test_endpoint_raises_400_for_duplicate_name(self, client, db: Session):
+        db.add(
+            Machine(
+                name="Machine B",
+                site="Site B",
+                architecture="x86_64",
+                scheduler="PBS",
+                gpu=False,
+                notes="Existing machine",
+            )
+        )
+        db.commit()
+
+        payload = {
+            "name": "Machine B",
+            "site": "Site C",
+            "architecture": "ARM",
+            "scheduler": "SLURM",
+            "gpu": True,
+            "notes": "Duplicate machine",
+        }
+
         res = client.post("/machines", json=payload)
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine with this name already exists"
 
 
 class TestListMachines:
-    def test_list_machines(self, db: Session, client):
+    def test_function_successfully_list_machines(self, db: Session):
         expected_machines = {
             "aurora",
             "frontier",
@@ -97,24 +115,33 @@ class TestListMachines:
             "chrysalis",
         }
 
-        # Test the actual function
         machines = list_machines(db)
         result = {m.name for m in machines}
 
         assert result == expected_machines
 
-        # Test the API endpoint
+    def test_endpoint_successfully_list_machines(self, client):
+        expected_machines = {
+            "aurora",
+            "frontier",
+            "anvil",
+            "polaris",
+            "andes",
+            "perlmutter",
+            "compy",
+            "chrysalis",
+        }
+
         res = client.get("/machines")
         assert res.status_code == 200
         data = res.json()
 
-        # Don’t rely on DB ordering.
-        result_api = {m["name"] for m in data}
-        assert result_api == expected_machines
+        result_endpoint = {m["name"] for m in data}
+        assert result_endpoint == expected_machines
 
 
 class TestGetMachine:
-    def test_get_machine_success(self, db: Session, client):
+    def test_function_successfully_gets_machines(self, db: Session):
         expected = Machine(
             name="Machine E",
             site="Site E",
@@ -127,29 +154,41 @@ class TestGetMachine:
         db.commit()
         db.refresh(expected)
 
-        # Test the actual function
         result = get_machine(expected.id, db)
         assert result.name == expected.name
         assert result.notes == expected.notes
 
-        # Test the API endpoint
+    def test_endpoint_successfully_get_machine(self, client, db: Session):
+        expected = Machine(
+            name="Machine E",
+            site="Site E",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=True,
+            notes="Test machine",
+        )
+        db.add(expected)
+        db.commit()
+        db.refresh(expected)
+
         res = client.get(f"/machines/{expected.id}")
         assert res.status_code == 200
 
-        result_api = res.json()
-        assert result_api["name"] == expected.name
-        assert result_api["notes"] == expected.notes
+        result_endpoint = res.json()
+        assert result_endpoint["name"] == expected.name
+        assert result_endpoint["notes"] == expected.notes
 
-    def test_get_machine_not_found(self, client, db: Session):
+    def test_function_raises_error_if_machine_not_found(self, db: Session):
         random_id = uuid4()
 
-        # Test the actual function
         try:
             get_machine(random_id, db)
         except HTTPException as e:
             assert str(e) == "404: Machine not found"
 
-        # Test the API endpoint
+    def test_endpoint_raises_404_if_machine_not_found(self, client):
+        random_id = uuid4()
+
         res = client.get(f"/machines/{random_id}")
         assert res.status_code == 404
         assert res.json()["detail"] == "Machine not found"
