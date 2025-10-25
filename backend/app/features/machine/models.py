@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
-from app.features.simulation.models import Simulation
+
+if TYPE_CHECKING:
+    from app.features.simulation.models import Simulation
 
 
 class Machine(Base, IDMixin, TimestampMixin):
