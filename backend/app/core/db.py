@@ -22,15 +22,32 @@ SessionLocal = sessionmaker(
 
 @contextmanager
 def transaction(db: Session):
+    """Context manager for handling database transactions.
+
+    This function provides a transactional scope around a series of operations.
+
+    Parameters:
+    -----------
+    db : Session
+        An active SQLAlchemy Session object.
+
+    Yields:
+    -------
+    Session
+        The provided SQLAlchemy Session object within a transaction.
+    """
     try:
         yield db
+
         db.commit()
     except IntegrityError as e:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Constraint violation while writing to the database.",
         ) from e
     except Exception:
         db.rollback()
+
         raise

@@ -18,6 +18,26 @@ if TYPE_CHECKING:
     from app.features.machine.models import Machine
 
 
+class Status(Base):
+    __tablename__ = "status_lookup"
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class ArtifactKind(str, Enum):
+    OUTPUT = "output"
+    ARCHIVE = "archive"
+    RUN_SCRIPT = "run_script"
+    POSTPROCESSING_SCRIPT = "postprocessing_script"
+
+
+class ExternalLinkKind(str, Enum):
+    DIAGNOSTIC = "diagnostic"
+    PERFORMANCE = "performance"
+    DOCS = "docs"
+    OTHER = "other"
+
+
 class Simulation(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
 
@@ -101,13 +121,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
 
 
-class ArtifactKind(str, Enum):
-    OUTPUT = "output"
-    ARCHIVE = "archive"
-    RUN_SCRIPT = "run_script"
-    POSTPROCESSING_SCRIPT = "postprocessing_script"
-
-
 class Artifact(Base, IDMixin, TimestampMixin):
     __tablename__ = "artifacts"
 
@@ -140,13 +153,6 @@ class Artifact(Base, IDMixin, TimestampMixin):
     )
 
 
-class ExternalLinkKind(str, Enum):
-    DIAGNOSTIC = "diagnostic"
-    PERFORMANCE = "performance"
-    DOCS = "docs"
-    OTHER = "other"
-
-
 class ExternalLink(Base, IDMixin, TimestampMixin):
     __tablename__ = "external_links"
 
@@ -167,14 +173,8 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     url: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))
 
-    simulation: Mapped["Simulation"] = relationship(
+    simulation: Mapped[Simulation] = relationship(
         back_populates="links",
         primaryjoin="ExternalLink.simulation_id==Simulation.id",
         passive_deletes=True,
     )
-
-
-class Status(Base):
-    __tablename__ = "status_lookup"
-    code: Mapped[str] = mapped_column(String(50), primary_key=True)
-    label: Mapped[str] = mapped_column(String(100), nullable=False)

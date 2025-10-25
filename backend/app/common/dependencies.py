@@ -22,6 +22,7 @@ def get_db() -> Generator[Session, None, None]:
     session is properly closed after use.
     """
     db = SessionLocal()
+
     try:
         yield db
     finally:
