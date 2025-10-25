@@ -140,7 +140,12 @@ def _drop_test_database():
         with admin_conn.cursor(row_factory=tuple_row) as cur:
             # Detect server version
             cur.execute("SHOW server_version_num;")
-            (server_version_num,) = cur.fetchone()
+            result = cur.fetchone()
+
+            if result is None:
+                raise ValueError("Failed to fetch server version number.")
+
+            (server_version_num,) = result
             server_version_num = int(server_version_num)
 
             if server_version_num >= 150000:
@@ -188,11 +193,6 @@ def _create_test_database():
     psycopg.DatabaseError
         If there is an issue executing the SQL commands.
 
-    See Also
-    --------
-    _get_database_session_name_user_and_password_from_url : Extracts database name, user, and password
-        from the test database URL.
-
     Examples
     --------
     >>> _create_test_database()
@@ -222,6 +222,17 @@ def _create_test_database():
 
 
 def _parse_db_url(db_url: str) -> tuple[str, str | None, str | None, str, int]:
+    """Parses a database URL into its components.
+
+    Parameters
+    ----------
+    db_url : str
+        The database URL to parse.
+    Returns
+    -------
+    tuple[str, str | None, str | None, str, int]
+        A tuple containing the database name, user, password, host, and port.
+    """
     parsed = urlparse(db_url)
 
     db_name = parsed.path.lstrip("/")
@@ -234,6 +245,12 @@ def _parse_db_url(db_url: str) -> tuple[str, str | None, str | None, str, int]:
 
 
 def _run_migrations():
+    """Runs Alembic migrations to set up the database schema for testing.
+
+    This function configures Alembic to use the test database URL and
+    applies all migrations to ensure the database schema is up-to-date
+    before running tests.
+    """
     alembic_cfg = Config(ALEMBIC_INI_PATH)
 
     # Inject test DB URL dynamically into Alembic env.
