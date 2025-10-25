@@ -263,8 +263,8 @@ def _run_migrations():
 def client(db: Session):
     """Sets up a FastAPI TestClient with a database dependency override.
 
-    This fixture overrides the `get_database_session` dependency used in FastAPI routes
-    to inject a test database session instead of the production database.
+    This fixture overrides the `get_database_session` dependency used in FastAPI
+    routes to inject a test database session instead of the production database.
     This ensures that the application uses the `earthframe_test` database
     during tests, isolating test data from production data.
 
@@ -295,6 +295,7 @@ def client(db: Session):
             pass
 
     app.dependency_overrides[get_database_session] = override_get_database_session
+
     with TestClient(app) as c:
         yield c
 
