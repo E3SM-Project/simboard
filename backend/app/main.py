@@ -6,6 +6,8 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logger import _setup_root_logger
 from app.features.machine.api import router as machine_router
 from app.features.simulation.api import router as simulations_router
+from app.features.user.manager import fastapi_users
+from app.features.user.schemas import UserCreate, UserRead, UserUpdate
 
 
 def create_app() -> FastAPI:
@@ -29,6 +31,16 @@ def create_app() -> FastAPI:
     # Register routers.
     app.include_router(simulations_router)
     app.include_router(machine_router)
+    app.include_router(
+        fastapi_users.get_register_router(UserRead, UserCreate),
+        prefix="/auth",
+        tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_users_router(UserRead, UserUpdate),
+        prefix="/users",
+        tags=["users"],
+    )
 
     return app
 
