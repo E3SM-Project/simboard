@@ -7,6 +7,8 @@ ValidationError. These handlers ensure consistent and user-friendly error
 responses for the application.
 """
 
+import traceback
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -119,6 +121,16 @@ def map_sa_exception(e: Exception) -> tuple[int, str]:
     tuple[int, str]
         A tuple containing the HTTP status code and the error message.
     """
+    logger.error("\n--- SQLAlchemy Exception Traceback ---\n%s", traceback.format_exc())
+    logger.error(
+        "\n--- Exception Details ---\n"
+        "Type: %s\n"
+        "Message: %s\n"
+        "--------------------------",
+        type(e).__name__,
+        str(e),
+    )
+
     if isinstance(e, sa_exc.IntegrityError):
         return pg_detail(e)
     elif isinstance(e, sa_exc.DataError):
@@ -129,7 +141,6 @@ def map_sa_exception(e: Exception) -> tuple[int, str]:
         return 503, "Database unavailable; try again."
     elif isinstance(e, sa_exc.DBAPIError):
         code = 503 if getattr(e, "connection_invalidated", False) else 500
-
         return code, "Database error."
 
     return 500, "Unexpected server error."
@@ -152,6 +163,9 @@ def pg_detail(e: sa_exc.IntegrityError) -> tuple[int, str]:
         A tuple containing the HTTP status code and the error message.
     """
     pgcode: str | None = getattr(getattr(e, "orig", None), "pgcode", None)
+
+    # Log the error details
+    logger.error(f"IntegrityError occurred: {e}")
 
     if pgcode == "23505":  # unique_violation (Postgres)
         return 409, "Duplicate resource (unique constraint)."

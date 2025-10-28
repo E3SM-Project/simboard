@@ -31,7 +31,6 @@ auth_router.include_router(
 # Users can manage their own profile.
 user_router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/me",
     tags=["users"],
     dependencies=[Depends(current_active_user)],
 )

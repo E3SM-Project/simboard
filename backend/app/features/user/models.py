@@ -6,7 +6,7 @@ from fastapi_users.db import (
     SQLAlchemyBaseUserTableUUID,
 )
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
@@ -22,6 +22,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     __tablename__ = "users"
 
+    # Override hashed_password to allow nullable for OAuth users
+    hashed_password: Mapped[str | None] = mapped_column(
+        String(length=1024), nullable=True
+    )
+
     role: Mapped[UserRole] = mapped_column(
         SQLEnum(UserRole, name="user_role"),
         nullable=False,
@@ -30,7 +35,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # Relationship to linked OAuth accounts
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
-        "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
+        "OAuthAccount",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",  # Required for async loading
     )
 
     def __repr__(self) -> str:
@@ -46,4 +54,6 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
         ForeignKey("users.id", ondelete="cascade"), nullable=False
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="oauth_accounts")
+    user: Mapped["User"] = relationship(
+        "User", back_populates="oauth_accounts", lazy="selectin"
+    )

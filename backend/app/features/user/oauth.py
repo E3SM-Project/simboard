@@ -1,7 +1,7 @@
 from fastapi_users.authentication import (
     AuthenticationBackend,
     CookieTransport,
-    Strategy,
+    JWTStrategy,
 )
 from httpx_oauth.clients.github import GitHubOAuth2
 
@@ -24,25 +24,14 @@ github_oauth_client = GitHubOAuth2(
 )
 
 
-class NoOpStrategy(Strategy):
-    # A no-operation strategy for GitHub OAuth.
-    async def read_token(self, token, user_manager):
-        return None
-
-    async def write_token(self, user):
-        return ""
-
-    async def destroy_token(self, token, user):
-        return None
-
-
-def get_noop_strategy():
-    return NoOpStrategy()
+def get_jwt_strategy() -> JWTStrategy:
+    """Return JWT strategy for OAuth backend."""
+    return JWTStrategy(secret=settings.github_state_secret_key, lifetime_seconds=3600)
 
 
 # OAuth backend definition.
 # For OAuth, the backend mainly defines the transport (cookie) and name.
 # No strategy is required here — OAuth router handles login flow.
 github_oauth_backend: AuthenticationBackend = AuthenticationBackend(
-    name="github", transport=cookie_transport, get_strategy=NoOpStrategy
+    name="github", transport=cookie_transport, get_strategy=get_jwt_strategy
 )
