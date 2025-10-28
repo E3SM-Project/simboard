@@ -20,11 +20,10 @@ class Settings(BaseSettings):
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------
-    database_url: str = "postgresql://user:password@localhost:5432/defaultdb"
+    database_url: str
 
     # Used only for tests; must include "test" in the path.
-    test_database_url: str = "postgresql://user:password@localhost:5432/defaultdb_test"
-
+    test_database_url: str
     # GitHub OAuth configuration (must be overridden in .env)
     # --------------------------------------------------------
     github_client_id: str
@@ -41,9 +40,6 @@ class Settings(BaseSettings):
     cookie_httponly: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_max_age: int = 3600
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
