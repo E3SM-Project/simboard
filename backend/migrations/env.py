@@ -19,6 +19,7 @@ from app.features.simulation.models import (  # noqa: F401
     Simulation,
     Status,
 )
+from app.features.user.models import OAuthAccount, User  # noqa: F401
 
 # --- Ensure project is importable (backend root = parent of 'app') ---
 CURRENT_DIR = os.path.dirname(__file__)
