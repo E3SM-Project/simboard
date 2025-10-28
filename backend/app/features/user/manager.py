@@ -1,50 +1,28 @@
-"""User management setup using FastAPI Users."""
-
-from uuid import UUID
-
-from fastapi import Depends, HTTPException, status
+# app/features/user/manager.py
+from fastapi import Depends
 from fastapi_users import BaseUserManager, FastAPIUsers, IntegerIDMixin
 from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.features.user.auth import auth_backend
-from app.features.user.models import OAuthAccount, User
-from core.database_async import get_async_session
+from app.core.database_async import get_async_session
+from app.features.user.models import User
+from app.features.user.oauth import github_oauth_backend
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_session)):  # noqa: B008
-    """Get the user database dependency."""
-    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
+    yield SQLAlchemyUserDatabase(session, User)
 
 
 class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
-    """User manager for handling user operations."""
-
-    reset_password_token_secret = settings.reset_password_secret_key
-    verification_token_secret = settings.verification_secret_key
+    async def on_after_register(self, user: User, request=None):
+        print(f"✅ New GitHub user registered: {user.email}")
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008
-    """Get the user manager dependency."""
     yield UserManager(user_db)
 
 
-# --- FastAPI Users Setup ---
-fastapi_users = FastAPIUsers[User, UUID](get_user_manager, [auth_backend])
+fastapi_users = FastAPIUsers[User, int](get_user_manager, [github_oauth_backend])
 
-# Helpers for route dependencies
-current_user = fastapi_users.current_user()
 current_active_user = fastapi_users.current_user(active=True)
-current_verified_user = fastapi_users.current_user(verified=True)
-current_superuser = fastapi_users.current_user(active=True, superuser=True)
-
-
-async def current_active_superuser(user: User = Depends(current_active_user)):  # noqa: B008
-    """Ensure the user is active and a superuser."""
-    if not user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions",
-        )
-    return user
+current_active_superuser = fastapi_users.current_user(active=True, superuser=True)

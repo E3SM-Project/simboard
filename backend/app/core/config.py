@@ -25,11 +25,12 @@ class Settings(BaseSettings):
     # Used only for tests; must include "test" in the path.
     test_database_url: str = "postgresql://user:password@localhost:5432/defaultdb_test"
 
-    # Security configuration (must be overridden in .env)
+    # GitHub OAuth configuration (must be overridden in .env)
     # --------------------------------------------------------
-    jwt_secret_key: str = "change_me_jwt_secret_key"
-    reset_password_secret_key: str = "change_me_reset_secret_key"
-    verification_secret_key: str = "change_me_verification_secret_key"
+    github_client_id: str
+    github_client_secret: str
+    github_redirect_url: str
+    github_state_secret_key: str = "changeme_state_secret"  # used to sign OAuth states
 
     # --- Token lifetimes ---
     lifetime_seconds: int = 3600

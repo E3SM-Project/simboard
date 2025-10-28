@@ -1,38 +1,31 @@
 from fastapi import APIRouter, Depends
 
-from app.features.user.auth import auth_backend
+from app.core.config import settings
 from app.features.user.manager import (
     current_active_superuser,
     current_active_user,
     fastapi_users,
 )
-from app.features.user.schemas import UserCreate, UserRead, UserUpdate
+from app.features.user.oauth import github_oauth_backend, github_oauth_client
+from app.features.user.schemas import UserRead, UserUpdate
 
-auth_router = APIRouter()
-user_router = APIRouter()
+user_router = APIRouter(prefix="/users", tags=["users"])
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
-# --- AUTHENTICATION & REGISTRATION ROUTES ---
-# These are public (registration, login, logout, verify, etc.).
+# --- GitHub OAuth Routes ---
 auth_router.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="/auth",
+    fastapi_users.get_oauth_router(
+        github_oauth_client,
+        github_oauth_backend,
+        state_secret=settings.github_state_secret_key,
+        redirect_url=settings.github_redirect_url,
+        associate_by_email=True,
+        is_verified_by_default=True,
+    ),
+    prefix="/github",
     tags=["auth"],
 )
-auth_router.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="/auth/jwt",
-    tags=["auth"],
-)
-auth_router.include_router(
-    fastapi_users.get_reset_password_router(),
-    prefix="/auth",
-    tags=["auth"],
-)
-auth_router.include_router(
-    fastapi_users.get_verify_router(UserRead),
-    prefix="/auth",
-    tags=["auth"],
-)
+
 
 # --- USER ROUTES ---
 # Users can manage their own profile.
