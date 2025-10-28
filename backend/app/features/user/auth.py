@@ -27,7 +27,7 @@ cookie_transport = CookieTransport(
 )
 
 # Authentication backend combining cookie transport and JWT strategy.
-authentication_backend = AuthenticationBackend(
+auth_backend = AuthenticationBackend(
     name="jwt",
     transport=cookie_transport,
     get_strategy=get_jwt_strategy,
