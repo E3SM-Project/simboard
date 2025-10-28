@@ -8,7 +8,7 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.features.user.authentication import auth_backend
+from app.features.user.authentication import authentication_backend
 from app.features.user.models import OAuthAccount, User
 from core.database_async import get_async_session
 
@@ -31,7 +31,7 @@ async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008
 
 
 # --- FastAPI Users Setup ---
-fastapi_users = FastAPIUsers[User, UUID](get_user_manager, [auth_backend])
+fastapi_users = FastAPIUsers[User, UUID](get_user_manager, [authentication_backend])
 
 # Helpers for route dependencies
 current_user = fastapi_users.current_user()

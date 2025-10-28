@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +30,19 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change_me_jwt_secret_key"
     reset_password_secret_key: str = "change_me_reset_secret_key"
     verification_secret_key: str = "change_me_verification_secret_key"
+
+    # --- Token lifetimes ---
+    lifetime_seconds: int = 3600
+
+    # --- Cookie config ---
+    cookie_name: str = "simscope_auth"
+    cookie_secure: bool = False
+    cookie_httponly: bool = True
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    cookie_max_age: int = 3600
+
+    class Config:
+        env_file = ".env"
 
 
 settings = Settings()

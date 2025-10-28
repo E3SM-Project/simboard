@@ -8,25 +8,26 @@ from fastapi_users.authentication import (
 
 from app.core.config import settings
 
-cookie_transport = CookieTransport(
-    cookie_name="simscope_auth",  # name of cookie
-    cookie_max_age=3600,  # seconds (1h)
-    cookie_secure=False,  # set to True in production (HTTPS)
-    cookie_httponly=True,  # prevents JS access
-    cookie_samesite="lax",  # can use "strict" or "none" if needed
-)
-
 
 def get_jwt_strategy() -> JWTStrategy:
-    """Get the JWT strategy for authentication."""
+    """JWT strategy for short-lived access tokens."""
     return JWTStrategy(
-        secret=settings.jwt_secret_key,  # e.g. read from env
-        lifetime_seconds=3600,  # token lifetime (1h)
+        secret=settings.jwt_secret_key,
+        lifetime_seconds=settings.lifetime_seconds,
     )
 
 
-# Authentication backend using JWT strategy and cookie transport.
-auth_backend = AuthenticationBackend(
+# Cookie transport configuration for storing JWT in cookies.
+cookie_transport = CookieTransport(
+    cookie_name=settings.cookie_name,
+    cookie_max_age=settings.cookie_max_age,
+    cookie_secure=settings.cookie_secure,
+    cookie_httponly=settings.cookie_httponly,
+    cookie_samesite=settings.cookie_samesite,
+)
+
+# Authentication backend combining cookie transport and JWT strategy.
+authentication_backend = AuthenticationBackend(
     name="jwt",
     transport=cookie_transport,
     get_strategy=get_jwt_strategy,
