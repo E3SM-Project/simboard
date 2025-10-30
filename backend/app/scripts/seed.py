@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import AnyUrl, HttpUrl
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.database import SessionLocal
 from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation

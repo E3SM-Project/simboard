@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi_users import schemas
+from pydantic import BaseModel, EmailStr
 
 
 class UserRead(schemas.BaseUser[UUID]):
@@ -25,3 +26,14 @@ class UserUpdate(schemas.BaseUserUpdate):
 
     # Optional for updates (admin can change roles)
     role: Annotated[str | None, "The role of the user"] = None
+
+
+class UserPreview(BaseModel):
+    """Minimal user info used for display purposes only."""
+
+    id: UUID
+    email: EmailStr
+    role: str
+    full_name: str | None = None
+
+    model_config = {"from_attributes": True}
