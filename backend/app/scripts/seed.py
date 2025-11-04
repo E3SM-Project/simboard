@@ -14,8 +14,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from pydantic import AnyUrl, HttpUrl
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.database import SessionLocal
 from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
@@ -92,18 +94,39 @@ def seed_from_json(db: Session, json_path: str):
         )
 
         # ✅ Step 2: Convert to ORM
-        sim = Simulation(**sim_in.model_dump(exclude={"artifacts", "links"}))
+        sim = Simulation(
+            **{
+                **sim_in.model_dump(exclude={"artifacts", "links"}),
+                "git_repository_url": str(sim_in.git_repository_url)
+                if isinstance(sim_in.git_repository_url, HttpUrl)
+                else sim_in.git_repository_url,
+            }
+        )
         db.add(sim)
         db.flush()  # get generated sim.id
 
         # ✅ Step 3: Attach related data
         for a in sim_in.artifacts or []:
-            db.add(Artifact(simulation_id=sim.id, **a.model_dump()))
+            db.add(
+                Artifact(
+                    simulation_id=sim.id,
+                    **{
+                        **a.model_dump(),
+                        "uri": str(a.uri) if isinstance(a.uri, AnyUrl) else a.uri,
+                    },
+                )
+            )
 
         for link in sim_in.links or []:
             db.add(
                 ExternalLink(
-                    simulation_id=sim.id, **{**link.model_dump(), "url": str(link.url)}
+                    simulation_id=sim.id,
+                    **{
+                        **link.model_dump(),
+                        "url": str(link.url)
+                        if isinstance(link.url, HttpUrl)
+                        else link.url,
+                    },
                 )
             )
 

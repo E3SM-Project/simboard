@@ -94,8 +94,12 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
-    created_by: Mapped[str | None] = mapped_column(String(100))
-    last_updated_by: Mapped[str | None] = mapped_column(String(100))
+    created_by: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+    )
+    last_updated_by: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+    )
 
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
@@ -103,6 +107,11 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Relationships
     # ~~~~~~~~~~~~~
+    created_by_user = relationship("User", foreign_keys=[created_by], lazy="joined")
+    last_updated_by_user = relationship(
+        "User", foreign_keys=[last_updated_by], lazy="joined"
+    )
+
     machine: Mapped[Machine] = relationship(
         back_populates="simulations", foreign_keys=[machine_id]
     )

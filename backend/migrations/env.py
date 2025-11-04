@@ -12,13 +12,7 @@ from app.core.config import settings
 from app.core.logger import _setup_custom_logger
 
 # import all SQLAlchemy models so Alembic sees them
-from app.features.machine.models import Machine  # noqa: F401
-from app.features.simulation.models import (  # noqa: F401
-    Artifact,
-    ExternalLink,
-    Simulation,
-    Status,
-)
+from app.models  # noqa: F401
 
 # --- Ensure project is importable (backend root = parent of 'app') ---
 CURRENT_DIR = os.path.dirname(__file__)

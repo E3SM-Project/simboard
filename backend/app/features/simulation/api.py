@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,57 +8,51 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationOut
+from app.features.user.manager import current_active_user
+from app.features.user.models import User
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
 
 @router.post("", response_model=SimulationOut, status_code=status.HTTP_201_CREATED)
 def create_simulation(
-    payload: SimulationCreate, db: Session = Depends(get_database_session)
+    payload: SimulationCreate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
 ):
-    """Create a new simulation record in the database.
+    """Create a new simulation record in the database."""
+    now = datetime.now(timezone.utc)
 
-    Parameters
-    ----------
-    payload : SimulationCreate
-        The data required to create a new simulation, including optional artifacts
-        and links.
-    db : Session, optional
-        The database session dependency, by default obtained via
-        `Depends(get_database_session)`.
-
-    Returns
-    -------
-    SimulationOut
-        The created simulation object validated and serialized as `SimulationOut`.
-    """
     sim = Simulation(
         **payload.model_dump(
             by_alias=False,
             exclude={"artifacts", "links"},
             exclude_unset=True,
-        )
+        ),
+        created_by=user.id,
+        last_updated_by=user.id,
+        created_at=now,
+        updated_at=now,
     )
 
     if payload.artifacts:
         for artifact in payload.artifacts:
             artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
             artifact_data["uri"] = str(artifact.uri)
-
             sim.artifacts.append(Artifact(**artifact_data))
 
     if payload.links:
         for link in payload.links:
             link_data = link.model_dump(by_alias=False, exclude_unset=True)
             link_data["url"] = str(link.url)
-
             sim.links.append(ExternalLink(**link_data))
 
     # Start a database transaction to ensure atomicity of the operation
     with transaction(db):
         # Add the simulation object to the database session.
         db.add(sim)
-        # Flush the session to persist the simulation object and generate its ID
+        # Flush the session to persist the simulation object, generate its ID
+        # and fully populate relationships before returning.
         db.flush()
 
     return SimulationOut.model_validate(sim, from_attributes=True)

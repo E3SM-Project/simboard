@@ -46,6 +46,10 @@ reload:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
 	poetry run uvicorn $(APP_NAME) --reload --host $(HOST) --port $(PORT)
 
+reload-debug:
+	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
+	poetry run uvicorn $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+
 # ============================================================
 #  Database Migrations (Alembic)
 # ============================================================

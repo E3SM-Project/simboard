@@ -13,6 +13,7 @@ from app.features.simulation.schemas import (
     SimulationCreate,
     SimulationOut,
 )
+from app.features.user.schemas import UserPreview
 
 
 class TestSimulationCreateSchema:
@@ -29,6 +30,8 @@ class TestSimulationCreateSchema:
             "status": "new",
             "machineId": uuid4(),
             "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
+            "createdBy": uuid4(),
+            "lastUpdatedBy": uuid4(),
         }
 
         simulation_create = SimulationCreate(**payload)
@@ -63,7 +66,8 @@ class TestSimulationCreateSchema:
             "knownIssues": "No known issues",
             "gitBranch": "main",
             "gitRepositoryUrl": HttpUrl("http://example.com/repo"),
-            "createdBy": "user1",
+            "createdBy": uuid4(),
+            "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
             "artifacts": [
                 {
@@ -113,8 +117,16 @@ class TestSimulationOutSchema:
             "status": "new",
             "machine_id": uuid4(),
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "created_by": uuid4(),
+            "created_by_user": UserPreview(
+                id=uuid4(), email="creator@example.com", role="user"
+            ),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+            "last_updated_by_user": UserPreview(
+                id=uuid4(), email="updater@example.com", role="user"
+            ),
+            "last_updated_by": uuid4(),
             "machine": MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -153,8 +165,6 @@ class TestSimulationOutSchema:
             "git_branch",
             "git_tag",
             "git_commit_hash",
-            "created_by",
-            "last_updated_by",
         ]
         for field in optional_fields:
             assert getattr(simulation_out, field) is None, (
@@ -183,8 +193,16 @@ class TestSimulationOutSchema:
             "status": "new",
             "machine_id": uuid4(),
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "created_by": uuid4(),
+            "created_by_user": UserPreview(
+                id=uuid4(), email="creator@example.com", role="user"
+            ),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+            "last_updated_by_user": UserPreview(
+                id=uuid4(), email="updater@example.com", role="user"
+            ),
+            "last_updated_by": uuid4(),
             "machine": MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -213,9 +231,6 @@ class TestSimulationOutSchema:
             "git_branch": "main",
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
-            "created_by": "user1",
-            "created_at": datetime(2023, 1, 1, 0, 0, 0),
-            "last_updated_by": "user2",
             "extra": {"key": "value"},
             "artifacts": [
                 {
@@ -255,7 +270,7 @@ class TestSimulationOutSchema:
                 assert getattr(simulation_out, key) == value
 
     def test_grouped_artifacts_computed_field(self):
-        simulation_out = SimulationOut(
+        simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
             name="Test Simulation",
             case_name="test_case",
@@ -268,8 +283,16 @@ class TestSimulationOutSchema:
             status="new",
             machine_id=uuid4(),
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            created_by=uuid4(),
+            created_by_user=UserPreview(
+                id=uuid4(), email="creator@example.com", role="user"
+            ),
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            last_updated_by_user=UserPreview(
+                id=uuid4(), email="updater@example.com", role="user"
+            ),
+            last_updated_by=uuid4(),
             machine=MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -315,7 +338,7 @@ class TestSimulationOutSchema:
         assert len(grouped["archive"]) == 1, "There should be 1 archive artifact."  # type: ignore
 
     def test_grouped_links_computed_field(self):
-        simulation_out = SimulationOut(
+        simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
             name="Test Simulation",
             case_name="test_case",
@@ -328,8 +351,16 @@ class TestSimulationOutSchema:
             status="new",
             machine_id=uuid4(),
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            created_by=uuid4(),
+            created_by_user=UserPreview(
+                id=uuid4(), email="creator@example.com", role="user"
+            ),
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            last_updated_by_user=UserPreview(
+                id=uuid4(), email="updater@example.com", role="user"
+            ),
+            last_updated_by=uuid4(),
             machine=MachineOut(
                 id=uuid4(),
                 name="Machine A",

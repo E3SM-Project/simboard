@@ -8,6 +8,7 @@ from pydantic import AnyUrl, Field, HttpUrl, computed_field
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
+from app.features.user.schemas import UserPreview
 
 
 class ArtifactKind(str, Enum):
@@ -204,17 +205,17 @@ class SimulationCreate(CamelInBaseModel):
     # Provenance & submission
     # -----------------------
     created_by: Annotated[
-        str | None,
+        UUID | None,
         Field(
             None,
-            description="User who created the simulation, defined at creation time.",
+            description="User ID who created the simulation, defined at creation time.",
         ),
     ]
     last_updated_by: Annotated[
-        str | None,
+        UUID | None,
         Field(
             None,
-            description="User who last updated the simulation, defined at update time.",
+            description="User ID who last updated the simulation, defined at update time.",
         ),
     ]
 
@@ -358,22 +359,23 @@ class SimulationOut(CamelOutBaseModel):
         datetime, Field(..., description="Timestamp when the simulation was created")
     ]
     created_by: Annotated[
-        str | None,
-        Field(
-            None,
-            description="User who created the simulation, defined at creation time.",
-        ),
+        UUID | None, Field(description="User ID who created the simulation.")
     ]
+    created_by_user: Annotated[
+        UserPreview | None,
+        Field(description="Full user info of who created the simulation."),
+    ]
+
     updated_at: Annotated[
         datetime,
         Field(..., description="Timestamp when the simulation was last updated"),
     ]
     last_updated_by: Annotated[
-        str | None,
-        Field(
-            None,
-            description="User who last updated the simulation, defined at update time.",
-        ),
+        UUID | None, Field(description="User ID who last updated the simulation.")
+    ]
+    last_updated_by_user: Annotated[
+        UserPreview | None,
+        Field(description="Full user info of who last updated the simulation."),
     ]
 
     # Miscellaneous
