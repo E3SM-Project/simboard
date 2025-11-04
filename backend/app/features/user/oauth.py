@@ -31,7 +31,6 @@ def get_jwt_strategy() -> JWTStrategy:
 
 # OAuth backend definition.
 # For OAuth, the backend mainly defines the transport (cookie) and name.
-# No strategy is required here — OAuth router handles login flow.
 github_oauth_backend: AuthenticationBackend = AuthenticationBackend(
     name="github", transport=cookie_transport, get_strategy=get_jwt_strategy
 )

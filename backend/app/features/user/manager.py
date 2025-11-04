@@ -1,4 +1,3 @@
-# app/features/user/manager.py
 import uuid
 
 from fastapi import Depends

@@ -134,6 +134,7 @@ def normal_user_sync(db):
     )
     db.add(user)
     db.flush()
+
     db.add(
         OAuthAccount(
             oauth_name="github",
@@ -145,6 +146,7 @@ def normal_user_sync(db):
     )
     db.commit()
     db.refresh(user)
+
     return {"id": user.id, "email": user.email}
 
 
@@ -159,6 +161,7 @@ def admin_user_sync(db):
     )
     db.add(admin)
     db.flush()
+
     db.add(
         OAuthAccount(
             oauth_name="github",
@@ -170,6 +173,7 @@ def admin_user_sync(db):
     )
     db.commit()
     db.refresh(admin)
+
     return {"id": admin.id, "email": admin.email}
 
 
