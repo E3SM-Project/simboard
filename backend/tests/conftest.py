@@ -1,27 +1,38 @@
 import os
+from collections.abc import AsyncGenerator
 from typing import Generator
 from urllib.parse import urlparse
 
 import psycopg
 import pytest
+import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from psycopg.rows import tuple_row
 from sqlalchemy import create_engine, event
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.common.dependencies import get_database_session
+from app.common.models.base import Base
 from app.core.config import settings
+from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.main import app
 
 logger = _setup_custom_logger(__name__)
 
-TEST_DB_URL = settings.test_database_url
 ALEMBIC_INI_PATH = "alembic.ini"
 
+
+# -----------------------------------------------
+# Synchronous fixtures
+# -----------------------------------------------
+
 # Set up the SQLAlchemy engine and sessionmaker for testing
+TEST_DB_URL = settings.test_database_url
 engine = create_engine(TEST_DB_URL, future=True)
 
 # NOTE: Keep a Sessionmaker here, but bind it per-test to a single connection
@@ -298,5 +309,46 @@ def client(db: Session):
 
     with TestClient(app) as c:
         yield c
+
+    app.dependency_overrides.clear()
+
+
+# -----------------------------------------------
+# Asynchronous fixtures
+# -----------------------------------------------
+
+# Async engine and sessionmaker for FastAPI Users
+ASYNC_TEST_DB_URL = TEST_DB_URL.replace("postgresql://", "postgresql+asyncpg://")
+async_engine = create_async_engine(ASYNC_TEST_DB_URL, future=True)
+AsyncTestingSessionLocal = async_sessionmaker(
+    async_engine, expire_on_commit=False, autoflush=False, autocommit=False
+)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_db() -> AsyncGenerator[AsyncSession, None]:
+    """Provide an AsyncSession for FastAPI Users tests."""
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with AsyncTestingSessionLocal() as session:
+        yield session
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_client(async_db: AsyncSession):
+    """FastAPI AsyncClient with async db override for FastAPI Users."""
+
+    async def override_get_async_session():
+        yield async_db
+
+    app.dependency_overrides[get_async_session] = override_get_async_session
+
+    # Use ASGITransport to run requests against the FastAPI app directly
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
 
     app.dependency_overrides.clear()
