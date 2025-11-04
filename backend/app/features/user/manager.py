@@ -7,8 +7,11 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database_async import get_async_session
+from app.core.logger import _setup_custom_logger
 from app.features.user.models import OAuthAccount, User
 from app.features.user.oauth import github_oauth_backend
+
+logger = _setup_custom_logger(__name__)
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_session)):  # noqa: B008
@@ -17,7 +20,7 @@ async def get_user_db(session: AsyncSession = Depends(get_async_session)):  # no
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(self, user: User, request=None):
-        print(f"✅ New GitHub user registered: {user.email}")
+        logger.info(f"✅ New GitHub user registered: {user.email}")
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008

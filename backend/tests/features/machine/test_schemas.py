@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -64,8 +64,8 @@ class TestMachineOutSchema:
             "scheduler": "PBS",
             "gpu": False,
             "notes": "Another test machine",
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
 
         machine_out = MachineOut(**payload)
@@ -103,8 +103,8 @@ class TestMachineOutSchema:
             "scheduler": "PBS",
             "gpu": False,
             "notes": "Another test machine",
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
 
         try:

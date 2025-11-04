@@ -1,4 +1,5 @@
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Generator
 from urllib.parse import urlparse
@@ -20,6 +21,7 @@ from app.common.models.base import Base
 from app.core.config import settings
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
+from app.features.user.models import OAuthAccount, User, UserRole
 from app.main import app
 
 logger = _setup_custom_logger(__name__)
@@ -30,7 +32,6 @@ ALEMBIC_INI_PATH = "alembic.ini"
 # -----------------------------------------------
 # Synchronous fixtures
 # -----------------------------------------------
-
 # Set up the SQLAlchemy engine and sessionmaker for testing
 TEST_DB_URL = settings.test_database_url
 engine = create_engine(TEST_DB_URL, future=True)
@@ -120,6 +121,56 @@ def setup_test_db():
         yield
     finally:
         _drop_test_database()
+
+
+@pytest.fixture
+def normal_user_sync(db):
+    """Sync version of normal_user for use with sync tests."""
+    user = User(
+        email="user@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.USER,
+    )
+    db.add(user)
+    db.flush()
+    db.add(
+        OAuthAccount(
+            oauth_name="github",
+            access_token="fake_token_user",
+            account_id=str(uuid.uuid4()),
+            account_email=user.email,
+            user_id=user.id,
+        )
+    )
+    db.commit()
+    db.refresh(user)
+    return {"id": user.id, "email": user.email}
+
+
+@pytest.fixture
+def admin_user_sync(db):
+    """Sync version of admin_user for use with sync tests."""
+    admin = User(
+        email="admin@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.ADMIN,
+    )
+    db.add(admin)
+    db.flush()
+    db.add(
+        OAuthAccount(
+            oauth_name="github",
+            access_token="fake_token_admin",
+            account_id=str(uuid.uuid4()),
+            account_email=admin.email,
+            user_id=admin.id,
+        )
+    )
+    db.commit()
+    db.refresh(admin)
+    return {"id": admin.id, "email": admin.email}
 
 
 def _drop_test_database():
@@ -352,3 +403,55 @@ async def async_client(async_db: AsyncSession):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def normal_user(async_db):
+    """Create a normal OAuth-based user directly in the database."""
+    user = User(
+        email="user@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.USER,
+    )
+    async_db.add(user)
+    await async_db.flush()
+
+    oauth_account = OAuthAccount(
+        oauth_name="github",
+        access_token="fake_token_user",
+        account_id=str(uuid.uuid4()),
+        account_email=user.email,
+        user_id=user.id,
+    )
+    async_db.add(oauth_account)
+    await async_db.commit()
+    await async_db.refresh(user)
+
+    return {"id": str(user.id), "email": user.email}
+
+
+@pytest_asyncio.fixture
+async def admin_user(async_db):
+    """Create an admin OAuth-based user directly in the database."""
+    admin = User(
+        email="admin@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.ADMIN,
+    )
+    async_db.add(admin)
+    await async_db.flush()
+
+    oauth_account = OAuthAccount(
+        oauth_name="github",
+        access_token="fake_token_admin",
+        account_id=str(uuid.uuid4()),
+        account_email=admin.email,
+        user_id=admin.id,
+    )
+    async_db.add(oauth_account)
+    await async_db.commit()
+    await async_db.refresh(admin)
+
+    return {"id": str(admin.id), "email": admin.email}

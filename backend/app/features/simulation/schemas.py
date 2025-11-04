@@ -207,13 +207,15 @@ class SimulationCreate(CamelInBaseModel):
     created_by: Annotated[
         UUID | None,
         Field(
+            None,
             description="User ID who created the simulation, defined at creation time.",
         ),
     ]
     last_updated_by: Annotated[
         UUID | None,
         Field(
-            description="User ID who last updated the simulation, defined at update time."
+            None,
+            description="User ID who last updated the simulation, defined at update time.",
         ),
     ]
 

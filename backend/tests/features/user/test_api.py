@@ -1,16 +1,14 @@
-import uuid
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
 from fastapi import status
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from httpx import AsyncClient
 
 from app.features.user import oauth
-from app.features.user.models import OAuthAccount, User, UserRole
+from app.features.user.models import UserRole
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -34,58 +32,6 @@ def override_dependency(path: str, name_contains: str, override) -> None:
 
                     if name_contains in call.__qualname__:
                         app.dependency_overrides[call] = override
-
-
-@pytest_asyncio.fixture
-async def normal_user(async_db):
-    """Create a normal OAuth-based user directly in the database."""
-    user = User(
-        email="user@example.com",
-        is_active=True,
-        is_verified=True,
-        role=UserRole.USER,
-    )
-    async_db.add(user)
-    await async_db.flush()
-
-    oauth_account = OAuthAccount(
-        oauth_name="github",
-        access_token="fake_token_user",
-        account_id=str(uuid.uuid4()),
-        account_email=user.email,
-        user_id=user.id,
-    )
-    async_db.add(oauth_account)
-    await async_db.commit()
-    await async_db.refresh(user)
-
-    return {"id": str(user.id), "email": user.email}
-
-
-@pytest_asyncio.fixture
-async def admin_user(async_db):
-    """Create an admin OAuth-based user directly in the database."""
-    admin = User(
-        email="admin@example.com",
-        is_active=True,
-        is_verified=True,
-        role=UserRole.ADMIN,
-    )
-    async_db.add(admin)
-    await async_db.flush()
-
-    oauth_account = OAuthAccount(
-        oauth_name="github",
-        access_token="fake_token_admin",
-        account_id=str(uuid.uuid4()),
-        account_email=admin.email,
-        user_id=admin.id,
-    )
-    async_db.add(oauth_account)
-    await async_db.commit()
-    await async_db.refresh(admin)
-
-    return {"id": str(admin.id), "email": admin.email}
 
 
 class TestAuthRoutes:
