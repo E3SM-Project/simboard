@@ -46,7 +46,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
-    """Generic OAuth account table sufpporting multiple providers."""
+    """Generic OAuth account table supporting multiple providers."""
 
     __tablename__ = "oauth_accounts"
 
