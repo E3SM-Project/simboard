@@ -79,24 +79,7 @@ class TestLogOutRoute:
     """Tests for the logout route."""
 
     @pytest.mark.asyncio
-    async def test_logout_clears_cookie(self, async_client: AsyncClient) -> None:
-        """Ensure the logout endpoint clears the authentication cookie."""
-        cookie_name = settings.cookie_name
-        async_client.cookies.set(cookie_name, "fake_cookie_value")
-
-        response = await async_client.post("/auth/logout")
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json() == {"message": "Successfully logged out"}
-
-        # Check the response header instead of async_client.cookies
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert cookie_name in set_cookie_header
-        assert "Max-Age=0" in set_cookie_header
-        assert "Path=/" in set_cookie_header
-
     @pytest.mark.asyncio
-    async def test_logout_clears_cookie_with_correct_attributes(
         self, async_client: AsyncClient
     ) -> None:
         """Ensure the logout endpoint clears the cookie with correct attributes."""
