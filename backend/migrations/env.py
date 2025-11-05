@@ -7,12 +7,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+# import all SQLAlchemy models so Alembic sees them
+import app.models  # noqa: F401
 from app.common.models.base import Base
 from app.core.config import settings
 from app.core.logger import _setup_custom_logger
-
-# import all SQLAlchemy models so Alembic sees them
-from app.models  # noqa: F401
 
 # --- Ensure project is importable (backend root = parent of 'app') ---
 CURRENT_DIR = os.path.dirname(__file__)
