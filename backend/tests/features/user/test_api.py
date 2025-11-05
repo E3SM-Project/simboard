@@ -7,6 +7,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from httpx import AsyncClient
 
+from app.core.config import settings
 from app.features.user import oauth
 from app.features.user.models import UserRole
 from app.main import app
@@ -72,6 +73,48 @@ class TestAuthRoutes:
 
         # Depending on cookie/JWT config, FastAPI-Users may redirect or just 400
         assert response.status_code in (200, 307, 400)
+
+
+class TestLogOutRoute:
+    """Tests for the logout route."""
+
+    @pytest.mark.asyncio
+    async def test_logout_clears_cookie(self, async_client: AsyncClient) -> None:
+        """Ensure the logout endpoint clears the cookie with correct attributes."""
+        cookie_name = settings.cookie_name
+        async_client.cookies.set(cookie_name, "fake_cookie_value")
+
+        response = await async_client.post("/auth/logout")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "Successfully logged out"}
+
+        set_cookie_header = response.headers.get("set-cookie", "")
+
+        assert f"{cookie_name}=" in set_cookie_header
+        assert "Max-Age=0" in set_cookie_header
+        assert "Path=/" in set_cookie_header
+
+        if settings.cookie_httponly:
+            assert "HttpOnly" in set_cookie_header
+
+        if settings.cookie_secure:
+            assert "Secure" in set_cookie_header
+
+        if settings.cookie_samesite:
+            expected_samesite = f"samesite={settings.cookie_samesite.lower()}"
+            assert expected_samesite in set_cookie_header.lower(), (
+                f"Expected SameSite={settings.cookie_samesite}, "
+                f"but got header: {set_cookie_header}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_logout_without_cookie(self, async_client: AsyncClient) -> None:
+        """Ensure the logout endpoint works even if no cookie is set."""
+        response = await async_client.post("/auth/logout")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "Successfully logged out"}
 
 
 class TestUserRoutes:

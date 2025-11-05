@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.features.user.manager import (
@@ -25,6 +26,24 @@ auth_router.include_router(
     prefix="/github",
     tags=["auth"],
 )
+
+
+@auth_router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout():
+    """Log out the current user by clearing the authentication cookie."""
+    response = JSONResponse(
+        content={"message": "Successfully logged out"},
+        status_code=status.HTTP_200_OK,
+    )
+    response.delete_cookie(
+        key=settings.cookie_name,
+        path="/",
+        httponly=settings.cookie_httponly,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
+
+    return response
 
 
 # --- USER ROUTES ---
