@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { useMachines, useSimulations } from '@/api/simulation';
+import Header from '@/components/layout/Header';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
@@ -45,8 +46,9 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <NavBar selectedSimulationIds={selectedSimulationIds} />
+        {/* TODO: Remove this or update to login button */}
+        <Header />
         <AppRoutes
-          // FIXME: Fix type annotations for AppRoutes
           simulations={simulations}
           machines={machines.data}
           selectedSimulationIds={selectedSimulationIds}

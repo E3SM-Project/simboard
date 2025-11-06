@@ -24,7 +24,6 @@ auth_router.include_router(
         is_verified_by_default=True,
     ),
     prefix="/github",
-    tags=["auth"],
 )
 
 

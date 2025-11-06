@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { useAuth } from '@/auth/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -115,10 +117,18 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
             aria-expanded={open}
           >
             <Avatar>
-              <AvatarImage src="/avatars/jane.jpg" alt="Jane Doe" />
-              <AvatarFallback>JD</AvatarFallback>
+              <AvatarImage
+                src={'/avatars/default.jpg'}
+                alt={user?.full_name || user?.email || 'User'}
+              />
+              <AvatarFallback>
+                {user?.full_name
+                  ?.split(' ')
+                  .map((n) => n[0])
+                  .join('') || 'U'}
+              </AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium">Jane Doe</span>
+            <span className="text-sm font-medium">{user?.full_name || user?.email || 'User'}</span>
             <svg
               className={`w-4 h-4 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
               fill="none"

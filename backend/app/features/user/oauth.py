@@ -12,7 +12,7 @@ cookie_transport = CookieTransport(
     cookie_name=settings.cookie_name,
     cookie_max_age=settings.cookie_max_age,
     cookie_secure=settings.cookie_secure,
-    cookie_httponly=True,
+    cookie_httponly=settings.cookie_httponly,
     cookie_samesite=settings.cookie_samesite,
 )
 
