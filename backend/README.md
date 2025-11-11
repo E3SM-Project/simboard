@@ -1,6 +1,6 @@
 # SimBoard Backend
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
+This project uses [UV](https://uv-py.github.io/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
 
 ---
 
@@ -16,7 +16,7 @@ cd simboard/backend
 # 2. Install dependencies
 make install
 
-# 3. (Optional) Enter Poetry shell
+# 3. (Optional) Enter UV shell
 make shell
 
 # 4. Run the FastAPI development server
@@ -30,41 +30,40 @@ The API will be live at **[http://127.0.0.1:8000](http://127.0.0.1:8000)**, with
 
 ---
 
-## Table of Contents
+## 📚 Table of Contents
 
+- [🚀 Developer Quickstart](#-developer-quickstart)
 - [Setup Instructions](#setup-instructions)
+  - [1. Install UV](#1-install-uv)
+  - [2. Install Dependencies](#2-install-dependencies)
+  - [3. Create a Local Environment File](#3-create-a-local-environment-file)
+  - [4. Activate the UV Shell (optional)](#4-activate-the-uv-shell-optional)
 - [🧰 Makefile Commands](#-makefile-commands)
-- [Startup](#startup)
-- [Tech Stack Overview](#tech-stack-overview)
-- [Managing the Backend](#managing-the-backend)
-
-  - [Editing Models and Schemas](#editing-models-and-schemas)
-  - [PostgreSQL Database Setup](#postgresql-database-setup)
-
-- [Containerization and Deployment](#containerization-and-deployment)
-- [License](#license)
-
----
+  - [🔧 Setup & Environment](#-setup--environment)
+  - [🚀 Development Server](#-development-server)
+  - [🗄️ Database Migrations (Alembic)](#️-database-migrations-alembic)
+  - [🧹 Code Quality](#-code-quality)
+  - [🆘 Miscellaneous](#-miscellaneous)
+- [PostgreSQL Database Setup](#postgresql-database-setup)
+  - [1. Run the PostgreSQL Container](#1-run-the-postgresql-container)
+  - [2. Verify the Database is Running](#2-verify-the-database-is-running)
+  - [3. Connect to the Database](#3-connect-to-the-database)
+  - [4. Update the Application Configuration](#4-update-the-application-configuration)
+  - [5. Run Migrations](#5-run-migrations)
 
 ## Setup Instructions
 
-### 1. Install Poetry
+### 1. Install UV
 
-If you don't have Poetry installed, run:
-
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-Or follow the [official instructions](https://python-poetry.org/docs/#installation).
+If you don't have UV installed, follow the [official instructions](https://uv-py.github.io/docs/installation/).
 
 ### 2. Install Dependencies
 
 Navigate to the project directory and install dependencies:
 
 ```bash
-cd /Users/vo13/repositories/simboard/backend
-poetry install
+cd /Users/vo13/repositories/earthframe/backend
+uv install
 ```
 
 ### 3. Create a Local Environment File
@@ -79,10 +78,10 @@ Then, edit `.env` to ensure the settings match your local development environmen
 
 > ⚠️ Never commit your `.env` file — it may contain secrets or local overrides.
 
-### 4. Activate the Poetry Shell (optional)
+### 4. Activate the UV Shell (optional)
 
 ```bash
-poetry shell
+uv shell
 ```
 
 ---
@@ -97,94 +96,45 @@ To simplify development, this project includes a `Makefile` that wraps common co
 make help
 ```
 
-All commands run inside the Poetry environment automatically.
+All commands run inside the UV environment automatically.
 
 ### 🔧 Setup & Environment
 
 | Command        | Description                                          | Equivalent Command                                                                                                 |
 | -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `make install` | Install all dependencies using Poetry.               | `poetry install`                                                                                                   |
-| `make shell`   | Open a Poetry shell (optional).                      | `poetry shell`                                                                                                     |
+| `make install` | Install all dependencies using UV.                   | `uv install`                                                                                                       |
+| `make shell`   | Open a UV shell (optional).                          | `uv shell`                                                                                                         |
 | `make clean`   | Remove caches, build artifacts, and temporary files. | `find . -type d -name "__pycache__" -exec rm -rf {} +`<br>`find . -type d -name ".pytest_cache" -exec rm -rf {} +` |
 
 ### 🚀 Development Server
 
-| Command       | Description                                                      | Equivalent Command                                                      |
-| ------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `make run`    | Start the FastAPI application.                                   | `poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000`          |
-| `make reload` | Start FastAPI with auto-reload (recommended during development). | `poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
+| Command       | Description                                                      | Equivalent Command                                               |
+| ------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `make run`    | Start the FastAPI application.                                   | `fastapi run app.main:app --host 127.0.0.1 --port 8000`          |
+| `make reload` | Start FastAPI with auto-reload (recommended during development). | `fastapi run app.main:app --reload --host 127.0.0.1 --port 8000` |
 
 ### 🗄️ Database Migrations (Alembic)
 
-| Command                         | Description                                                              | Equivalent Command                                        |
-| ------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `make migrate m="Message"`      | Generate a new Alembic migration with an autogenerated diff and message. | `poetry run alembic revision --autogenerate -m "Message"` |
-| `make upgrade`                  | Apply all pending migrations.                                            | `poetry run alembic upgrade head`                         |
-| `make downgrade rev=<revision>` | Revert the database to a specific migration revision.                    | `poetry run alembic downgrade <revision>`                 |
-| `make current`                  | Show the current migration version in the database.                      | `poetry run alembic current`                              |
-| `make history`                  | List all migration scripts and their statuses.                           | `poetry run alembic history`                              |
+| Command                         | Description                                                              | Equivalent Command                                    |
+| ------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `make migrate m="Message"`      | Generate a new Alembic migration with an autogenerated diff and message. | `uv run alembic revision --autogenerate -m "Message"` |
+| `make upgrade`                  | Apply all pending migrations.                                            | `uv run alembic upgrade head`                         |
+| `make downgrade rev=<revision>` | Revert the database to a specific migration revision.                    | `uv run alembic downgrade <revision>`                 |
+| `make current`                  | Show the current migration version in the database.                      | `uv run alembic current`                              |
+| `make history`                  | List all migration scripts and their statuses.                           | `uv run alembic history`                              |
 
 ### 🧹 Code Quality
 
-| Command       | Description                               | Equivalent Command              |
-| ------------- | ----------------------------------------- | ------------------------------- |
-| `make lint`   | Run Ruff linter on the codebase.          | `poetry run ruff check .`       |
-| `make format` | Automatically fix lint issues using Ruff. | `poetry run ruff check . --fix` |
+| Command       | Description                               | Equivalent Command          |
+| ------------- | ----------------------------------------- | --------------------------- |
+| `make lint`   | Run Ruff linter on the codebase.          | `uv run ruff check .`       |
+| `make format` | Automatically fix lint issues using Ruff. | `uv run ruff check . --fix` |
 
 ### 🆘 Miscellaneous
 
 | Command     | Description                                            | Equivalent Command                     |
 | ----------- | ------------------------------------------------------ | -------------------------------------- |
 | `make help` | Display all available commands and short descriptions. | _(Printed directly from the Makefile)_ |
-
----
-
-## Startup
-
-### 1. Run FastAPI Application
-
-```bash
-poetry run uvicorn app.main:app --reload
-```
-
-API available at [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-### 2. API Documentation
-
-- Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- ReDoc: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-
----
-
-## Tech Stack Overview
-
-- **FastAPI** — Web framework for async Python APIs.
-- **Pydantic** — Data validation and serialization.
-- **SQLAlchemy** — ORM and database toolkit.
-- **Alembic** — Schema migrations.
-- **Poetry** — Dependency management and packaging.
-
-**Typical Flow:**
-
-1. FastAPI endpoint handles a request.
-2. Pydantic validates input/output.
-3. SQLAlchemy queries the database.
-4. Alembic manages schema versioning.
-
----
-
-## Managing the Backend
-
-### Editing Models and Schemas
-
-1. Modify SQLAlchemy models (`backend/app/models`).
-2. Update Pydantic schemas (`backend/app/schemas`).
-3. Generate and apply Alembic migrations:
-
-   ```bash
-   poetry run alembic revision --autogenerate -m "Describe your migration"
-   poetry run alembic upgrade head
-   ```
 
 ---
 
@@ -204,23 +154,10 @@ docker run --name simboard-db \
   -d postgres:16
 ```
 
-**Explanation:**
-
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` define credentials and the default DB.
-- `-v simboard_pgdata:/var/lib/postgresql/data` ensures data persists between restarts.
-- `-p 5432:5432` maps the port for local access.
-- `postgres:16` pins a stable version and avoids breaking changes from future major releases.
-
 ### 2. Verify the Database is Running
 
 ```bash
 docker ps
-```
-
-If you don’t see the container, check logs:
-
-```bash
-docker logs simboard-db
 ```
 
 ### 3. Connect to the Database
@@ -231,14 +168,6 @@ Using `psql`:
 psql -h localhost -U simboard -d simboard
 ```
 
-Or through a GUI like TablePlus / DBeaver:
-
-- Host: `127.0.0.1`
-- Port: `5432`
-- User: `simboard`
-- Password: `simboard`
-- Database: `simboard`
-
 ### 4. Update the Application Configuration
 
 In `.env`:
@@ -247,8 +176,6 @@ In `.env`:
 DATABASE_URL=postgresql+psycopg://simboard:simboard@localhost:5432/simboard
 ```
 
-> 💡 If using async SQLAlchemy, change to `postgresql+asyncpg://`.
-
 ### 5. Run Migrations
 
 ```bash
@@ -256,27 +183,6 @@ make upgrade
 ```
 
 This applies all migrations and initializes the schema.
-
----
-
-## 🐳 Containerization and Deployment
-
-SimBoard’s backend and database will soon be **fully containerized** to simplify deployment.
-A `docker-compose.yml` will define:
-
-- The FastAPI backend
-- The PostgreSQL service
-- Shared volumes and environment configuration
-
-This will enable a single-command setup like:
-
-```bash
-docker compose up -d
-```
-
-Stay tuned — containerization scripts will be added in an upcoming release.
-
----
 
 ## License
 
