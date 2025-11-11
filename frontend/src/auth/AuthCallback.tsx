@@ -13,8 +13,7 @@ const AuthCallback: React.FC = () => {
         // ✅ Ask backend who we are; cookie already set by FastAPI
         await refreshUser();
 
-        // ✅ Redirect wherever you want after login
-        navigate('/dashboard', { replace: true });
+        navigate(-1);
       } catch (err) {
         console.error('Failed to refresh user:', err);
         navigate('/login', { replace: true });
