@@ -9,6 +9,7 @@ services:
     restart: "no"
     ports:
       - "8000:8000"
+      - "5678:5678"  # Debugpy
     env_file:
       - ./backend/.env
     environment:
@@ -29,7 +30,7 @@ services:
             - "*.pyc"
             - "*.pytest_cache"
             - ".ruff_cache"
-        # ✅ Rebuild image automatically if dependencies change
+        # Rebuild container if dependencies change
         - path: ./backend/pyproject.toml
           action: rebuild
         - path: ./backend/uv.lock
@@ -40,15 +41,18 @@ services:
       - default
   frontend:
     image: node:24-alpine
+    # Sync source code to /app (hot reload)
     working_dir: /app
     command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm run dev --host 0.0.0.0"
+    environment:
+      - CI=true # Fixes ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
     ports:
       - "5173:5173"
     env_file:
       - ./frontend/.env
     volumes:
       - ./frontend:/app
-    labels: []   # no Traefik in dev
+    labels: []   # No Traefik in dev
     networks:
       - default
 
