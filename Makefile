@@ -11,6 +11,94 @@ NC=\033[0m
 BACKEND_DIR=backend
 FRONTEND_DIR=frontend
 
+# =========================================
+# 🐳 Docker & Container Commands
+# =========================================
+
+# Compose files
+COMPOSE_FILE_DEV := docker-compose.dev.yml
+COMPOSE_FILE_PROD := docker-compose.yml
+
+# Default target for convenience
+.PHONY: docker-help
+docker-help:
+	@echo "Available Docker commands:"
+	@echo "  make docker-build        – Build all images (dev)"
+	@echo "  make docker-build-backend– Build backend image only"
+	@echo "  make docker-up           – Start all containers"
+	@echo "  make docker-up-backend   – Start backend only"
+	@echo "  make docker-down         – Stop and remove containers"
+	@echo "  make docker-rebuild      – Rebuild all images (no cache)"
+	@echo "  make docker-logs         – Tail backend logs"
+	@echo "  make docker-shell        – Open bash shell inside backend"
+	@echo "  make docker-prune        – Clean up unused Docker resources"
+
+# -------------------------------------------------
+# Build images
+# -------------------------------------------------
+
+.PHONY: docker-build
+docker-build:
+	docker compose -f $(COMPOSE_FILE_DEV) build \
+		--build-arg ENV=development \
+
+.PHONY: docker-build-backend
+docker-build-backend:
+	docker compose -f $(COMPOSE_FILE_DEV) build \
+		--build-arg ENV=development \
+		backend
+
+.PHONY: docker-rebuild
+docker-rebuild:
+	docker compose -f $(COMPOSE_FILE_DEV) build \
+		--build-arg ENV=development \
+		--no-cache \
+
+# -------------------------------------------------
+# Run containers
+# -------------------------------------------------
+
+.PHONY: docker-up
+docker-up:
+	docker compose -f $(COMPOSE_FILE_DEV) up
+
+.PHONY: docker-up-backend
+docker-up-backend:
+	docker compose -f $(COMPOSE_FILE_DEV) up backend
+
+.PHONY: docker-up-frontend
+docker-up-frontend:
+	docker compose -f $(COMPOSE_FILE_DEV) up frontend
+
+# -------------------------------------------------
+# Stop / teardown
+# -------------------------------------------------
+
+.PHONY: docker-down
+docker-down:
+	docker compose -f $(COMPOSE_FILE_DEV) down
+
+# -------------------------------------------------
+# Logs & exec
+# -------------------------------------------------
+
+.PHONY: docker-logs
+docker-logs:
+	docker compose -f $(COMPOSE_FILE_DEV) logs -f backend
+
+.PHONY: docker-shell
+docker-shell:
+	docker compose -f $(COMPOSE_FILE_DEV) exec backend bash
+
+# -------------------------------------------------
+# Cleanup
+# -------------------------------------------------
+
+.PHONY: docker-prune
+docker-prune:
+	docker system prune -f
+
+
 # ============================================================
 #  Setup & Environment
 # ============================================================

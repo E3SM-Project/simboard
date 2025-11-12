@@ -4,7 +4,7 @@
 # ============================================================
 
 # Variables
-APP_NAME=app.main:app
+APP_NAME=app/main.py
 HOST=127.0.0.1
 PORT=8000
 
