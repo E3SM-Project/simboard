@@ -41,8 +41,6 @@ if env == "production":
 # --------------------------------------------------------------------
 # 🧑‍💻 Create a dummy OAuth user (GitHub-style)
 # --------------------------------------------------------------------
-
-
 def create_dev_oauth_user(db: Session):
     """Ensure a dummy OAuth user + OAuthAccount exist for development."""
     dev_email = "earthframe-dev@example.com"
