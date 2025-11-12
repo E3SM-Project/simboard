@@ -25,7 +25,11 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-proj
 
 # Copy only required app files
 COPY app /app/app
+COPY core /app/core
+COPY migrations /app/migrations
 COPY Makefile pyproject.toml /app/
+COPY README.md /app/
+COPY alembic.ini /app/
 
 # Install project in editable mode
 RUN --mount=type=cache,target=/root/.cache/uv uv sync
@@ -51,8 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf 
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
 # Copy preinstalled virtualenv and source files
-COPY ./pyproject.toml ./uv.lock ./alembic.ini /README.md /app/
-COPY ./app /app/app
+COPY --from=builder /app /app
 
 # Create non-root user for runtime safety
 RUN adduser --disabled-password --gecos "" appuser
