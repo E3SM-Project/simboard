@@ -53,7 +53,11 @@ docker-rebuild:
 
 docker-up:
 ifeq ($(e),dev)
-	docker compose -f $(COMPOSE_FILE) up --watch $(svc)
+ifeq ($(svc),backend)
+	docker compose -f $(COMPOSE_FILE) up --watch backend
+else
+	docker compose -f $(COMPOSE_FILE) up $(svc)
+endif
 else
 	docker compose -f $(COMPOSE_FILE) up -d $(svc)
 endif
