@@ -1,7 +1,7 @@
 [project]
-name = "earthframe-backend"
+name = "simboard-backend"
 version = "0.1.0"
-description = "EarthFrame backend for the E3SM project"
+description = "SimBoard backend for the E3SM project"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Tom Vo", email = "vo13@llnl.com" }]

@@ -43,7 +43,7 @@ if env == "production":
 # --------------------------------------------------------------------
 def create_dev_oauth_user(db: Session):
     """Ensure a dummy OAuth user + OAuthAccount exist for development."""
-    dev_email = "earthframe-dev@example.com"
+    dev_email = "simboard-dev@example.com"
     provider = "github"
 
     # 1. Check if the user already exists

@@ -62,7 +62,7 @@ If you don't have UV installed, follow the [official instructions](https://uv-py
 Navigate to the project directory and install dependencies:
 
 ```bash
-cd /Users/vo13/repositories/earthframe/backend
+cd /Users/vo13/repositories/simboard/backend
 uv install
 ```
 

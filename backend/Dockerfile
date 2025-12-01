@@ -69,9 +69,9 @@ HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O- http://localhost:8000/he
 # Run mode: autoreload for dev, plain for prod
 CMD ["sh", "-c", "\
     if [ \"$ENV\" = 'production' ]; then \
-    echo '🚀 Starting EarthFrame backend (production mode)...'; \
+    echo '🚀 Starting SimBoard backend (production mode)...'; \
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8000; \
     else \
-    echo '⚙️ Starting EarthFrame backend (development mode, autoreload)...'; \
+    echo '⚙️ Starting SimBoard backend (development mode, autoreload)...'; \
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload; \
     fi"]
