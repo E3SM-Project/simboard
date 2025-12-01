@@ -331,7 +331,7 @@ def client(db: Session):
 
     This fixture overrides the `get_database_session` dependency used in FastAPI
     routes to inject a test database session instead of the production database.
-    This ensures that the application uses the `earthframe_test` database
+    This ensures that the application uses the `simboard_test` database
     during tests, isolating test data from production data.
 
     Parameters
