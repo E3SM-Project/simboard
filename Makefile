@@ -1,5 +1,5 @@
 # ============================================================
-#  🌍 EarthFrame Project Makefile
+#  🌍 SimBoard Project Makefile
 #  Unified project-level commands for backend & frontend
 # ============================================================
 

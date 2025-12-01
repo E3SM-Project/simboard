@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         - ENV=development
-    image: earthframe-backend-dev
+    image: simboard-backend-dev
     restart: "no"
     ports:
       - "8000:8000"
@@ -66,7 +66,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-earthframe} -d ${POSTGRES_DB:-earthframe}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simboard} -d ${POSTGRES_DB:-simboard}"]
       interval: 10s
       retries: 5
       start_period: 10s

@@ -1,8 +1,8 @@
-# EarthFrame
+# SimBoard
 
-EarthFrame is a platform for managing and comparing Earth system simulation metadata, with a focus on **E3SM** (Energy Exascale Earth System Model) reference simulations.
+SimBoard is a platform for managing and comparing Earth system simulation metadata, with a focus on **E3SM** (Energy Exascale Earth System Model) reference simulations.
 
-The goal of EarthFrame is to provide researchers with tools to:
+The goal of SimBoard is to provide researchers with tools to:
 
 - Store and organize simulation metadata
 - Browse and visualize simulation details
@@ -17,8 +17,8 @@ Get started in **five simple commands**:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-org>/earthframe.git
-cd earthframe
+git clone https://github.com/<your-org>/simboard.git
+cd simboard
 
 # 2. Install dependencies for backend and frontend
 make install
@@ -67,7 +67,7 @@ Each component has its own README with setup instructions:
 
 - Backend dependencies are managed with **Poetry**.
 - Frontend dependencies are managed with **pnpm**.
-- Use **[GitHub Issues](https://github.com/E3SM-Project/earthframe/issues)** for feature requests and tracking.
+- Use **[GitHub Issues](https://github.com/E3SM-Project/simboard/issues)** for feature requests and tracking.
 - Contributions should include tests and documentation updates.
 
 ---
@@ -80,7 +80,7 @@ Run `make help` to view all available commands.
 
 ## 🔐 Local HTTPS / Traefik Setup
 
-EarthFrame can be containerized with **Traefik** as a reverse proxy to handle HTTPS and routing between the frontend and backend.
+SimBoard can be containerized with **Traefik** as a reverse proxy to handle HTTPS and routing between the frontend and backend.
 
 ### Why Traefik?
 
