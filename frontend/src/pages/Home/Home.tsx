@@ -24,7 +24,7 @@ const Home = ({ simulations, machines }: HomeProps) => {
             Explore E3SM Simulations with Confidence
           </h1>
           <p className="italic text-lg mb-4 text-muted-foreground">
-            EarthFrame provides access to curated Earth system simulations from the Department of
+            SimBoard provides access to curated Earth system simulations from the Department of
             Energy&apos;s Energy Exascale Earth System Model (E3SM).
           </p>
           <ul className="list-disc list-outside pl-5 mb-4 text-base text-muted-foreground">
@@ -60,7 +60,7 @@ const Home = ({ simulations, machines }: HomeProps) => {
       <section className="w-full max-w-7xl mx-auto mt-12">
         <h2 className="text-2xl font-bold mb-2">Quick Start</h2>
         <p className="text-muted-foreground mb-1">
-          Get started with EarthFrame by following these key steps.
+          Get started with SimBoard by following these key steps.
         </p>
         <p className="text-muted-foreground mb-6">
           Explore curated simulations, compare outputs, or upload your own results.

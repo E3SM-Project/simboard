@@ -1,6 +1,6 @@
-# EarthFrame Frontend
+# SimBoard Frontend
 
-The **EarthFrame Frontend** is a modern web application built with **React**, **TypeScript**, and **Vite**.
+The **SimBoard Frontend** is a modern web application built with **React**, **TypeScript**, and **Vite**.
 
 It provides the user interface for browsing, comparing, and analyzing **E3SM** (Energy Exascale Earth System Model) simulation metadata.
 

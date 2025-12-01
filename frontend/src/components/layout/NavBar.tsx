@@ -50,7 +50,7 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
           {/* Logo */}
           <Link to="/" className="text-xl font-bold flex items-center gap-2">
             <span className="text-muted-foreground">🔬🌍</span>
-            EarthFrame
+            SimBoard
           </Link>
 
           {/* Nav Links */}

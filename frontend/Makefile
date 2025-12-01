@@ -1,5 +1,5 @@
 # ============================================================
-#  EarthFrame Frontend Makefile
+#  SimBoard Frontend Makefile
 #  Description: Common developer commands for local use
 # ============================================================
 
