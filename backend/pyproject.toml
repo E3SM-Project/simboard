@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "earthframe-backend"
+name = "simboard-backend"
 version = "0.1.0"
-description = "EarthFrame backend for the E3SM project"
+description = "SimBoard backend for the E3SM project"
 authors = ["Tom Vo <vo13@llnl.com>"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -34,7 +34,10 @@ pydantic-settings = "^2.4.0"
 python-dotenv = "^1.0.1"
 
 # --- Authentication / Authorization ---
-fastapi-users = { extras = ["sqlalchemy", "oauth"], version = ">=14.0.0,<15.0.0" }
+fastapi-users = { extras = [
+  "sqlalchemy",
+  "oauth",
+], version = ">=14.0.0,<15.0.0" }
 python-jose = "^3.5.0"
 
 # --- AI / NLP tools ---

@@ -1,5 +1,5 @@
 """
-EarthFrame Development Seeder
+SimBoard Development Seeder
 -----------------------------
 Seeds the database with simulation, artifact, and external link data
 from a JSON file. Safe to run only in non-production environments.

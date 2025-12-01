@@ -12,7 +12,7 @@ from app.features.user.api import auth_router, user_router
 def create_app() -> FastAPI:
     _setup_root_logger()
 
-    app = FastAPI(title="EarthFrame API")
+    app = FastAPI(title="SimBoard API")
 
     # Register custom exception handlers that map SQLAlchemy errors to HTTP
     # responses.

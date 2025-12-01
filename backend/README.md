@@ -1,4 +1,4 @@
-# EarthFrame Backend
+# SimBoard Backend
 
 This project uses [Poetry](https://python-poetry.org/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
 
@@ -10,8 +10,8 @@ Get started in **five simple commands**:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-org>/earthframe.git
-cd earthframe/backend
+git clone https://github.com/<your-org>/simboard.git
+cd simboard/backend
 
 # 2. Install dependencies
 make install
@@ -63,7 +63,7 @@ Or follow the [official instructions](https://python-poetry.org/docs/#installati
 Navigate to the project directory and install dependencies:
 
 ```bash
-cd /Users/vo13/repositories/earthframe/backend
+cd /Users/vo13/repositories/simboard/backend
 poetry install
 ```
 
@@ -195,11 +195,11 @@ To set up a local PostgreSQL database using Docker:
 ### 1. Run the PostgreSQL Container
 
 ```bash
-docker run --name earthframe-db \
-  -e POSTGRES_USER=earthframe \
-  -e POSTGRES_PASSWORD=earthframe \
-  -e POSTGRES_DB=earthframe \
-  -v earthframe_pgdata:/var/lib/postgresql/data \
+docker run --name simboard-db \
+  -e POSTGRES_USER=simboard \
+  -e POSTGRES_PASSWORD=simboard \
+  -e POSTGRES_DB=simboard \
+  -v simboard_pgdata:/var/lib/postgresql/data \
   -p 5432:5432 \
   -d postgres:16
 ```
@@ -207,7 +207,7 @@ docker run --name earthframe-db \
 **Explanation:**
 
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` define credentials and the default DB.
-- `-v earthframe_pgdata:/var/lib/postgresql/data` ensures data persists between restarts.
+- `-v simboard_pgdata:/var/lib/postgresql/data` ensures data persists between restarts.
 - `-p 5432:5432` maps the port for local access.
 - `postgres:16` pins a stable version and avoids breaking changes from future major releases.
 
@@ -220,7 +220,7 @@ docker ps
 If you don’t see the container, check logs:
 
 ```bash
-docker logs earthframe-db
+docker logs simboard-db
 ```
 
 ### 3. Connect to the Database
@@ -228,23 +228,23 @@ docker logs earthframe-db
 Using `psql`:
 
 ```bash
-psql -h localhost -U earthframe -d earthframe
+psql -h localhost -U simboard -d simboard
 ```
 
 Or through a GUI like TablePlus / DBeaver:
 
 - Host: `127.0.0.1`
 - Port: `5432`
-- User: `earthframe`
-- Password: `earthframe`
-- Database: `earthframe`
+- User: `simboard`
+- Password: `simboard`
+- Database: `simboard`
 
 ### 4. Update the Application Configuration
 
 In `.env`:
 
 ```env
-DATABASE_URL=postgresql+psycopg://earthframe:earthframe@localhost:5432/earthframe
+DATABASE_URL=postgresql+psycopg://simboard:simboard@localhost:5432/simboard
 ```
 
 > 💡 If using async SQLAlchemy, change to `postgresql+asyncpg://`.
@@ -261,7 +261,7 @@ This applies all migrations and initializes the schema.
 
 ## 🐳 Containerization and Deployment
 
-EarthFrame’s backend and database will soon be **fully containerized** to simplify deployment.
+SimBoard’s backend and database will soon be **fully containerized** to simplify deployment.
 A `docker-compose.yml` will define:
 
 - The FastAPI backend
