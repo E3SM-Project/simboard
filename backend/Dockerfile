@@ -25,7 +25,6 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-proj
 
 # Copy only required app files
 COPY app /app/app
-COPY core /app/core
 COPY migrations /app/migrations
 COPY Makefile pyproject.toml /app/
 COPY README.md /app/
