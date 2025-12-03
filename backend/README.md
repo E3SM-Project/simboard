@@ -1,188 +1,28 @@
 # SimBoard Backend
 
-This project uses [UV](https://uv-py.github.io/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
+This backend uses [UV](https://uv-py.github.io/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
 
----
+It provides a REST API for managing and querying simulation metadata, including endpoints for browsing, comparing, and analyzing **E3SM** (Energy Exascale Earth System Model) simulation data.
 
-## 🚀 Developer Quickstart
+## Tech Stack
 
-Get started in **five simple commands**:
+> ℹ️ **Note:** The backend runs as a Docker container.
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/<your-org>/simboard.git
-cd simboard/backend
+- **FastAPI** — Web framework for building APIs
+- **UV** — Python dependency and environment management
+- **SQLAlchemy** — ORM and database toolkit, with **Alembic** for databse migrations
+- **PostgreSQL** — Primary relational database
 
-# 2. Install dependencies
-make install
+## Development Guide
 
-# 3. (Optional) Enter UV shell
-make shell
+For the development guide, see the [root README.md file](../README.md). It includes
+information on how to get the backend service started via Docker.
 
-# 4. Run the FastAPI development server
-make reload
+## 🧰 Backend Makefile Commands
 
-# 5. View API docs
-open http://127.0.0.1:8000/docs
-```
+This directory includes a **backend Makefile**.
 
-The API will be live at **[http://127.0.0.1:8000](http://127.0.0.1:8000)**, with Swagger UI at `/docs` and ReDoc at `/redoc`.
-
----
-
-## 📚 Table of Contents
-
-- [🚀 Developer Quickstart](#-developer-quickstart)
-- [Setup Instructions](#setup-instructions)
-  - [1. Install UV](#1-install-uv)
-  - [2. Install Dependencies](#2-install-dependencies)
-  - [3. Create a Local Environment File](#3-create-a-local-environment-file)
-  - [4. Activate the UV Shell (optional)](#4-activate-the-uv-shell-optional)
-- [🧰 Makefile Commands](#-makefile-commands)
-  - [🔧 Setup & Environment](#-setup--environment)
-  - [🚀 Development Server](#-development-server)
-  - [🗄️ Database Migrations (Alembic)](#️-database-migrations-alembic)
-  - [🧹 Code Quality](#-code-quality)
-  - [🆘 Miscellaneous](#-miscellaneous)
-- [PostgreSQL Database Setup](#postgresql-database-setup)
-  - [1. Run the PostgreSQL Container](#1-run-the-postgresql-container)
-  - [2. Verify the Database is Running](#2-verify-the-database-is-running)
-  - [3. Connect to the Database](#3-connect-to-the-database)
-  - [4. Update the Application Configuration](#4-update-the-application-configuration)
-  - [5. Run Migrations](#5-run-migrations)
-
-## Setup Instructions
-
-### 1. Install UV
-
-If you don't have UV installed, follow the [official instructions](https://uv-py.github.io/docs/installation/).
-
-### 2. Install Dependencies
-
-Navigate to the project directory and install dependencies:
-
-```bash
-cd /Users/vo13/repositories/simboard/backend
-uv install
-```
-
-### 3. Create a Local Environment File
-
-A template file is provided for convenience:
-
-```bash
-cp .env.example .env
-```
-
-Then, edit `.env` to ensure the settings match your local development environment — particularly the `DATABASE_URL` if running PostgreSQL locally.
-
-> ⚠️ Never commit your `.env` file — it may contain secrets or local overrides.
-
-### 4. Activate the UV Shell (optional)
-
-```bash
-uv shell
-```
-
----
-
-## 🧰 Makefile Commands
-
-### Using the Makefile
-
-To simplify development, this project includes a `Makefile` that wraps common commands (e.g., starting the server, running migrations, linting code).
-
-```bash
-make help
-```
-
-All commands run inside the UV environment automatically.
-
-### 🔧 Setup & Environment
-
-| Command        | Description                                          | Equivalent Command                                                                                                 |
-| -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `make install` | Install all dependencies using UV.                   | `uv install`                                                                                                       |
-| `make shell`   | Open a UV shell (optional).                          | `uv shell`                                                                                                         |
-| `make clean`   | Remove caches, build artifacts, and temporary files. | `find . -type d -name "__pycache__" -exec rm -rf {} +`<br>`find . -type d -name ".pytest_cache" -exec rm -rf {} +` |
-
-### 🚀 Development Server
-
-| Command       | Description                                                      | Equivalent Command                                               |
-| ------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `make run`    | Start the FastAPI application.                                   | `fastapi run app.main:app --host 127.0.0.1 --port 8000`          |
-| `make reload` | Start FastAPI with auto-reload (recommended during development). | `fastapi run app.main:app --reload --host 127.0.0.1 --port 8000` |
-
-### 🗄️ Database Migrations (Alembic)
-
-| Command                         | Description                                                              | Equivalent Command                                    |
-| ------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `make migrate m="Message"`      | Generate a new Alembic migration with an autogenerated diff and message. | `uv run alembic revision --autogenerate -m "Message"` |
-| `make upgrade`                  | Apply all pending migrations.                                            | `uv run alembic upgrade head`                         |
-| `make downgrade rev=<revision>` | Revert the database to a specific migration revision.                    | `uv run alembic downgrade <revision>`                 |
-| `make current`                  | Show the current migration version in the database.                      | `uv run alembic current`                              |
-| `make history`                  | List all migration scripts and their statuses.                           | `uv run alembic history`                              |
-
-### 🧹 Code Quality
-
-| Command       | Description                               | Equivalent Command          |
-| ------------- | ----------------------------------------- | --------------------------- |
-| `make lint`   | Run Ruff linter on the codebase.          | `uv run ruff check .`       |
-| `make format` | Automatically fix lint issues using Ruff. | `uv run ruff check . --fix` |
-
-### 🆘 Miscellaneous
-
-| Command     | Description                                            | Equivalent Command                     |
-| ----------- | ------------------------------------------------------ | -------------------------------------- |
-| `make help` | Display all available commands and short descriptions. | _(Printed directly from the Makefile)_ |
-
----
-
-## PostgreSQL Database Setup
-
-To set up a local PostgreSQL database using Docker:
-
-### 1. Run the PostgreSQL Container
-
-```bash
-docker run --name simboard-db \
-  -e POSTGRES_USER=simboard \
-  -e POSTGRES_PASSWORD=simboard \
-  -e POSTGRES_DB=simboard \
-  -v simboard_pgdata:/var/lib/postgresql/data \
-  -p 5432:5432 \
-  -d postgres:16
-```
-
-### 2. Verify the Database is Running
-
-```bash
-docker ps
-```
-
-### 3. Connect to the Database
-
-Using `psql`:
-
-```bash
-psql -h localhost -U simboard -d simboard
-```
-
-### 4. Update the Application Configuration
-
-In `.env`:
-
-```env
-DATABASE_URL=postgresql+psycopg://simboard:simboard@localhost:5432/simboard
-```
-
-### 5. Run Migrations
-
-```bash
-make upgrade
-```
-
-This applies all migrations and initializes the schema.
+In `/backend`, run `make help` to view all available commands
 
 ## License
 
