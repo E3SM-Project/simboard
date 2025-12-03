@@ -10,9 +10,31 @@ GREEN  := \033[0;32m
 YELLOW := \033[1;33m
 RED    := \033[0;31m
 NC     := \033[0m
-
 BACKEND_DIR  := backend
 FRONTEND_DIR := frontend
+
+# ============================================================
+# ⚙️ Environment File Setup
+# ============================================================
+
+.PHONY: copy-env
+
+copy-env:
+	@echo "$(GREEN)Copying .env.example → .env...$(NC)"
+	@for dir in . $(BACKEND_DIR) $(FRONTEND_DIR); do \
+		loc=$$([ "$$dir" = "." ] && echo "root" || echo "$$dir"); \
+		src="$$dir/.env.example"; \
+		dst="$$dir/.env"; \
+		if [ -f "$$dst" ]; then \
+			echo "$(YELLOW)⚠️  $$dst exists, skipping...$(NC)"; \
+		elif [ -f "$$src" ]; then \
+			cp "$$src" "$$dst"; \
+			echo "$(GREEN)✅ Copied $$src → $$dst$(NC)"; \
+		else \
+			echo "$(YELLOW)⚠️  No .env.example in $$loc$(NC)"; \
+		fi; \
+	done
+
 
 # ============================================================
 # 🐳 Docker & Container Commands

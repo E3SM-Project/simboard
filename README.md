@@ -21,8 +21,6 @@ The goal of SimBoard is to provide researchers with tools to:
    git clone https://github.com/<your-org>/simboard.git
    ```
 
-3. Configure `.env` files: Update the root, `/backend`, and `/frontend` `.env` files with required values.
-
 ## 🚀 Developer Quickstart with Docker
 
 Get started in **six simple commands**:
@@ -30,6 +28,9 @@ Get started in **six simple commands**:
 ```bash
 # 1. Enter the repository
 cd simboard
+
+# 2. Create .env files and configure as needed
+make copy-env
 
 # 2. Build docker containers
 make docker-build e=dev
