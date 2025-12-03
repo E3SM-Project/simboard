@@ -15,11 +15,16 @@ NC=\033[0m
 # ============================================================
 #  Setup & Environment
 # ============================================================
-.PHONY: install shell clean
+.PHONY: install sync shell clean
 
 install:
+	@echo "$(GREEN)Creating environment...$(NC)"
+	uv venv .venv
+	$(MAKE) sync
+
+sync:
 	@echo "$(GREEN)Installing dependencies...$(NC)"
-	uv install
+	uv sync --all-groups
 
 shell:
 	@echo "$(GREEN)Entering UV shell...$(NC)"
