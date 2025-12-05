@@ -15,7 +15,7 @@ NC=\033[0m
 # ============================================================
 #  Setup & Environment
 # ============================================================
-.PHONY: install sync shell clean
+.PHONY: install sync clean
 
 install:
 	@echo "$(GREEN)Creating environment...$(NC)"
@@ -25,10 +25,6 @@ install:
 sync:
 	@echo "$(GREEN)Installing dependencies...$(NC)"
 	uv sync --all-groups
-
-shell:
-	@echo "$(GREEN)Entering UV shell...$(NC)"
-	uv shell
 
 clean:
 	@echo "$(GREEN)Cleaning cache and build files...$(NC)"
@@ -44,15 +40,15 @@ clean:
 
 run:
 	@echo "$(GREEN)Starting FastAPI server...$(NC)"
-	fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
+	uv run fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
 
 reload:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
-	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
+	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
 
 reload-debug:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
-	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
 
 # ============================================================
 #  Database Migrations (Alembic)

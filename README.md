@@ -79,7 +79,11 @@ Commands:
 cd simboard
 
 # 2. Create .env files and configure as needed
-# TODO: Make sure to update POSTGRES_SERVER, DATABASE_URL, and TEST_DATABASE_URL in `backend/.env`
+# After running `make copy-env`, open `backend/.env` and configure these settings
+# using the bare-metal variables.
+#   - POSTGRES_SERVER: The hostname or IP address of your PostgreSQL server (e.g., localhost)
+#   - DATABASE_URL: The connection string for your main development database
+#   - TEST_DATABASE_URL: The connection string for your test database
 make copy-env
 
 # 3. Build and install the environments for frontend and backend

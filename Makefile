@@ -194,11 +194,13 @@ frontend:
 
 start:
 	@echo "$(GREEN)Starting backend and frontend concurrently...$(NC)"
-	cd $(BACKEND_DIR) && make reload &
-	BACK_PID=$$!
-	cd $(FRONTEND_DIR) && make dev
-	@echo "$(YELLOW)Stopping backend...$(NC)"
-	@kill $$BACK_PID || true
+	{ \
+		cd $(BACKEND_DIR) && make reload & \
+		BACK_PID=$$!; \
+		cd $(FRONTEND_DIR) && make dev; \
+		echo "$(YELLOW)Stopping backend...$(NC)"; \
+		kill $$BACK_PID || true; \
+	}
 
 stop:
 	@echo "$(YELLOW)Stopping local backend and frontend...$(NC)"

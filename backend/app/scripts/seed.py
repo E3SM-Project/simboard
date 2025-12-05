@@ -63,9 +63,8 @@ def create_dev_oauth_user(db: Session):
 
         if oauth_exists:
             print(f"🔑 OAuth account already exists for {provider} → {user.email}")
-            return user
 
-        return user
+            return user
 
     # 2. Create the user (no password needed for OAuth users)
     user = User(
