@@ -117,7 +117,7 @@ docker-clean-volumes:
 # 🗃️ Docker Database Commands
 # ============================================================
 
-.PHONY: db-migrate db-upgrade db-rollback db-seed db-unseed db-init
+.PHONY: db-migrate db-upgrade db-rollback db-seed db-rollback db-init
 
 # Create new Alembic migration inside the backend container
 db-migrate:

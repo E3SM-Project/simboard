@@ -46,7 +46,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=https://api.${DOMAIN}
+        - VITE_API_URL=https://api.${DOMAIN}
         - NODE_ENV=production
     image: ${DOCKER_IMAGE_FRONTEND:-simboard-frontend}
     restart: always

@@ -10,7 +10,7 @@ It provides a REST API for managing and querying simulation metadata, including 
 
 - **FastAPI** — Web framework for building APIs
 - **UV** — Python dependency and environment management
-- **SQLAlchemy** — ORM and database toolkit, with **Alembic** for databse migrations
+- **SQLAlchemy** — ORM and database toolkit, with **Alembic** for database migrations
 - **PostgreSQL** — Primary relational database
 
 ## 🧰 Backend Makefile Commands

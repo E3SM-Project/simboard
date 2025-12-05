@@ -67,7 +67,7 @@ def create_dev_oauth_user(db: Session):
 
         return user
 
-    # 2 Create the user (no password needed for OAuth users)
+    # 2. Create the user (no password needed for OAuth users)
     user = User(
         email=dev_email,
         role="admin",
@@ -83,7 +83,7 @@ def create_dev_oauth_user(db: Session):
     # 3. Create the linked OAuthAccount
     oauth: OAuthAccount = OAuthAccount(
         user_id=user.id,
-        oauth_name="provider",
+        oauth_name=provider,
         account_id="123456",  # fake GitHub user ID
         account_email=dev_email,
         access_token="gho_dummy_token_12345",
@@ -139,9 +139,6 @@ def seed_from_json(db: Session, json_path: str):
             first_user = create_dev_oauth_user(db)
             db.refresh(first_user)
 
-        # Validate that the user ID exists in the database
-        if not first_user:
-            raise ValueError("No valid user found to associate with the simulation.")
         first_user_id = first_user.id
 
         sim_in = SimulationCreate(

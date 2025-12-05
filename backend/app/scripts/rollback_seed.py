@@ -15,8 +15,8 @@ def rollback_seed(db: Session):
         db.query(ExternalLink).delete()
         db.query(Artifact).delete()
         db.query(Simulation).delete()
-        db.query(User).delete()
         db.query(OAuthAccount).delete()
+        db.query(User).delete()
         db.commit()
 
         print("✅ Rollback complete.")
