@@ -194,7 +194,7 @@ frontend:
 
 start:
 	@echo "$(GREEN)Starting backend and frontend concurrently...$(NC)"
-	{ \
+	@{ \
 		cd $(BACKEND_DIR) && make reload & \
 		BACK_PID=$$!; \
 		cd $(FRONTEND_DIR) && make dev; \
