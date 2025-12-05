@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.database import SessionLocal
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.user.models import OAuthAccount, User
 
 
 def rollback_seed(db: Session):
@@ -14,6 +15,8 @@ def rollback_seed(db: Session):
         db.query(ExternalLink).delete()
         db.query(Artifact).delete()
         db.query(Simulation).delete()
+        db.query(OAuthAccount).delete()
+        db.query(User).delete()
         db.commit()
 
         print("✅ Rollback complete.")

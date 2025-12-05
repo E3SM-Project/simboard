@@ -5,8 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
     # General application configuration
@@ -35,7 +34,7 @@ class Settings(BaseSettings):
     lifetime_seconds: int = 3600
 
     # --- Cookie config ---
-    cookie_name: str = "simscope_auth"
+    cookie_name: str = "simboard_auth"
     cookie_secure: bool = False
     cookie_httponly: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"

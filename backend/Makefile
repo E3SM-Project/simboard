@@ -4,7 +4,7 @@
 # ============================================================
 
 # Variables
-APP_NAME=app.main:app
+APP_NAME=app/main.py
 HOST=127.0.0.1
 PORT=8000
 
@@ -15,16 +15,20 @@ NC=\033[0m
 # ============================================================
 #  Setup & Environment
 # ============================================================
-
-.PHONY: install shell clean
+.PHONY: install sync shell clean
 
 install:
+	@echo "$(GREEN)Creating environment...$(NC)"
+	uv venv .venv
+	$(MAKE) sync
+
+sync:
 	@echo "$(GREEN)Installing dependencies...$(NC)"
-	poetry install
+	uv sync --all-groups
 
 shell:
-	@echo "$(GREEN)Entering Poetry shell...$(NC)"
-	poetry shell
+	@echo "$(GREEN)Entering UV shell...$(NC)"
+	uv shell
 
 clean:
 	@echo "$(GREEN)Cleaning cache and build files...$(NC)"
@@ -40,15 +44,15 @@ clean:
 
 run:
 	@echo "$(GREEN)Starting FastAPI server...$(NC)"
-	poetry run uvicorn $(APP_NAME) --host $(HOST) --port $(PORT)
+	fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
 
 reload:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
-	poetry run uvicorn $(APP_NAME) --reload --host $(HOST) --port $(PORT)
+	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
 
 reload-debug:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
-	poetry run uvicorn $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
 
 # ============================================================
 #  Database Migrations (Alembic)
@@ -58,23 +62,23 @@ reload-debug:
 
 migrate:
 	@echo "$(GREEN)Generating new Alembic migration...$(NC)"
-	poetry run alembic revision --autogenerate -m "$(m)"
+	uv run alembic revision --autogenerate -m "$(m)"
 
 upgrade:
 	@echo "$(GREEN)Upgrading database to latest migration...$(NC)"
-	poetry run alembic upgrade head
+	uv run alembic upgrade head
 
 downgrade:
 	@echo "$(GREEN)Downgrading database...$(NC)"
-	poetry run alembic downgrade $(rev)
+	uv run alembic downgrade $(rev)
 
 history:
 	@echo "$(GREEN)Listing migration history...$(NC)"
-	poetry run alembic history
+	uv run alembic history
 
 current:
 	@echo "$(GREEN)Current database version:$(NC)"
-	poetry run alembic current
+	uv run alembic current
 
 # ============================================================
 #  Code Quality
@@ -84,15 +88,15 @@ current:
 
 lint:
 	@echo "$(GREEN)Linting with Ruff...$(NC)"
-	poetry run ruff check .
+	uv run ruff check .
 
 format:
 	@echo "$(GREEN)Auto-fixing issues with Ruff...$(NC)"
-	poetry run ruff check . --fix
+	uv run ruff check . --fix
 
 test:
 	@echo "$(GREEN)Running tests with pytest...$(NC)"
-	poetry run pytest tests
+	uv run pytest tests
 
 # ============================================================
 #  Misc
@@ -102,8 +106,8 @@ test:
 
 help:
 	@echo "$(GREEN)Available commands:$(NC)"
-	@echo "  make install         - Install dependencies via Poetry"
-	@echo "  make shell           - Enter Poetry shell"
+	@echo "  make install         - Install dependencies via UV"
+	@echo "  make shell           - Enter UV shell"
 	@echo "  make run             - Start FastAPI server"
 	@echo "  make reload          - Start FastAPI with auto-reload"
 	@echo "  make migrate m='msg' - Create Alembic migration with message"

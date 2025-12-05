@@ -11,10 +11,11 @@ Usage:
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from pydantic import AnyUrl, HttpUrl
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
@@ -26,6 +27,7 @@ from app.features.simulation.schemas import (
     ExternalLinkCreate,
     SimulationCreate,
 )
+from app.features.user.models import OAuthAccount, User
 
 # --------------------------------------------------------------------
 # 🧱 Safety check
@@ -36,14 +38,75 @@ if env == "production":
     sys.exit(1)
 
 
-def load_json(path: str):
+# --------------------------------------------------------------------
+# 🧑‍💻 Create a dummy OAuth user (GitHub-style)
+# --------------------------------------------------------------------
+def create_dev_oauth_user(db: Session):
+    """Ensure a dummy OAuth user + OAuthAccount exist for development."""
+    dev_email = "simboard-dev@example.com"
+    provider = "github"
+
+    # 1. Check if the user already exists
+    stmt = select(User).where(User.email == dev_email)
+    user = db.execute(stmt).scalars().one_or_none()
+
+    if user is not None:
+        print(f"🔑 Dev user already exists: {user.email}")
+
+        # Check if an OAuthAccount already exists for this user/provider
+        stmt = (
+            select(OAuthAccount)
+            .where(OAuthAccount.user_id == user.id)
+            .where(OAuthAccount.oauth_name == provider)
+        )
+        oauth_exists = db.execute(stmt).scalars().one_or_none()
+
+        if oauth_exists:
+            print(f"🔑 OAuth account already exists for {provider} → {user.email}")
+            return user
+
+        return user
+
+    # 2. Create the user (no password needed for OAuth users)
+    user = User(
+        email=dev_email,
+        role="admin",
+        hashed_password="",  # OAuth users don’t have local passwords
+        is_active=True,
+        is_superuser=True,
+        is_verified=True,
+    )
+    db.add(user)
+    db.flush()  # generate user.id
+    print(f"✅ Created dummy user: {user.email}")
+
+    # 3. Create the linked OAuthAccount
+    oauth: OAuthAccount = OAuthAccount(
+        user_id=user.id,
+        oauth_name=provider,
+        account_id="123456",  # fake GitHub user ID
+        account_email=dev_email,
+        access_token="gho_dummy_token_12345",
+        refresh_token="dummy_refresh_token_12345",
+        expires_at=int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+    )
+    db.add(oauth)
+    db.commit()
+
+    print(f"✅ Created dev user + OAuth account: {user.email} ({provider})")
+
+    return user
+
+
+# --------------------------------------------------------------------
+# 🌱 Main seeding logic
+# --------------------------------------------------------------------
+def load_json(path: str) -> dict:
     """Load and parse a JSON seed file."""
-    path = Path(path)  # type: ignore
-
-    if not path.exists():  # type: ignore
-        raise FileNotFoundError(f"Seed file not found: {path}")
-
-    with open(path, "r") as f:
+    path_obj = Path(path)
+    if not path_obj.exists():
+        raise FileNotFoundError(f"Seed file not found: {path_obj}")
+    with open(path_obj, "r") as f:
         return json.load(f)
 
 
@@ -57,7 +120,6 @@ def seed_from_json(db: Session, json_path: str):
     db.query(Simulation).delete()
 
     for entry in data:
-        # --- 🔍 Match machine name to existing Machine.id ---
         machine_name = entry.get("machine", {}).get("name")
         if not machine_name:
             raise ValueError(
@@ -71,11 +133,18 @@ def seed_from_json(db: Session, json_path: str):
                 f"for simulation '{entry.get('name')}'"
             )
 
-        # ✅ Step 1: Create Pydantic schema instance
+        # ✅ Ensure at least one user exists
+        first_user = db.query(User).order_by(User.id.asc()).first()
+        if not first_user:
+            first_user = create_dev_oauth_user(db)
+            db.refresh(first_user)
+
+        first_user_id = first_user.id
+
         sim_in = SimulationCreate(
             **{
                 **entry,
-                "machineId": machine.id,  # ✅ use real ID from DB
+                "machineId": machine.id,
                 "simulationStartDate": _parse_datetime(
                     entry.get("simulationStartDate")
                 ),
@@ -83,17 +152,16 @@ def seed_from_json(db: Session, json_path: str):
                 "runStartDate": _parse_datetime(entry.get("runStartDate")),
                 "runEndDate": _parse_datetime(entry.get("runEndDate")),
                 "createdAt": _parse_datetime(entry.get("createdAt")),
-                "artifacts": [
-                    ArtifactCreate(**artifact)
-                    for artifact in entry.get("artifacts", [])
-                ],
+                "createdBy": first_user_id,
+                "updatedBy": first_user_id,
+                "lastUpdatedBy": first_user_id,
+                "artifacts": [ArtifactCreate(**a) for a in entry.get("artifacts", [])],
                 "links": [
                     ExternalLinkCreate(**link) for link in entry.get("links", [])
                 ],
             }
         )
 
-        # ✅ Step 2: Convert to ORM
         sim = Simulation(
             **{
                 **sim_in.model_dump(exclude={"artifacts", "links"}),
@@ -103,9 +171,8 @@ def seed_from_json(db: Session, json_path: str):
             }
         )
         db.add(sim)
-        db.flush()  # get generated sim.id
+        db.flush()
 
-        # ✅ Step 3: Attach related data
         for a in sim_in.artifacts or []:
             db.add(
                 Artifact(
@@ -135,7 +202,6 @@ def seed_from_json(db: Session, json_path: str):
 
 
 def _parse_datetime(value):
-    """Safely parse various ISO8601 datetime formats."""
     if not value:
         return None
     try:
@@ -149,11 +215,11 @@ if __name__ == "__main__":
     mock_filepath = str(Path(__file__).resolve().parent / "simulations.json")
 
     try:
+        create_dev_oauth_user(db)  # ✅ always ensure dummy user exists
         seed_from_json(db, mock_filepath)
     except Exception as e:
         print(f"❌ Seeding failed: {e}")
         db.rollback()
-
         raise
     finally:
         db.close()

@@ -11,7 +11,7 @@
     }
   ],
   "settings": {
-    "debug.javascript.unmapMissingSources": true,
+    "debug.javascript.unmapMissingSources": true
   },
   "tasks": {
     "version": "2.0.0",
@@ -60,6 +60,22 @@
         "env": {
           "PYTHONPATH": "${workspaceFolder}/backend"
         }
+      },
+      {
+        "name": "backend: Attach (Docker)",
+        "type": "debugpy",
+        "request": "attach",
+        "connect": {
+          "host": "localhost",
+          "port": 5678
+        },
+        "pathMappings": [
+          {
+            "localRoot": "${workspaceFolder}/../backend",
+            "remoteRoot": "/app"
+          }
+        ],
+        "justMyCode": true
       },
       {
         "name": "frontend: Vite (Chrome)",

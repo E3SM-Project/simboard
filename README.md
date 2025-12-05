@@ -1,8 +1,8 @@
-# EarthFrame
+# SimBoard
 
-EarthFrame is a platform for managing and comparing Earth system simulation metadata, with a focus on **E3SM** (Energy Exascale Earth System Model) reference simulations.
+SimBoard is a platform for managing and comparing Earth system simulation metadata, with a focus on **E3SM** (Energy Exascale Earth System Model) reference simulations.
 
-The goal of EarthFrame is to provide researchers with tools to:
+The goal of SimBoard is to provide researchers with tools to:
 
 - Store and organize simulation metadata
 - Browse and visualize simulation details
@@ -11,26 +11,137 @@ The goal of EarthFrame is to provide researchers with tools to:
 
 ---
 
-## 🚀 Developer Quickstart
+## 🚀 Prerequisites
 
-Get started in **five simple commands**:
+1. Install **Docker Desktop**: [Download here](https://www.docker.com/products/docker-desktop) and ensure it's running.
+
+2. Install **uv** (Python package/dependency manager):
+
+   ```bash
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Windows (PowerShell)
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+   Verify the installation:
+
+   ```bash
+   uv --version
+   ```
+
+3. Install **Node.js**, **npm**, and **pnpm**:
+
+   Install Node.js (which includes npm):
+
+   - Download and install from the official site: https://nodejs.org
+     - Recommended: **LTS** version
+
+   Verify the installation:
+
+   ```bash
+   node --version
+   npm --version
+   ```
+
+   Install **pnpm** globally using npm:
+
+   ```bash
+   npm install -g pnpm
+   ```
+
+   Verify the pnpm installation:
+
+   ```bash
+   pnpm --version
+   ```
+
+4. Clone the repository:
+
+   ```bash
+   git clone https://github.com/<your-org>/simboard.git
+   ```
+
+## 🚀 Developer Quickstart with Local Development Environments (Bare-Metal)
+
+The bare-metal local development environments are ideal for rapid development and testing of
+code. **It is the suggested choice of day-to-day coding.**
+
+- Instant reloads, best debugging, quickest pytest runs
+- Use your machine's Python/Node installations
+  > ⚠️ **Warning:** This setup is for local development only and is **not production-accurate**. Do **not** use these configurations as-is for any production environment.
+
+Commands:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/<your-org>/earthframe.git
-cd earthframe
+# 1. Enter the repository
+cd simboard
 
-# 2. Install dependencies for backend and frontend
+# 2. Create .env files and configure as needed
+# TODO: Make sure to update POSTGRES_SERVER, DATABASE_URL, and TEST_DATABASE_URL in `backend/.env`
+make copy-env
+
+# 3. Build and install the environments for frontend and backend
 make install
 
-# 3. Start both services (backend + frontend)
-make start
+# 4. Build the database container using Docker
+make docker-up e=dev svc=db
 
-# 4. Open the API and UI
+# 5. Apply database migrations and seed the database
+make db-upgrade
+make db-seed
+
+# 6. Start backend.
+make backend
+
+# 7. Start frontend.
+make frontend
+
+# 8. Open the API and UI
 open http://127.0.0.1:8000/docs       # Backend Swagger UI
 open http://127.0.0.1:5173            # Frontend web app
 
-# 5. Run linters and type checks (optional)
+# 9. Run linters and type checks (optional)
+make lint
+make type-check
+```
+
+## 🚀 Developer Quickstart with Docker Development Environments
+
+The Docker Development Environments are ideal for validating that SimBoard works
+inside Docker before deploying.
+
+- Matches production environment (Python version, OS libs, networking)
+- Catches Dockerfile issues early
+- Lets you test the full stack together (frontend ↔ backend ↔ DB)
+- Slower than bare-metal, used for integration validation
+- Great for team onboarding
+
+Commands:
+
+```bash
+# 1. Enter the repository
+cd simboard
+
+# 2. Create .env files and configure as needed
+make copy-env
+
+# 2. Build docker containers
+make docker-build e=dev
+
+# 3. Start docker containers (database, backend, frontend)
+make docker-up e=dev
+
+# 4. Apply database migrations and seed the database
+make db-upgrade
+make db-seed
+
+# 5. Open the API and UI
+open http://127.0.0.1:8000/docs       # Backend Swagger UI
+open http://127.0.0.1:5173            # Frontend web app
+
+# 6. Run linters and type checks (optional)
 make lint
 make type-check
 ```
@@ -42,14 +153,7 @@ make type-check
 - [Repository Structure](#repository-structure)
 - [Development](#development)
 - [🧰 Project Makefile Commands](#-project-makefile-commands)
-
-  - [Setup & Environment](#setup--environment)
-  - [Development](#development-1)
-  - [Database & Migrations](#database--migrations)
-  - [Code Quality](#code-quality)
-  - [Build & Preview](#build--preview)
-  - [Example Workflow](#example-workflow)
-
+- [🔐 Local HTTPS / Traefik Setup](#-local-https--traefik-setup)
 - [License](#license)
 
 ---
@@ -72,9 +176,12 @@ Each component has its own README with setup instructions:
 
 ## Development
 
+- Docker is used for containerized development and deployment.
+  - Run `make docker-help` to view all available Docker commands.
+  - Ensure Docker Desktop is running before executing these commands.
 - Backend dependencies are managed with **Poetry**.
 - Frontend dependencies are managed with **pnpm**.
-- Use **[GitHub Issues](https://github.com/E3SM-Project/earthframe/issues)** for feature requests and tracking.
+- Use **[GitHub Issues](https://github.com/E3SM-Project/simboard/issues)** for feature requests and tracking.
 - Contributions should include tests and documentation updates.
 
 ---
@@ -85,72 +192,15 @@ This repository includes a **top-level Makefile** that orchestrates both the bac
 
 Run `make help` to view all available commands.
 
-### Setup & Environment
+## 🔐 Local HTTPS / Traefik Setup
 
-| Command        | Description                                    | Equivalent Command                                               |
-| -------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `make install` | Install dependencies for backend and frontend. | `cd backend && poetry install && cd ../frontend && pnpm install` |
-| `make clean`   | Remove build artifacts and node_modules.       | `cd backend && make clean && cd ../frontend && make clean`       |
+SimBoard uses **Traefik** as a reverse proxy to handle HTTPS and routing between the frontend and backend.
 
----
+### Why Traefik?
 
-### Development
-
-| Command         | Description                               | Equivalent Command                                       |
-| --------------- | ----------------------------------------- | -------------------------------------------------------- |
-| `make start`    | Start backend and frontend concurrently.  | `make reload` (backend) + `make dev` (frontend)          |
-| `make backend`  | Run backend (FastAPI) development server. | `cd backend && poetry run uvicorn app.main:app --reload` |
-| `make frontend` | Run frontend (Vite) development server.   | `cd frontend && pnpm dev`                                |
-
----
-
-### Database & Migrations
-
-| Command                | Description                       | Equivalent Command                                                  |
-| ---------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `make migrate m="msg"` | Generate a new Alembic migration. | `cd backend && poetry run alembic revision --autogenerate -m "msg"` |
-| `make upgrade`         | Apply all pending migrations.     | `cd backend && poetry run alembic upgrade head`                     |
-
----
-
-### Code Quality
-
-| Command           | Description                                 | Equivalent Command                                                               |
-| ----------------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `make lint`       | Run linters for both backend and frontend.  | `cd backend && poetry run ruff check . && cd ../frontend && pnpm lint`           |
-| `make format`     | Auto-fix code style issues.                 | `cd backend && poetry run ruff check . --fix && cd ../frontend && pnpm lint:fix` |
-| `make type-check` | Run TypeScript type checks (frontend only). | `cd frontend && pnpm type-check`                                                 |
-
----
-
-### Build & Preview
-
-| Command        | Description                                | Equivalent Command            |
-| -------------- | ------------------------------------------ | ----------------------------- |
-| `make build`   | Build frontend for production.             | `cd frontend && pnpm build`   |
-| `make preview` | Preview frontend production build locally. | `cd frontend && pnpm preview` |
-
----
-
-### Example Workflow
-
-```bash
-# 1. Install everything
-make install
-
-# 2. Run both backend and frontend
-make start
-
-# 3. Generate and apply a new database migration
-make migrate m="Add user table"
-make upgrade
-
-# 4. Lint and fix code
-make lint
-make format
-```
-
----
+- Simplifies local HTTPS with self-signed or automatic certificates (via Let's Encrypt).
+- Provides a unified entry point for multiple services (`frontend`, `backend`, etc.).
+- Automatically handles routing and load balancing.
 
 ## License
 

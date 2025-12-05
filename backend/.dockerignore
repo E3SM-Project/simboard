@@ -1,0 +1,10 @@
+# Prevent local venv and caches from entering Docker context
+.venv/
+__pycache__/
+*.pyc
+.env
+.ruff_cache/
+.mypy_cache/
+tests/
+tests_coverage_reports/
+htmlcov/

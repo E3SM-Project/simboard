@@ -1,0 +1,79 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        - ENV=development
+    image: simboard-backend-dev
+    restart: "no"
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # Debugpy
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENV=development
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - UV_PROJECT_ENVIRONMENT=/tmp/.venv
+    develop:
+      watch:
+        # Sync source code to /app (hot reload)
+        - path: ./backend
+          action: sync
+          target: /app
+          ignore:
+            - ./backend/.venv
+            - .venv
+            - __pycache__
+            - "*.pyc"
+            - "*.pytest_cache"
+            - ".ruff_cache"
+        # Rebuild container if dependencies change
+        - path: ./backend/pyproject.toml
+          action: rebuild
+        - path: ./backend/uv.lock
+          action: rebuild
+    depends_on:
+      - db
+    networks:
+      - default
+  frontend:
+    image: node:24-alpine
+    # Sync source code to /app (hot reload)
+    working_dir: /app
+    command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm run dev --host 0.0.0.0"
+    environment:
+      - CI=true # Fixes ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - ./frontend:/app
+    labels: []   # No Traefik in dev
+    networks:
+      - default
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simboard} -d ${POSTGRES_DB:-simboard}"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+      timeout: 5s
+
+  traefik:
+    profiles: ["disabled"]  # Disabled in dev
+
+volumes:
+  db-data:

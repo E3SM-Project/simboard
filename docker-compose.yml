@@ -1,0 +1,127 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        - ENV=production
+    image: ${DOCKER_IMAGE_BACKEND:-simboard-backend}
+    restart: always
+    env_file:
+      - ./.env
+      - ./backend/.env
+    environment:
+      - ENV=production
+      - DOMAIN=${DOMAIN}
+      - FRONTEND_ORIGIN=https://app.${DOMAIN}
+    expose:
+      - "8000"
+    volumes: []
+    depends_on:
+      - db
+    networks:
+      - traefik-public
+      - default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+      - traefik.http.services.${STACK_NAME:-simboard}-backend.loadbalancer.server.port=8000
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-http.rule=Host(`api.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-https.rule=Host(`api.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-https.tls=true
+      - traefik.http.routers.${STACK_NAME:-simboard}-backend-https.tls.certresolver=le
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=https://api.${DOMAIN}
+        - NODE_ENV=production
+    image: ${DOCKER_IMAGE_FRONTEND:-simboard-frontend}
+    restart: always
+    env_file:
+      - ./frontend/.env
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - traefik-public
+      - default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      - traefik.http.services.${STACK_NAME:-simboard}-frontend.loadbalancer.server.port=80
+
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-http.rule=Host(`app.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-http.middlewares=https-redirect
+
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.rule=Host(`app.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.tls=true
+      - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.tls.certresolver=le
+
+  ########################################
+  # Database (Postgres)
+  ########################################
+  db:
+    image: postgres:17
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - db-data:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simboard} -d ${POSTGRES_DB:-simboard}"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+      timeout: 5s
+
+  traefik:
+    image: traefik:v3.1
+    restart: always
+    env_file:
+      - ./.env
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=http"
+      - "--certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+    networks:
+      - traefik-public
+
+volumes:
+  db-data:
+  letsencrypt:
+
+networks:
+  traefik-public:
+    external: false

@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Node / build
+.pnpm-store
 node_modules
 dist
 dist-ssr
@@ -15,6 +16,7 @@ dist-ssr
 
 # Editor directories and files
 .vscode/*
+!.vscode/simboard.code-workspace
 !.vscode/extensions.json
 !.vscode/settings.json
 .idea
