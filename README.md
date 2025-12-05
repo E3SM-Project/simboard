@@ -15,15 +15,110 @@ The goal of SimBoard is to provide researchers with tools to:
 
 1. Install **Docker Desktop**: [Download here](https://www.docker.com/products/docker-desktop) and ensure it's running.
 
-2. Clone the repository:
+2. Install **uv** (Python package/dependency manager):
+
+   ```bash
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Windows (PowerShell)
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+   Verify the installation:
+
+   ```bash
+   uv --version
+   ```
+
+3. Install **Node.js**, **npm**, and **pnpm**:
+
+   Install Node.js (which includes npm):
+
+   - Download and install from the official site: https://nodejs.org
+     - Recommended: **LTS** version
+
+   Verify the installation:
+
+   ```bash
+   node --version
+   npm --version
+   ```
+
+   Install **pnpm** globally using npm:
+
+   ```bash
+   npm install -g pnpm
+   ```
+
+   Verify the pnpm installation:
+
+   ```bash
+   pnpm --version
+   ```
+
+4. Clone the repository:
 
    ```bash
    git clone https://github.com/<your-org>/simboard.git
    ```
 
-## 🚀 Developer Quickstart with Docker
+## 🚀 Developer Quickstart with Local Development Environments (Bare-Metal)
 
-Get started in **six simple commands**:
+The bare-metal local development environments are ideal for rapid development and testing of
+code. **It is the suggested choice of day-to-day coding.**
+
+- Instant reloads, best debugging, quickest pytest runs
+- Use your machine's Python/Node installations
+  > ⚠️ **Warning:** This setup is for local development only and is **not production-accurate**. Do **not** use these configurations as-is for any production environment.
+
+Commands:
+
+```bash
+# 1. Enter the repository
+cd simboard
+
+# 2. Create .env files and configure as needed
+# TODO: Make sure to update POSTGRES_SERVER, DATABASE_URL, and TEST_DATABASE_URL in `backend/.env`
+make copy-env
+
+# 3. Build and install the environments for frontend and backend
+make install
+
+# 4. Build the database container using Docker
+make docker-up e=dev svc=db
+
+# 5. Apply database migrations and seed the database
+make db-upgrade
+make db-seed
+
+# 6. Start backend.
+make backend
+
+# 7. Start frontend.
+make frontend
+
+# 8. Open the API and UI
+open http://127.0.0.1:8000/docs       # Backend Swagger UI
+open http://127.0.0.1:5173            # Frontend web app
+
+# 9. Run linters and type checks (optional)
+make lint
+make type-check
+```
+
+## 🚀 Developer Quickstart with Docker Development Environments
+
+The Docker Development Environments are ideal for validating that SimBoard works
+inside Docker before deploying.
+
+- Matches production environment (Python version, OS libs, networking)
+- Catches Dockerfile issues early
+- Lets you test the full stack together (frontend ↔ backend ↔ DB)
+- Slower than bare-metal, used for integration validation
+- Great for team onboarding
+
+Commands:
 
 ```bash
 # 1. Enter the repository

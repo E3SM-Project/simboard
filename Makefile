@@ -182,15 +182,7 @@ clean:
 # 🧑‍💻 Local Development Utilities
 # ============================================================
 
-.PHONY: start backend frontend stop
-
-start:
-	@echo "$(GREEN)Starting backend and frontend concurrently...$(NC)"
-	cd $(BACKEND_DIR) && make reload &
-	BACK_PID=$$!
-	cd $(FRONTEND_DIR) && make dev
-	@echo "$(YELLOW)Stopping backend...$(NC)"
-	@kill $$BACK_PID || true
+.PHONY: backend frontend start stop
 
 backend:
 	@echo "$(GREEN)Starting backend locally...$(NC)"
@@ -199,6 +191,14 @@ backend:
 frontend:
 	@echo "$(GREEN)Starting frontend locally...$(NC)"
 	cd $(FRONTEND_DIR) && make dev
+
+start:
+	@echo "$(GREEN)Starting backend and frontend concurrently...$(NC)"
+	cd $(BACKEND_DIR) && make reload &
+	BACK_PID=$$!
+	cd $(FRONTEND_DIR) && make dev
+	@echo "$(YELLOW)Stopping backend...$(NC)"
+	@kill $$BACK_PID || true
 
 stop:
 	@echo "$(YELLOW)Stopping local backend and frontend...$(NC)"
