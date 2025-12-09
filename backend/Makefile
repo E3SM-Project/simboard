@@ -15,7 +15,7 @@ NC=\033[0m
 # ============================================================
 #  Setup & Environment
 # ============================================================
-.PHONY: install sync shell clean
+.PHONY: install sync clean
 
 install:
 	@echo "$(GREEN)Creating environment...$(NC)"
@@ -25,10 +25,6 @@ install:
 sync:
 	@echo "$(GREEN)Installing dependencies...$(NC)"
 	uv sync --all-groups
-
-shell:
-	@echo "$(GREEN)Entering UV shell...$(NC)"
-	uv shell
 
 clean:
 	@echo "$(GREEN)Cleaning cache and build files...$(NC)"
@@ -44,15 +40,15 @@ clean:
 
 run:
 	@echo "$(GREEN)Starting FastAPI server...$(NC)"
-	fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
+	uv run fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
 
 reload:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
-	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
+	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
 
 reload-debug:
 	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
-	fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
 
 # ============================================================
 #  Database Migrations (Alembic)
@@ -106,15 +102,17 @@ test:
 
 help:
 	@echo "$(GREEN)Available commands:$(NC)"
-	@echo "  make install         - Install dependencies via UV"
-	@echo "  make shell           - Enter UV shell"
-	@echo "  make run             - Start FastAPI server"
-	@echo "  make reload          - Start FastAPI with auto-reload"
-	@echo "  make migrate m='msg' - Create Alembic migration with message"
-	@echo "  make upgrade         - Apply all migrations"
-	@echo "  make downgrade rev=  - Downgrade to specific revision"
-	@echo "  make current         - Show current DB revision"
-	@echo "  make history         - Show migration history"
-	@echo "  make lint            - Run linter (Ruff)"
-	@echo "  make format          - Auto-fix code issues with Ruff"
-	@echo "  make clean           - Remove caches and build artifacts"
+	@echo "  make install           - Create virtual environment and install dependencies"
+	@echo "  make sync              - Install dependencies (all groups)"
+	@echo "  make clean             - Remove caches and build artifacts"
+	@echo "  make run               - Start FastAPI server"
+	@echo "  make reload            - Start FastAPI server with auto-reload"
+	@echo "  make reload-debug      - Start FastAPI server with auto-reload and debug logging"
+	@echo "  make migrate m='msg'   - Create Alembic migration with message"
+	@echo "  make upgrade           - Apply all migrations"
+	@echo "  make downgrade rev=    - Downgrade to specific revision"
+	@echo "  make history           - Show migration history"
+	@echo "  make current           - Show current DB revision"
+	@echo "  make lint              - Run linter (Ruff)"
+	@echo "  make format            - Auto-fix code issues with Ruff"
+	@echo "  make test              - Run tests with pytest"

@@ -45,8 +45,11 @@ COMPOSE_FILE_PROD := docker-compose.yml
 
 .DEFAULT_GOAL := docker-help
 
-COMPOSE_FILE := $(if $(filter prod,$(e)),$(COMPOSE_FILE_PROD),$(COMPOSE_FILE_DEV))
-ENV_TYPE     := $(if $(filter prod,$(e)),production,development)
+# Default environment = dev
+env ?= dev
+
+COMPOSE_FILE := $(if $(filter prod,$(env)),$(COMPOSE_FILE_PROD),$(COMPOSE_FILE_DEV))
+ENV_TYPE     := $(if $(filter prod,$(env)),production,development)
 
 require-svc:
 	@if [ -z "$(svc)" ]; then echo "$(RED)❌ Please specify -svc=<service>$(NC)"; exit 1; fi
@@ -55,17 +58,17 @@ require-svc:
 
 docker-help:
 	@echo "$(YELLOW)Available Docker commands:$(NC)"
-	@printf "  %-45s %s\n" "make docker-build e=<type> svc=<service>" "Build images (dev/prod)"
-	@printf "  %-45s %s\n" "make docker-rebuild e=<type> svc=<service>" "Rebuild images (no cache)"
-	@printf "  %-45s %s\n" "make docker-up e=<type> svc=<service>" "Start containers (detached or watch mode)"
-	@printf "  %-45s %s\n" "make docker-down e=<type>" "Stop and remove containers"
-	@printf "  %-45s %s\n" "make docker-restart svc=<service>" "Restart a specific container"
-	@printf "  %-45s %s\n" "make docker-logs e=<type> svc=<service>" "Tail container logs"
-	@printf "  %-45s %s\n" "make docker-shell e=<type> svc=<service>" "Open bash shell inside container"
-	@printf "  %-45s %s\n" "make docker-ps" "List running containers"
-	@printf "  %-45s %s\n" "make docker-config" "View merged Compose configuration"
-	@printf "  %-45s %s\n" "make docker-prune" "Clean up unused Docker resources"
-	@printf "  %-45s %s\n" "make docker-clean-volumes" "Remove all Docker volumes (use with caution)"
+	@printf "  %-45s %s\n" "make docker-build env=<dev|prod> svc=<service>" "Build images"
+	@printf "  %-45s %s\n" "make docker-rebuild env=<dev|prod> svc=<service>" "Rebuild images (no cache)"
+	@printf "  %-45s %s\n" "make docker-up env=<dev|prod> svc=<service>" "Start containers"
+	@printf "  %-45s %s\n" "make docker-down env=<dev|prod>" "Stop and remove containers"
+	@printf "  %-45s %s\n" "make docker-restart env=<dev|prod> svc=<service>" "Restart a specific container"
+	@printf "  %-45s %s\n" "make docker-logs env=<dev|prod> svc=<service>" "Tail container logs"
+	@printf "  %-45s %s\n" "make docker-shell env=<dev|prod> svc=<service>" "Open bash shell inside a container"
+	@printf "  %-45s %s\n" "make docker-ps env=<dev|prod>" "List running containers"
+	@printf "  %-45s %s\n" "make docker-config env=<dev|prod>" "View merged Compose configuration"
+	@printf "  %-45s %s\n" "make docker-prune" "Clean unused Docker resources"
+	@printf "  %-45s %s\n" "make docker-clean-volumes env=<dev|prod>" "Remove ALL Docker volumes (danger!)"
 
 docker-build:
 	docker compose -f $(COMPOSE_FILE) build --build-arg ENV=$(ENV_TYPE) $(svc)
@@ -74,7 +77,7 @@ docker-rebuild:
 	docker compose -f $(COMPOSE_FILE) build --build-arg ENV=$(ENV_TYPE) --no-cache $(svc)
 
 docker-up:
-ifeq ($(e),dev)
+ifeq ($(env),dev)
 ifeq ($(svc),backend)
 	docker compose -f $(COMPOSE_FILE) up --watch backend
 else
@@ -111,6 +114,7 @@ docker-clean-volumes:
 	@echo "$(RED)⚠️  Warning: This will remove ALL Docker volumes, including Postgres data!$(NC)"
 	@read -p "Are you sure you want to proceed? (y/N): " confirm && [ "$$confirm" = "y" ]
 	docker compose -f $(COMPOSE_FILE) down -v
+
 
 
 # ============================================================
@@ -194,11 +198,13 @@ frontend:
 
 start:
 	@echo "$(GREEN)Starting backend and frontend concurrently...$(NC)"
-	cd $(BACKEND_DIR) && make reload &
-	BACK_PID=$$!
-	cd $(FRONTEND_DIR) && make dev
-	@echo "$(YELLOW)Stopping backend...$(NC)"
-	@kill $$BACK_PID || true
+	@{ \
+		cd $(BACKEND_DIR) && make reload & \
+		BACK_PID=$$!; \
+		cd $(FRONTEND_DIR) && make dev; \
+		echo "$(YELLOW)Stopping backend...$(NC)"; \
+		kill $$BACK_PID || true; \
+	}
 
 stop:
 	@echo "$(YELLOW)Stopping local backend and frontend...$(NC)"
@@ -260,8 +266,9 @@ help:
 	@printf "  %-25s %s\n" "make docker-help" "List Docker management commands"
 	@printf "  %-25s %s\n" "make db-migrate m='msg'" "Create Alembic migration (in Docker)"
 	@printf "  %-25s %s\n" "make db-upgrade" "Apply Alembic migrations (in Docker)"
+	@printf "  %-25s %s\n" "make db-rollback" "Rollback last Alembic migration (in Docker)"
 	@printf "  %-25s %s\n" "make db-seed" "Seed dummy data (in Docker)"
-	@printf "  %-25s %s\n" "make db-unseed" "Rollback dummy data (in Docker)"
+	@printf "  %-25s %s\n" "make db-rollback-seed" "Rollback dummy data (in Docker)"
 	@printf "  %-25s %s\n" "make db-init" "Migrate + seed database (in Docker)"
 	@printf "  %-25s %s\n" "make install" "Install local dependencies"
 	@printf "  %-25s %s\n" "make clean" "Clean caches and build artifacts"
@@ -275,3 +282,4 @@ help:
 	@printf "  %-25s %s\n" "make test" "Run all tests"
 	@printf "  %-25s %s\n" "make build" "Build frontend + backend for production"
 	@printf "  %-25s %s\n" "make preview" "Preview built frontend"
+	@printf "  %-25s %s\n" "make copy-env" "Copy .env.example to .env for all projects"

@@ -63,7 +63,24 @@ def create_dev_oauth_user(db: Session):
 
         if oauth_exists:
             print(f"🔑 OAuth account already exists for {provider} → {user.email}")
+
             return user
+
+        # OAuth doesn't exist, create it
+        oauth = OAuthAccount(
+            user_id=user.id,
+            oauth_name=provider,
+            account_id="123456",
+            account_email=dev_email,
+            access_token="gho_dummy_token_12345",
+            refresh_token="dummy_refresh_token_12345",
+            expires_at=int(
+                (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()
+            ),
+        )
+        db.add(oauth)
+        db.commit()
+        print(f"✅ Created OAuth account for existing user: {user.email} ({provider})")
 
         return user
 
