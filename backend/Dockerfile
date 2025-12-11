@@ -56,6 +56,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 # Copy preinstalled virtualenv and source files
 COPY --from=builder /app /app
 
+# COPY entrypoint.sh BEFORE switching users
+COPY entrypoint.sh /app/entrypoint.sh
+
+# Make it executable WHILE STILL ROOT
+RUN chmod +x /app/entrypoint.sh
+
 # Create non-root user for runtime safety
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
@@ -65,12 +71,4 @@ EXPOSE 8000
 # Healthcheck endpoint (optional)
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O- http://localhost:8000/health || exit 1
 
-# Run mode: autoreload for dev, plain for prod
-CMD ["sh", "-c", "\
-    if [ \"$ENV\" = 'production' ]; then \
-    echo '🚀 Starting SimBoard backend (production mode)...'; \
-    uv run uvicorn app.main:app --host 0.0.0.0 --port 8000; \
-    else \
-    echo '⚙️ Starting SimBoard backend (development mode, autoreload)...'; \
-    uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload; \
-    fi"]
+ENTRYPOINT ["/app/entrypoint.sh"]
