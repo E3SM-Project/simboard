@@ -46,8 +46,6 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <NavBar selectedSimulationIds={selectedSimulationIds} />
-        {/* TODO: Remove this or update to login button */}
-        <Header />
         <AppRoutes
           simulations={simulations}
           machines={machines.data}
