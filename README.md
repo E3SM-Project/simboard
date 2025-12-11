@@ -78,35 +78,28 @@ Commands:
 # 1. Enter the repository
 cd simboard
 
-# 2. Create .env files and configure as needed
-# After running `make copy-env`, open `backend/.env` and configure these settings
-# using the bare-metal variables.
+# 2. Setup the development environment.
+make setup-dev
+
+# 3. Configure the environment variables as neeeded
+# Open `backend/.env` and configure these settings using the bare-metal variables.
 #   - POSTGRES_SERVER: The hostname or IP address of your PostgreSQL server (e.g., localhost)
 #   - DATABASE_URL: The connection string for your main development database
 #   - TEST_DATABASE_URL: The connection string for your test database
-make copy-env
 
-# 3. Build and install the environments for frontend and backend
-make install
+# 4. Run database migrations and seed with data
+cd backend && make migrate && make seed && cd ../
 
-# 4. Build the database container using Docker
-make docker-up e=dev svc=db
-
-# 5. Apply database migrations and seed the database
-make db-upgrade
-make db-seed
-
-# 6. Start backend.
+# 5. Start backend and frontend in separate terminals.
+# Alternatively, run `make start` to start in a single terminal.
 make backend
-
-# 7. Start frontend.
 make frontend
 
-# 8. Open the API and UI
+# 6. Open the API and UI
 open https://127.0.0.1:8000/docs       # Backend Swagger UI
 open https://127.0.0.1:5173            # Frontend web app
 
-# 9. Run linters and type checks (optional)
+# 7. Run linters and type checks (optional)
 make lint
 make type-check
 ```
@@ -128,24 +121,19 @@ Commands:
 # 1. Enter the repository
 cd simboard
 
-# 2. Create .env files and configure as needed
-make copy-env
+# 2. Setup the development environment. This also runs database migrations and seeding.
+make setup-dev-docker
 
-# 2. Build docker containers
-make docker-build e=dev
+# 3. Start backend and frontend containers in separate terminals.
+# Alternatively, run `make start` to start in a single terminal.
+make docker-up svc=backend
+make docker-up svc=frontend
 
-# 3. Start docker containers (database, backend, frontend)
-make docker-up e=dev
-
-# 4. Apply database migrations and seed the database
-make db-upgrade
-make db-seed
-
-# 5. Open the API and UI
+# 4. Open the API and UI
 open https://127.0.0.1:8000/docs       # Backend Swagger UI
-open http://127.0.0.1:5173            # Frontend web app
+open https://127.0.0.1:5173            # Frontend web app
 
-# 6. Run linters and type checks (optional)
+# 5. Run linters and type checks (optional)
 make lint
 make type-check
 ```
