@@ -4,7 +4,7 @@
 # ============================================================
 
 # Variables
-APP_NAME=app/main.py
+APP_NAME=app.main
 HOST=127.0.0.1
 PORT=8000
 
@@ -39,16 +39,31 @@ clean:
 .PHONY: run reload
 
 run:
-	@echo "$(GREEN)Starting FastAPI server...$(NC)"
-	uv run fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
+	@echo "$(GREEN)Starting FastAPI server over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--host $(HOST) \
+		--port $(PORT) \
+		--ssl-keyfile ../certs/dev.key \
+		--ssl-certfile ../certs/dev.crt
 
 reload:
-	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
-	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
+	@echo "$(GREEN)Starting FastAPI server with auto-reload over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--reload \
+		--host $(HOST) \
+		--port $(PORT) \
+		--ssl-keyfile ../certs/dev.key \
+		--ssl-certfile ../certs/dev.crt
 
 reload-debug:
-	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
-	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--reload \
+		--host $(HOST) \
+		--port $(PORT) \
+		--log-level debug \
+		--ssl-keyfile ../certs/dev.key \
+		--ssl-certfile ../certs/dev.crt
 
 # ============================================================
 #  Database Migrations (Alembic)
@@ -75,6 +90,35 @@ history:
 current:
 	@echo "$(GREEN)Current database version:$(NC)"
 	uv run alembic current
+
+# ============================================================
+#  Database Seeding (Development Only)
+# ============================================================
+
+.PHONY: db-seed db-rollback-seed
+
+db-seed:
+	@if [ "$(e)" != "prod" ]; then \
+		echo "$(GREEN)🌱 Seeding dummy data into Postgres...$(NC)"; \
+		uv run python app/scripts/seed.py; \
+	else \
+		echo "⚠️  Seeding disabled in production environment"; \
+	fi
+
+db-rollback-seed:
+	@if [ "$(e)" != "prod" ]; then \
+		echo "\033[0;33mRolling back dummy data...\033[0m"; \
+		uv run python app/scripts/rollback_seed.py; \
+	else \
+		echo "⚠️  Rolling back dummy data disabled in production"; \
+	fi
+
+
+# Initialize database (migrate + seed)
+db-init:
+	@echo "$(GREEN)🚀 Initializing database (apply migrations + seed)...$(NC)"
+	make upgrade
+	make db-seed
 
 # ============================================================
 #  Code Quality

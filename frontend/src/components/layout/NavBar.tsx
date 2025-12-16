@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { useAuth } from '@/auth/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { user, isAuthenticated, loginWithGithub, logout, loading } = useAuth();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -106,54 +108,85 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
           </nav>
         </div>
 
-        {/* Right: User Avatar Dropdown */}
+        {/* Right: Auth Controls */}
         <div className="relative" ref={dropdownRef}>
-          <button
-            className="flex items-center gap-2 focus:outline-none"
-            onClick={() => setOpen((v) => !v)}
-            aria-haspopup="true"
-            aria-expanded={open}
-          >
-            <Avatar>
-              <AvatarImage src="/avatars/jane.jpg" alt="Jane Doe" />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium">Jane Doe</span>
-            <svg
-              className={`w-4 h-4 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {loading ? (
+            <span className="text-sm text-muted-foreground">Loading...</span>
+          ) : !isAuthenticated ? (
+            <button
+              onClick={loginWithGithub}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-          {open && (
-            <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-lg z-50">
+              Login with GitHub
+              <span className="ml-2 align-middle">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width={18}
+                  height={18}
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="inline-block"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.004.07 1.532 1.032 1.532 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.339-2.221-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.025A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.295 2.748-1.025 2.748-1.025.546 1.378.202 2.397.1 2.65.64.7 1.028 1.595 1.028 2.688 0 3.847-2.337 4.695-4.566 4.944.359.309.678.919.678 1.852 0 1.336-.012 2.417-.012 2.747 0 .268.18.579.688.481C19.138 20.2 22 16.447 22 12.021 22 6.484 17.523 2 12 2z" />
+                </svg>
+              </span>
+            </button>
+          ) : (
+            <>
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                onClick={() => {
-                  setOpen(false);
-                  // Placeholder: handle profile
-                }}
+                className="flex items-center gap-2 focus:outline-none"
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup="true"
+                aria-expanded={open}
               >
-                View Profile
+                <Avatar>
+                  <AvatarImage
+                    src="/avatars/default.jpg"
+                    alt={user?.full_name || user?.email || 'User'}
+                  />
+                  <AvatarFallback>
+                    {user?.full_name
+                      ?.split(' ')
+                      .filter((n) => n.trim().length > 0)
+                      .map((n) => n[0])
+                      .join('') ||
+                      user?.email?.[0]?.toUpperCase() ||
+                      'U'}
+                  </AvatarFallback>
+                </Avatar>
+
+                <span className="text-sm font-medium">{user?.full_name || user?.email}</span>
+
+                <svg
+                  className={`w-4 h-4 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
               </button>
-              <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                onClick={() => {
-                  setOpen(false);
-                  // Placeholder: handle logout
-                }}
-              >
-                Log Out
-              </button>
-            </div>
+
+              {open && (
+                <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-lg z-50">
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                    onClick={async () => {
+                      setOpen(false);
+                      await logout();
+                    }}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

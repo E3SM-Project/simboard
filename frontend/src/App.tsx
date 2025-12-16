@@ -6,6 +6,8 @@ import { useMachines, useSimulations } from '@/api/simulation';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
+import { Toaster } from './components/ui/toaster';
+
 const App = () => {
   // -------------------- Constants --------------------
   const LOCAL_STORAGE_KEY = 'selectedSimulationIds';
@@ -46,7 +48,6 @@ const App = () => {
       <BrowserRouter>
         <NavBar selectedSimulationIds={selectedSimulationIds} />
         <AppRoutes
-          // FIXME: Fix type annotations for AppRoutes
           simulations={simulations}
           machines={machines.data}
           selectedSimulationIds={selectedSimulationIds}
@@ -54,6 +55,7 @@ const App = () => {
           selectedSimulations={selectedSimulations}
         />
       </BrowserRouter>
+      <Toaster />
     </QueryClientProvider>
   );
 };

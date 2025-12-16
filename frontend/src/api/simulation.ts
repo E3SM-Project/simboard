@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import axiosInstance from '@/api/axios';
+import api from '@/api/api';
 import type { Machine, SimulationOut } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';
@@ -8,7 +8,7 @@ const SIMULATIONS_URL = '/simulations';
 export const fetchSimulations = async (
   url: string = SIMULATIONS_URL
 ): Promise<SimulationOut[]> => {
-  const res = await axiosInstance.get<SimulationOut[]>(url, {
+  const res = await api.get<SimulationOut[]>(url, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
@@ -16,7 +16,7 @@ export const fetchSimulations = async (
 };
 
 export const fetchSimulationById = async (id: string): Promise<SimulationOut> => {
-  const res = await axiosInstance.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
+  const res = await api.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
@@ -93,7 +93,7 @@ export const useMachines = (url: string = '/machines') => {
     setLoading(true);
     setError(null);
 
-    axiosInstance.get<Machine[]>(url, {
+    api.get<Machine[]>(url, {
       headers: { 'Cache-Control': 'no-cache' },
     })
       .then((res) => {

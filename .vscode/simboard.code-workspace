@@ -81,7 +81,7 @@
         "name": "frontend: Vite (Chrome)",
         "type": "chrome", // you can also use "pwa-chrome" if preferred
         "request": "launch",
-        "url": "http://localhost:5173",
+        "url": "https://127.0.0.1:5173",
         "webRoot": "${workspaceFolder}/frontend",
         "preLaunchTask": "frontend: dev (vite)",
         "skipFiles": [
@@ -99,12 +99,12 @@
         "name": "frontend: Vite (Firefox)",
         "type": "firefox", // requires the "Debugger for Firefox" extension
         "request": "launch",
-        "url": "http://localhost:5173",
+        "url": "https://127.0.0.1:5173",
         "webRoot": "${workspaceFolder}/frontend",
         "preLaunchTask": "frontend: dev (vite)",
         "pathMappings": [
           {
-            "url": "http://localhost:5173/",
+            "url": "https://127.0.0.1:5173/",
             "path": "${workspaceFolder}/frontend"
           }
         ],

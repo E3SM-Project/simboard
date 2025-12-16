@@ -67,3 +67,12 @@ dmypy.json
 # Environment files
 **/.env
 !**/.env.example
+
+# Certificate files
+/certs/*
+*.key
+*.crt
+*.pem
+
+# But keep the generator script
+!certs/generate-dev-certs.sh

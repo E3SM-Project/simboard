@@ -1,6 +1,7 @@
 import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 
 import { useSimulation } from '@/api/simulation';
+import AuthCallback from '@/auth/AuthCallback';
 import Browse from '@/pages/Browse/Browse';
 import Compare from '@/pages/Compare/Compare';
 import Docs from '@/pages/Docs/Docs';
@@ -85,6 +86,7 @@ const createRoutes = ({
     },
     { path: '/upload', element: <Upload machines={machines} /> },
     { path: '/docs', element: <Docs /> },
+    { path: '/auth/callback', element: <AuthCallback /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },
   ];
 };

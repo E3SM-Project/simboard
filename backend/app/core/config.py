@@ -15,20 +15,20 @@ class Settings(BaseSettings):
 
     # Frontend
     # ----------------------------------------
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origin: str = "https://127.0.0.1:5173"
+    frontend_auth_redirect_url: str = "https://127.0.0.1:5173/auth/callback"
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------
     database_url: str
-
-    # Used only for tests; must include "test" in the path.
     test_database_url: str
+
     # GitHub OAuth configuration (must be overridden in .env)
     # --------------------------------------------------------
     github_client_id: str
     github_client_secret: str
     github_redirect_url: str
-    github_state_secret_key: str = "changeme_state_secret"  # used to sign OAuth states
+    github_state_secret_key: str
 
     # --- Token lifetimes ---
     lifetime_seconds: int = 3600

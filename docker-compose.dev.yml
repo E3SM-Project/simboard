@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
       args:
         - ENV=development
+    volumes:
+      - ./certs:/app/certs:ro
     image: simboard-backend-dev
     restart: "no"
     ports:
@@ -17,6 +19,8 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - UV_PROJECT_ENVIRONMENT=/tmp/.venv
+      - SSL_CERTFILE=/app/certs/dev.crt
+      - SSL_KEYFILE=/app/certs/dev.key
     develop:
       watch:
         # Sync source code to /app (hot reload)
@@ -46,15 +50,19 @@ services:
     command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm run dev --host 0.0.0.0"
     environment:
       - CI=true # Fixes ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+      - VITE_SSL_CERT=/certs/dev.crt
+      - VITE_SSL_KEY=/certs/dev.key
     ports:
       - "5173:5173"
     env_file:
       - ./frontend/.env
     volumes:
       - ./frontend:/app
+      - ./certs:/certs:ro
     labels: []   # No Traefik in dev
     networks:
       - default
+
 
   db:
     image: postgres:17
