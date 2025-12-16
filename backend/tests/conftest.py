@@ -264,21 +264,25 @@ def _create_test_database():
     >>> _create_test_database()
     [pytest setup] Created database: test_db_name
     """
-    db_name, user, password, _, _ = _parse_db_url(TEST_DB_URL)
+    db_name, user, password, host, port = _parse_db_url(TEST_DB_URL)
 
     conn = psycopg.connect(
         dbname="postgres",
         user=user,
         password=password,
-        host="localhost",
+        host=host,
+        port=port,
         autocommit=True,
     )
     cur = conn.cursor()
 
     # Check if test DB already exists
     cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+
     if not cur.fetchone():
         cur.execute(f'CREATE DATABASE "{db_name}"')
+        conn.commit()
+
         logger.info(f"[pytest setup] Created test database: {db_name}")
     else:
         logger.info(f"[pytest setup] Using existing test database: {db_name}")
