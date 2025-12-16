@@ -43,7 +43,7 @@ const AuthCallback: React.FC = () => {
           duration: 3000,
         });
 
-        navigate('/login', { replace: true });
+        navigate('/', { replace: true });
       }
     };
 

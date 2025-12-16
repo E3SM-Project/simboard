@@ -5,6 +5,8 @@ echo "ENV=$ENV"
 
 if [ "$ENV" = "production" ]; then
     echo "🚀 Starting SimBoard backend (production mode)..."
+    # In production, HTTPS is expected to be handled by a reverse proxy (e.g., Traefik).
+    # Uvicorn is started without SSL options here; do not enable HTTPS at the app layer in production.
     exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 else
     echo "⚙️ Starting SimBoard backend (development mode with HTTPS + autoreload)..."

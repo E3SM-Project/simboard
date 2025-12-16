@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -39,11 +40,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loginWithGithub = async () => {
-    const { data } = await api.get<{ authorization_url: string }>('/auth/github/authorize');
-    const { authorization_url } = data;
+    try {
+      const { data } = await api.get<{ authorization_url: string }>('/auth/github/authorize');
+      const { authorization_url } = data;
 
-    // Redirect browser to GitHub
-    window.location.href = authorization_url;
+      // Redirect browser to GitHub authorization URL to initiate OAuth flow.
+      window.location.href = authorization_url;
+    } catch {
+      toast({
+        title: 'Failed to initiate GitHub login',
+        description: "We couldn't start the login process. Please try again.",
+        variant: 'destructive',
+      });
+    }
   };
 
   const logout = useCallback(async (): Promise<void> => {
@@ -67,9 +76,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
+  const logoutRef = useRef(logout);
+
+  // Keep ref updated but don’t re-register
   useEffect(() => {
-    registerLogoutHandler(logout);
+    logoutRef.current = logout;
   }, [logout]);
+
+  // Register once with a stable wrapper
+  useEffect(() => {
+    registerLogoutHandler(() => logoutRef.current());
+  }, []);
 
   useEffect(() => {
     void refreshUser();

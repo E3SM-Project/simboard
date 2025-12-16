@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     github_client_id: str
     github_client_secret: str
     github_redirect_url: str
-    github_state_secret_key: str = "changeme_state_secret"
+    github_state_secret_key: str
 
     # --- Token lifetimes ---
     lifetime_seconds: int = 3600

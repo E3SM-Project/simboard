@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { useMachines, useSimulations } from '@/api/simulation';
-import Header from '@/components/layout/Header';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
