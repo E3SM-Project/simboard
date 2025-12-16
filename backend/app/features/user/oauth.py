@@ -27,7 +27,7 @@ class CustomCookieTransport(CookieTransport):
             Response: The HTTP response with the cookie set and redirection.
         """
         response = RedirectResponse(
-            "https://127.0.0.1:5173/auth/callback", status_code=302
+            settings.frontend_auth_redirect_url, status_code=302
         )
 
         return self._set_login_cookie(response, token)
