@@ -148,7 +148,7 @@ open https://127.0.0.1:8000/docs
 
 SimBoard uses a **multi-environment .env layout**:
 
-```
+```bash
 .envs/
   local/
     backend.env
@@ -163,7 +163,7 @@ SimBoard uses a **multi-environment .env layout**:
 
 Environment selection is controlled by:
 
-```
+```env
 env=<name>
 ```
 
@@ -177,13 +177,13 @@ make docker-up env=production svc=backend
 
 Under the hood, everything receives:
 
-```
+```env
 APP_ENV=$(env)
 ```
 
 Backend and frontend automatically load:
 
-```
+```bash
 .envs/<env>/backend.env
 .envs/<env>/frontend.env
 ```
@@ -194,8 +194,9 @@ Backend and frontend automatically load:
 
 Set these in the appropriate environment folder, e.g.:
 
-```
+```bash
 .envs/local/backend.env
+.envs/local_docker/backend.env
 ```
 
 ```env
@@ -214,7 +215,7 @@ GITHUB_STATE_SECRET_KEY=your_secret
 
 ## Repository Structure
 
-```
+```bash
 simboard/
 ├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
 ├── frontend/       # Vite + React + Tailwind + shadcn
@@ -244,39 +245,6 @@ Pull requests should include tests + documentation updates.
 
 The Makefile provides **unified commands** for backend, frontend, Docker, DB, and environment management.
 
-### Examples
-
-#### Backend
-
-```
-make backend-install
-make backend-reload env=local
-make backend-migrate m="msg"
-make backend-test
-```
-
-#### Frontend
-
-```
-make frontend-dev env=local
-make frontend-build
-make frontend-lint
-```
-
-#### Docker
-
-```
-make docker-up env=local_docker svc=backend
-make docker-up env=local_docker svc=frontend
-```
-
-#### Database
-
-```
-make db-init env=local
-make db-upgrade env=local_docker
-```
-
 View full list:
 
 ```bash
@@ -289,7 +257,7 @@ make help
 
 SimBoard uses **local HTTPS** with development certificates:
 
-```
+```bash
 certs/dev.crt
 certs/dev.key
 ```
