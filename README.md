@@ -7,7 +7,7 @@ SimBoard helps researchers:
 - Store and organize simulation metadata
 - Browse and visualize simulation details
 - Compare runs side-by-side
-- Surface diagnostics and key metadata-driven insights
+- Surface diagnostics and metadata-driven insights
 
 ---
 
@@ -16,32 +16,29 @@ SimBoard helps researchers:
 - [Prerequisites](#prerequisites)
 - [Developer Quickstart (Bare-Metal)](#developer-quickstart-bare-metal)
 - [Developer Quickstart (Docker)](#developer-quickstart-docker)
-- [Environment Variables](#environment-variables)
+- [Environment System](#environment-system)
 - [Repository Structure](#repository-structure)
 - [Development Notes](#development-notes)
-- [Makefile Commands](#makefile-commands)
-- [Local HTTPS / Traefik](#local-https--traefik)
+- [Makefile Overview](#makefile-overview)
+- [Local HTTPS](#local-https)
 - [License](#license)
 
 ---
 
 ## Prerequisites
 
-### 1. Install **Docker Desktop**
+### 1. Install Docker Desktop
 
-Download: https://www.docker.com/products/docker-desktop  
-Ensure it is running before using Docker commands.
+[https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+Ensure it is running before any Docker-based commands.
 
 ---
 
-### 2. Install **uv** (Python dependency manager)
+### 2. Install uv (Python dependency manager)
 
 ```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS/Linux
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
 ```
 
 Verify:
@@ -52,11 +49,9 @@ uv --version
 
 ---
 
-### 3. Install **Node.js**, **npm**, and **pnpm**
+### 3. Install Node.js, npm, and pnpm
 
-Install Node.js (LTS recommended): https://nodejs.org
-
-Verify:
+Install Node (LTS recommended): [https://nodejs.org](https://nodejs.org)
 
 ```bash
 node --version
@@ -67,11 +62,6 @@ Install pnpm:
 
 ```bash
 npm install -g pnpm
-```
-
-Verify:
-
-```bash
 pnpm --version
 ```
 
@@ -88,152 +78,206 @@ cd simboard
 
 ## Developer Quickstart (Bare-Metal)
 
-This is the **recommended workflow for daily development**:
+This is the **recommended daily workflow**:
 
-- Fastest reloads
+- Fastest hot reloads
 - Best debugging experience
-- Fastest pytest runs
-- Uses your native Python/Node installations
+- No Docker overhead
 
-> ⚠️ **Not production-accurate.** Do not use bare-metal configs in actual deployments.
+> ⚠️ Bare-metal dev is _not production-accurate_ — it is optimized for speed.
 
 ### Commands
 
 ```bash
-# 1. Enter repository
 cd simboard
 
-# 2. Setup the development environment (installs deps + copies .env files)
-make setup-dev
+# 1. Setup development assets (env files + certs + deps)
+make setup-dev env=local
 
-# 3. Start backend + frontend (run in separate terminals)
-make backend
-make frontend
+# 2. Start backend (terminal 1)
+make backend-reload env=local
+
+# 3. Start frontend (terminal 2)
+make frontend-dev env=local
 
 # 4. Open API and UI
 open https://127.0.0.1:8000/docs
 open https://127.0.0.1:5173
+```
 
-# 5. Optional: linting & type checks
+Optional:
+
+```bash
 make lint
 make type-check
+make test
 ```
 
 ---
 
 ## Developer Quickstart (Docker)
 
-Use this environment to validate that SimBoard works **inside containers**, similar to production:
+Use this workflow when you need **production-like dev**:
 
-- Matches production OS + Python runtime
-- Catches Dockerfile or networking issues early
-- Ideal for integration testing (frontend ↔ backend ↔ database)
-
-Slightly slower than bare-metal—use only when you need container parity.
+- Same OS/runtime
+- Validates Docker networking, build steps
+- Ideal for integration testing
 
 ### Commands
 
 ```bash
-# 1. Enter repository
 cd simboard
 
-# 2. Build + start Docker dev environment (automatically runs migrations & seeds DB)
-make setup-dev-docker
+# Build images, generate envs, run migrations, seed DB
+make setup-dev-docker env=local_docker
 
-# 3. Start backend & frontend containers (separate terminals)
-make docker-up svc=backend
-make docker-up svc=frontend
+# Start backend container
+make docker-up env=local_docker svc=backend
 
-# 4. Open API and UI
-open https://127.0.0.1:8000/docs
+# Start frontend container
+make docker-up env=local_docker svc=frontend
+
+# Open API and UI
 open https://127.0.0.1:5173
-
-# 5. Optional checks
-make lint
-make type-check
+open https://127.0.0.1:8000/docs
 ```
 
 ---
 
-## Environment Variables
+## Environment System
 
-Both:
-
-- `make setup-dev`
-- `make setup-dev-docker`
-
-automatically copy all required `.env` files for you.
-
-You **do not need to manually copy them** — simply **edit the values** as needed.
-
-The primary customization developers must provide is the **GitHub OAuth configuration** in:
+SimBoard uses a **multi-environment .env layout**:
 
 ```
-backend/.env
+.envs/
+  local/
+    backend.env
+    frontend.env
+  local_docker/
+    backend.env
+    frontend.env
+  production/
+    backend.env
+    frontend.env
 ```
 
-### Backend GitHub OAuth Variables
+Environment selection is controlled by:
+
+```
+env=<name>
+```
+
+Example:
+
+```bash
+make backend-reload env=local
+make frontend-dev env=local_docker
+make docker-up env=production svc=backend
+```
+
+Under the hood, everything receives:
+
+```
+APP_ENV=$(env)
+```
+
+Backend and frontend automatically load:
+
+```
+.envs/<env>/backend.env
+.envs/<env>/frontend.env
+```
+
+---
+
+## GitHub OAuth Configuration
+
+Set these in the appropriate environment folder, e.g.:
+
+```
+.envs/local/backend.env
+```
 
 ```env
-# These come from your GitHub OAuth App (GitHub → Settings → Developer settings → OAuth Apps)
-GITHUB_CLIENT_ID=your_github_oauth_app_client_id
-GITHUB_CLIENT_SECRET=your_github_oauth_app_client_secret
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
 
-# Must match the callback URL in your GitHub App configuration
-# This is the backend OAuth callback endpoint that GitHub calls with the authorization code.
-GITHUB_REDIRECT_URL=https://127.0.0.1/auth/github/callback
-# For production, this must also point to the backend's OAuth callback endpoint
-# GITHUB_REDIRECT_URL=https://app.${DOMAIN}/auth/callback
+# Must match GitHub OAuth config
+GITHUB_REDIRECT_URL=https://127.0.0.1:8000/auth/github/callback
 
-# Secret used to sign OAuth "state" parameter (prevents CSRF)
-# Generate securely with:
-#   python -c "import secrets; print(secrets.token_urlsafe(64))"
-GITHUB_STATE_SECRET_KEY=superlongrandomsecretforoauthstate
+# Generate securely:
+# python -c "import secrets; print(secrets.token_urlsafe(64))"
+GITHUB_STATE_SECRET_KEY=your_secret
 ```
-
-No other environment variables typically need modification during development.
 
 ---
 
 ## Repository Structure
 
-```bash
-.
-├── backend/     # FastAPI, Postgres, SQLAlchemy, Alembic, Pydantic
-├── frontend/    # Vite + React + Tailwind + shadcn
-└── README.md    # This file
 ```
-
-Each component provides more details:
-
-- **Backend:** [./backend/README.md](./backend/README.md)
-- **Frontend:** [./frontend/README.md](./frontend/README.md)
+simboard/
+├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
+├── frontend/       # Vite + React + Tailwind + shadcn
+├── .envs/          # local / local_docker / production environment sets
+├── docker-compose.dev.yml
+├── docker-compose.yml
+├── Makefile        # unified monorepo automation
+└── certs/          # dev HTTPS certificates
+```
 
 ---
 
 ## Development Notes
 
-- Backend dependencies are managed using **uv** (`pyproject.toml`).
-- Frontend dependencies use **pnpm**.
-- Docker is used for both dev containers and production images.
-- Ensure Docker Desktop is running before executing any Docker-based Make commands.
+- Backend dependencies managed using **uv**
+- Frontend dependencies managed using **pnpm**
+- Environment switching handled automatically via `APP_ENV`
+- `.envs/<env>` contains all environment-specific configs
+- Docker Compose uses `.envs/local_docker/*` when running containers
 
-Use [GitHub Issues](https://github.com/E3SM-Project/simboard/issues/new/choose) for reporting bugs and proposing features.
-
-Contributions should include tests and documentation updates.
+Use GitHub Issues to report bugs or propose features.
+Pull requests should include tests + documentation updates.
 
 ---
 
-## Makefile Commands
+## Makefile Overview
 
-SimBoard includes a **top-level Makefile** that orchestrates:
+The Makefile provides **unified commands** for backend, frontend, Docker, DB, and environment management.
 
-- Backend commands (proxied into `backend/Makefile`)
-- Frontend commands (proxied into `frontend/Makefile`)
-- Docker orchestration
-- Developer utilities (linting, formatting, type checking)
+### Examples
 
-View all available commands:
+#### Backend
+
+```
+make backend-install
+make backend-reload env=local
+make backend-migrate m="msg"
+make backend-test
+```
+
+#### Frontend
+
+```
+make frontend-dev env=local
+make frontend-build
+make frontend-lint
+```
+
+#### Docker
+
+```
+make docker-up env=local_docker svc=backend
+make docker-up env=local_docker svc=frontend
+```
+
+#### Database
+
+```
+make db-init env=local
+make db-upgrade env=local_docker
+```
+
+View full list:
 
 ```bash
 make help
@@ -241,20 +285,25 @@ make help
 
 ---
 
-## Local HTTPS / Traefik
+## Local HTTPS
 
-SimBoard uses **Traefik** to provide:
+SimBoard uses **local HTTPS** with development certificates:
 
-- Simple local HTTPS
-- Reverse proxy routing between services
-- Automatic certificate handling
-- Production-like request flow during local development
+```
+certs/dev.crt
+certs/dev.key
+```
 
-Traefik is automatically configured when using:
+Generated via:
 
 ```bash
-make setup-dev-docker
+make gen-certs
 ```
+
+Used automatically by:
+
+- FastAPI (Uvicorn SSL)
+- Vite (via VITE_SSL_CERT and VITE_SSL_KEY)
 
 ---
 
