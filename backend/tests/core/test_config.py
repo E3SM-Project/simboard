@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 from app.core.config import get_env_file
 
-pytestmark = pytest.mark.no_db  # Ensure DB fixture never runs
 
 class TestGetEnvFile:
     @pytest.fixture(autouse=True)
