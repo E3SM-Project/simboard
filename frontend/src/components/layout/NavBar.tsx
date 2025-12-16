@@ -148,8 +148,11 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
                   <AvatarFallback>
                     {user?.full_name
                       ?.split(' ')
+                      .filter((n) => n.trim().length > 0)
                       .map((n) => n[0])
-                      .join('') || 'U'}
+                      .join('') ||
+                      user?.email?.[0]?.toUpperCase() ||
+                      'U'}
                   </AvatarFallback>
                 </Avatar>
 
