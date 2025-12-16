@@ -13,8 +13,9 @@ services:
       - "8000:8000"
       - "5678:5678"  # Debugpy
     env_file:
-      - ./backend/.env
+      - ./.envs/dev_docker/backend.env
     environment:
+      - APP_ENV=dev_docker
       - ENV=development
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
@@ -49,13 +50,14 @@ services:
     working_dir: /app
     command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm run dev --host 0.0.0.0"
     environment:
+      - APP_ENV=dev_docker
       - CI=true # Fixes ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
       - VITE_SSL_CERT=/certs/dev.crt
       - VITE_SSL_KEY=/certs/dev.key
     ports:
       - "5173:5173"
     env_file:
-      - ./frontend/.env
+      - ./.envs/dev_docker/frontend.env
     volumes:
       - ./frontend:/app
       - ./certs:/certs:ro
@@ -63,12 +65,11 @@ services:
     networks:
       - default
 
-
   db:
     image: postgres:17
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./.envs/dev_docker/backend.env
     ports:
       - "5432:5432"
     volumes:

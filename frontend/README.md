@@ -21,12 +21,6 @@ Earth System Model) simulation metadata.
 For the development guide, see the [root README.md file](../README.md). It includes
 information on how to get the frontend service started via Docker.
 
-## 🧰 Frontend Makefile Commands
-
-This directory includes a **frontend Makefile**.
-
-In `/frontend`, run `make help` to view all available commands
-
 ## Expanding the ESLint Configuration
 
 If you are developing a production-grade application, you can enable **type-aware lint rules** for better code quality and consistency.

@@ -64,15 +64,23 @@ coverage.xml
 .dmypy.json
 dmypy.json
 
-# Environment files
-**/.env
-!**/.env.example
+# Environment files (root or nested)
+*.env
+.env
+**/*.env
 
-# Certificate files
+# New multi-environment directory for backend/frontend envs
+!*.env.example
+!**/*.env.example
+
+# If you want to commit empty directory structure:
+!.envs/.gitkeep
+!.envs/*/.gitkeep
+
+# Certificates
 /certs/*
 *.key
 *.crt
 *.pem
-
 # But keep the generator script
 !certs/generate-dev-certs.sh
