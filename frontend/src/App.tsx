@@ -7,6 +7,8 @@ import Header from '@/components/layout/Header';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
+import { Toaster } from './components/ui/toaster';
+
 const App = () => {
   // -------------------- Constants --------------------
   const LOCAL_STORAGE_KEY = 'selectedSimulationIds';
@@ -54,6 +56,7 @@ const App = () => {
           selectedSimulations={selectedSimulations}
         />
       </BrowserRouter>
+      <Toaster />
     </QueryClientProvider>
   );
 };

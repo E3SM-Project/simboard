@@ -1,3 +1,4 @@
+import { LogOut } from 'lucide-react';
 import React, {
   createContext,
   ReactNode,
@@ -8,6 +9,7 @@ import React, {
 } from 'react';
 
 import api, { registerLogoutHandler } from '@/api/axios';
+import { toast } from '@/hooks/use-toast';
 import type { User } from '@/types/user';
 
 interface AuthContextType {
@@ -48,9 +50,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await api.post('/auth/logout');
     } catch {
-      // ignore errors
+      // ignore errors — local logout still succeeds
     } finally {
       setUser(null);
+
+      toast({
+        title: (
+          <div className="flex items-center gap-2">
+            <LogOut className="h-5 w-5 text-gray-600" />
+            Signed out
+          </div>
+        ),
+        description: 'You’ve been logged out.',
+        duration: 2000,
+      });
     }
   }, []);
 
