@@ -175,19 +175,18 @@ backend/.env
 ### Backend GitHub OAuth Variables
 
 ```env
-# These come from your GitHub OAuth App:
-# GitHub → Settings → Developer settings → OAuth Apps
+# These come from your GitHub OAuth App (GitHub → Settings → Developer settings → OAuth Apps)
 GITHUB_CLIENT_ID=your_github_oauth_app_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_app_client_secret
 
-# Must match the callback URL in your GitHub App configuration.
-# For local development, this points to the backend callback route.
-GITHUB_REDIRECT_URL=https://localhost:8000/auth/github/callback
-# For production, this typically points to the frontend:
+# Must match the callback URL in your GitHub App configuration
+# This is the backend OAuth callback endpoint that GitHub calls with the authorization code.
+GITHUB_REDIRECT_URL=https://127.0.0.1/auth/github/callback
+# For production, this must also point to the backend's OAuth callback endpoint
 # GITHUB_REDIRECT_URL=https://app.${DOMAIN}/auth/callback
 
-# Secret used to sign OAuth `state` parameter (prevents CSRF)
-# Generate with:
+# Secret used to sign OAuth "state" parameter (prevents CSRF)
+# Generate securely with:
 #   python -c "import secrets; print(secrets.token_urlsafe(64))"
 GITHUB_STATE_SECRET_KEY=superlongrandomsecretforoauthstate
 ```
