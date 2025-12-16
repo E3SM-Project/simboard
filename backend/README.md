@@ -13,12 +13,6 @@ It provides a REST API for managing and querying simulation metadata, including 
 - **SQLAlchemy** — ORM and database toolkit, with **Alembic** for database migrations
 - **PostgreSQL** — Primary relational database
 
-## 🧰 Backend Makefile Commands
-
-This directory includes a **backend Makefile**.
-
-In `/backend`, run `make help` to view all available commands
-
 ## License
 
 For license information, see the [root LICENSE file](../LICENSE).

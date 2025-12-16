@@ -11,7 +11,7 @@ Earth System Model) simulation metadata.
 
 - **React 19** — Core UI library
 - **TypeScript** — Type-safe development
-- **Vite 6** — Lightning-fast build and dev environment
+- **Vite 6** — Lightning-fast build and cdev environment
 - **Tailwind CSS** + **shadcn** — Styling and components
 - **ESLint + Prettier** — Code linting and formatting
 - **pnpm** — Dependency management
@@ -20,12 +20,6 @@ Earth System Model) simulation metadata.
 
 For the development guide, see the [root README.md file](../README.md). It includes
 information on how to get the frontend service started via Docker.
-
-## 🧰 Frontend Makefile Commands
-
-This directory includes a **frontend Makefile**.
-
-In `/frontend`, run `make help` to view all available commands
 
 ## Expanding the ESLint Configuration
 
