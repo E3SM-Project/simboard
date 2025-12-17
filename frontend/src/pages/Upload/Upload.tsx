@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
+import { createSimulation } from '@/api/simulation';
 import FormSection from '@/pages/Upload/FormSection';
-import FormTokenInput from '@/pages/Upload/FormTokenInput';
 import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ArtifactIn } from '@/types/artifact';
@@ -16,6 +16,7 @@ type OpenKey =
   | 'configuration'
   | 'modelSetup'
   | 'versionControl'
+  | 'timeline'
   | 'paths'
   | 'docs'
   | 'review'
@@ -25,52 +26,48 @@ type OpenKey =
 const countValidfields = (fields: (string | null | undefined)[]) =>
   fields.reduce((count, field) => (field ? count + 1 : count), 0);
 
-const REQUIRED_FIELDS = {
-  config: 4,
-  model: 2,
-  version: 2,
-  paths: 1,
-};
-
 // -------------------- Initial Form State --------------------
 const initialState: SimulationCreateForm = {
-  name: '',
-  caseName: '',
+  // --- Configuration ---
+  name: '', // required
+  caseName: '', // required
   description: null,
-  compset: '',
-  compsetAlias: '',
-  gridName: '',
-  gridResolution: '',
+  compset: '', // required
+  compsetAlias: '', // required
+  gridName: '', // required
+  gridResolution: '', // required
+  initializationType: '',
+  compiler: null,
   parentSimulationId: null,
 
-  simulationType: 'production',
-  status: 'not-started',
+  // --- Model Setup ---
+  simulationType: '', // required
+  status: 'created', // required
   campaignId: null,
   experimentTypeId: null,
-  initializationType: '',
-  groupName: null,
+  machineId: '', // required
 
-  machineId: '',
-  simulationStartDate: '',
-  simulationEndDate: null,
-  runStartDate: null,
-  runEndDate: null,
-  compiler: null,
-
-  keyFeatures: null,
-  knownIssues: null,
-  notesMarkdown: null,
-
+  // --- Version Control ---
   gitRepositoryUrl: null,
   gitBranch: null,
   gitTag: null,
   gitCommitHash: null,
 
-  createdBy: null,
-  lastUpdatedBy: null,
+  // --- Timeline ---
+  simulationStartDate: '', // required
+  simulationEndDate: null,
+  runStartDate: null,
+  runEndDate: null,
 
+  // --- Documentation ---
+  keyFeatures: null,
+  knownIssues: null,
+  notesMarkdown: null,
+
+  // --- Metadata ---
   extra: {},
 
+  // --- Artifacts & Links ---
   artifacts: [],
   links: [],
 
@@ -87,48 +84,338 @@ const Upload = ({ machines }: UploadProps) => {
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
 
   const [variables, setVariables] = useState<string[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
   const [diagLinks, setDiagLinks] = useState<{ label: string; url: string }[]>([]);
   const [paceLinks, setPaceLinks] = useState<{ label: string; url: string }[]>([]);
 
   // -------------------- Derived Data --------------------
   const formWithVars = useMemo(() => ({ ...form, variables }), [form, variables]);
+  // --- Configuration fields (matches initialState order)
+  const configFields = useMemo(
+    () => [
+      {
+        label: 'Simulation Name',
+        name: 'name',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., E3SM v3 LR Control 20190815',
+      },
+      {
+        label: 'Simulation Case Name',
+        name: 'caseName',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., 20190815.ne30_oECv3_ICG.A_WCYCL1850S_CMIP6.piControl',
+      },
+      {
+        label: 'Description',
+        name: 'description',
+        required: false,
+        type: 'textarea',
+        placeholder: 'Short description (optional)',
+      },
+      {
+        label: 'Compset',
+        name: 'compset',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., A_WCYCL1850S_CMIP6',
+      },
+      {
+        label: 'Compset Alias',
+        name: 'compsetAlias',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., WCYCL1850S',
+      },
+      {
+        label: 'Grid Name',
+        name: 'gridName',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., ne30_oECv3_ICG',
+      },
+      {
+        label: 'Grid Resolution',
+        name: 'gridResolution',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., 1deg',
+      },
+      {
+        label: 'Initialization Type',
+        name: 'initializationType',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., hybrid, branch, startup',
+      },
+      {
+        label: 'Compiler',
+        name: 'compiler',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., intel/2021.4',
+      },
+      {
+        label: 'Parent Simulation ID',
+        name: 'parentSimulationId',
+        required: false,
+        type: 'text',
+        placeholder: 'Parent simulation ID (optional)',
+      },
+    ],
+    [],
+  );
 
+  // --- Model Setup fields (matches initialState order)
+  const modelFields = useMemo(
+    () => [
+      {
+        label: 'Simulation Type',
+        name: 'simulationType',
+        required: true,
+        type: 'select',
+        options: [
+          { value: 'production', label: 'Production' },
+          { value: 'test', label: 'Test' },
+          { value: 'spinup', label: 'Spinup' },
+        ],
+      },
+      {
+        label: 'Status',
+        name: 'status',
+        required: true,
+        type: 'select',
+        options: [
+          { value: 'created', label: 'Created' },
+          { value: 'queued', label: 'Queued' },
+          { value: 'running', label: 'Running' },
+          { value: 'failed', label: 'Failed' },
+          { value: 'completed', label: 'Completed' },
+        ],
+      },
+      {
+        label: 'Campaign',
+        name: 'campaignId',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., v3.LR',
+      },
+      {
+        label: 'Experiment Type',
+        name: 'experimentTypeId',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., piControl',
+      },
+      {
+        label: 'Machine',
+        name: 'machineId',
+        required: true,
+        type: 'select',
+        options: machines.map((m) => ({ value: m.id, label: m.name })),
+      },
+    ],
+    [machines],
+  );
+
+  // --- Version Control fields (matches initialState order)
+  const versionFields = useMemo(
+    () => [
+      {
+        label: 'Repository URL',
+        name: 'gitRepositoryUrl',
+        required: false,
+        type: 'text',
+        placeholder: 'https://github.com/org/repo',
+      },
+      {
+        label: 'Branch',
+        name: 'gitBranch',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., e3sm-v3',
+      },
+      { label: 'Tag', name: 'gitTag', required: false, type: 'text', placeholder: 'e.g., v1.0.0' },
+      {
+        label: 'Commit Hash',
+        name: 'gitCommitHash',
+        required: false,
+        type: 'text',
+        placeholder: 'e.g., a1b2c3d',
+      },
+    ],
+    [],
+  );
+
+  // --- Timeline fields (matches initialState order)
+  const timelineFields = useMemo(
+    () => [
+      {
+        label: 'Simulation Start Date',
+        name: 'simulationStartDate',
+        required: true,
+        type: 'date',
+        placeholder: '',
+      },
+      {
+        label: 'Simulation End Date',
+        name: 'simulationEndDate',
+        required: false,
+        type: 'date',
+        placeholder: '',
+      },
+      {
+        label: 'Run Start Date',
+        name: 'runStartDate',
+        required: false,
+        type: 'date',
+        placeholder: '',
+      },
+      { label: 'Run End Date', name: 'runEndDate', required: false, type: 'date', placeholder: '' },
+    ],
+    [],
+  );
+
+  // --- Documentation fields (matches initialState order)
+  const docFields = useMemo(
+    () => [
+      {
+        label: 'Key Features',
+        name: 'keyFeatures',
+        required: false,
+        type: 'textarea',
+        placeholder: 'Key features (optional)',
+      },
+      {
+        label: 'Known Issues',
+        name: 'knownIssues',
+        required: false,
+        type: 'textarea',
+        placeholder: 'Known issues (optional)',
+      },
+      {
+        label: 'Notes (Markdown)',
+        name: 'notesMarkdown',
+        required: false,
+        type: 'textarea',
+        placeholder: 'Notes (optional)',
+      },
+    ],
+    [],
+  );
+
+  // --- Metadata fields (matches initialState order)
+  const metaFields = useMemo(
+    () => [
+      {
+        label: 'Extra Metadata (JSON)',
+        name: 'extra',
+        required: false,
+        type: 'textarea',
+        placeholder: '{"foo": "bar"}',
+      },
+    ],
+    [],
+  );
+
+  // --- Data Paths & Scripts fields (matches initialState order)
+  const pathFields = useMemo(
+    () => [
+      {
+        label: 'Output Path',
+        name: 'outputPath',
+        required: true,
+        type: 'text',
+        placeholder: '/global/archive/sim-output/...',
+      },
+      {
+        label: 'Archive Paths (comma-separated)',
+        name: 'archivePaths',
+        required: false,
+        type: 'text',
+        placeholder: '/global/archive/sim-state/..., /other/path/...',
+      },
+      {
+        label: 'Run Script Paths (comma-separated)',
+        name: 'runScriptPaths',
+        required: false,
+        type: 'text',
+        placeholder: '/home/user/run.sh, /home/user/run2.sh',
+      },
+      {
+        label: 'Postprocessing Script Paths (comma-separated)',
+        name: 'postprocessingScriptPaths',
+        required: false,
+        type: 'text',
+        placeholder: '/home/user/post.sh',
+      },
+    ],
+    [],
+  );
+
+  // Calculate required fields based on field definitions
+  const required_fields = useMemo(
+    () => ({
+      configuration: configFields.filter((f) => f.required).length,
+      modelSetup: modelFields.filter((f) => f.required).length,
+      versionControl: versionFields.filter((f) => f.required).length,
+      timeline: timelineFields.filter((f) => f.required).length,
+      paths: pathFields.filter((f) => f.required).length,
+      docs: docFields.filter((f) => f.required).length,
+      meta: metaFields.filter((f) => f.required).length,
+      review: 0,
+    }),
+    [configFields, modelFields, versionFields, timelineFields, pathFields, docFields, metaFields],
+  );
+  // -------------------- Derived Data for Required Counts --------------------
   const configSat = useMemo(() => {
     const fields = [
       form.name,
-      form.status && form.status !== 'not-started' ? form.status : null,
-      form.campaignId,
-      form.experimentTypeId,
+      form.caseName,
+      form.compset,
+      form.compsetAlias,
+      form.gridName,
+      form.gridResolution,
     ];
     return countValidfields(fields);
-  }, [form.name, form.status, form.campaignId, form.experimentTypeId]);
+  }, [
+    form.name,
+    form.caseName,
+    form.compset,
+    form.compsetAlias,
+    form.gridName,
+    form.gridResolution,
+  ]);
 
   const modelSat = useMemo(() => {
-    const fields = [form.machineId, form.compiler];
-    return countValidfields(fields);
-  }, [form.machineId, form.compiler]);
+    const fields = [form.simulationType, form.status, form.machineId];
 
-  const versionSat = useMemo(() => {
-    const fields = [form.gitBranch, form.gitCommitHash];
     return countValidfields(fields);
-  }, [form.gitBranch, form.gitCommitHash]);
+  }, [form.simulationType, form.status, form.machineId]);
 
   const pathsSat = useMemo(() => {
     const fields = [form.outputPath];
+
     return countValidfields(fields);
   }, [form.outputPath]);
 
+  const timelineSat = useMemo(() => {
+    const fields = [form.simulationStartDate];
+
+    return countValidfields(fields);
+  }, [form.simulationStartDate]);
+
   const allValid = useMemo(() => {
     return (
-      configSat >= REQUIRED_FIELDS.config &&
-      modelSat >= REQUIRED_FIELDS.model &&
-      versionSat >= REQUIRED_FIELDS.version
+      configSat >= required_fields.configuration &&
+      modelSat >= required_fields.modelSetup &&
+      timelineSat >= required_fields.timeline &&
+      pathsSat >= required_fields.paths
     );
-  }, [configSat, modelSat, versionSat]);
+  }, [required_fields, configSat, modelSat, timelineSat, pathsSat]);
 
   // -------------------- Builders --------------------
-  const buildArtifacts = (form: any): ArtifactIn[] => {
+  const buildArtifacts = (form: SimulationCreateForm): ArtifactIn[] => {
     const artifacts: ArtifactIn[] = [];
 
     if (form.outputPath) artifacts.push({ kind: 'output', uri: form.outputPath });
@@ -140,7 +427,7 @@ const Upload = ({ machines }: UploadProps) => {
       form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', uri: p }));
 
     if (form.postprocessingScriptPaths?.length)
-      form.postprocessingScriptPath.forEach((p: string) =>
+      form.postprocessingScriptPaths.forEach((p: string) =>
         artifacts.push({ kind: 'postprocessingScript', uri: p }),
       );
 
@@ -166,7 +453,42 @@ const Upload = ({ machines }: UploadProps) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    // Handle array fields for comma-separated values
+    if (
+      name === 'archivePaths' ||
+      name === 'runScriptPaths' ||
+      name === 'postprocessingScriptPaths'
+    ) {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }));
+    } else if (name === 'simulationEndDate' || name === 'runStartDate' || name === 'runEndDate') {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value || null,
+      }));
+    } else if (name === 'extra') {
+      // Parse JSON for extra metadata
+      let parsed = {};
+      try {
+        parsed = value ? JSON.parse(value) : {};
+      } catch {
+        parsed = {};
+      }
+      setForm((prev) => ({
+        ...prev,
+        extra: parsed,
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const toggle = (k: OpenKey) => setOpen((prev) => (prev === k ? null : k));
@@ -190,7 +512,6 @@ const Upload = ({ machines }: UploadProps) => {
     const artifacts = buildArtifacts(form);
     const links = buildLinks(diagLinks, paceLinks);
 
-    // TODO: Hook up to API
     const payload: SimulationCreate = {
       ...form,
       artifacts,
@@ -198,7 +519,7 @@ const Upload = ({ machines }: UploadProps) => {
     };
 
     console.log('Submitting simulation:', payload);
-    // await api.post("/simulations", payload);
+    createSimulation(payload);
   };
 
   // -------------------- Render --------------------
@@ -212,305 +533,117 @@ const Upload = ({ machines }: UploadProps) => {
           </p>
         </header>
 
+        {/* Configuration Section */}
         <FormSection
           title="Configuration"
           isOpen={open === 'configuration'}
           onToggle={() => toggle('configuration')}
-          requiredCount={REQUIRED_FIELDS.config}
+          requiredCount={required_fields.configuration}
           satisfiedCount={configSat}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-medium">
-                Simulation Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="e.g., 20190815.ne30_oECv3_ICG.A_WCYCL1850S_CMIP6.piControl"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Status <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-              >
-                <option value="not-started">Not started</option>
-                <option value="running">Running</option>
-                <option value="complete">Complete</option>
-                <option value="failed">Failed</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Campaign <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="campaignId"
-                value={form.campaignId}
-                onChange={handleChange}
-                placeholder="e.g., v3.LR"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Experiment Type <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="experimentTypeId"
-                value={form.experimentTypeId}
-                onChange={handleChange}
-                placeholder="e.g., piControl"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium">
-                Target Variables{' '}
-                <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <div className="mt-1">
-                <FormTokenInput
-                  values={variables}
-                  setValues={setVariables}
-                  placeholder="ts, pr, huss…"
-                />
+            {configFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-red-500">*</span>}
+                </label>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    className="mt-1 w-full rounded-md border px-3 py-2"
+                    name={field.name}
+                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                    rows={field.name === 'description' ? 2 : 4}
+                  />
+                ) : (
+                  <input
+                    className="mt-1 w-full h-10 rounded-md border px-3"
+                    name={field.name}
+                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                  />
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Add model variables relevant to this simulation (comma or Enter to add).
-              </p>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium">
-                Tags <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <div className="mt-1">
-                <FormTokenInput
-                  values={tags}
-                  setValues={setTags}
-                  placeholder="ocean, ne30, q1-2024…"
-                />
-              </div>
-            </div>
+            ))}
           </div>
         </FormSection>
+
+        {/* Timeline Section */}
         <FormSection
-          title="Model Setup"
-          isOpen={open === 'modelSetup'}
-          onToggle={() => toggle('modelSetup')}
-          requiredCount={REQUIRED_FIELDS.model}
-          satisfiedCount={modelSat}
+          title="Timeline"
+          isOpen={open === 'timeline'}
+          onToggle={() => toggle('timeline')}
+          requiredCount={required_fields.timeline}
+          satisfiedCount={timelineSat}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-medium">
-                Machine <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="machineId"
-                value={form.machineId}
-                onChange={handleChange}
-              >
-                <option value="">Select a machine</option>
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Compiler <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="compiler"
-                value={form.compiler ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., intel/2021.4"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Grid Name <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gridName"
-                value={form.gridName ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., ne30_oECv3_ICG"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Compset <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="compset"
-                value={form.compset ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., A_WCYCL1850S_CMIP6"
-              />
-            </div>
+            {timelineFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-red-500">*</span>}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                <input
+                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  type={field.type}
+                  name={field.name}
+                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                />
+              </div>
+            ))}
           </div>
         </FormSection>
-        <FormSection
-          title="Version Control"
-          isOpen={open === 'versionControl'}
-          onToggle={() => toggle('versionControl')}
-          requiredCount={REQUIRED_FIELDS.version}
-          satisfiedCount={versionSat}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-medium">
-                Branch <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gitBranch"
-                value={form.gitBranch ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., e3sm-v3"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Commit Hash <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gitCommitHash"
-                value={form.gitCommitHash ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., a1b2c3d"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Tag</label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gitTag"
-                value={form.gitTag ?? ''}
-                onChange={handleChange}
-                placeholder="e.g., a1b2c3d"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Repository URL{' '}
-                <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="gitRepositoryUrl"
-                value={form.gitRepositoryUrl ?? ''}
-                onChange={handleChange}
-                placeholder="https://github.com/org/repo"
-              />
-            </div>
-          </div>
-        </FormSection>
+
+        {/* Data Paths & Scripts Section */}
         <FormSection
           title="Data Paths & Scripts"
           isOpen={open === 'paths'}
           onToggle={() => toggle('paths')}
-          requiredCount={REQUIRED_FIELDS.paths}
+          requiredCount={required_fields.paths}
           satisfiedCount={pathsSat}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="text-sm font-medium">
-                Output Path <span className="text-red-500">*</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="outputPath"
-                value={form.outputPath ?? ''}
-                onChange={handleChange}
-                placeholder="/global/archive/sim-output/..."
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Archive Paths (comma-separated)</label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="archivePaths"
-                value={form.archivePaths?.join?.(', ') ?? ''}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    archivePaths: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="/global/archive/sim-state/..., /other/path/..."
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Run Script Paths (comma-separated)</label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="runScriptPaths"
-                value={form.runScriptPaths?.join?.(', ') ?? ''}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    runScriptPaths: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="/home/user/run.sh, /home/user/run2.sh"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Postprocessing Script Paths (comma-separated)
-                <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <input
-                className="mt-1 w-full h-10 rounded-md border px-3"
-                name="postprocessingScriptPaths"
-                value={form.postprocessingScriptPaths?.join?.(', ') ?? ''}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    postprocessingScriptPaths: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="/home/user/post.sh"
-              />
-            </div>
+            {pathFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-red-500">*</span>}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                <input
+                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  name={field.name}
+                  value={
+                    Array.isArray(form[field.name as keyof SimulationCreateForm])
+                      ? (form[field.name as keyof SimulationCreateForm] as string[]).join(', ')
+                      : (form[field.name as keyof SimulationCreateForm] ?? '')
+                  }
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                />
+              </div>
+            ))}
           </div>
         </FormSection>
+
+        {/* Documentation & Notes Section */}
         <FormSection
           title="Documentation & Notes"
           isOpen={open === 'docs'}
           onToggle={() => toggle('docs')}
         >
           <div className="space-y-6">
+            {/* Diagnostic Links */}
             <div>
               <div className="font-medium mb-2">
                 Diagnostic Links <span className="text-xs text-muted-foreground">(optional)</span>
@@ -536,6 +669,7 @@ const Upload = ({ machines }: UploadProps) => {
               </button>
             </div>
 
+            {/* PACE Links */}
             <div>
               <div className="font-medium mb-2">
                 PACE Links <span className="text-xs text-muted-foreground">(optional)</span>
@@ -561,34 +695,61 @@ const Upload = ({ machines }: UploadProps) => {
               </button>
             </div>
 
-            <div>
-              <label className="text-sm font-medium">
-                Notes (Markdown){' '}
-                <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-md border px-3 py-2"
-                name="notesMarkdown"
-                value={form.notesMarkdown ?? ''}
-                onChange={handleChange}
-                rows={4}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Known Issues <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-md border px-3 py-2"
-                name="knownIssues"
-                value={form.knownIssues ?? ''}
-                onChange={handleChange}
-                rows={2}
-              />
-            </div>
+            {/* Documentation Fields */}
+            {docFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                <textarea
+                  className="mt-1 w-full rounded-md border px-3 py-2"
+                  name={field.name}
+                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                  rows={field.name === 'notesMarkdown' ? 4 : 2}
+                />
+              </div>
+            ))}
           </div>
         </FormSection>
+
+        {/* Ownership & Metadata Section */}
+        <FormSection
+          title="Ownership & Metadata"
+          isOpen={open === 'meta'}
+          onToggle={() => toggle('meta')}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {metaFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                <textarea
+                  className="mt-1 w-full rounded-md border px-3 py-2"
+                  name={field.name}
+                  value={
+                    field.name === 'extra'
+                      ? JSON.stringify(form.extra ?? {}, null, 2)
+                      : (form[field.name as keyof SimulationCreateForm] ?? '')
+                  }
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                  rows={4}
+                />
+              </div>
+            ))}
+          </div>
+        </FormSection>
+
+        {/* Review & Submit Section */}
         <FormSection
           title="Review & Submit"
           isOpen={open === 'review'}
@@ -601,6 +762,32 @@ const Upload = ({ machines }: UploadProps) => {
                   <strong>Name:</strong> {form.name || '—'}
                 </div>
                 <div>
+                  <strong>Case Name:</strong> {form.caseName || '—'}
+                </div>
+                <div>
+                  <strong>Compset:</strong> {form.compset || '—'}
+                </div>
+                <div>
+                  <strong>Compset Alias:</strong> {form.compsetAlias || '—'}
+                </div>
+                <div>
+                  <strong>Grid Name:</strong> {form.gridName || '—'}
+                </div>
+                <div>
+                  <strong>Grid Resolution:</strong> {form.gridResolution || '—'}
+                </div>
+                <div>
+                  <strong>Initialization Type:</strong> {form.initializationType || '—'}
+                </div>
+                <div>
+                  <strong>Parent Simulation ID:</strong> {form.parentSimulationId || '—'}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div>
+                  <strong>Simulation Type:</strong> {form.simulationType || '—'}
+                </div>
+                <div>
                   <strong>Status:</strong> {form.status || '—'}
                 </div>
                 <div>
@@ -610,33 +797,32 @@ const Upload = ({ machines }: UploadProps) => {
                   <strong>Experiment Type:</strong> {form.experimentTypeId || '—'}
                 </div>
                 <div>
-                  <strong>Variables:</strong> {variables.join(', ') || '—'}
-                </div>
-                <div>
-                  <strong>Tags:</strong> {tags.join(', ') || '—'}
-                </div>
-              </div>
-              <div className="space-y-1">
-                {/* TODO Valid options from machines state. */}
-                <div>
                   <strong>Machine ID:</strong> {form.machineId || '—'}
                 </div>
                 <div>
                   <strong>Compiler:</strong> {form.compiler || '—'}
                 </div>
-                <div>
-                  <strong>Grid:</strong> {form.gridName || '—'}
-                </div>
-                <div>
-                  <strong>Branch:</strong> {form.gitBranch || '—'}
-                </div>
-                <div>
-                  <strong>Git Hash:</strong> {form.gitCommitHash || '—'}
-                </div>
-                <div>
-                  <strong>External Repo:</strong> {form.gitRepositoryUrl || '—'}
-                </div>
               </div>
+            </div>
+
+            <div className="text-sm">
+              <strong>Repository URL:</strong> {form.gitRepositoryUrl || '—'}
+              <br />
+              <strong>Branch:</strong> {form.gitBranch || '—'}
+              <br />
+              <strong>Tag:</strong> {form.gitTag || '—'}
+              <br />
+              <strong>Commit Hash:</strong> {form.gitCommitHash || '—'}
+            </div>
+
+            <div className="text-sm">
+              <strong>Simulation Start Date:</strong> {form.simulationStartDate || '—'}
+              <br />
+              <strong>Simulation End Date:</strong> {form.simulationEndDate || '—'}
+              <br />
+              <strong>Run Start Date:</strong> {form.runStartDate || '—'}
+              <br />
+              <strong>Run End Date:</strong> {form.runEndDate || '—'}
             </div>
 
             <div className="text-sm">
@@ -645,6 +831,9 @@ const Upload = ({ machines }: UploadProps) => {
               <strong>Archive Paths:</strong> {(form.archivePaths || []).join(', ') || '—'}
               <br />
               <strong>Run Scripts:</strong> {(form.runScriptPaths || []).join(', ') || '—'}
+              <br />
+              <strong>Postprocessing Scripts:</strong>{' '}
+              {(form.postprocessingScriptPaths || []).join(', ') || '—'}
             </div>
 
             <div className="text-sm">
@@ -672,7 +861,6 @@ const Upload = ({ machines }: UploadProps) => {
               onClick={() => {
                 setForm(initialState);
                 setVariables([]);
-                setTags([]);
                 setDiagLinks([]);
                 setPaceLinks([]);
               }}
@@ -683,10 +871,7 @@ const Upload = ({ machines }: UploadProps) => {
               type="button"
               className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
               disabled={!allValid}
-              onClick={() => {
-                // In your app, submit formWithVars + tags to backend
-                alert('Submitted!');
-              }}
+              onClick={handleSubmit}
             >
               Submit Simulation
             </button>
@@ -695,7 +880,7 @@ const Upload = ({ machines }: UploadProps) => {
 
         <StickyActionsBar
           disabled={!allValid}
-          onSaveDraft={() => console.log('Save draft', formWithVars, { tags })}
+          onSaveDraft={() => console.log('Save draft', formWithVars)}
           onNext={() => {
             if (!allValid) {
               window.scrollTo({ top: 0, behavior: 'smooth' });

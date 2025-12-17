@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import api from '@/api/api';
-import type { Machine, SimulationOut } from '@/types';
+import type { Machine, SimulationCreate, SimulationOut } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';
+
+
+export const createSimulation = async (
+  data: SimulationCreate
+): Promise<SimulationOut> => {
+  try {
+    const res = await api.post<SimulationOut>(SIMULATIONS_URL, data);
+
+    return res.data;
+  } catch (err) {
+
+    console.error('Error creating simulation:', err);
+    throw err;
+  }
+};
 
 export const fetchSimulations = async (
   url: string = SIMULATIONS_URL

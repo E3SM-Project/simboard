@@ -11,6 +11,14 @@ from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
 
 
+class SimulationStatus(str, Enum):
+    CREATED = "created"
+    QUEUED = "queued"
+    RUNNING = "running"
+    FAILED = "failed"
+    COMPLETED = "completed"
+
+
 class ArtifactKind(str, Enum):
     """Enumeration of possible artifact types."""
 
@@ -130,7 +138,10 @@ class SimulationCreate(CamelInBaseModel):
     # -------------------
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
-    status: Annotated[str, Field(..., description="Current status of the simulation")]
+
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
     campaign_id: Annotated[
         str | None, Field(None, description="Optional ID of the associated campaign")
     ]
