@@ -79,7 +79,10 @@ class ArtifactCreate(CamelInBaseModel):
 
     kind: Annotated[ArtifactKind, Field(..., description="The type of the artifact.")]
     uri: Annotated[
-        AnyUrl, Field(..., description="The URI where the artifact is located.")
+        str,
+        Field(
+            ..., description="The URI or filesystem path where the artifact is located."
+        ),
     ]
     label: Annotated[
         str | None, Field(None, description="An optional label for the artifact.")
@@ -94,7 +97,10 @@ class ArtifactOut(CamelOutBaseModel):
     ]
     kind: Annotated[ArtifactKind, Field(..., description="The type of the artifact.")]
     uri: Annotated[
-        AnyUrl, Field(..., description="The URI where the artifact is located.")
+        str,
+        Field(
+            ..., description="The URI or filesystem path where the artifact is located."
+        ),
     ]
     label: Annotated[
         str | None, Field(None, description="An optional label for the artifact.")
