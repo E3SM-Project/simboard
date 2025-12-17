@@ -424,9 +424,9 @@ const Upload = ({ machines }: UploadProps) => {
   );
 
   // Memoized section counts
-  const sectionSats = useMemo(
+  const fieldsSatisfied = useMemo(
     () => ({
-      config: getSatisfiedCount(configFields),
+      configuration: getSatisfiedCount(configFields),
       modelSetup: getSatisfiedCount(modelFields),
       timeline: getSatisfiedCount(timelineFields),
       paths: getSatisfiedCount(pathFields),
@@ -434,13 +434,13 @@ const Upload = ({ machines }: UploadProps) => {
     [getSatisfiedCount, configFields, modelFields, timelineFields, pathFields],
   );
 
-  const allValid = useMemo(
+  const allFieldsValid = useMemo(
     () =>
-      sectionSats.config >= required_fields.configuration &&
-      sectionSats.modelSetup >= required_fields.modelSetup &&
-      sectionSats.timeline >= required_fields.timeline &&
-      sectionSats.paths >= required_fields.paths,
-    [required_fields, sectionSats],
+      fieldsSatisfied.configuration >= required_fields.configuration &&
+      fieldsSatisfied.modelSetup >= required_fields.modelSetup &&
+      fieldsSatisfied.timeline >= required_fields.timeline &&
+      fieldsSatisfied.paths >= required_fields.paths,
+    [required_fields, fieldsSatisfied],
   );
 
   // -------------------- Builders --------------------
@@ -545,11 +545,11 @@ const Upload = ({ machines }: UploadProps) => {
 
     const payload: SimulationCreate = {
       ...form,
+      gitRepositoryUrl: form.gitRepositoryUrl?.trim() === '' ? null : form.gitRepositoryUrl,
       artifacts,
       links,
     };
 
-    console.log('Submitting simulation:', payload);
     createSimulation(payload);
   };
 
@@ -596,49 +596,57 @@ const Upload = ({ machines }: UploadProps) => {
           </p>
         </header>
 
-        {configFields.map((field) => (
-          <div key={field.name}>
-            <label className="text-sm font-medium">
-              {field.label}
-              {field.required && <span className="text-red-500">*</span>}
-            </label>
+        <FormSection
+          title="Configuration"
+          isOpen={open === 'configuration'}
+          onToggle={() => toggle('configuration')}
+          requiredCount={required_fields.configuration}
+          satisfiedCount={fieldsSatisfied.configuration}
+        >
+          {configFields.map((field) => (
+            <div key={field.name}>
+              <label className="text-sm font-medium">
+                {field.label}
+                {field.required && <span className="text-red-500">*</span>}
+              </label>
 
-            {field.type === 'textarea' ? (
-              <textarea
-                className={`mt-1 w-full rounded-md border px-3 py-2 ${
-                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                }`}
-                name={field.name}
-                value={form[field.name] ?? ''}
-                onChange={handleChange}
-                placeholder={field.placeholder}
-                rows={field.name === 'description' ? 2 : 4}
-              />
-            ) : (
-              <input
-                className={`mt-1 w-full rounded-md border px-3 h-10 ${
-                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                }`}
-                name={field.name}
-                value={form[field.name] ?? ''}
-                onChange={handleChange}
-                placeholder={field.placeholder}
-              />
-            )}
+              {field.type === 'textarea' ? (
+                <textarea
+                  className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  name={field.name}
+                  value={form[field.name] ?? ''}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                  rows={field.name === 'description' ? 2 : 4}
+                />
+              ) : (
+                <input
+                  className={`mt-1 w-full rounded-md border px-3 h-10 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  name={field.name}
+                  value={form[field.name] ?? ''}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                />
+              )}
 
-            {/* 🔥 Inline validation message */}
-            {errors[field.name] && (
-              <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
-            )}
-          </div>
-        ))}
+              {/* 🔥 Inline validation message */}
+              {errors[field.name] && (
+                <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+              )}
+            </div>
+          ))}
+        </FormSection>
 
         <FormSection
           title="Timeline"
           isOpen={open === 'timeline'}
           onToggle={() => toggle('timeline')}
           requiredCount={required_fields.timeline}
-          satisfiedCount={sectionSats.timeline}
+          satisfiedCount={fieldsSatisfied.timeline}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {timelineFields.map((field) => (
@@ -671,7 +679,7 @@ const Upload = ({ machines }: UploadProps) => {
           isOpen={open === 'modelSetup'}
           onToggle={() => toggle('modelSetup')}
           requiredCount={required_fields.modelSetup}
-          satisfiedCount={sectionSats.modelSetup}
+          satisfiedCount={fieldsSatisfied.modelSetup}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {modelFields.map((field) => (
@@ -751,7 +759,7 @@ const Upload = ({ machines }: UploadProps) => {
           isOpen={open === 'paths'}
           onToggle={() => toggle('paths')}
           requiredCount={required_fields.paths}
-          satisfiedCount={sectionSats.paths}
+          satisfiedCount={fieldsSatisfied.paths}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {pathFields.map((field) => (
@@ -970,7 +978,7 @@ const Upload = ({ machines }: UploadProps) => {
             <button
               type="button"
               className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-              disabled={!allValid || Object.values(errors).some((e) => e && e.length > 0)}
+              disabled={!allFieldsValid || Object.values(errors).some((e) => e && e.length > 0)}
               onClick={handleSubmit}
             >
               Submit Simulation
@@ -979,10 +987,10 @@ const Upload = ({ machines }: UploadProps) => {
         </FormSection>
 
         <StickyActionsBar
-          disabled={!allValid || Object.values(errors).some((e) => e && e.length > 0)}
+          disabled={!allFieldsValid || Object.values(errors).some((e) => e && e.length > 0)}
           onSaveDraft={() => console.log('Save draft', form)}
           onNext={() => {
-            if (!allValid) {
+            if (!allFieldsValid) {
               window.scrollTo({ top: 0, behavior: 'smooth' });
               return;
             }
