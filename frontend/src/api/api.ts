@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosResponse } from "axios";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://127.0.0.1:8000/api';
 
-export type LogoutFn = () => void;
+export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
 
 export const registerLogoutHandler = (fn: LogoutFn): void => {
@@ -33,7 +33,7 @@ api.interceptors.response.use(
         requestUrl.includes(`${logoutEndpoint}/`);
 
       if (!isLogoutRequest) {
-        onLogout?.();
+          onLogout?.({ silent: true });
       }
     }
 
