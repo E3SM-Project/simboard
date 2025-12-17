@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { createSimulation } from '@/api/simulation';
 import FormSection from '@/pages/Upload/FormSection';
@@ -6,6 +6,8 @@ import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ArtifactIn } from '@/types/artifact';
 import { ExternalLinkIn } from '@/types/link';
+
+import LinkField from './LinkField';
 
 // -------------------- Types & Interfaces --------------------
 interface UploadProps {
@@ -21,10 +23,6 @@ type OpenKey =
   | 'docs'
   | 'review'
   | null;
-
-// -------------------- Pure Helpers --------------------
-const countValidfields = (fields: (string | null | undefined)[]) =>
-  fields.reduce((count, field) => (field ? count + 1 : count), 0);
 
 // -------------------- Initial Form State --------------------
 const initialState: SimulationCreateForm = {
@@ -82,13 +80,12 @@ const initialState: SimulationCreateForm = {
 const Upload = ({ machines }: UploadProps) => {
   const [open, setOpen] = useState<OpenKey>('configuration');
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [variables, setVariables] = useState<string[]>([]);
   const [diagLinks, setDiagLinks] = useState<{ label: string; url: string }[]>([]);
   const [paceLinks, setPaceLinks] = useState<{ label: string; url: string }[]>([]);
 
   // -------------------- Derived Data --------------------
-  const formWithVars = useMemo(() => ({ ...form, variables }), [form, variables]);
   // --- Configuration fields (matches initialState order)
   const configFields = useMemo(
     () => [
@@ -358,61 +355,93 @@ const Upload = ({ machines }: UploadProps) => {
     () => ({
       configuration: configFields.filter((f) => f.required).length,
       modelSetup: modelFields.filter((f) => f.required).length,
-      versionControl: versionFields.filter((f) => f.required).length,
       timeline: timelineFields.filter((f) => f.required).length,
+      versionControl: versionFields.filter((f) => f.required).length,
       paths: pathFields.filter((f) => f.required).length,
       docs: docFields.filter((f) => f.required).length,
       meta: metaFields.filter((f) => f.required).length,
       review: 0,
     }),
-    [configFields, modelFields, versionFields, timelineFields, pathFields, docFields, metaFields],
+    [configFields, modelFields, timelineFields, versionFields, pathFields, docFields, metaFields],
   );
-  // -------------------- Derived Data for Required Counts --------------------
-  const configSat = useMemo(() => {
-    const fields = [
-      form.name,
-      form.caseName,
-      form.compset,
-      form.compsetAlias,
-      form.gridName,
-      form.gridResolution,
+
+  const validateField = (name: string, value: any) => {
+    let error: string | null = null;
+
+    // 1. Required fields
+    const ALL_FIELDS = [
+      ...configFields,
+      ...modelFields,
+      ...timelineFields,
+      ...versionFields,
+      ...pathFields,
+      ...docFields,
+      ...metaFields,
     ];
-    return countValidfields(fields);
-  }, [
-    form.name,
-    form.caseName,
-    form.compset,
-    form.compsetAlias,
-    form.gridName,
-    form.gridResolution,
-  ]);
 
-  const modelSat = useMemo(() => {
-    const fields = [form.simulationType, form.status, form.machineId];
+    const fieldDef = ALL_FIELDS.find((f) => f.name === name);
 
-    return countValidfields(fields);
-  }, [form.simulationType, form.status, form.machineId]);
+    if (fieldDef?.required) {
+      if (
+        value === undefined ||
+        value === null ||
+        value === '' ||
+        (Array.isArray(value) && value.length === 0)
+      ) {
+        error = `${fieldDef.label} is required`;
+      }
+    }
 
-  const pathsSat = useMemo(() => {
-    const fields = [form.outputPath];
+    // 2. Special-case validation by name
+    if (!error) {
+      if (name === 'machineId') {
+        const isUuid = /^[0-9a-fA-F-]{36}$/.test(value);
+        if (!isUuid) error = 'Machine ID must be a valid UUID';
+      }
 
-    return countValidfields(fields);
-  }, [form.outputPath]);
+      if (name === 'simulationStartDate') {
+        const date = Date.parse(value);
+        if (isNaN(date)) error = 'Invalid start date';
+      }
+    }
 
-  const timelineSat = useMemo(() => {
-    const fields = [form.simulationStartDate];
+    setErrors((prev) => ({ ...prev, [name]: error ?? '' }));
+  };
 
-    return countValidfields(fields);
-  }, [form.simulationStartDate]);
+  // -------------------- Derived Data for Required Counts --------------------
+  // Count non-empty values
+  const isFilled = (v: unknown) => v !== null && v !== undefined && v !== '';
 
-  const allValid = useMemo(() => {
-    return (
-      configSat >= required_fields.configuration &&
-      modelSat >= required_fields.modelSetup &&
-      timelineSat >= required_fields.timeline &&
-      pathsSat >= required_fields.paths
-    );
-  }, [required_fields, configSat, modelSat, timelineSat, pathsSat]);
+  // Generic satisfied count calculator for required fields
+  const getSatisfiedCount = useCallback(
+    (fields: { name: string; required: boolean }[]) =>
+      fields.reduce((count, f) => {
+        if (!f.required) return count;
+        const v = form[f.name as keyof SimulationCreateForm];
+        return isFilled(v) ? count + 1 : count;
+      }, 0),
+    [form],
+  );
+
+  // Memoized section counts
+  const sectionSats = useMemo(
+    () => ({
+      config: getSatisfiedCount(configFields),
+      modelSetup: getSatisfiedCount(modelFields),
+      timeline: getSatisfiedCount(timelineFields),
+      paths: getSatisfiedCount(pathFields),
+    }),
+    [getSatisfiedCount, configFields, modelFields, timelineFields, pathFields],
+  );
+
+  const allValid = useMemo(
+    () =>
+      sectionSats.config >= required_fields.configuration &&
+      sectionSats.modelSetup >= required_fields.modelSetup &&
+      sectionSats.timeline >= required_fields.timeline &&
+      sectionSats.paths >= required_fields.paths,
+    [required_fields, sectionSats],
+  );
 
   // -------------------- Builders --------------------
   const buildArtifacts = (form: SimulationCreateForm): ArtifactIn[] => {
@@ -488,6 +517,8 @@ const Upload = ({ machines }: UploadProps) => {
         ...prev,
         [name]: value,
       }));
+
+      validateField(name, value);
     }
   };
 
@@ -522,6 +553,38 @@ const Upload = ({ machines }: UploadProps) => {
     createSimulation(payload);
   };
 
+  // -------------------- Development Checks --------------------
+  useEffect(() => {
+    // Run this check only in development mode.
+    if (!import.meta.env.DEV) return;
+
+    const uiFields = [
+      ...configFields,
+      ...modelFields,
+      ...versionFields,
+      ...timelineFields,
+      ...docFields,
+      ...metaFields,
+      ...pathFields,
+    ].map((f) => f.name);
+
+    // Fields intentionally ignored (appear in state, not UI)
+    const ignore = new Set(['artifacts', 'links']);
+
+    const stateKeys = Object.keys(initialState).filter((k) => !ignore.has(k));
+
+    const missingInUI = stateKeys.filter((k) => !uiFields.includes(k));
+    const missingInState = uiFields.filter((k) => !stateKeys.includes(k));
+
+    if (missingInUI.length || missingInState.length) {
+      console.group('⚠️ Field mismatch detected');
+      if (missingInUI.length) console.log('State fields missing UI:', missingInUI);
+      if (missingInState.length) console.log('UI fields missing state:', missingInState);
+
+      console.groupEnd();
+    }
+  }, [configFields, modelFields, versionFields, timelineFields, docFields, metaFields, pathFields]);
+
   // -------------------- Render --------------------
   return (
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
@@ -533,51 +596,49 @@ const Upload = ({ machines }: UploadProps) => {
           </p>
         </header>
 
-        {/* Configuration Section */}
-        <FormSection
-          title="Configuration"
-          isOpen={open === 'configuration'}
-          onToggle={() => toggle('configuration')}
-          requiredCount={required_fields.configuration}
-          satisfiedCount={configSat}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {configFields.map((field) => (
-              <div key={field.name}>
-                <label className="text-sm font-medium">
-                  {field.label}
-                  {field.required && <span className="text-red-500">*</span>}
-                </label>
-                {field.type === 'textarea' ? (
-                  <textarea
-                    className="mt-1 w-full rounded-md border px-3 py-2"
-                    name={field.name}
-                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
-                    onChange={handleChange}
-                    placeholder={field.placeholder}
-                    rows={field.name === 'description' ? 2 : 4}
-                  />
-                ) : (
-                  <input
-                    className="mt-1 w-full h-10 rounded-md border px-3"
-                    name={field.name}
-                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
-                    onChange={handleChange}
-                    placeholder={field.placeholder}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </FormSection>
+        {configFields.map((field) => (
+          <div key={field.name}>
+            <label className="text-sm font-medium">
+              {field.label}
+              {field.required && <span className="text-red-500">*</span>}
+            </label>
 
-        {/* Timeline Section */}
+            {field.type === 'textarea' ? (
+              <textarea
+                className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                }`}
+                name={field.name}
+                value={form[field.name] ?? ''}
+                onChange={handleChange}
+                placeholder={field.placeholder}
+                rows={field.name === 'description' ? 2 : 4}
+              />
+            ) : (
+              <input
+                className={`mt-1 w-full rounded-md border px-3 h-10 ${
+                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                }`}
+                name={field.name}
+                value={form[field.name] ?? ''}
+                onChange={handleChange}
+                placeholder={field.placeholder}
+              />
+            )}
+
+            {/* 🔥 Inline validation message */}
+            {errors[field.name] && (
+              <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+            )}
+          </div>
+        ))}
+
         <FormSection
           title="Timeline"
           isOpen={open === 'timeline'}
           onToggle={() => toggle('timeline')}
           requiredCount={required_fields.timeline}
-          satisfiedCount={timelineSat}
+          satisfiedCount={sectionSats.timeline}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {timelineFields.map((field) => (
@@ -585,30 +646,32 @@ const Upload = ({ machines }: UploadProps) => {
                 <label className="text-sm font-medium">
                   {field.label}
                   {field.required && <span className="text-red-500">*</span>}
-                  {!field.required && (
-                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-                  )}
                 </label>
+
                 <input
-                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   type={field.type}
                   name={field.name}
-                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  value={form[field.name] ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
+
+                {errors[field.name] && (
+                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                )}
               </div>
             ))}
           </div>
         </FormSection>
-
-        {/* Model Setup Section */}
         <FormSection
           title="Model Setup"
           isOpen={open === 'modelSetup'}
           onToggle={() => toggle('modelSetup')}
           requiredCount={required_fields.modelSetup}
-          satisfiedCount={modelSat}
+          satisfiedCount={sectionSats.modelSetup}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {modelFields.map((field) => (
@@ -616,16 +679,15 @@ const Upload = ({ machines }: UploadProps) => {
                 <label className="text-sm font-medium">
                   {field.label}
                   {field.required && <span className="text-red-500">*</span>}
-                  {!field.required && (
-                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-                  )}
                 </label>
+
                 {field.type === 'select' ? (
-                  // $SELECT_PLACEHOLDER$
                   <select
-                    className="mt-1 w-full h-10 rounded-md border px-3"
+                    className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     name={field.name}
-                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    value={form[field.name] ?? ''}
                     onChange={handleChange}
                   >
                     <option value="">Select...</option>
@@ -637,19 +699,23 @@ const Upload = ({ machines }: UploadProps) => {
                   </select>
                 ) : (
                   <input
-                    className="mt-1 w-full h-10 rounded-md border px-3"
+                    className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     name={field.name}
-                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    value={form[field.name] ?? ''}
                     onChange={handleChange}
                     placeholder={field.placeholder}
                   />
+                )}
+
+                {errors[field.name] && (
+                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
                 )}
               </div>
             ))}
           </div>
         </FormSection>
-
-        {/* Version Control Section */}
         <FormSection
           title="Version Control"
           isOpen={open === 'versionControl'}
@@ -660,32 +726,32 @@ const Upload = ({ machines }: UploadProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {versionFields.map((field) => (
               <div key={field.name}>
-                <label className="text-sm font-medium">
-                  {field.label}
-                  {field.required && <span className="text-red-500">*</span>}
-                  {!field.required && (
-                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-                  )}
-                </label>
+                <label className="text-sm font-medium">{field.label}</label>
+
                 <input
-                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   name={field.name}
-                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  value={form[field.name] ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
+
+                {errors[field.name] && (
+                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                )}
               </div>
             ))}
           </div>
         </FormSection>
 
-        {/* Data Paths & Scripts Section */}
         <FormSection
           title="Data Paths & Scripts"
           isOpen={open === 'paths'}
           onToggle={() => toggle('paths')}
           requiredCount={required_fields.paths}
-          satisfiedCount={pathsSat}
+          satisfiedCount={sectionSats.paths}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {pathFields.map((field) => (
@@ -693,21 +759,25 @@ const Upload = ({ machines }: UploadProps) => {
                 <label className="text-sm font-medium">
                   {field.label}
                   {field.required && <span className="text-red-500">*</span>}
-                  {!field.required && (
-                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-                  )}
                 </label>
+
                 <input
-                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   name={field.name}
                   value={
-                    Array.isArray(form[field.name as keyof SimulationCreateForm])
-                      ? (form[field.name as keyof SimulationCreateForm] as string[]).join(', ')
-                      : (form[field.name as keyof SimulationCreateForm] ?? '')
+                    Array.isArray(form[field.name])
+                      ? form[field.name].join(', ')
+                      : (form[field.name] ?? '')
                   }
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
+
+                {errors[field.name] && (
+                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                )}
               </div>
             ))}
           </div>
@@ -720,57 +790,14 @@ const Upload = ({ machines }: UploadProps) => {
           onToggle={() => toggle('docs')}
         >
           <div className="space-y-6">
-            {/* Diagnostic Links */}
-            <div>
-              <div className="font-medium mb-2">
-                Diagnostic Links <span className="text-xs text-muted-foreground">(optional)</span>
-              </div>
-              {diagLinks.map((lnk, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <input
-                    className="w-1/3 h-10 rounded-md border px-3"
-                    placeholder="Label"
-                    value={lnk.label}
-                    onChange={(e) => setDiag(i, 'label', e.target.value)}
-                  />
-                  <input
-                    className="w-2/3 h-10 rounded-md border px-3"
-                    placeholder="URL"
-                    value={lnk.url}
-                    onChange={(e) => setDiag(i, 'url', e.target.value)}
-                  />
-                </div>
-              ))}
-              <button type="button" className="text-sm text-blue-600 underline" onClick={addDiag}>
-                + Add Link
-              </button>
-            </div>
+            <LinkField
+              title="Diagnostic Links"
+              links={diagLinks}
+              onAdd={addDiag}
+              onChange={setDiag}
+            />
 
-            {/* PACE Links */}
-            <div>
-              <div className="font-medium mb-2">
-                PACE Links <span className="text-xs text-muted-foreground">(optional)</span>
-              </div>
-              {paceLinks.map((lnk, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <input
-                    className="w-1/3 h-10 rounded-md border px-3"
-                    placeholder="Label"
-                    value={lnk.label}
-                    onChange={(e) => setPace(i, 'label', e.target.value)}
-                  />
-                  <input
-                    className="w-2/3 h-10 rounded-md border px-3"
-                    placeholder="URL"
-                    value={lnk.url}
-                    onChange={(e) => setPace(i, 'url', e.target.value)}
-                  />
-                </div>
-              ))}
-              <button type="button" className="text-sm text-blue-600 underline" onClick={addPace}>
-                + Add Link
-              </button>
-            </div>
+            <LinkField title="PACE Links" links={paceLinks} onAdd={addPace} onChange={setPace} />
 
             {/* Documentation Fields */}
             {docFields.map((field) => (
@@ -798,24 +825,26 @@ const Upload = ({ machines }: UploadProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {metaFields.map((field) => (
               <div key={field.name}>
-                <label className="text-sm font-medium">
-                  {field.label}
-                  {!field.required && (
-                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-                  )}
-                </label>
+                <label className="text-sm font-medium">{field.label}</label>
+
                 <textarea
-                  className="mt-1 w-full rounded-md border px-3 py-2"
+                  className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   name={field.name}
                   value={
                     field.name === 'extra'
                       ? JSON.stringify(form.extra ?? {}, null, 2)
-                      : (form[field.name as keyof SimulationCreateForm] ?? '')
+                      : (form[field.name] ?? '')
                   }
                   onChange={handleChange}
                   placeholder={field.placeholder}
                   rows={4}
                 />
+
+                {errors[field.name] && (
+                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                )}
               </div>
             ))}
           </div>
@@ -941,7 +970,7 @@ const Upload = ({ machines }: UploadProps) => {
             <button
               type="button"
               className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-              disabled={!allValid}
+              disabled={!allValid || Object.values(errors).some((e) => e && e.length > 0)}
               onClick={handleSubmit}
             >
               Submit Simulation
@@ -950,8 +979,8 @@ const Upload = ({ machines }: UploadProps) => {
         </FormSection>
 
         <StickyActionsBar
-          disabled={!allValid}
-          onSaveDraft={() => console.log('Save draft', formWithVars)}
+          disabled={!allValid || Object.values(errors).some((e) => e && e.length > 0)}
+          onSaveDraft={() => console.log('Save draft', form)}
           onNext={() => {
             if (!allValid) {
               window.scrollTo({ top: 0, behavior: 'smooth' });
