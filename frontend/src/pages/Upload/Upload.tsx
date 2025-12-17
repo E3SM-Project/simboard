@@ -602,6 +602,83 @@ const Upload = ({ machines }: UploadProps) => {
           </div>
         </FormSection>
 
+        {/* Model Setup Section */}
+        <FormSection
+          title="Model Setup"
+          isOpen={open === 'modelSetup'}
+          onToggle={() => toggle('modelSetup')}
+          requiredCount={required_fields.modelSetup}
+          satisfiedCount={modelSat}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {modelFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-red-500">*</span>}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                {field.type === 'select' ? (
+                  // $SELECT_PLACEHOLDER$
+                  <select
+                    className="mt-1 w-full h-10 rounded-md border px-3"
+                    name={field.name}
+                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    onChange={handleChange}
+                  >
+                    <option value="">Select...</option>
+                    {field.options?.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="mt-1 w-full h-10 rounded-md border px-3"
+                    name={field.name}
+                    value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </FormSection>
+
+        {/* Version Control Section */}
+        <FormSection
+          title="Version Control"
+          isOpen={open === 'versionControl'}
+          onToggle={() => toggle('versionControl')}
+          requiredCount={required_fields.versionControl}
+          satisfiedCount={0}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {versionFields.map((field) => (
+              <div key={field.name}>
+                <label className="text-sm font-medium">
+                  {field.label}
+                  {field.required && <span className="text-red-500">*</span>}
+                  {!field.required && (
+                    <span className="text-xs text-muted-foreground ml-1">(optional)</span>
+                  )}
+                </label>
+                <input
+                  className="mt-1 w-full h-10 rounded-md border px-3"
+                  name={field.name}
+                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                />
+              </div>
+            ))}
+          </div>
+        </FormSection>
+
         {/* Data Paths & Scripts Section */}
         <FormSection
           title="Data Paths & Scripts"
@@ -717,12 +794,7 @@ const Upload = ({ machines }: UploadProps) => {
           </div>
         </FormSection>
 
-        {/* Ownership & Metadata Section */}
-        <FormSection
-          title="Ownership & Metadata"
-          isOpen={open === 'meta'}
-          onToggle={() => toggle('meta')}
-        >
+        <FormSection title="Metadata" isOpen={open === 'meta'} onToggle={() => toggle('meta')}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {metaFields.map((field) => (
               <div key={field.name}>
@@ -749,7 +821,6 @@ const Upload = ({ machines }: UploadProps) => {
           </div>
         </FormSection>
 
-        {/* Review & Submit Section */}
         <FormSection
           title="Review & Submit"
           isOpen={open === 'review'}
