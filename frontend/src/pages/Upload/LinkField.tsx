@@ -13,7 +13,7 @@ interface LinkFieldProps {
   optionalText?: string;
 }
 
-const LinkField: React.FC<LinkFieldProps> = ({
+export const LinkField: React.FC<LinkFieldProps> = ({
   title,
   links,
   onChange,
@@ -45,5 +45,3 @@ const LinkField: React.FC<LinkFieldProps> = ({
     </button>
   </div>
 );
-
-export default LinkField;

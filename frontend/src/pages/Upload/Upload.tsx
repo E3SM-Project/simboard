@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { createSimulation } from '@/api/simulation';
+import { FieldList } from '@/pages/Upload/FieldList';
 import FormSection from '@/pages/Upload/FormSection';
+import { LinkField } from '@/pages/Upload/LinkField';
+import { ReviewSection } from '@/pages/Upload/ReviewSection';
 import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ArtifactIn } from '@/types/artifact';
 import { ExternalLinkIn } from '@/types/link';
-
-import LinkField from './LinkField';
 
 // -------------------- Types & Interfaces --------------------
 interface UploadProps {
@@ -21,7 +22,7 @@ type OpenKey =
   | 'timeline'
   | 'paths'
   | 'docs'
-  | 'review'
+  | 'meta'
   | null;
 
 // -------------------- Initial Form State --------------------
@@ -78,9 +79,11 @@ const initialState: SimulationCreateForm = {
 
 // -------------------- Component --------------------
 const Upload = ({ machines }: UploadProps) => {
-  const [open, setOpen] = useState<OpenKey>('configuration');
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [openSection, setOpenSection] = useState<OpenKey>('configuration');
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const [diagLinks, setDiagLinks] = useState<{ label: string; url: string }[]>([]);
   const [paceLinks, setPaceLinks] = useState<{ label: string; url: string }[]>([]);
@@ -222,7 +225,7 @@ const Upload = ({ machines }: UploadProps) => {
         label: 'Repository URL',
         name: 'gitRepositoryUrl',
         required: false,
-        type: 'text',
+        type: 'url',
         placeholder: 'https://github.com/org/repo',
       },
       {
@@ -522,7 +525,7 @@ const Upload = ({ machines }: UploadProps) => {
     }
   };
 
-  const toggle = (k: OpenKey) => setOpen((prev) => (prev === k ? null : k));
+  const toggle = (k: OpenKey) => setOpenSection((prev) => (prev === k ? null : k));
 
   const addDiag = () => setDiagLinks([...diagLinks, { label: '', url: '' }]);
   const setDiag = (i: number, field: 'label' | 'url', v: string) => {
@@ -598,7 +601,7 @@ const Upload = ({ machines }: UploadProps) => {
 
         <FormSection
           title="Configuration"
-          isOpen={open === 'configuration'}
+          isOpen={openSection === 'configuration'}
           onToggle={() => toggle('configuration')}
           requiredCount={required_fields.configuration}
           satisfiedCount={fieldsSatisfied.configuration}
@@ -643,7 +646,7 @@ const Upload = ({ machines }: UploadProps) => {
 
         <FormSection
           title="Timeline"
-          isOpen={open === 'timeline'}
+          isOpen={openSection === 'timeline'}
           onToggle={() => toggle('timeline')}
           requiredCount={required_fields.timeline}
           satisfiedCount={fieldsSatisfied.timeline}
@@ -676,7 +679,7 @@ const Upload = ({ machines }: UploadProps) => {
         </FormSection>
         <FormSection
           title="Model Setup"
-          isOpen={open === 'modelSetup'}
+          isOpen={openSection === 'modelSetup'}
           onToggle={() => toggle('modelSetup')}
           requiredCount={required_fields.modelSetup}
           satisfiedCount={fieldsSatisfied.modelSetup}
@@ -726,7 +729,7 @@ const Upload = ({ machines }: UploadProps) => {
         </FormSection>
         <FormSection
           title="Version Control"
-          isOpen={open === 'versionControl'}
+          isOpen={openSection === 'versionControl'}
           onToggle={() => toggle('versionControl')}
           requiredCount={required_fields.versionControl}
           satisfiedCount={0}
@@ -756,7 +759,7 @@ const Upload = ({ machines }: UploadProps) => {
 
         <FormSection
           title="Data Paths & Scripts"
-          isOpen={open === 'paths'}
+          isOpen={openSection === 'paths'}
           onToggle={() => toggle('paths')}
           requiredCount={required_fields.paths}
           satisfiedCount={fieldsSatisfied.paths}
@@ -794,7 +797,7 @@ const Upload = ({ machines }: UploadProps) => {
         {/* Documentation & Notes Section */}
         <FormSection
           title="Documentation & Notes"
-          isOpen={open === 'docs'}
+          isOpen={openSection === 'docs'}
           onToggle={() => toggle('docs')}
         >
           <div className="space-y-6">
@@ -829,7 +832,11 @@ const Upload = ({ machines }: UploadProps) => {
           </div>
         </FormSection>
 
-        <FormSection title="Metadata" isOpen={open === 'meta'} onToggle={() => toggle('meta')}>
+        <FormSection
+          title="Metadata"
+          isOpen={openSection === 'meta'}
+          onToggle={() => toggle('meta')}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {metaFields.map((field) => (
               <div key={field.name}>
@@ -860,106 +867,57 @@ const Upload = ({ machines }: UploadProps) => {
 
         <FormSection
           title="Review & Submit"
-          isOpen={open === 'review'}
-          onToggle={() => toggle('review')}
+          isOpen={reviewOpen}
+          onToggle={() => setReviewOpen((v) => !v)}
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="space-y-1">
-                <div>
-                  <strong>Name:</strong> {form.name || '—'}
-                </div>
-                <div>
-                  <strong>Case Name:</strong> {form.caseName || '—'}
-                </div>
-                <div>
-                  <strong>Compset:</strong> {form.compset || '—'}
-                </div>
-                <div>
-                  <strong>Compset Alias:</strong> {form.compsetAlias || '—'}
-                </div>
-                <div>
-                  <strong>Grid Name:</strong> {form.gridName || '—'}
-                </div>
-                <div>
-                  <strong>Grid Resolution:</strong> {form.gridResolution || '—'}
-                </div>
-                <div>
-                  <strong>Initialization Type:</strong> {form.initializationType || '—'}
-                </div>
-                <div>
-                  <strong>Parent Simulation ID:</strong> {form.parentSimulationId || '—'}
-                </div>
+            <ReviewSection title="Configuration">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <FieldList form={form} fields={configFields} />
               </div>
-              <div className="space-y-1">
-                <div>
-                  <strong>Simulation Type:</strong> {form.simulationType || '—'}
-                </div>
-                <div>
-                  <strong>Status:</strong> {form.status || '—'}
-                </div>
-                <div>
-                  <strong>Campaign:</strong> {form.campaignId || '—'}
-                </div>
-                <div>
-                  <strong>Experiment Type:</strong> {form.experimentTypeId || '—'}
-                </div>
-                <div>
-                  <strong>Machine ID:</strong> {form.machineId || '—'}
-                </div>
-                <div>
-                  <strong>Compiler:</strong> {form.compiler || '—'}
-                </div>
+            </ReviewSection>
+
+            <ReviewSection title="Model Setup">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <FieldList form={form} fields={modelFields} />
               </div>
-            </div>
+            </ReviewSection>
 
-            <div className="text-sm">
-              <strong>Repository URL:</strong> {form.gitRepositoryUrl || '—'}
-              <br />
-              <strong>Branch:</strong> {form.gitBranch || '—'}
-              <br />
-              <strong>Tag:</strong> {form.gitTag || '—'}
-              <br />
-              <strong>Commit Hash:</strong> {form.gitCommitHash || '—'}
-            </div>
+            <ReviewSection title="Version Control">
+              <FieldList form={form} fields={versionFields} />
+            </ReviewSection>
 
-            <div className="text-sm">
-              <strong>Simulation Start Date:</strong> {form.simulationStartDate || '—'}
-              <br />
-              <strong>Simulation End Date:</strong> {form.simulationEndDate || '—'}
-              <br />
-              <strong>Run Start Date:</strong> {form.runStartDate || '—'}
-              <br />
-              <strong>Run End Date:</strong> {form.runEndDate || '—'}
-            </div>
+            <ReviewSection title="Timeline">
+              <FieldList form={form} fields={timelineFields} />
+            </ReviewSection>
 
-            <div className="text-sm">
-              <strong>Output Path:</strong> {form.outputPath || '—'}
-              <br />
-              <strong>Archive Paths:</strong> {(form.archivePaths || []).join(', ') || '—'}
-              <br />
-              <strong>Run Scripts:</strong> {(form.runScriptPaths || []).join(', ') || '—'}
-              <br />
-              <strong>Postprocessing Scripts:</strong>{' '}
-              {(form.postprocessingScriptPaths || []).join(', ') || '—'}
-            </div>
+            <ReviewSection title="Data Paths & Scripts">
+              <FieldList form={form} fields={pathFields} />
+            </ReviewSection>
 
-            <div className="text-sm">
-              <strong>Diagnostic Links:</strong>
-              <ul className="list-disc ml-6">
-                {diagLinks.map((l, i) => (
-                  <li key={i}>
-                    {l.label ? `${l.label}: ` : ''}
-                    <a href={l.url} className="text-blue-600 underline">
-                      {l.url}
-                    </a>
-                  </li>
-                ))}
-                {diagLinks.length === 0 ? (
-                  <li className="list-none text-muted-foreground">—</li>
-                ) : null}
-              </ul>
-            </div>
+            <ReviewSection title="Group: Diagnostic Links">
+              <div className="text-sm">
+                <ul className="list-disc ml-6">
+                  {diagLinks.length === 0 ? (
+                    <li className="list-none text-muted-foreground">—</li>
+                  ) : (
+                    diagLinks.map((l, i) => (
+                      <li key={i}>
+                        {l.label ? `${l.label}: ` : ''}
+                        <a
+                          href={l.url}
+                          className="text-blue-600 underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {l.url}
+                        </a>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </ReviewSection>
           </div>
 
           <div className="mt-4 flex gap-2">
@@ -968,7 +926,6 @@ const Upload = ({ machines }: UploadProps) => {
               className="border px-5 py-2 rounded-md"
               onClick={() => {
                 setForm(initialState);
-                setVariables([]);
                 setDiagLinks([]);
                 setPaceLinks([]);
               }}
@@ -994,7 +951,7 @@ const Upload = ({ machines }: UploadProps) => {
               window.scrollTo({ top: 0, behavior: 'smooth' });
               return;
             }
-            setOpen('review');
+            setOpenSection('review');
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
           }}
         />
