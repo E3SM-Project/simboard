@@ -63,8 +63,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Create non-root user for runtime safety
-RUN adduser --disabled-password --gecos "" appuser
-USER appuser
+# NOTE: Might not need to do this in Spinup environments, need follow up with John.
+# RUN adduser --disabled-password --gecos "" appuser
+# USER appuser
 
 EXPOSE 8000
 

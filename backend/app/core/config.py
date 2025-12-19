@@ -48,6 +48,8 @@ def get_env_file(project_root: Path | None = None) -> str | None:
             "Create it or set CI=true to rely on environment variables."
         )
 
+    # TODO: Validate that required env vars are present?
+
     return str(env_file)
 
 

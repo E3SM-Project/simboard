@@ -17,7 +17,7 @@ COPY pnpm-lock.yaml package.json ./
 
 # Install dependencies (with caching)
 RUN --mount=type=cache,target=/root/.pnpm-store \
-    --mount=type=cache,target=node_modules \
+    # --mount=type=cache,target=node_modules \
     pnpm install --frozen-lockfile
 
 # Copy source code

@@ -89,13 +89,12 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
-
-    https:
-      finalKey && finalCert
-        ? {
-            key: fs.readFileSync(finalKey),
-            cert: fs.readFileSync(finalCert),
-          }
-        : undefined,
+    // https:
+    //   finalKey && finalCert
+    //     ? {
+    //         key: fs.readFileSync(finalKey),
+    //         cert: fs.readFileSync(finalCert),
+    //       }
+    //     : undefined,
   },
 });
