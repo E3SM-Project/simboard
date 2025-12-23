@@ -1,6 +1,10 @@
+import axios from 'axios';
+import { CheckCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { createSimulation } from '@/api/simulation';
+import { toast } from '@/hooks/use-toast';
 import { FieldList } from '@/pages/Upload/FieldList';
 import FormSection from '@/pages/Upload/FormSection';
 import { LinkField } from '@/pages/Upload/LinkField';
@@ -78,8 +82,11 @@ const initialState: SimulationCreateForm = {
 
 // -------------------- Component --------------------
 const Upload = ({ machines }: UploadProps) => {
+  const navigate = useNavigate();
+
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [openSection, setOpenSection] = useState<OpenKey>('configuration');
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -539,6 +546,8 @@ const Upload = ({ machines }: UploadProps) => {
 
   // -------------------- Handlers --------------------
   const handleSubmit = async () => {
+    setIsSubmitting(true);
+
     const artifacts = buildArtifacts(form);
     const links = buildLinks(diagLinks, paceLinks);
 
@@ -549,7 +558,50 @@ const Upload = ({ machines }: UploadProps) => {
       links,
     };
 
-    createSimulation(payload);
+    try {
+      const simulation = await createSimulation(payload);
+
+      toast({
+        title: (
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            <span>Simulation created</span>
+          </div>
+        ),
+        description: 'Your simulation has been successfully created.',
+      });
+
+      navigate(`/simulations/${simulation.id}`, {
+        state: { justCreated: true },
+      });
+    } catch (error) {
+      console.error('Failed to create simulation:', error);
+
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const detail = error.response?.data?.detail;
+
+        if (status === 409) {
+          toast({
+            title: 'Simulation already exists',
+            description:
+              typeof detail === 'string'
+                ? detail
+                : 'A simulation with the same name or case already exists.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
+      toast({
+        title: 'Upload failed',
+        description: 'We could not create the simulation. Please review the form and try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // -------------------- Development Checks --------------------
@@ -727,7 +779,7 @@ const Upload = ({ machines }: UploadProps) => {
           isOpen={openSection === 'versionControl'}
           onToggle={() => toggle('versionControl')}
           requiredCount={requiredFields.versionControl}
-          satisfiedCount={0}
+          satisfiedCount={getSatisfiedCount(versionFields)}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {versionFields.map((field) => (
@@ -1046,7 +1098,7 @@ const Upload = ({ machines }: UploadProps) => {
             <button
               type="button"
               className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-              disabled={Object.values(errors).some(Boolean) || !allFieldsValid}
+              disabled={Object.values(errors).some(Boolean) || !allFieldsValid || isSubmitting}
               onClick={handleSubmit}
             >
               Submit Simulation
