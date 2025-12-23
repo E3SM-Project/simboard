@@ -5,12 +5,13 @@ import { useNavigate } from 'react-router-dom';
 
 import { createSimulation } from '@/api/simulation';
 import { toast } from '@/hooks/use-toast';
+import { ConfirmResetDialog } from '@/pages/Upload/ConfirmResetDialog';
 import { FieldList } from '@/pages/Upload/FieldList';
 import FormSection from '@/pages/Upload/FormSection';
 import { LinkField } from '@/pages/Upload/LinkField';
 import { ReviewSection } from '@/pages/Upload/ReviewSection';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
-import { ArtifactIn } from '@/types/artifact';
+import { ARTIFACT_KIND_MAP, ArtifactIn } from '@/types/artifact';
 import { ExternalLinkIn } from '@/types/link';
 
 // -------------------- Types & Interfaces --------------------
@@ -326,7 +327,7 @@ const Upload = ({ machines }: UploadProps) => {
   const pathFields = useMemo(
     () => [
       {
-        label: 'Output Path',
+        label: 'Output Path (single directory)',
         name: 'outputPath',
         required: true,
         type: 'text',
@@ -372,7 +373,7 @@ const Upload = ({ machines }: UploadProps) => {
     [configFields, modelFields, timelineFields, versionFields, pathFields, docFields, metaFields],
   );
 
-  const validateField = (name: string, value: any) => {
+  const validateField = (name: string, value: unknown) => {
     let error: string | null = null;
 
     // 1. Required fields
@@ -402,12 +403,18 @@ const Upload = ({ machines }: UploadProps) => {
     // 2. Special-case validation by name
     if (!error) {
       if (name === 'machineId') {
-        const isUuid = /^[0-9a-fA-F-]{36}$/.test(value);
-        if (!isUuid) error = 'Machine ID must be a valid UUID';
+        if (value === undefined || value === null || value === '') {
+          // Ensure empty machineId is always treated as required,
+          // even if the field definition is not marked as required
+          error = 'Machine ID is required';
+        } else {
+          const isUuid = /^[0-9a-fA-F-]{36}$/.test(String(value));
+          if (!isUuid) error = 'Machine ID must be a valid UUID';
+        }
       }
 
       if (name === 'simulationStartDate') {
-        const date = Date.parse(value);
+        const date = Date.parse(String(value));
         if (isNaN(date)) error = 'Invalid start date';
       }
     }
@@ -454,18 +461,33 @@ const Upload = ({ machines }: UploadProps) => {
   const buildArtifacts = (form: SimulationCreateForm): ArtifactIn[] => {
     const artifacts: ArtifactIn[] = [];
 
-    if (form.outputPath) artifacts.push({ kind: 'output', uri: form.outputPath });
+    if (form.outputPath) {
+      artifacts.push({
+        kind: ARTIFACT_KIND_MAP.outputPath,
+        uri: form.outputPath,
+      });
+    }
 
-    if (form.archivePaths?.length)
-      form.archivePaths.forEach((p: string) => artifacts.push({ kind: 'archive', uri: p }));
+    form.archivePaths?.forEach((path) => {
+      artifacts.push({
+        kind: ARTIFACT_KIND_MAP.archivePaths,
+        uri: path,
+      });
+    });
 
-    if (form.runScriptPaths?.length)
-      form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', uri: p }));
+    form.runScriptPaths?.forEach((path) => {
+      artifacts.push({
+        kind: ARTIFACT_KIND_MAP.runScriptPaths,
+        uri: path,
+      });
+    });
 
-    if (form.postprocessingScriptPaths?.length)
-      form.postprocessingScriptPaths.forEach((p: string) =>
-        artifacts.push({ kind: 'postprocessingScript', uri: p }),
-      );
+    form.postprocessingScriptPaths?.forEach((path) => {
+      artifacts.push({
+        kind: ARTIFACT_KIND_MAP.postprocessingScriptPaths,
+        uri: path,
+      });
+    });
 
     return artifacts;
   };
@@ -475,16 +497,37 @@ const Upload = ({ machines }: UploadProps) => {
     paceLinks: { label: string; url: string }[],
   ): ExternalLinkIn[] => {
     const links: ExternalLinkIn[] = [];
-    diagLinks.forEach((l) =>
-      links.push({ kind: 'diagnostic', url: l.url, label: l.label || null }),
-    );
-    paceLinks.forEach((l) =>
-      links.push({ kind: 'performance', url: l.url, label: l.label || null }),
-    );
+    diagLinks.forEach((l) => {
+      if (l.label.trim() && l.url.trim()) {
+        links.push({ kind: 'diagnostic', url: l.url, label: l.label || null });
+      }
+    });
+    paceLinks.forEach((l) => {
+      if (l.label.trim() && l.url.trim()) {
+        links.push({ kind: 'performance', url: l.url, label: l.label || null });
+      }
+    });
+
     return links;
   };
 
   // -------------------- Handlers --------------------
+
+  const ARRAY_FIELDS = new Set(['archivePaths', 'runScriptPaths', 'postprocessingScriptPaths']);
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+
+    if (!ARRAY_FIELDS.has(name)) return;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }));
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
@@ -492,18 +535,13 @@ const Upload = ({ machines }: UploadProps) => {
 
     let normalizedValue: unknown = value;
 
-    if (
-      name === 'archivePaths' ||
-      name === 'runScriptPaths' ||
-      name === 'postprocessingScriptPaths'
-    ) {
-      normalizedValue = value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    } else if (name === 'simulationEndDate' || name === 'runStartDate' || name === 'runEndDate') {
+    // Dates → empty string becomes null
+    if (name === 'simulationEndDate' || name === 'runStartDate' || name === 'runEndDate') {
       normalizedValue = value || null;
-    } else if (name === 'extra') {
+    }
+
+    // JSON field
+    else if (name === 'extra') {
       try {
         normalizedValue = value ? JSON.parse(value) : {};
         setErrors((prev) => ({ ...prev, [name]: '' }));
@@ -588,6 +626,7 @@ const Upload = ({ machines }: UploadProps) => {
                 : 'A simulation with the same name or case already exists.',
             variant: 'destructive',
           });
+
           return;
         }
       }
@@ -665,6 +704,24 @@ const Upload = ({ machines }: UploadProps) => {
   }, [configFields, modelFields, versionFields, timelineFields, docFields, metaFields, pathFields]);
 
   // -------------------- Render --------------------
+  const renderErrorList = (
+    errors: Record<string, string>,
+    fields: { name: string; label: string }[],
+  ): React.ReactNode => {
+    return Object.entries(errors)
+      .filter(([_, msg]) => !!msg)
+      .map(([field, msg]) => {
+        const fieldDef = fields.find((f) => f.name === field);
+        const label = fieldDef ? fieldDef.label : field;
+
+        return (
+          <li key={field}>
+            <span className="font-semibold">{label}:</span> {String(msg)}
+          </li>
+        );
+      });
+  };
+
   return (
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
@@ -859,6 +916,7 @@ const Upload = ({ machines }: UploadProps) => {
                       : (form[field.name] ?? '')
                   }
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder={field.placeholder}
                 />
 
@@ -983,42 +1041,26 @@ const Upload = ({ machines }: UploadProps) => {
               <div className="mt-2 text-red-600 text-sm">
                 Please fix the errors above before submitting.
                 <ul className="list-disc ml-6 mt-1">
-                  {Object.entries(errors)
-                    .filter(([_, msg]) => !!msg)
-                    .map(([field, msg]) => {
-                      // Find the label for the field
-                      const allFields = [
-                        ...configFields,
-                        ...modelFields,
-                        ...versionFields,
-                        ...timelineFields,
-                        ...docFields,
-                        ...metaFields,
-                        ...pathFields,
-                      ];
-                      const fieldDef = allFields.find((f) => f.name === field);
-                      const label = fieldDef ? fieldDef.label : field;
-                      return (
-                        <li key={field}>
-                          <span className="font-semibold">{label}:</span> {msg}
-                        </li>
-                      );
-                    })}
+                  {renderErrorList(errors, [
+                    ...configFields,
+                    ...modelFields,
+                    ...versionFields,
+                    ...timelineFields,
+                    ...docFields,
+                    ...metaFields,
+                    ...pathFields,
+                  ])}
                 </ul>
               </div>
             )}
           </div>
           <div className="space-y-4">
             <ReviewSection title="Configuration">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <FieldList form={form} fields={configFields} />
-              </div>
+              <FieldList form={form} fields={configFields} />
             </ReviewSection>
 
             <ReviewSection title="Model Setup">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <FieldList form={form} fields={modelFields} />
-              </div>
+              <FieldList form={form} fields={modelFields} />
             </ReviewSection>
 
             <ReviewSection title="Version Control">
@@ -1032,99 +1074,35 @@ const Upload = ({ machines }: UploadProps) => {
             <ReviewSection title="Data Paths & Scripts">
               <FieldList form={form} fields={pathFields} />
             </ReviewSection>
-
             <ReviewSection title="Diagnostic Links">
-              <div className="text-sm">
-                <ul className="list-disc ml-6">
-                  {diagLinks.length === 0 ? (
-                    <li className="list-none text-muted-foreground">—</li>
-                  ) : (
-                    diagLinks.map((l, i) => (
-                      <li key={i}>
-                        {l.label ? `${l.label}: ` : ''}
-                        <a
-                          href={l.url}
-                          className="text-blue-600 underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {l.url}
-                        </a>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
+              <FieldList
+                form={{ diagLinks }}
+                fields={[
+                  {
+                    label: 'Diagnostic Links',
+                    name: 'diagLinks',
+                    required: false,
+                    type: 'links',
+                  },
+                ]}
+              />
             </ReviewSection>
             <ReviewSection title="PACE Links">
-              <div className="text-sm">
-                <ul className="list-disc ml-6">
-                  {paceLinks.length === 0 ? (
-                    <li className="list-none text-muted-foreground">—</li>
-                  ) : (
-                    paceLinks.map((l, i) => (
-                      <li key={i}>
-                        {l.label ? `${l.label}: ` : ''}
-                        <a
-                          href={l.url}
-                          className="text-blue-600 underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {l.url}
-                        </a>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
+              <FieldList
+                form={{ paceLinks }}
+                fields={[
+                  {
+                    label: 'PACE Links',
+                    name: 'paceLinks',
+                    required: false,
+                    type: 'links',
+                  },
+                ]}
+              />
             </ReviewSection>
           </div>
           <ReviewSection title="Documentation & Notes">
-            <div className="space-y-4">
-              <div>
-                <div className="font-medium text-sm mb-1">Key Features</div>
-                <div className="text-sm whitespace-pre-line">
-                  {form.keyFeatures ? (
-                    form.keyFeatures
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="font-medium text-sm mb-1">Known Issues</div>
-                <div className="text-sm whitespace-pre-line">
-                  {form.knownIssues ? (
-                    form.knownIssues
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="font-medium text-sm mb-1">Notes</div>
-                <div className="text-sm whitespace-pre-line">
-                  {form.notesMarkdown ? (
-                    form.notesMarkdown
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="font-medium text-sm mb-1">Extra Metadata</div>
-                <div className="text-sm whitespace-pre-line">
-                  {form.extra && Object.keys(form.extra).length > 0 ? (
-                    <pre className="bg-gray-100 rounded p-2">
-                      {JSON.stringify(form.extra, null, 2)}
-                    </pre>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </div>
-              </div>
-            </div>
+            <FieldList form={form} fields={[...docFields, ...metaFields]} />
           </ReviewSection>
         </FormSection>
 
@@ -1135,20 +1113,14 @@ const Upload = ({ machines }: UploadProps) => {
             </p>
             <div className="flex gap-2">
               <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  className="border border-red-300 text-red-600 bg-white hover:bg-red-50 px-5 py-2 rounded-md mr-2"
-                  onClick={() => {
-                    if (window.confirm('This will clear all entered data. Continue?')) {
-                      setForm(initialState);
-                      setDiagLinks([]);
-                      setPaceLinks([]);
-                      setErrors({});
-                    }
+                <ConfirmResetDialog
+                  onConfirm={() => {
+                    setForm(initialState);
+                    setDiagLinks([]);
+                    setPaceLinks([]);
+                    setErrors({});
                   }}
-                >
-                  Reset form
-                </button>
+                />
 
                 <button
                   type="button"
