@@ -9,7 +9,6 @@ import { FieldList } from '@/pages/Upload/FieldList';
 import FormSection from '@/pages/Upload/FormSection';
 import { LinkField } from '@/pages/Upload/LinkField';
 import { ReviewSection } from '@/pages/Upload/ReviewSection';
-import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ArtifactIn } from '@/types/artifact';
 import { ExternalLinkIn } from '@/types/link';
@@ -86,13 +85,12 @@ const Upload = ({ machines }: UploadProps) => {
 
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [openSection, setOpenSection] = useState<OpenKey>('configuration');
-  const [reviewOpen, setReviewOpen] = useState(false);
-
   const [diagLinks, setDiagLinks] = useState<{ label: string; url: string }[]>([]);
   const [paceLinks, setPaceLinks] = useState<{ label: string; url: string }[]>([]);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openSection, setOpenSection] = useState<OpenKey>('configuration');
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   // -------------------- Derived Data --------------------
   // --- Configuration fields (matches initialState order)
@@ -964,6 +962,22 @@ const Upload = ({ machines }: UploadProps) => {
                 marked with <span className="text-red-500">*</span>. All required fields must be
                 filled before submitting.
               </span>
+              <span
+                className={`ml-auto px-2 py-1 rounded text-xs font-semibold ${
+                  allFieldsValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}
+              >
+                {fieldsSatisfied.configuration +
+                  fieldsSatisfied.modelSetup +
+                  fieldsSatisfied.timeline +
+                  fieldsSatisfied.paths}{' '}
+                /{' '}
+                {requiredFields.configuration +
+                  requiredFields.modelSetup +
+                  requiredFields.timeline +
+                  requiredFields.paths}{' '}
+                required fields completed
+              </span>
             </div>
             {Object.values(errors).some(Boolean) && (
               <div className="mt-2 text-red-600 text-sm">
@@ -1112,43 +1126,42 @@ const Upload = ({ machines }: UploadProps) => {
               </div>
             </div>
           </ReviewSection>
-
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              className="border px-5 py-2 rounded-md"
-              onClick={() => {
-                setForm(initialState);
-                setDiagLinks([]);
-                setPaceLinks([]);
-              }}
-            >
-              Reset Form
-            </button>
-
-            <button
-              type="button"
-              className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-              disabled={Object.values(errors).some(Boolean) || !allFieldsValid || isSubmitting}
-              onClick={handleSubmit}
-            >
-              Submit Simulation
-            </button>
-          </div>
         </FormSection>
 
-        <StickyActionsBar
-          disabled={Object.values(errors).some(Boolean)}
-          onSaveDraft={() => console.log('Save draft', form)}
-          onNext={() => {
-            if (!allFieldsValid) {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              return;
-            }
-            setOpenSection('review');
-            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-          }}
-        />
+        <div className="sticky bottom-0 inset-x-0 border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Tip: You can collapse completed sections to stay focused.
+            </p>
+            <div className="flex gap-2">
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  className="border border-red-300 text-red-600 bg-white hover:bg-red-50 px-5 py-2 rounded-md mr-2"
+                  onClick={() => {
+                    if (window.confirm('This will clear all entered data. Continue?')) {
+                      setForm(initialState);
+                      setDiagLinks([]);
+                      setPaceLinks([]);
+                      setErrors({});
+                    }
+                  }}
+                >
+                  Reset form
+                </button>
+
+                <button
+                  type="button"
+                  className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
+                  disabled={Object.values(errors).some(Boolean) || !allFieldsValid || isSubmitting}
+                  onClick={handleSubmit}
+                >
+                  Submit simulation
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
