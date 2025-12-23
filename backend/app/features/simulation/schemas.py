@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import AnyUrl, Field, HttpUrl, computed_field
+from pydantic import Field, HttpUrl, computed_field
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
