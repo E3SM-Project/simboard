@@ -23,7 +23,7 @@ export const FieldList = ({ form, fields, className = 'text-sm space-y-1' }: Fie
           <div key={field.name}>
             <strong>
               {field.label}
-              {field.required && <span style={{ color: 'red' }}> *</span>}:
+              {field.required && <span className="text-red-500"> *</span>}:
             </strong>{' '}
             {String(displayValue)}
           </div>

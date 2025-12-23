@@ -550,10 +550,10 @@ const Upload = ({ machines }: UploadProps) => {
 
     const artifacts = buildArtifacts(form);
     const links = buildLinks(diagLinks, paceLinks);
+    const normalizedForm = normalizeOptionalFields(form);
 
     const payload: SimulationCreate = {
-      ...form,
-      gitRepositoryUrl: form.gitRepositoryUrl?.trim() === '' ? null : form.gitRepositoryUrl,
+      ...normalizedForm,
       artifacts,
       links,
     };
@@ -602,6 +602,37 @@ const Upload = ({ machines }: UploadProps) => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const normalizeOptionalFields = (form: SimulationCreateForm): SimulationCreateForm => {
+    return {
+      ...form,
+
+      // nullable strings / IDs
+      description: form.description?.trim() || null,
+      compiler: form.compiler?.trim() || null,
+      parentSimulationId: form.parentSimulationId || null,
+      campaignId: form.campaignId || null,
+      experimentTypeId: form.experimentTypeId || null,
+      gitRepositoryUrl: form.gitRepositoryUrl?.trim() || null,
+      gitBranch: form.gitBranch?.trim() || null,
+      gitTag: form.gitTag?.trim() || null,
+      gitCommitHash: form.gitCommitHash?.trim() || null,
+      simulationEndDate: form.simulationEndDate || null,
+      runStartDate: form.runStartDate || null,
+      runEndDate: form.runEndDate || null,
+      keyFeatures: form.keyFeatures?.trim() || null,
+      knownIssues: form.knownIssues?.trim() || null,
+      notesMarkdown: form.notesMarkdown?.trim() || null,
+
+      // arrays
+      archivePaths: form.archivePaths ?? [],
+      runScriptPaths: form.runScriptPaths ?? [],
+      postprocessingScriptPaths: form.postprocessingScriptPaths ?? [],
+
+      // object
+      extra: form.extra ?? {},
+    };
   };
 
   // -------------------- Development Checks --------------------
