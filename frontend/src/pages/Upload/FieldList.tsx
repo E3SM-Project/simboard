@@ -3,6 +3,7 @@ import { SimulationCreateForm } from '@/types/simulation';
 interface FieldDef {
   name: string;
   label: string;
+  required?: boolean; // Add required flag
 }
 
 interface FieldListProps {
@@ -16,12 +17,15 @@ export const FieldList = ({ form, fields, className = 'text-sm space-y-1' }: Fie
     <div className={className}>
       {fields.map((field) => {
         const value = form[field.name as keyof SimulationCreateForm];
-
         const displayValue = Array.isArray(value) ? value.join(', ') || '—' : (value ?? '—');
 
         return (
           <div key={field.name}>
-            <strong>{field.label}:</strong> {String(displayValue)}
+            <strong>
+              {field.label}
+              {field.required && <span style={{ color: 'red' }}> *</span>}:
+            </strong>{' '}
+            {String(displayValue)}
           </div>
         );
       })}

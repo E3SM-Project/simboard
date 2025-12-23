@@ -22,7 +22,6 @@ type OpenKey =
   | 'timeline'
   | 'paths'
   | 'docs'
-  | 'meta'
   | null;
 
 // -------------------- Initial Form State --------------------
@@ -144,7 +143,7 @@ const Upload = ({ machines }: UploadProps) => {
       {
         label: 'Initialization Type',
         name: 'initializationType',
-        required: false,
+        required: true,
         type: 'text',
         placeholder: 'e.g., hybrid, branch, startup',
       },
@@ -354,7 +353,7 @@ const Upload = ({ machines }: UploadProps) => {
   );
 
   // Calculate required fields based on field definitions
-  const required_fields = useMemo(
+  const requiredFields = useMemo(
     () => ({
       configuration: configFields.filter((f) => f.required).length,
       modelSetup: modelFields.filter((f) => f.required).length,
@@ -439,11 +438,11 @@ const Upload = ({ machines }: UploadProps) => {
 
   const allFieldsValid = useMemo(
     () =>
-      fieldsSatisfied.configuration >= required_fields.configuration &&
-      fieldsSatisfied.modelSetup >= required_fields.modelSetup &&
-      fieldsSatisfied.timeline >= required_fields.timeline &&
-      fieldsSatisfied.paths >= required_fields.paths,
-    [required_fields, fieldsSatisfied],
+      fieldsSatisfied.configuration >= requiredFields.configuration &&
+      fieldsSatisfied.modelSetup >= requiredFields.modelSetup &&
+      fieldsSatisfied.timeline >= requiredFields.timeline &&
+      fieldsSatisfied.paths >= requiredFields.paths,
+    [requiredFields, fieldsSatisfied],
   );
 
   // -------------------- Builders --------------------
@@ -485,43 +484,40 @@ const Upload = ({ machines }: UploadProps) => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
     const { name, value } = e.target;
-    // Handle array fields for comma-separated values
+
+    let normalizedValue: unknown = value;
+
     if (
       name === 'archivePaths' ||
       name === 'runScriptPaths' ||
       name === 'postprocessingScriptPaths'
     ) {
-      setForm((prev) => ({
-        ...prev,
-        [name]: value
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }));
+      normalizedValue = value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     } else if (name === 'simulationEndDate' || name === 'runStartDate' || name === 'runEndDate') {
-      setForm((prev) => ({
-        ...prev,
-        [name]: value || null,
-      }));
+      normalizedValue = value || null;
     } else if (name === 'extra') {
-      // Parse JSON for extra metadata
-      let parsed = {};
       try {
-        parsed = value ? JSON.parse(value) : {};
+        normalizedValue = value ? JSON.parse(value) : {};
+        setErrors((prev) => ({ ...prev, [name]: '' }));
       } catch {
-        parsed = {};
+        normalizedValue = {};
+        setErrors((prev) => ({
+          ...prev,
+          [name]: 'Invalid JSON format',
+        }));
       }
-      setForm((prev) => ({
-        ...prev,
-        extra: parsed,
-      }));
-    } else {
-      setForm((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+    }
 
-      validateField(name, value);
+    setForm((prev) => ({
+      ...prev,
+      [name]: normalizedValue,
+    }));
+
+    if (name !== 'extra') {
+      validateField(name, normalizedValue);
     }
   };
 
@@ -558,7 +554,6 @@ const Upload = ({ machines }: UploadProps) => {
 
   // -------------------- Development Checks --------------------
   useEffect(() => {
-    // Run this check only in development mode.
     if (!import.meta.env.DEV) return;
 
     const uiFields = [
@@ -603,7 +598,7 @@ const Upload = ({ machines }: UploadProps) => {
           title="Configuration"
           isOpen={openSection === 'configuration'}
           onToggle={() => toggle('configuration')}
-          requiredCount={required_fields.configuration}
+          requiredCount={requiredFields.configuration}
           satisfiedCount={fieldsSatisfied.configuration}
         >
           {configFields.map((field) => (
@@ -648,7 +643,7 @@ const Upload = ({ machines }: UploadProps) => {
           title="Timeline"
           isOpen={openSection === 'timeline'}
           onToggle={() => toggle('timeline')}
-          requiredCount={required_fields.timeline}
+          requiredCount={requiredFields.timeline}
           satisfiedCount={fieldsSatisfied.timeline}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -681,7 +676,7 @@ const Upload = ({ machines }: UploadProps) => {
           title="Model Setup"
           isOpen={openSection === 'modelSetup'}
           onToggle={() => toggle('modelSetup')}
-          requiredCount={required_fields.modelSetup}
+          requiredCount={requiredFields.modelSetup}
           satisfiedCount={fieldsSatisfied.modelSetup}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -731,7 +726,7 @@ const Upload = ({ machines }: UploadProps) => {
           title="Version Control"
           isOpen={openSection === 'versionControl'}
           onToggle={() => toggle('versionControl')}
-          requiredCount={required_fields.versionControl}
+          requiredCount={requiredFields.versionControl}
           satisfiedCount={0}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -761,7 +756,7 @@ const Upload = ({ machines }: UploadProps) => {
           title="Data Paths & Scripts"
           isOpen={openSection === 'paths'}
           onToggle={() => toggle('paths')}
-          requiredCount={required_fields.paths}
+          requiredCount={requiredFields.paths}
           satisfiedCount={fieldsSatisfied.paths}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -791,6 +786,14 @@ const Upload = ({ machines }: UploadProps) => {
                 )}
               </div>
             ))}
+            <LinkField
+              title="Diagnostic Links"
+              links={diagLinks}
+              onAdd={addDiag}
+              onChange={setDiag}
+            />
+
+            <LinkField title="PACE Links" links={paceLinks} onAdd={addPace} onChange={setPace} />
           </div>
         </FormSection>
 
@@ -801,15 +804,6 @@ const Upload = ({ machines }: UploadProps) => {
           onToggle={() => toggle('docs')}
         >
           <div className="space-y-6">
-            <LinkField
-              title="Diagnostic Links"
-              links={diagLinks}
-              onAdd={addDiag}
-              onChange={setDiag}
-            />
-
-            <LinkField title="PACE Links" links={paceLinks} onAdd={addPace} onChange={setPace} />
-
             {/* Documentation Fields */}
             {docFields.map((field) => (
               <div key={field.name}>
@@ -829,39 +823,33 @@ const Upload = ({ machines }: UploadProps) => {
                 />
               </div>
             ))}
-          </div>
-        </FormSection>
 
-        <FormSection
-          title="Metadata"
-          isOpen={openSection === 'meta'}
-          onToggle={() => toggle('meta')}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {metaFields.map((field) => (
-              <div key={field.name}>
-                <label className="text-sm font-medium">{field.label}</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {metaFields.map((field) => (
+                <div key={field.name}>
+                  <label className="text-sm font-medium">{field.label}</label>
 
-                <textarea
-                  className={`mt-1 w-full rounded-md border px-3 py-2 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  name={field.name}
-                  value={
-                    field.name === 'extra'
-                      ? JSON.stringify(form.extra ?? {}, null, 2)
-                      : (form[field.name] ?? '')
-                  }
-                  onChange={handleChange}
-                  placeholder={field.placeholder}
-                  rows={4}
-                />
+                  <textarea
+                    className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    name={field.name}
+                    value={
+                      field.name === 'extra'
+                        ? JSON.stringify(form.extra ?? {}, null, 2)
+                        : (form[field.name] ?? '')
+                    }
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                    rows={4}
+                  />
 
-                {errors[field.name] && (
-                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
-                )}
-              </div>
-            ))}
+                  {errors[field.name] && (
+                    <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </FormSection>
 
@@ -870,6 +858,59 @@ const Upload = ({ machines }: UploadProps) => {
           isOpen={reviewOpen}
           onToggle={() => setReviewOpen((v) => !v)}
         >
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+              <svg
+                className="w-5 h-5 text-blue-500 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="white" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 8v4m0 4h.01"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              </svg>
+              <span className="text-sm text-blue-900">
+                <span className="font-medium">Review your entries below.</span> Required fields are
+                marked with <span className="text-red-500">*</span>. All required fields must be
+                filled before submitting.
+              </span>
+            </div>
+            {Object.values(errors).some(Boolean) && (
+              <div className="mt-2 text-red-600 text-sm">
+                Please fix the errors above before submitting.
+                <ul className="list-disc ml-6 mt-1">
+                  {Object.entries(errors)
+                    .filter(([_, msg]) => !!msg)
+                    .map(([field, msg]) => {
+                      // Find the label for the field
+                      const allFields = [
+                        ...configFields,
+                        ...modelFields,
+                        ...versionFields,
+                        ...timelineFields,
+                        ...docFields,
+                        ...metaFields,
+                        ...pathFields,
+                      ];
+                      const fieldDef = allFields.find((f) => f.name === field);
+                      const label = fieldDef ? fieldDef.label : field;
+                      return (
+                        <li key={field}>
+                          <span className="font-semibold">{label}:</span> {msg}
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
+          </div>
           <div className="space-y-4">
             <ReviewSection title="Configuration">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -895,7 +936,7 @@ const Upload = ({ machines }: UploadProps) => {
               <FieldList form={form} fields={pathFields} />
             </ReviewSection>
 
-            <ReviewSection title="Group: Diagnostic Links">
+            <ReviewSection title="Diagnostic Links">
               <div className="text-sm">
                 <ul className="list-disc ml-6">
                   {diagLinks.length === 0 ? (
@@ -918,7 +959,76 @@ const Upload = ({ machines }: UploadProps) => {
                 </ul>
               </div>
             </ReviewSection>
+            <ReviewSection title="PACE Links">
+              <div className="text-sm">
+                <ul className="list-disc ml-6">
+                  {paceLinks.length === 0 ? (
+                    <li className="list-none text-muted-foreground">—</li>
+                  ) : (
+                    paceLinks.map((l, i) => (
+                      <li key={i}>
+                        {l.label ? `${l.label}: ` : ''}
+                        <a
+                          href={l.url}
+                          className="text-blue-600 underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {l.url}
+                        </a>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </ReviewSection>
           </div>
+          <ReviewSection title="Documentation & Notes">
+            <div className="space-y-4">
+              <div>
+                <div className="font-medium text-sm mb-1">Key Features</div>
+                <div className="text-sm whitespace-pre-line">
+                  {form.keyFeatures ? (
+                    form.keyFeatures
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-sm mb-1">Known Issues</div>
+                <div className="text-sm whitespace-pre-line">
+                  {form.knownIssues ? (
+                    form.knownIssues
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-sm mb-1">Notes</div>
+                <div className="text-sm whitespace-pre-line">
+                  {form.notesMarkdown ? (
+                    form.notesMarkdown
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-sm mb-1">Extra Metadata</div>
+                <div className="text-sm whitespace-pre-line">
+                  {form.extra && Object.keys(form.extra).length > 0 ? (
+                    <pre className="bg-gray-100 rounded p-2">
+                      {JSON.stringify(form.extra, null, 2)}
+                    </pre>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </ReviewSection>
 
           <div className="mt-4 flex gap-2">
             <button
@@ -932,10 +1042,11 @@ const Upload = ({ machines }: UploadProps) => {
             >
               Reset Form
             </button>
+
             <button
               type="button"
               className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-              disabled={!allFieldsValid || Object.values(errors).some((e) => e && e.length > 0)}
+              disabled={Object.values(errors).some(Boolean) || !allFieldsValid}
               onClick={handleSubmit}
             >
               Submit Simulation
@@ -944,7 +1055,7 @@ const Upload = ({ machines }: UploadProps) => {
         </FormSection>
 
         <StickyActionsBar
-          disabled={!allFieldsValid || Object.values(errors).some((e) => e && e.length > 0)}
+          disabled={Object.values(errors).some(Boolean)}
           onSaveDraft={() => console.log('Save draft', form)}
           onNext={() => {
             if (!allFieldsValid) {
