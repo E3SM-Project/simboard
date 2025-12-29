@@ -7,7 +7,7 @@ import { docsRoutes } from '@/features/docs/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { simulationsRoutes } from '@/features/simulations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
-import ProtectedRoute from '@/routes/ProtectedRoute';
+import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {

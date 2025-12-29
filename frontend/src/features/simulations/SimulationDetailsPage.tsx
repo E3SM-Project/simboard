@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom"
 
-import { useSimulation } from "@/api/simulation"
 import { SimulationDetailsView } from "@/features/simulations/components/SimulationDetailsView"
+import { useSimulation } from "@/features/simulations/hooks/useSimulation"
 
 export const SimulationDetailsPage = () => {
     const { id } = useParams<{ id: string }>()

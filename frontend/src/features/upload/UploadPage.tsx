@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createSimulation } from '@/api/simulation';
+import { createSimulation } from '@/features/simulations/api/api';
 import { ConfirmResetDialog } from '@/features/upload/components/ConfirmResetDialog';
 import FormSection from '@/features/upload/components/FormSection';
 import { LinkField } from '@/features/upload/components/LinkField';
