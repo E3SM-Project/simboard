@@ -1,5 +1,5 @@
-import BrowseToolbar from '@/pages/Browse/BrowseToolbar';
-import SimulationResultCard from '@/pages/Browse/SimulationResultCard';
+import BrowseToolbar from '@/features/browse/BrowseToolbar';
+import SimulationResultCard from '@/features/browse/SimulationResultCard';
 import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCards {

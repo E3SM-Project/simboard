@@ -1,9 +1,9 @@
 import { Funnel } from 'lucide-react';
 
 import { MultiSelect } from '@/components/ui/multi-select';
-import type { FilterState } from '@/pages/Browse/Browse';
-import CollapsibleGroup from '@/pages/Browse/CollapsibleGroup';
-import MultiSelectCheckboxGroup from '@/pages/Browse/MultiSelectCheckBoxGroup';
+import type { FilterState } from '@/features/browse/Browse';
+import CollapsibleGroup from '@/features/browse/CollapsibleGroup';
+import MultiSelectCheckboxGroup from '@/features/browse/MultiSelectCheckBoxGroup';
 
 interface FilterPanelProps {
   appliedFilters: FilterState;

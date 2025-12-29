@@ -2,7 +2,7 @@ import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 
 import { useSimulation } from '@/api/simulation';
 import AuthCallback from '@/auth/AuthCallback';
-import Browse from '@/pages/Browse/Browse';
+import Browse from '@/features/browse/Browse';
 import Compare from '@/pages/Compare/Compare';
 import Docs from '@/pages/Docs/Docs';
 import Home from '@/pages/Home/Home';

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import BrowseFiltersSidePanel from '@/pages/Browse/BrowseFiltersSidePanel';
-import SimulationResultCards from '@/pages/Browse/SimulationResultsCards';
-import SimulationResultsTable from '@/pages/Browse/SimulationResultsTable';
+import BrowseFiltersSidePanel from '@/features/browse/BrowseFiltersSidePanel';
+import SimulationResultCards from '@/features/browse/SimulationResultsCards';
+import SimulationResultsTable from '@/features/browse/SimulationResultsTable';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------

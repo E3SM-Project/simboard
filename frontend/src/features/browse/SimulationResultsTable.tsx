@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import BrowseToolbar from '@/pages/Browse/BrowseToolbar';
+import BrowseToolbar from '@/features/browse/BrowseToolbar';
 import type { SimulationOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
