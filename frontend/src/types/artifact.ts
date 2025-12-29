@@ -1,8 +1,15 @@
-export type ArtifactKind =
-  | "output"
-  | "archive"
-  | "runScript"
-  | "postprocessingScript";
+// Mapping from form field names to artifact enums.
+export const ARTIFACT_KIND_MAP: Record<
+  'outputPath' | 'archivePaths' | 'runScriptPaths' | 'postprocessingScriptPaths',
+  ArtifactKind
+> = {
+  outputPath: 'output',
+  archivePaths: 'archive',
+  runScriptPaths: 'run_script',
+  postprocessingScriptPaths: 'postprocessing_script',
+};
+
+export type ArtifactKind = 'output' | 'archive' | 'run_script' | 'postprocessing_script';
 
 /**
  * Represents an artifact uploaded or linked to a simulation.

@@ -55,24 +55,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const logout = useCallback(async (): Promise<void> => {
+  const logout = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       await api.post('/auth/logout');
     } catch {
-      // ignore errors — local logout still succeeds
+      /* ignore */
     } finally {
       setUser(null);
 
-      toast({
-        title: (
-          <div className="flex items-center gap-2">
-            <LogOut className="h-5 w-5 text-gray-600" />
-            Signed out
-          </div>
-        ),
-        description: 'You’ve been logged out.',
-        duration: 2000,
-      });
+      if (!silent) {
+        toast({
+          title: (
+            <div className="flex items-center gap-2">
+              <LogOut className="h-5 w-5 text-gray-600" />
+              Signed out
+            </div>
+          ),
+          description: 'You’ve been logged out.',
+          duration: 2000,
+        });
+      }
     }
   }, []);
 
@@ -85,7 +87,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Register once with a stable wrapper
   useEffect(() => {
-    registerLogoutHandler(() => logoutRef.current());
+    registerLogoutHandler(() => logoutRef.current({ silent: true }));
   }, []);
 
   useEffect(() => {

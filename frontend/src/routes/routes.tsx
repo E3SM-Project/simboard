@@ -9,6 +9,7 @@ import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
 import Upload from '@/pages/Upload/Upload';
+import ProtectedRoute from '@/routes/ProtectedRoute';
 import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {
@@ -84,7 +85,10 @@ const createRoutes = ({
         />
       ),
     },
-    { path: '/upload', element: <Upload machines={machines} /> },
+    {
+      element: <ProtectedRoute />,
+      children: [{ path: '/upload', element: <Upload machines={machines} /> }],
+    },
     { path: '/docs', element: <Docs /> },
     { path: '/auth/callback', element: <AuthCallback /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },

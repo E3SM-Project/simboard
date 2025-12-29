@@ -4,11 +4,19 @@ from enum import Enum
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import AnyUrl, Field, HttpUrl, computed_field
+from pydantic import Field, HttpUrl, computed_field
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
+
+
+class SimulationStatus(str, Enum):
+    CREATED = "created"
+    QUEUED = "queued"
+    RUNNING = "running"
+    FAILED = "failed"
+    COMPLETED = "completed"
 
 
 class ArtifactKind(str, Enum):
@@ -71,7 +79,10 @@ class ArtifactCreate(CamelInBaseModel):
 
     kind: Annotated[ArtifactKind, Field(..., description="The type of the artifact.")]
     uri: Annotated[
-        AnyUrl, Field(..., description="The URI where the artifact is located.")
+        str,
+        Field(
+            ..., description="The URI or filesystem path where the artifact is located."
+        ),
     ]
     label: Annotated[
         str | None, Field(None, description="An optional label for the artifact.")
@@ -86,7 +97,10 @@ class ArtifactOut(CamelOutBaseModel):
     ]
     kind: Annotated[ArtifactKind, Field(..., description="The type of the artifact.")]
     uri: Annotated[
-        AnyUrl, Field(..., description="The URI where the artifact is located.")
+        str,
+        Field(
+            ..., description="The URI or filesystem path where the artifact is located."
+        ),
     ]
     label: Annotated[
         str | None, Field(None, description="An optional label for the artifact.")
@@ -130,7 +144,9 @@ class SimulationCreate(CamelInBaseModel):
     # -------------------
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
-    status: Annotated[str, Field(..., description="Current status of the simulation")]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
     campaign_id: Annotated[
         str | None, Field(None, description="Optional ID of the associated campaign")
     ]
