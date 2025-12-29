@@ -20,7 +20,7 @@ const titleIconMap: Record<string, JSX.Element> = {
   batchLog: <ClipboardList size={16} />,
 };
 
-const SimulationPathCard = ({ kind, title, paths, emptyText, description }: SimulationPathCard) => {
+export const SimulationPathCard = ({ kind, title, paths, emptyText, description }: SimulationPathCard) => {
   const hasPaths = paths && paths.length > 0;
 
   return (
@@ -96,5 +96,3 @@ const SimulationPathCard = ({ kind, title, paths, emptyText, description }: Simu
     </Card>
   );
 };
-
-export default SimulationPathCard;

@@ -4,10 +4,10 @@ import { useSimulation } from '@/api/simulation';
 import AuthCallback from '@/auth/AuthCallback';
 import { BrowsePage } from '@/features/browse/BrowsePage';
 import { ComparePage } from '@/features/compare/ComparePage';
-import { DocsPage } from '@/features/docs/Docs';
+import { DocsPage } from '@/features/docs/DocsPage';
 import { HomePage } from '@/features/home/HomePage';
-import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
-import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
+import { SimulationDetailsPage } from '@/features/simulations/SimulationDetailsPage';
+import { SimulationsPage } from '@/features/simulations/SimulationsPage';
 import Upload from '@/pages/Upload/Upload';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import type { Machine, SimulationOut } from '@/types/index';
@@ -50,7 +50,7 @@ const SimulationDetailsRoute = () => {
       </div>
     );
 
-  return <SimulationDetails simulation={simulation} />;
+  return <SimulationDetailsPage simulation={simulation} />;
 };
 
 const createRoutes = ({
@@ -72,7 +72,7 @@ const createRoutes = ({
         />
       ),
     },
-    { path: '/simulations', element: <SimulationsCatalog simulations={simulations} /> },
+    { path: '/simulations', element: <SimulationsPage simulations={simulations} /> },
     { path: '/simulations/:id', element: <SimulationDetailsRoute /> },
     {
       path: '/compare',

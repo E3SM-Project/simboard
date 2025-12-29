@@ -11,8 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import { cn } from '@/lib/utils';
-import SimulationPathCard from '@/pages/SimulationsCatalog/SimulationPathCard';
 import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
@@ -35,7 +35,7 @@ const ReadonlyInput = ({ value, className }: { value?: string; className?: strin
 );
 
 // -------------------- Main Component --------------------
-const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
+export const SimulationDetailsPage = ({ simulation, canEdit = false }: Props) => {
   // -------------------- Local State --------------------
   const [activeTab, setActiveTab] = useState('summary');
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
@@ -188,11 +188,11 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
                   <span className="text-sm">
                     {simulation.simulationStartDate && simulation.simulationEndDate
                       ? (() => {
-                          return getSimulationDuration(
-                            simulation.simulationStartDate,
-                            simulation.simulationEndDate,
-                          );
-                        })()
+                        return getSimulationDuration(
+                          simulation.simulationStartDate,
+                          simulation.simulationEndDate,
+                        );
+                      })()
                       : '—'}
                   </span>
                 </FieldRow>
@@ -519,5 +519,3 @@ const SimulationDetails = ({ simulation, canEdit = false }: Props) => {
     </div>
   );
 };
-
-export default SimulationDetails;

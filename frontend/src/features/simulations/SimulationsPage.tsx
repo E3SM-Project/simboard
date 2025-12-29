@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
-interface SimulationsCatalogProps {
+interface SimulationsPageProps {
   simulations: SimulationOut[];
 }
 
@@ -77,7 +77,7 @@ const formatDate = (d?: string) => {
   return format(dt, 'yyyy-MM-dd');
 };
 
-const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
+export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
@@ -463,5 +463,3 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
     </div>
   );
 };
-
-export default SimulationsCatalog;
