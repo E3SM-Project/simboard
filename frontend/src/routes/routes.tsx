@@ -8,7 +8,7 @@ import { DocsPage } from '@/features/docs/DocsPage';
 import { HomePage } from '@/features/home/HomePage';
 import { SimulationDetailsPage } from '@/features/simulations/SimulationDetailsPage';
 import { SimulationsPage } from '@/features/simulations/SimulationsPage';
-import Upload from '@/pages/Upload/Upload';
+import { UploadPage } from '@/features/upload/UploadPage';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import type { Machine, SimulationOut } from '@/types/index';
 
@@ -87,9 +87,8 @@ const createRoutes = ({
     },
     {
       element: <ProtectedRoute />,
-      children: [{ path: '/upload', element: <Upload machines={machines} /> }],
+      children: [{ path: '/upload', element: <UploadPage machines={machines} /> }],
     },
-    { path: '/upload', element: <Upload machines={machines} /> },
     { path: '/docs', element: <DocsPage /> },
     { path: '/auth/callback', element: <AuthCallback /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },

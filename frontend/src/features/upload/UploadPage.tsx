@@ -16,7 +16,7 @@ import { ARTIFACT_KIND_MAP, ArtifactIn } from '@/types/artifact';
 import { ExternalLinkIn } from '@/types/link';
 
 // -------------------- Types & Interfaces --------------------
-interface UploadProps {
+interface UploadPageProps {
   machines: Machine[];
 }
 
@@ -82,7 +82,7 @@ const initialState: SimulationCreateForm = {
 };
 
 // -------------------- Component --------------------
-const Upload = ({ machines }: UploadProps) => {
+export const UploadPage = ({ machines }: UploadPageProps) => {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<SimulationCreateForm>(initialState);
@@ -792,9 +792,8 @@ const Upload = ({ machines }: UploadProps) => {
 
               {field.type === 'textarea' ? (
                 <textarea
-                  className={`mt-1 w-full rounded-md border px-3 py-2 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`mt-1 w-full rounded-md border px-3 py-2 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   name={field.name}
                   value={form[field.name] ?? ''}
                   onChange={handleChange}
@@ -803,9 +802,8 @@ const Upload = ({ machines }: UploadProps) => {
                 />
               ) : (
                 <input
-                  className={`mt-1 w-full rounded-md border px-3 h-10 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`mt-1 w-full rounded-md border px-3 h-10 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   name={field.name}
                   value={form[field.name] ?? ''}
                   onChange={handleChange}
@@ -837,9 +835,8 @@ const Upload = ({ machines }: UploadProps) => {
                 </label>
 
                 <input
-                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   type={field.type}
                   name={field.name}
                   value={form[field.name] ?? ''}
@@ -871,9 +868,8 @@ const Upload = ({ machines }: UploadProps) => {
 
                 {field.type === 'select' ? (
                   <select
-                    className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`mt-1 w-full h-10 rounded-md border px-3 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     name={field.name}
                     value={form[field.name] ?? ''}
                     onChange={handleChange}
@@ -887,9 +883,8 @@ const Upload = ({ machines }: UploadProps) => {
                   </select>
                 ) : (
                   <input
-                    className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`mt-1 w-full h-10 rounded-md border px-3 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     name={field.name}
                     value={form[field.name] ?? ''}
                     onChange={handleChange}
@@ -917,9 +912,8 @@ const Upload = ({ machines }: UploadProps) => {
                 <label className="text-sm font-medium">{field.label}</label>
 
                 <input
-                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   name={field.name}
                   value={form[field.name] ?? ''}
                   onChange={handleChange}
@@ -950,9 +944,8 @@ const Upload = ({ machines }: UploadProps) => {
                 </label>
 
                 <input
-                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`mt-1 w-full h-10 rounded-md border px-3 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   name={field.name}
                   value={
                     Array.isArray(form[field.name])
@@ -1025,9 +1018,8 @@ const Upload = ({ machines }: UploadProps) => {
                   <label className="text-sm font-medium">{field.label}</label>
 
                   <textarea
-                    className={`mt-1 w-full rounded-md border px-3 py-2 ${
-                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`mt-1 w-full rounded-md border px-3 py-2 ${errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     name={field.name}
                     value={
                       field.name === 'extra'
@@ -1078,9 +1070,8 @@ const Upload = ({ machines }: UploadProps) => {
                 </span>
 
                 <span
-                  className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
-                    allFieldsValid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                  }`}
+                  className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${allFieldsValid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}
                 >
                   {allFieldsValid ? (
                     <CheckCircle className="h-3.5 w-3.5" />
@@ -1177,5 +1168,3 @@ const Upload = ({ machines }: UploadProps) => {
     </div>
   );
 };
-
-export default Upload;
