@@ -1,6 +1,5 @@
 import { JSX } from 'react';
 
-import type { ExternalLinkIn } from '@/types/link';
 import { SimulationCreateForm } from '@/types/simulation';
 
 interface ReviewFieldDef {
