@@ -418,8 +418,9 @@ const Upload = ({ machines }: UploadProps) => {
         }
       }
 
-      if (name === 'simulationStartDate') {
+      if (name === 'simulationStartDate' && value !== undefined && value !== null && value !== '') {
         const date = Date.parse(String(value));
+
         if (isNaN(date)) error = 'Invalid start date';
       }
     }
