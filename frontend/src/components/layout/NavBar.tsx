@@ -106,6 +106,7 @@ const Navbar = ({ selectedSimulationIds }: NavBarProps) => {
             isAuthenticated={isAuthenticated}
             user={user}
             loginWithGithub={loginWithGithub}
+            logout={logout}
           />
 
           {loading ? (

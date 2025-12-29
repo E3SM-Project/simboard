@@ -1,20 +1,23 @@
 import { JSX } from 'react';
 
-import { ArtifactIn } from '@/types';
 import type { ExternalLinkIn } from '@/types/link';
 import { SimulationCreateForm } from '@/types/simulation';
 
-interface FieldDef {
+interface ReviewFieldDef {
   name: string;
   label: string;
 }
 
-interface FieldListProps {
+interface ReviewFieldListProps {
   form: SimulationCreateForm;
-  fields: FieldDef[];
+  fields: ReviewFieldDef[];
   className?: string;
 }
-export const FieldList = ({ form, fields, className = 'text-sm space-y-2' }: FieldListProps) => {
+export const ReviewFieldList = ({
+  form,
+  fields,
+  className = 'text-sm space-y-2',
+}: ReviewFieldListProps) => {
   const fieldIsEmpty = (value: unknown): boolean => {
     if (value == null) return true;
     if (Array.isArray(value)) return value.length === 0;
@@ -29,35 +32,7 @@ export const FieldList = ({ form, fields, className = 'text-sm space-y-2' }: Fie
         const isEmpty = fieldIsEmpty(value);
 
         let displayValue: string | JSX.Element = '—';
-
-        // 1. Structural rendering.
-        // @ts-expect-error: discriminated union to be fixed later
-        if (field.type === 'links' && Array.isArray(value)) {
-          const validLinks = value.filter((link: ExternalLinkIn) => link.label && link.url);
-
-          displayValue =
-            validLinks.length === 0 ? (
-              '—'
-            ) : (
-              <ul className="list-disc ml-6">
-                {validLinks.map((link, idx) => (
-                  <li key={idx}>
-                    <span className="font-medium">{link.label}:</span>{' '}
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      {link.url}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            );
-
-          // 2. Field-provided renderValue (scalar customization)
-        } else if (!isEmpty && field.renderValue) {
+        if (!isEmpty && field.renderValue) {
           displayValue = field.renderValue(value);
 
           // 3. Generic fallbacks

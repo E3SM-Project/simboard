@@ -17,6 +17,7 @@ interface MobileMenuProps {
   isAuthenticated: boolean;
   user?: User | null;
   loginWithGithub: () => void;
+  logout: () => void;
 }
 
 const MobileMenu = ({
@@ -25,6 +26,7 @@ const MobileMenu = ({
   isAuthenticated,
   user,
   loginWithGithub,
+  logout,
 }: MobileMenuProps) => {
   const [open, setOpen] = useState(false);
 
@@ -104,6 +106,7 @@ const MobileMenu = ({
           role="dialog"
           aria-modal="true"
           aria-label="Mobile navigation"
+          onClick={() => setOpen(false)}
         >
           <div
             id="mobile-menu"
@@ -128,17 +131,28 @@ const MobileMenu = ({
                 Log in with GitHub
               </Button>
             ) : (
-              <div className="flex items-center gap-3 p-2 border rounded-md">
-                <Avatar>
-                  <AvatarImage src="/avatars/default.jpg" />
-                  <AvatarFallback>{user?.email?.[0]?.toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <span
-                  className="text-sm font-medium truncate max-w-[160px]"
-                  title={user?.full_name || user?.email}
+              <div className="flex flex-col gap-2 p-2 border rounded-md">
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarImage src="/avatars/default.jpg" />
+                    <AvatarFallback>{user?.email?.[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span
+                    className="text-sm font-medium truncate max-w-[160px]"
+                    title={user?.full_name || user?.email}
+                  >
+                    {user?.full_name || user?.email}
+                  </span>
+                </div>
+                <Link
+                  className="self-start text-xs text-destructive hover:underline"
+                  onClick={async () => {
+                    setOpen(false);
+                    await logout();
+                  }}
                 >
-                  {user?.full_name || user?.email}
-                </span>
+                  Log out
+                </Link>
               </div>
             )}
 

@@ -6,9 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { createSimulation } from '@/api/simulation';
 import { toast } from '@/hooks/use-toast';
 import { ConfirmResetDialog } from '@/pages/Upload/ConfirmResetDialog';
-import { FieldList } from '@/pages/Upload/FieldList';
 import FormSection from '@/pages/Upload/FormSection';
 import { LinkField } from '@/pages/Upload/LinkField';
+import { ReviewFieldList } from '@/pages/Upload/ReviewFieldList';
+import { ReviewLinkList } from '@/pages/Upload/ReviewLinkList';
 import { ReviewSection } from '@/pages/Upload/ReviewSection';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ARTIFACT_KIND_MAP, ArtifactIn } from '@/types/artifact';
@@ -332,28 +333,28 @@ const Upload = ({ machines }: UploadProps) => {
   const pathFields = useMemo(
     () => [
       {
-        label: 'Output Path (single directory)',
+        label: 'Output Path',
         name: 'outputPath',
         required: true,
         type: 'text',
         placeholder: '/global/archive/sim-output/...',
       },
       {
-        label: 'Archive Paths (comma-separated)',
+        label: 'Archive Paths',
         name: 'archivePaths',
         required: false,
         type: 'text',
         placeholder: '/global/archive/sim-state/..., /other/path/...',
       },
       {
-        label: 'Run Script Paths (comma-separated)',
+        label: 'Run Script Paths',
         name: 'runScriptPaths',
         required: false,
         type: 'text',
         placeholder: '/home/user/run.sh, /home/user/run2.sh',
       },
       {
-        label: 'Postprocessing Script Paths (comma-separated)',
+        label: 'Postprocessing Script Paths',
         name: 'postprocessingScriptPaths',
         required: false,
         type: 'text',
@@ -405,12 +406,11 @@ const Upload = ({ machines }: UploadProps) => {
       }
     }
 
-    // 2. Special-case validation by name
+    // 2. Special-case validation by name.
+    // NOTE: These fields are empty on the initial form state but require user input.
     if (!error) {
       if (name === 'machineId') {
         if (value === undefined || value === null || value === '') {
-          // Ensure empty machineId is always treated as required,
-          // even if the field definition is not marked as required
           error = 'Machine ID is required';
         } else {
           const isUuid = /^[0-9a-fA-F-]{36}$/.test(String(value));
@@ -504,12 +504,12 @@ const Upload = ({ machines }: UploadProps) => {
   ): ExternalLinkIn[] => {
     const links: ExternalLinkIn[] = [];
     diagLinks.forEach((l) => {
-      if (l.label.trim() && l.url.trim()) {
+      if (l.label?.trim() && l.url?.trim()) {
         links.push({ kind: 'diagnostic', url: l.url, label: l.label || null });
       }
     });
     paceLinks.forEach((l) => {
-      if (l.label.trim() && l.url.trim()) {
+      if (l.label?.trim() && l.url?.trim()) {
         links.push({ kind: 'performance', url: l.url, label: l.label || null });
       }
     });
@@ -550,9 +550,11 @@ const Upload = ({ machines }: UploadProps) => {
     else if (name === 'extra') {
       try {
         normalizedValue = value ? JSON.parse(value) : {};
+
         setErrors((prev) => ({ ...prev, [name]: '' }));
       } catch {
         normalizedValue = {};
+
         setErrors((prev) => ({
           ...prev,
           [name]: 'Invalid JSON format',
@@ -640,7 +642,7 @@ const Upload = ({ machines }: UploadProps) => {
             description:
               typeof data?.detail === 'string'
                 ? data.detail
-                : 'The simulation request is valid but canot be accepted.',
+                : 'The simulation request is valid but cannot be accepted.',
             variant: 'destructive',
           });
 
@@ -706,29 +708,29 @@ const Upload = ({ machines }: UploadProps) => {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
 
-    const uiFields = [
-      ...configFields,
-      ...modelFields,
-      ...versionFields,
-      ...timelineFields,
-      ...docFields,
-      ...metaFields,
-      ...pathFields,
-    ].map((f) => f.name);
-
-    // Fields intentionally ignored (appear in state, not UI)
     const ignore = new Set(['artifacts', 'links']);
+
+    const uiFieldSet = new Set(
+      [
+        ...configFields,
+        ...modelFields,
+        ...versionFields,
+        ...timelineFields,
+        ...docFields,
+        ...metaFields,
+        ...pathFields,
+      ].map((f) => f.name),
+    );
 
     const stateKeys = Object.keys(initialState).filter((k) => !ignore.has(k));
 
-    const missingInUI = stateKeys.filter((k) => !uiFields.includes(k));
-    const missingInState = uiFields.filter((k) => !stateKeys.includes(k));
+    const missingInUI = stateKeys.filter((k) => !uiFieldSet.has(k));
+    const missingInState = [...uiFieldSet].filter((k) => !stateKeys.includes(k));
 
     if (missingInUI.length || missingInState.length) {
       console.group('⚠️ Field mismatch detected');
-      if (missingInUI.length) console.log('State fields missing UI:', missingInUI);
-      if (missingInState.length) console.log('UI fields missing state:', missingInState);
-
+      if (missingInUI.length) console.warn('State fields missing UI:', missingInUI);
+      if (missingInState.length) console.warn('UI fields missing state:', missingInState);
       console.groupEnd();
     }
   }, [configFields, modelFields, versionFields, timelineFields, docFields, metaFields, pathFields]);
@@ -962,6 +964,18 @@ const Upload = ({ machines }: UploadProps) => {
                   placeholder={field.placeholder}
                 />
 
+                {field.name === 'outputPath' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter a single path (for example: <code>/path</code>)
+                  </p>
+                )}
+                {field.name !== 'outputPath' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter a comma-separated list of paths (for example: <code>/path1,/path2</code>{' '}
+                    or <code>/path1, /path2</code>).
+                  </p>
+                )}
+
                 {errors[field.name] && (
                   <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
                 )}
@@ -1096,52 +1110,32 @@ const Upload = ({ machines }: UploadProps) => {
             )}
             <div className="space-y-4">
               <ReviewSection title="Configuration">
-                <FieldList form={form} fields={configFields} />
+                <ReviewFieldList form={form} fields={configFields} />
               </ReviewSection>
 
               <ReviewSection title="Model Setup">
-                <FieldList form={form} fields={modelFields} />
+                <ReviewFieldList form={form} fields={modelFields} />
               </ReviewSection>
 
               <ReviewSection title="Version Control">
-                <FieldList form={form} fields={versionFields} />
+                <ReviewFieldList form={form} fields={versionFields} />
               </ReviewSection>
 
               <ReviewSection title="Timeline">
-                <FieldList form={form} fields={timelineFields} />
+                <ReviewFieldList form={form} fields={timelineFields} />
               </ReviewSection>
 
               <ReviewSection title="Data Paths & Scripts">
-                <FieldList form={form} fields={pathFields} />
+                <ReviewFieldList form={form} fields={pathFields} />
               </ReviewSection>
               <ReviewSection title="Diagnostic Links">
-                <FieldList
-                  form={{ diagLinks }}
-                  fields={[
-                    {
-                      label: 'Diagnostic Links',
-                      name: 'diagLinks',
-                      required: false,
-                      type: 'links',
-                    },
-                  ]}
-                />
+                <ReviewLinkList links={diagLinks} />
               </ReviewSection>
               <ReviewSection title="PACE Links">
-                <FieldList
-                  form={{ paceLinks }}
-                  fields={[
-                    {
-                      label: 'PACE Links',
-                      name: 'paceLinks',
-                      required: false,
-                      type: 'links',
-                    },
-                  ]}
-                />
+                <ReviewLinkList links={paceLinks} />
               </ReviewSection>
               <ReviewSection title="Documentation & Notes">
-                <FieldList form={form} fields={[...docFields, ...metaFields]} />
+                <ReviewFieldList form={form} fields={[...docFields, ...metaFields]} />
               </ReviewSection>
             </div>
           </div>
@@ -1166,7 +1160,11 @@ const Upload = ({ machines }: UploadProps) => {
                 <button
                   type="button"
                   className="bg-gray-900 text-white px-5 py-2 rounded-md disabled:opacity-50"
-                  disabled={Object.values(errors).some(Boolean) || !allFieldsValid || isSubmitting}
+                  disabled={
+                    Object.values(errors).filter((msg) => msg !== '').length > 0 ||
+                    !allFieldsValid ||
+                    isSubmitting
+                  }
                   onClick={handleSubmit}
                 >
                   Submit simulation
