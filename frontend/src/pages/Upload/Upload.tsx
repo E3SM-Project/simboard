@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -218,6 +218,11 @@ const Upload = ({ machines }: UploadProps) => {
         required: true,
         type: 'select',
         options: machines.map((m) => ({ value: m.id, label: m.name })),
+        renderValue: (value: string) => {
+          const machine = machines.find((m) => m.id === value);
+
+          return machine ? machine.name : value;
+        },
       },
     ],
     [machines],
@@ -615,14 +620,38 @@ const Upload = ({ machines }: UploadProps) => {
 
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-        const detail = error.response?.data?.detail;
+        const data = error.response?.data;
+
+        // TODO: Handle errors more gracefully by having the form detect them first.
+        if (status === 422 && Array.isArray(data?.detail)) {
+          toast({
+            title: 'Invalid form data',
+            description: 'Some fields are missing or invalid. Please review the form and try again',
+            variant: 'destructive',
+          });
+
+          return;
+        }
+
+        if (status === 400) {
+          toast({
+            title: 'Cannot create simulation',
+            description:
+              typeof data?.detail === 'string'
+                ? data.detail
+                : 'The simulation request is valid but canot be accepted.',
+            variant: 'destructive',
+          });
+
+          return;
+        }
 
         if (status === 409) {
           toast({
             title: 'Simulation already exists',
             description:
-              typeof detail === 'string'
-                ? detail
+              typeof data?.detail === 'string'
+                ? data.detail
                 : 'A simulation with the same name or case already exists.',
             variant: 'destructive',
           });
@@ -721,6 +750,18 @@ const Upload = ({ machines }: UploadProps) => {
         );
       });
   };
+
+  const completed =
+    fieldsSatisfied.configuration +
+    fieldsSatisfied.modelSetup +
+    fieldsSatisfied.timeline +
+    fieldsSatisfied.paths;
+
+  const required =
+    requiredFields.configuration +
+    requiredFields.modelSetup +
+    requiredFields.timeline +
+    requiredFields.paths;
 
   return (
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
@@ -997,46 +1038,45 @@ const Upload = ({ machines }: UploadProps) => {
           isOpen={reviewOpen}
           onToggle={() => setReviewOpen((v) => !v)}
         >
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
-              <svg
-                className="w-5 h-5 text-blue-500 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="white" />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 8v4m0 4h.01"
+          <div
+            className="mb-4 max-h-[60vh] md:max-h-[600px] overflow-y-auto pr-2"
+            style={{ scrollbarGutter: 'stable' }}
+            tabIndex={0}
+          >
+            <div className="sticky top-0 z-10 mb-3">
+              <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded">
+                <svg
+                  className="w-5 h-5 text-blue-500 flex-shrink-0"
+                  fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
-                />
-              </svg>
-              <span className="text-sm text-blue-900">
-                <span className="font-medium">Review your entries below.</span> Required fields are
-                marked with <span className="text-red-500">*</span>. All required fields must be
-                filled before submitting.
-              </span>
-              <span
-                className={`ml-auto px-2 py-1 rounded text-xs font-semibold ${
-                  allFieldsValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}
-              >
-                {fieldsSatisfied.configuration +
-                  fieldsSatisfied.modelSetup +
-                  fieldsSatisfied.timeline +
-                  fieldsSatisfied.paths}{' '}
-                /{' '}
-                {requiredFields.configuration +
-                  requiredFields.modelSetup +
-                  requiredFields.timeline +
-                  requiredFields.paths}{' '}
-                required fields completed
-              </span>
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <circle cx="12" cy="12" r="10" fill="white" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+                </svg>
+
+                <span className="text-sm text-slate-700">
+                  <span className="font-medium">Review your entries below.</span> Required fields
+                  are marked with <span className="text-red-500">*</span> and must be filled before
+                  submitting.
+                </span>
+
+                <span
+                  className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
+                    allFieldsValid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}
+                >
+                  {allFieldsValid ? (
+                    <CheckCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                  )}
+                  {completed} / {required} required
+                </span>
+              </div>
             </div>
+
             {Object.values(errors).some(Boolean) && (
               <div className="mt-2 text-red-600 text-sm">
                 Please fix the errors above before submitting.
@@ -1053,57 +1093,57 @@ const Upload = ({ machines }: UploadProps) => {
                 </ul>
               </div>
             )}
+            <div className="space-y-4">
+              <ReviewSection title="Configuration">
+                <FieldList form={form} fields={configFields} />
+              </ReviewSection>
+
+              <ReviewSection title="Model Setup">
+                <FieldList form={form} fields={modelFields} />
+              </ReviewSection>
+
+              <ReviewSection title="Version Control">
+                <FieldList form={form} fields={versionFields} />
+              </ReviewSection>
+
+              <ReviewSection title="Timeline">
+                <FieldList form={form} fields={timelineFields} />
+              </ReviewSection>
+
+              <ReviewSection title="Data Paths & Scripts">
+                <FieldList form={form} fields={pathFields} />
+              </ReviewSection>
+              <ReviewSection title="Diagnostic Links">
+                <FieldList
+                  form={{ diagLinks }}
+                  fields={[
+                    {
+                      label: 'Diagnostic Links',
+                      name: 'diagLinks',
+                      required: false,
+                      type: 'links',
+                    },
+                  ]}
+                />
+              </ReviewSection>
+              <ReviewSection title="PACE Links">
+                <FieldList
+                  form={{ paceLinks }}
+                  fields={[
+                    {
+                      label: 'PACE Links',
+                      name: 'paceLinks',
+                      required: false,
+                      type: 'links',
+                    },
+                  ]}
+                />
+              </ReviewSection>
+              <ReviewSection title="Documentation & Notes">
+                <FieldList form={form} fields={[...docFields, ...metaFields]} />
+              </ReviewSection>
+            </div>
           </div>
-          <div className="space-y-4">
-            <ReviewSection title="Configuration">
-              <FieldList form={form} fields={configFields} />
-            </ReviewSection>
-
-            <ReviewSection title="Model Setup">
-              <FieldList form={form} fields={modelFields} />
-            </ReviewSection>
-
-            <ReviewSection title="Version Control">
-              <FieldList form={form} fields={versionFields} />
-            </ReviewSection>
-
-            <ReviewSection title="Timeline">
-              <FieldList form={form} fields={timelineFields} />
-            </ReviewSection>
-
-            <ReviewSection title="Data Paths & Scripts">
-              <FieldList form={form} fields={pathFields} />
-            </ReviewSection>
-            <ReviewSection title="Diagnostic Links">
-              <FieldList
-                form={{ diagLinks }}
-                fields={[
-                  {
-                    label: 'Diagnostic Links',
-                    name: 'diagLinks',
-                    required: false,
-                    type: 'links',
-                  },
-                ]}
-              />
-            </ReviewSection>
-            <ReviewSection title="PACE Links">
-              <FieldList
-                form={{ paceLinks }}
-                fields={[
-                  {
-                    label: 'PACE Links',
-                    name: 'paceLinks',
-                    required: false,
-                    type: 'links',
-                  },
-                ]}
-              />
-            </ReviewSection>
-          </div>
-          <ReviewSection title="Documentation & Notes">
-            <FieldList form={form} fields={[...docFields, ...metaFields]} />
-          </ReviewSection>
         </FormSection>
 
         <div className="sticky bottom-0 inset-x-0 border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">

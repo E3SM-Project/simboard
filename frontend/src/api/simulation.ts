@@ -6,14 +6,9 @@ import type { Machine, SimulationCreate, SimulationOut } from '@/types';
 const SIMULATIONS_URL = '/simulations';
 
 export const createSimulation = async (data: SimulationCreate): Promise<SimulationOut> => {
-  try {
-    const res = await api.post<SimulationOut>(SIMULATIONS_URL, data);
+  const res = await api.post<SimulationOut>(SIMULATIONS_URL, data);
 
-    return res.data;
-  } catch (err) {
-    console.error('Error creating simulation:', err);
-    throw err;
-  }
+  return res.data;
 };
 
 export const fetchSimulations = async (url: string = SIMULATIONS_URL): Promise<SimulationOut[]> => {

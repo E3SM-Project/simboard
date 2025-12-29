@@ -1,3 +1,6 @@
+import { JSX } from 'react';
+
+import { ArtifactIn } from '@/types';
 import type { ExternalLinkIn } from '@/types/link';
 import { SimulationCreateForm } from '@/types/simulation';
 
@@ -12,24 +15,32 @@ interface FieldListProps {
   className?: string;
 }
 export const FieldList = ({ form, fields, className = 'text-sm space-y-2' }: FieldListProps) => {
+  const fieldIsEmpty = (value: unknown): boolean => {
+    if (value == null) return true;
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') return Object.keys(value).length === 0;
+    return value === '';
+  };
+
   return (
     <div className={className}>
       {fields.map((field) => {
         const value = form[field.name as keyof SimulationCreateForm];
-        const isEmpty =
-          value === undefined ||
-          value === null ||
-          (Array.isArray(value) ? value.length === 0 : value === '') ||
-          (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
+        const isEmpty = fieldIsEmpty(value);
 
-        let displayValue: string | JSX.Element;
-        // @ts-expect-error: type may exist on some fields
-        if (field.type === 'links' && Array.isArray(value) && value.length > 0) {
-          displayValue = (
-            <ul className="list-disc ml-6">
-              {value
-                .filter((link: ExternalLinkIn) => link.label && link.url)
-                .map((link: ExternalLinkIn, idx: number) => (
+        let displayValue: string | JSX.Element = '—';
+
+        // 1. Structural rendering.
+        // @ts-expect-error: discriminated union to be fixed later
+        if (field.type === 'links' && Array.isArray(value)) {
+          const validLinks = value.filter((link: ExternalLinkIn) => link.label && link.url);
+
+          displayValue =
+            validLinks.length === 0 ? (
+              '—'
+            ) : (
+              <ul className="list-disc ml-6">
+                {validLinks.map((link, idx) => (
                   <li key={idx}>
                     <span className="font-medium">{link.label}:</span>{' '}
                     <a
@@ -42,24 +53,25 @@ export const FieldList = ({ form, fields, className = 'text-sm space-y-2' }: Fie
                     </a>
                   </li>
                 ))}
-            </ul>
-          );
-          // If no valid links, show em dash
-          if (
-            value.filter((link: { label: string; url: string }) => link.label && link.url)
-              .length === 0
-          ) {
-            displayValue = '—';
-          }
+              </ul>
+            );
+
+          // 2. Field-provided renderValue (scalar customization)
+        } else if (!isEmpty && field.renderValue) {
+          displayValue = field.renderValue(value);
+
+          // 3. Generic fallbacks
         } else if (Array.isArray(value)) {
-          displayValue = value.join(', ') || '—';
+          displayValue = value.length ? value.join(', ') : '—';
         } else if (typeof value === 'object' && value !== null) {
           displayValue = JSON.stringify(value, null, 2);
-        } else {
-          displayValue = value ?? '—';
+        } else if (!isEmpty) {
+          displayValue = value;
         }
 
         let bgColor = 'bg-gray-100';
+
+        // FIXME: Fix the type check here.
         // @ts-expect-error: required may exist on some fields
         if (field.required) {
           bgColor = isEmpty ? 'bg-yellow-100' : 'bg-green-100';

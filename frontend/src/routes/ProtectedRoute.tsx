@@ -8,7 +8,7 @@ const ProtectedRoute = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className="flex items-center justify-center h-64 text-gray-500" aria-live="polite">
         Checking authentication…
       </div>
     );
