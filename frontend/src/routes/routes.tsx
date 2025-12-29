@@ -3,7 +3,7 @@ import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 import { useSimulation } from '@/api/simulation';
 import AuthCallback from '@/auth/AuthCallback';
 import { BrowsePage } from '@/features/browse/BrowsePage';
-import Compare from '@/pages/Compare/Compare';
+import { ComparePage } from '@/features/compare/ComparePage';
 import Docs from '@/pages/Docs/Docs';
 import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
@@ -77,7 +77,7 @@ const createRoutes = ({
     {
       path: '/compare',
       element: (
-        <Compare
+        <ComparePage
           simulations={simulations}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}

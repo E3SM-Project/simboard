@@ -2,24 +2,24 @@ import { ChevronRight } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { AIFloatingButton } from '@/pages/Compare/AIFloatingButton';
-import CompareToolbar from '@/pages/Compare/CompareToolbar';
-import { norm, renderCellValue } from '@/pages/Compare/utils';
+import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
+import CompareToolbar from '@/features/compare/components/CompareToolbar';
+import { norm, renderCellValue } from '@/features/compare/utils';
 import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
-interface CompareProps {
+interface ComparePageProps {
   simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];
 }
 
-const Compare = ({
+export const ComparePage = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
-}: CompareProps) => {
+}: ComparePageProps) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
   const handleButtonClick = () => navigate('/Browse');
@@ -535,5 +535,3 @@ const Compare = ({
     </div>
   );
 };
-
-export default Compare;
