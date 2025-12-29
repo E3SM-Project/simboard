@@ -24,7 +24,11 @@ interface SimulationResultCard {
   handleSelect: (sim: SimulationOut) => void;
 }
 
-const SimulationResultCard = ({ simulation, selected, handleSelect }: SimulationResultCard) => {
+export const SimulationResultCard = ({
+  simulation,
+  selected,
+  handleSelect,
+}: SimulationResultCard) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
 
@@ -318,5 +322,3 @@ const SimulationResultCard = ({ simulation, selected, handleSelect }: Simulation
     </Card>
   );
 };
-
-export default SimulationResultCard;

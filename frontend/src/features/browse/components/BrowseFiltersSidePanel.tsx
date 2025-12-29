@@ -1,9 +1,9 @@
 import { Funnel } from 'lucide-react';
 
 import { MultiSelect } from '@/components/ui/multi-select';
-import type { FilterState } from '@/features/browse/Browse';
-import CollapsibleGroup from '@/features/browse/CollapsibleGroup';
-import MultiSelectCheckboxGroup from '@/features/browse/MultiSelectCheckBoxGroup';
+import type { FilterState } from '@/features/browse/BrowsePage';
+import CollapsibleGroup from '@/features/browse/components/CollapsibleGroup';
+import MultiSelectCheckboxGroup from '@/features/browse/components/MultiSelectCheckBoxGroup';
 
 interface FilterPanelProps {
   appliedFilters: FilterState;
@@ -12,7 +12,7 @@ interface FilterPanelProps {
   machineOptions: { value: string; label: string }[];
 }
 
-const BrowseFiltersSidePanel = ({
+export const BrowseFiltersSidePanel = ({
   appliedFilters,
   availableFilters,
   onChange,
@@ -189,5 +189,3 @@ const BrowseFiltersSidePanel = ({
     </aside>
   );
 };
-
-export default BrowseFiltersSidePanel;

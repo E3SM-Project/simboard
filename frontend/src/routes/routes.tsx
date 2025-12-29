@@ -2,7 +2,7 @@ import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 
 import { useSimulation } from '@/api/simulation';
 import AuthCallback from '@/auth/AuthCallback';
-import Browse from '@/features/browse/Browse';
+import { BrowsePage } from '@/features/browse/BrowsePage';
 import Compare from '@/pages/Compare/Compare';
 import Docs from '@/pages/Docs/Docs';
 import Home from '@/pages/Home/Home';
@@ -65,7 +65,7 @@ const createRoutes = ({
     {
       path: '/browse',
       element: (
-        <Browse
+        <BrowsePage
           simulations={simulations}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}

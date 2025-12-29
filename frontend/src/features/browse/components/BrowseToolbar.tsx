@@ -12,7 +12,7 @@ interface SelectedSimulationsBreadcrumbProps {
 
 const MAX_SELECTION = 5;
 
-const BrowseToolbar = ({
+export const BrowseToolbar = ({
   simulations,
   buttonText,
   onCompareButtonClick,
@@ -77,5 +77,3 @@ const BrowseToolbar = ({
     </div>
   );
 };
-
-export default BrowseToolbar;

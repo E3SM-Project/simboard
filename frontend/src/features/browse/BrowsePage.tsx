@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import BrowseFiltersSidePanel from '@/features/browse/BrowseFiltersSidePanel';
-import SimulationResultCards from '@/features/browse/SimulationResultsCards';
-import SimulationResultsTable from '@/features/browse/SimulationResultsTable';
+import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
+import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
+import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
@@ -32,7 +32,7 @@ export interface FilterState {
   createdBy: string[];
 }
 
-interface BrowseProps {
+interface BrowsePageProps {
   simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
@@ -61,7 +61,11 @@ const createEmptyFilters = (): FilterState => ({
   createdBy: [],
 });
 
-const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }: BrowseProps) => {
+export const BrowsePage = ({
+  simulations,
+  selectedSimulationIds,
+  setSelectedSimulationIds,
+}: BrowsePageProps) => {
   // -------------------- Router --------------------
   const location = useLocation();
   const navigate = useNavigate();
@@ -424,5 +428,3 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     </div>
   );
 };
-
-export default Browse;

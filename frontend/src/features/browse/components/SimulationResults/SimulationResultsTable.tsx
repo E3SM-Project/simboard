@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import BrowseToolbar from '@/features/browse/BrowseToolbar';
+import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import type { SimulationOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
@@ -294,7 +294,7 @@ const getStickyLeftOffset = (
   return left;
 };
 
-const SimulationResultsTable = ({
+export const SimulationResultsTable = ({
   simulations,
   filteredData,
   selectedSimulationIds,
@@ -503,5 +503,3 @@ const SimulationResultsTable = ({
     </div>
   );
 };
-
-export default SimulationResultsTable;

@@ -1,5 +1,5 @@
-import BrowseToolbar from '@/features/browse/BrowseToolbar';
-import SimulationResultCard from '@/features/browse/SimulationResultCard';
+import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
+import { SimulationResultCard } from '@/features/browse/components/SimulationResults/SimulationResultCard';
 import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCards {
@@ -10,7 +10,7 @@ interface SimulationResultCards {
   handleCompareButtonClick: () => void;
 }
 
-const SimulationResultCards = ({
+export const SimulationResultCards = ({
   simulations,
   filteredData,
   selectedSimulationIds,
@@ -53,5 +53,3 @@ const SimulationResultCards = ({
     </div>
   );
 };
-
-export default SimulationResultCards;
