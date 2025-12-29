@@ -2,15 +2,15 @@ import { Earth } from 'lucide-react'; // Or use your own SVG if you have one
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import LatestSimulationsTable from '@/pages/Home/LatestSimulationsTable';
+import LatestSimulationsTable from '@/features/home/components/LatestSimulationsTable';
 import type { Machine, SimulationOut } from '@/types/index';
 
-interface HomeProps {
+interface HomePageProps {
   simulations: SimulationOut[];
   machines: Machine[];
 }
 
-const Home = ({ simulations, machines }: HomeProps) => {
+export const HomePage = ({ simulations, machines }: HomePageProps) => {
   const latestSimulations = [...simulations]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 6);
@@ -169,5 +169,3 @@ const Home = ({ simulations, machines }: HomeProps) => {
     </main>
   );
 };
-
-export default Home;

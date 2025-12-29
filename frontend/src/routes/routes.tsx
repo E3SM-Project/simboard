@@ -5,7 +5,7 @@ import AuthCallback from '@/auth/AuthCallback';
 import { BrowsePage } from '@/features/browse/BrowsePage';
 import { ComparePage } from '@/features/compare/ComparePage';
 import { DocsPage } from '@/features/docs/Docs';
-import Home from '@/pages/Home/Home';
+import { HomePage } from '@/features/home/HomePage';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
 import Upload from '@/pages/Upload/Upload';
@@ -61,7 +61,7 @@ const createRoutes = ({
   selectedSimulations,
 }: RoutesProps): RouteObject[] => {
   return [
-    { path: '/', element: <Home simulations={simulations} machines={machines} /> },
+    { path: '/', element: <HomePage simulations={simulations} machines={machines} /> },
     {
       path: '/browse',
       element: (
