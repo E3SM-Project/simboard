@@ -4,7 +4,7 @@ import { useSimulation } from '@/api/simulation';
 import AuthCallback from '@/auth/AuthCallback';
 import { BrowsePage } from '@/features/browse/BrowsePage';
 import { ComparePage } from '@/features/compare/ComparePage';
-import Docs from '@/pages/Docs/Docs';
+import { DocsPage } from '@/features/docs/Docs';
 import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
@@ -89,7 +89,8 @@ const createRoutes = ({
       element: <ProtectedRoute />,
       children: [{ path: '/upload', element: <Upload machines={machines} /> }],
     },
-    { path: '/docs', element: <Docs /> },
+    { path: '/upload', element: <Upload machines={machines} /> },
+    { path: '/docs', element: <DocsPage /> },
     { path: '/auth/callback', element: <AuthCallback /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },
   ];
