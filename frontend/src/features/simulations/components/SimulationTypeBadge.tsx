@@ -41,7 +41,7 @@ const getStyleProps = (simulationType: string) => {
   return styles.experimental;
 };
 
-const SimulationTypeBadge = ({ simulationType }: SimulationTypeBadgeProps) => {
+export const SimulationTypeBadge = ({ simulationType }: SimulationTypeBadgeProps) => {
   const { className, style, label, Icon } = getStyleProps(simulationType);
 
   return (
@@ -51,4 +51,3 @@ const SimulationTypeBadge = ({ simulationType }: SimulationTypeBadgeProps) => {
   );
 };
 
-export default SimulationTypeBadge;
