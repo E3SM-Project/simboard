@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosResponse } from "axios";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://127.0.0.1:8000/api';
 
 export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
@@ -45,4 +45,3 @@ api.interceptors.response.use(
   }
 );
 
-export default api;

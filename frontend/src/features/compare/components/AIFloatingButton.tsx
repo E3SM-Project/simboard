@@ -2,8 +2,8 @@ import { Sparkles, X } from 'lucide-react';
 import { Loader2 } from 'lucide-react'; // shadcn spinner icon
 import { useState } from 'react';
 
-import { fetchAISimAnalysis } from '@/api/compareAPI';
 import { Button } from '@/components/ui/button';
+import { getAISimAnalysis } from '@/features/compare/api/api';
 import type { SimulationOut } from '@/types/index';
 
 interface AIFloatingButton {
@@ -22,7 +22,7 @@ export const AIFloatingButton = ({ selectedSimulations }: AIFloatingButton) => {
     setAIResult(null);
     try {
       const simulations = selectedSimulations.map((sim) => ({ ...sim }));
-      const aiSummary = await fetchAISimAnalysis(simulations);
+      const aiSummary = await getAISimAnalysis(simulations);
       setAIResult(aiSummary || 'No summary available.');
     } catch (err) {
       setAIResult('Error generating summary.');

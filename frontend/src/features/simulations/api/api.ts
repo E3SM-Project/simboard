@@ -1,4 +1,4 @@
-import api from '@/api/api';
+import { api } from '@/api/api';
 import type { SimulationCreate, SimulationOut } from '@/types';
 
 export const SIMULATIONS_URL = '/simulations';
