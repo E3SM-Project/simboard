@@ -104,396 +104,390 @@ export const SimulationDetailsView = ({
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="outputs">Outputs & Logs</TabsTrigger>
         </TabsList>
 
         {/* SUMMARY TAB */}
         <TabsContent value="summary" className="space-y-6">
-          <TabsContent value="summary" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Configuration</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <FieldRow label="Simulation Name">
-                    <ReadonlyInput value={simulation.name} />
-                  </FieldRow>
-                  <FieldRow label="Case Name">
-                    <ReadonlyInput value={simulation.caseName} />
-                  </FieldRow>
-                  <FieldRow label="Model Version">
-                    <ReadonlyInput value={simulation.gitTag ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Compset">
-                    <ReadonlyInput value={simulation.compset ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Grid Name">
-                    <ReadonlyInput value={simulation.gridName ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Grid Resolution">
-                    <ReadonlyInput value={simulation.gridResolution ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Initialization Type">
-                    <ReadonlyInput value={simulation.initializationType ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Compiler">
-                    <ReadonlyInput value={simulation.compiler ?? undefined} />
-                  </FieldRow>
-                  <FieldRow label="Parent Simulation ID">
-                    <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
-                  </FieldRow>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Model Setup</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <FieldRow label="Simulation Type">
-                    <ReadonlyInput value={simulation.simulationType} />
-                  </FieldRow>
-                  <FieldRow label="Status">
-                    <ReadonlyInput value={simulation.status} />
-                  </FieldRow>
-                  <FieldRow label="Campaign ID">
-                    <ReadonlyInput value={simulation.campaignId} />
-                  </FieldRow>
-                  <FieldRow label="Experiment Type ID">
-                    <ReadonlyInput value={simulation.experimentTypeId} />
-                  </FieldRow>
-                  <FieldRow label="Machine">
-                    <ReadonlyInput value={simulation.machine.name} />
-                  </FieldRow>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Timeline</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <FieldRow label="Simulation Start Date">
-                    <span className="text-sm">
-                      {simulation.simulationStartDate
-                        ? formatDate(simulation.simulationStartDate)
-                        : '—'}
-                    </span>
-                  </FieldRow>
-                  <FieldRow label="Simulation End Date">
-                    <span className="text-sm">
-                      {simulation.simulationEndDate
-                        ? formatDate(simulation.simulationEndDate)
-                        : '—'}
-                    </span>
-                  </FieldRow>
-                  <FieldRow label="Total Duration">
-                    <span className="text-sm">
-                      {simulation.simulationStartDate && simulation.simulationEndDate
-                        ? (() => {
-                            return getSimulationDuration(
-                              simulation.simulationStartDate,
-                              simulation.simulationEndDate,
-                            );
-                          })()
-                        : '—'}
-                    </span>
-                  </FieldRow>
-                  {simulation.runStartDate && (
-                    <FieldRow label="Run Start Date">
-                      <span className="text-sm">{formatDate(simulation.runStartDate)}</span>
-                    </FieldRow>
-                  )}
-                  {simulation.runEndDate && (
-                    <FieldRow label="Run End Date">
-                      <span className="text-sm">{formatDate(simulation.runEndDate)}</span>
-                    </FieldRow>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Provenance</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">Created:</Label>
-                    <span className="text-sm">
-                      {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
-                    </span>
-                    {simulation.createdBy && (
-                      <span className="text-sm">by {simulation.createdBy}</span>
-                    )}
-                  </div>
-                  {/* Last edited row */}
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">
-                      Last edited:
-                    </Label>
-                    <span className="text-sm">
-                      {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
-                    </span>
-                    {simulation.lastUpdatedBy && (
-                      <span className="text-sm">by {simulation.lastUpdatedBy}</span>
-                    )}
-                  </div>
-                  {/* Simulation UUID row */}
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">
-                      Simulation UUID:
-                    </Label>
-                    <ReadonlyInput
-                      value={
-                        simulation.id
-                          ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`
-                          : undefined
-                      }
-                    />
-                    {simulation.id && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        onClick={() => navigator.clipboard.writeText(simulation.id)}
-                        title="Copy full Simulation ID"
-                      >
-                        Copy
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">
-                      Git Repository:
-                    </Label>
-                    {simulation.gitRepositoryUrl ? (
-                      <a
-                        href={simulation.gitRepositoryUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        {simulation.gitRepositoryUrl}
-                      </a>
-                    ) : (
-                      <p className="text-sm">—</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">
-                      Git Branch:
-                    </Label>
-                    <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">Git Tag:</Label>
-                    <p className="text-sm">{simulation.gitTag ?? '—'}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">
-                      Git Commit Hash:
-                    </Label>
-                    <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="lg:col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">External Resources</CardTitle>
-                </div>
+                <CardTitle className="text-base">Configuration</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <Label className="mb-1 block text-sm">Diagnostics</Label>
-                    {simulation.groupedLinks.diagnostic?.length ? (
-                      <ul className="list-disc pl-5 text-sm">
-                        {simulation.groupedLinks.diagnostic.map((d) => (
-                          <li key={d.url} className="flex items-center gap-2">
-                            <a
-                              className="text-blue-600 hover:underline flex items-center gap-1"
-                              href={d.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                className="inline-block"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                />
-                              </svg>
-                              {d.label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="mb-2 text-sm text-muted-foreground">
-                        Links to diagnostics will appear here once available.
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="mb-1 block text-sm">Performance</Label>
-                    {simulation.groupedLinks.performance?.length ? (
-                      <ul className="list-disc pl-5 text-sm">
-                        {simulation.groupedLinks.performance.map((p) => (
-                          <li key={p.url} className="flex items-center gap-2">
-                            <a
-                              className="text-blue-600 hover:underline flex items-center gap-1"
-                              href={p.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                className="inline-block"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                />
-                              </svg>
-                              {p.label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="mb-2 text-sm text-muted-foreground">
-                        Links to performance metrics will appear here once available.
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  {Object.entries(simulation.groupedLinks)
-                    .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
-                    .map(([key, linkList]) => (
-                      <div key={key} className="mb-4">
-                        <h4 className="text-sm font-medium capitalize">{key}</h4>
-                        <ul className="list-disc pl-5 text-sm">
-                          {linkList.map((link) => (
-                            <li key={link.url} className="flex items-center gap-2">
-                              <a
-                                className="text-blue-600 hover:underline flex items-center gap-1"
-                                href={link.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="16"
-                                  height="16"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  className="inline-block"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                  />
-                                </svg>
-                                {link.label}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                </div>
+              <CardContent className="space-y-3">
+                <FieldRow label="Simulation Name">
+                  <ReadonlyInput value={simulation.name} />
+                </FieldRow>
+                <FieldRow label="Case Name">
+                  <ReadonlyInput value={simulation.caseName} />
+                </FieldRow>
+                <FieldRow label="Model Version">
+                  <ReadonlyInput value={simulation.gitTag ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Compset">
+                  <ReadonlyInput value={simulation.compset ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Grid Name">
+                  <ReadonlyInput value={simulation.gridName ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Grid Resolution">
+                  <ReadonlyInput value={simulation.gridResolution ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Initialization Type">
+                  <ReadonlyInput value={simulation.initializationType ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Compiler">
+                  <ReadonlyInput value={simulation.compiler ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Parent Simulation ID">
+                  <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
+                </FieldRow>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Notes</CardTitle>
+                <CardTitle className="text-base">Model Setup</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Textarea
-                  placeholder="Add notes..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="min-h-[120px]"
-                />
-                {!canEdit && (
-                  <p className="text-xs text-muted-foreground">
-                    A user account with write privilege is required to update this simulation page.
-                  </p>
+                <FieldRow label="Simulation Type">
+                  <ReadonlyInput value={simulation.simulationType} />
+                </FieldRow>
+                <FieldRow label="Status">
+                  <ReadonlyInput value={simulation.status} />
+                </FieldRow>
+                <FieldRow label="Campaign ID">
+                  <ReadonlyInput value={simulation.campaignId} />
+                </FieldRow>
+                <FieldRow label="Experiment Type ID">
+                  <ReadonlyInput value={simulation.experimentTypeId} />
+                </FieldRow>
+                <FieldRow label="Machine">
+                  <ReadonlyInput value={simulation.machine.name} />
+                </FieldRow>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Timeline</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <FieldRow label="Simulation Start Date">
+                  <span className="text-sm">
+                    {simulation.simulationStartDate
+                      ? formatDate(simulation.simulationStartDate)
+                      : '—'}
+                  </span>
+                </FieldRow>
+                <FieldRow label="Simulation End Date">
+                  <span className="text-sm">
+                    {simulation.simulationEndDate ? formatDate(simulation.simulationEndDate) : '—'}
+                  </span>
+                </FieldRow>
+                <FieldRow label="Total Duration">
+                  <span className="text-sm">
+                    {simulation.simulationStartDate && simulation.simulationEndDate
+                      ? (() => {
+                          return getSimulationDuration(
+                            simulation.simulationStartDate,
+                            simulation.simulationEndDate,
+                          );
+                        })()
+                      : '—'}
+                  </span>
+                </FieldRow>
+                {simulation.runStartDate && (
+                  <FieldRow label="Run Start Date">
+                    <span className="text-sm">{formatDate(simulation.runStartDate)}</span>
+                  </FieldRow>
                 )}
-                <div>
-                  <Button disabled={!canEdit}>Save</Button>
+                {simulation.runEndDate && (
+                  <FieldRow label="Run End Date">
+                    <span className="text-sm">{formatDate(simulation.runEndDate)}</span>
+                  </FieldRow>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Provenance</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Created:</Label>
+                  <span className="text-sm">
+                    {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
+                  </span>
+                  {simulation.createdBy && (
+                    <span className="text-sm">by {simulation.createdBy}</span>
+                  )}
+                </div>
+                {/* Last edited row */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Last edited:
+                  </Label>
+                  <span className="text-sm">
+                    {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
+                  </span>
+                  {simulation.lastUpdatedBy && (
+                    <span className="text-sm">by {simulation.lastUpdatedBy}</span>
+                  )}
+                </div>
+                {/* Simulation UUID row */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Simulation UUID:
+                  </Label>
+                  <ReadonlyInput
+                    value={
+                      simulation.id
+                        ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`
+                        : undefined
+                    }
+                  />
+                  {simulation.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(simulation.id)}
+                      title="Copy full Simulation ID"
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Git Repository:
+                  </Label>
+                  {simulation.gitRepositoryUrl ? (
+                    <a
+                      href={simulation.gitRepositoryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {simulation.gitRepositoryUrl}
+                    </a>
+                  ) : (
+                    <p className="text-sm">—</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Branch:</Label>
+                  <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Tag:</Label>
+                  <p className="text-sm">{simulation.gitTag ?? '—'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Git Commit Hash:
+                  </Label>
+                  <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
                 </div>
               </CardContent>
             </Card>
-            <div>
-              <h3 className="mb-2 text-sm font-semibold tracking-tight">Comments</h3>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex gap-3 py-4 px-2 rounded transition-all"
-                    style={{ marginBottom: '16px', marginTop: '16px' }}
-                  >
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarFallback>
-                        {c.author
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                        <span className="font-medium text-foreground">{c.author}</span>
-                        <span>•</span>
-                        <span>{formatDate(c.date)}</span>
-                      </div>
-                      <p className="text-sm leading-relaxed">{c.text}</p>
+          </div>
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">External Resources</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="mb-1 block text-sm">Diagnostics</Label>
+                  {simulation.groupedLinks.diagnostic?.length ? (
+                    <ul className="list-disc pl-5 text-sm">
+                      {simulation.groupedLinks.diagnostic.map((d) => (
+                        <li key={d.url} className="flex items-center gap-2">
+                          <a
+                            className="text-blue-600 hover:underline flex items-center gap-1"
+                            href={d.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              className="inline-block"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                              />
+                            </svg>
+                            {d.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mb-2 text-sm text-muted-foreground">
+                      Links to diagnostics will appear here once available.
                     </div>
-                  </div>
-                ))}
-                <Separator />
-                <div className="flex items-start gap-2">
-                  <Textarea
-                    placeholder="Add a comment ..."
-                    className="min-h-[80px]"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                  />
-                  <Button onClick={addComment} className="shrink-0">
-                    Post
-                  </Button>
+                  )}
+                </div>
+                <div>
+                  <Label className="mb-1 block text-sm">Performance</Label>
+                  {simulation.groupedLinks.performance?.length ? (
+                    <ul className="list-disc pl-5 text-sm">
+                      {simulation.groupedLinks.performance.map((p) => (
+                        <li key={p.url} className="flex items-center gap-2">
+                          <a
+                            className="text-blue-600 hover:underline flex items-center gap-1"
+                            href={p.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              className="inline-block"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                              />
+                            </svg>
+                            {p.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mb-2 text-sm text-muted-foreground">
+                      Links to performance metrics will appear here once available.
+                    </div>
+                  )}
                 </div>
               </div>
+              <div>
+                {Object.entries(simulation.groupedLinks)
+                  .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
+                  .map(([key, linkList]) => (
+                    <div key={key} className="mb-4">
+                      <h4 className="text-sm font-medium capitalize">{key}</h4>
+                      <ul className="list-disc pl-5 text-sm">
+                        {linkList.map((link) => (
+                          <li key={link.url} className="flex items-center gap-2">
+                            <a
+                              className="text-blue-600 hover:underline flex items-center gap-1"
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                className="inline-block"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                />
+                              </svg>
+                              {link.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Textarea
+                placeholder="Add notes..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-[120px]"
+              />
+              {!canEdit && (
+                <p className="text-xs text-muted-foreground">
+                  A user account with write privilege is required to update this simulation page.
+                </p>
+              )}
+              <div>
+                <Button disabled={!canEdit}>Save</Button>
+              </div>
+            </CardContent>
+          </Card>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold tracking-tight">Comments</h3>
+            <div className="space-y-4">
+              {comments.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex gap-3 py-4 px-2 rounded transition-all"
+                  style={{ marginBottom: '16px', marginTop: '16px' }}
+                >
+                  <Avatar className="h-8 w-8 mt-1">
+                    <AvatarFallback>
+                      {c.author
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                      <span className="font-medium text-foreground">{c.author}</span>
+                      <span>•</span>
+                      <span>{formatDate(c.date)}</span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{c.text}</p>
+                  </div>
+                </div>
+              ))}
+              <Separator />
+              <div className="flex items-start gap-2">
+                <Textarea
+                  placeholder="Add a comment ..."
+                  className="min-h-[80px]"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                />
+                <Button onClick={addComment} className="shrink-0">
+                  Post
+                </Button>
+              </div>
             </div>
-          </TabsContent>
+          </div>
         </TabsContent>
 
         {/* OUTPUTS TAB */}

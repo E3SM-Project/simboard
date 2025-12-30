@@ -24,7 +24,8 @@ information on how to get the frontend service started via Docker.
 ## Architecture
 
 - Features are the primary unit (e.g., `features/browse`)
-  - `simulations` is a domain feature.
+  - `simulations` and `machines` are domain features
+  - Make sure to update the "Deep cross-feature imports" section under `no-restricted-imports` with new domain features.
   - Other features (browse, compare, home) may depend on `simulations`.
   - Features must not import or depend on each other directly.
 - API logic lives under `features/*/api`

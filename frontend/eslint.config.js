@@ -69,16 +69,26 @@ export default [
       // Architectural boundaries (feature-based)
       // ----------------------------------------------
       'boundaries/elements': [
-        { type: 'feature', pattern: 'src/features/*' },
-        { type: 'feature-api', pattern: 'src/features/*/api/*' },
-        { type: 'hook', pattern: 'src/features/*/hooks/*' },
+        // Feature modules (entire subtree)
+        { type: 'feature', pattern: 'src/features/**' },
 
-        { type: 'ui', pattern: 'src/components/ui/*' },
-        { type: 'shared', pattern: 'src/components/shared/*' },
+        // Design system / UI primitives
+        { type: 'ui', pattern: 'src/components/ui/**' },
 
-        { type: 'auth', pattern: 'src/auth/*' },
-        { type: 'api-client', pattern: 'src/api/*' },
-        { type: 'app', pattern: 'src/routes/*' },
+        // Shared composite components
+        { type: 'shared', pattern: 'src/components/shared/**' },
+
+        // Utilities
+        { type: 'lib', pattern: 'src/lib/**' },
+
+        // Domain / API contract types
+        { type: 'types', pattern: 'src/types/**' },
+
+        // API client & adapters
+        { type: 'api', pattern: 'src/api/**' },
+
+        // App-level routing & composition
+        { type: 'routes', pattern: 'src/routes/**' },
       ],
     },
 
@@ -131,6 +141,7 @@ export default [
             // --------------------------------------------
             '@/features/*/*/*',
             '!@/features/simulations/**',
+            '!@/features/machines/**',
           ],
         },
       ],
@@ -151,8 +162,7 @@ export default [
             {
               from: 'hook',
               disallow: ['api-client'],
-              message:
-                'Hooks must not import the API client directly. Use feature API modules.',
+              message: 'Hooks must not import the API client directly. Use feature API modules.',
             },
             {
               from: 'ui',
