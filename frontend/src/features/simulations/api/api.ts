@@ -24,4 +24,3 @@ export const getSimulationById = async (id: string): Promise<SimulationOut> => {
 
   return res.data;
 };
-

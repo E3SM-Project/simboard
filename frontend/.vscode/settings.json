@@ -27,15 +27,8 @@
   // ESLint = code quality fixes
   // -----------------------------
   "eslint.enable": true,
-  "eslint.validate": [
-    "javascript",
-    "javascriptreact",
-    "typescript",
-    "typescriptreact"
-  ],
-  "eslint.workingDirectories": [
-    { "directory": ".", "changeProcessCwd": true }
-  ],
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+  "eslint.workingDirectories": [{ "directory": ".", "changeProcessCwd": true }],
 
   // Run ESLint fixes on save (NOT formatting)
   "editor.codeActionsOnSave": {

@@ -1,17 +1,15 @@
-import type { RouteObject } from "react-router-dom"
+import type { RouteObject } from 'react-router-dom';
 
-import { UploadPage } from "@/features/upload/UploadPage"
-import type { Machine } from "@/types"
+import { UploadPage } from '@/features/upload/UploadPage';
+import type { Machine } from '@/types';
 
 interface UploadRoutesProps {
-    machines: Machine[]
+  machines: Machine[];
 }
 
-export const uploadRoutes = ({
-    machines,
-}: UploadRoutesProps): RouteObject[] => [
-        {
-            path: "/upload",
-            element: <UploadPage machines={machines} />,
-        },
-    ]
+export const uploadRoutes = ({ machines }: UploadRoutesProps): RouteObject[] => [
+  {
+    path: '/upload',
+    element: <UploadPage machines={machines} />,
+  },
+];

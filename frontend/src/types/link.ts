@@ -1,8 +1,4 @@
-export type ExternalLinkKind =
-  | "diagnostic"
-  | "performance"
-  | "docs"
-  | "other";
+export type ExternalLinkKind = 'diagnostic' | 'performance' | 'docs' | 'other';
 
 /**
  * Represents a link to an external diagnostic, documentation, or related resource.

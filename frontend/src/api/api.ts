@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosResponse } from "axios";
+import axios, { AxiosError, AxiosResponse } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://127.0.0.1:8000/api';
 
@@ -11,7 +11,7 @@ export const registerLogoutHandler = (fn: LogoutFn): void => {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-   // Required for cookie authentication (e.g., GitHub OAuth).
+  // Required for cookie authentication (e.g., GitHub OAuth).
   withCredentials: true,
   timeout: 10000,
 });
@@ -23,8 +23,8 @@ api.interceptors.response.use(
     const status = error.response?.status;
 
     if (status === 401 || status === 403) {
-      const logoutEndpoint = "/logout";
-      const requestUrl = error.config?.url ?? "";
+      const logoutEndpoint = '/logout';
+      const requestUrl = error.config?.url ?? '';
 
       // Avoid recursive logout when logout call itself fails.
       const isLogoutRequest =
@@ -33,15 +33,14 @@ api.interceptors.response.use(
         requestUrl.includes(`${logoutEndpoint}/`);
 
       if (!isLogoutRequest) {
-          onLogout?.({ silent: true });
+        onLogout?.({ silent: true });
       }
     }
 
     if (import.meta.env.DEV) {
-      console.warn("API Error:", status, error.response?.data);
+      console.warn('API Error:', status, error.response?.data);
     }
 
     return Promise.reject(error);
-  }
+  },
 );
-

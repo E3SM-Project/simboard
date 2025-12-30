@@ -50,4 +50,3 @@ export const SimulationTypeBadge = ({ simulationType }: SimulationTypeBadgeProps
     </Badge>
   );
 };
-

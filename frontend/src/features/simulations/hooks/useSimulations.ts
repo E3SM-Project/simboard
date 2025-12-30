@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from 'react';
 
-import { listSimulations } from "@/features/simulations/api/api";
-import { SimulationOut } from "@/types/simulation";
+import { listSimulations } from '@/features/simulations/api/api';
+import { SimulationOut } from '@/types/simulation';
 
 export const useSimulations = () => {
   const [data, setData] = useState<SimulationOut[]>([]);

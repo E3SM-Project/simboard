@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
-import { getSimulationById } from "@/features/simulations/api/api";
-import { SimulationOut } from "@/types/simulation";
+import { getSimulationById } from '@/features/simulations/api/api';
+import { SimulationOut } from '@/types/simulation';
 
 export const useSimulation = (id: string) => {
   const [data, setData] = useState<SimulationOut | null>(null);

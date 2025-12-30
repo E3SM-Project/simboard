@@ -1,6 +1,5 @@
-import type { ArtifactIn, ArtifactOut } from "@/types/artifact";
-import type { ExternalLinkIn, ExternalLinkOut } from "@/types/link";
-
+import type { ArtifactIn, ArtifactOut } from '@/types/artifact';
+import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 
 /**
  * Request payload for creating a new simulation.
@@ -75,7 +74,7 @@ export interface SimulationCreateForm extends SimulationCreate {
  * API response model for a simulation (from FastAPI / DB).
  * Equivalent to FastAPI SimulationOut schema.
  */
-export interface SimulationOut extends SimulationCreate{
+export interface SimulationOut extends SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
   id: string;

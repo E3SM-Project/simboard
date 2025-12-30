@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from 'react';
 
-import { listMachines } from "@/features/machines/api/api";
-import { Machine } from "@/types";
+import { listMachines } from '@/features/machines/api/api';
+import { Machine } from '@/types';
 
 export const useMachines = () => {
   const [data, setData] = useState<Machine[]>([]);

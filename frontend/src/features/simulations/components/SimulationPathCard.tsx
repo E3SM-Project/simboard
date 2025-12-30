@@ -1,6 +1,6 @@
 import { TooltipTrigger } from '@radix-ui/react-tooltip';
 import { Archive, ClipboardList, FileText, Info, Link2, Package } from 'lucide-react';
-import React from 'react';
+import React, { JSX } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
@@ -20,7 +20,13 @@ const titleIconMap: Record<string, JSX.Element> = {
   batchLog: <ClipboardList size={16} />,
 };
 
-export const SimulationPathCard = ({ kind, title, paths, emptyText, description }: SimulationPathCard) => {
+export const SimulationPathCard = ({
+  kind,
+  title,
+  paths,
+  emptyText,
+  description,
+}: SimulationPathCard) => {
   const hasPaths = paths && paths.length > 0;
 
   return (
