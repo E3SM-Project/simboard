@@ -1,77 +1,148 @@
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import boundaries from 'eslint-plugin-boundaries';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import path from 'node:path';
 
 export default [
+  // --------------------------------------------------
   // Ignore patterns
+  // --------------------------------------------------
   {
     ignores: [
       'dist',
       'src/components/ui/**',
       'src/components/ui/use-toast.ts',
-      'src/components/examples/**' /* auto-generated examples */,
+      'src/components/examples/**', // auto-generated examples
     ],
   },
 
-  // Base JS recommended (flat-ready)
+  // --------------------------------------------------
+  // Base JS + TS
+  // --------------------------------------------------
   js.configs.recommended,
-
   // TypeScript recommended (array of flat configs)
   ...tseslint.configs.recommended,
-
   // Prettier: disable conflicting stylistic rules
   prettier,
 
-  // Project rules
+  // --------------------------------------------------
+  // Frontend project rules
+  // --------------------------------------------------
   {
-    files: ['**/*.{js,jsx,ts,tsx}'],
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
+
     languageOptions: {
       parser: tseslint.parser,
       ecmaVersion: 'latest',
       sourceType: 'module',
+
       globals: {
         ...globals.browser,
         window: 'readonly',
         document: 'readonly',
       },
-      // NOTE: ecmaFeatures was removed in ESLint v9 flat config. JSX is handled by parser + file extensions.
-      // If you have .jsx/.tsx files, parsing JSX will work without ecmaFeatures.
+
+      // REQUIRED for monorepo + path aliases
+      parserOptions: {
+        project: path.resolve('./tsconfig.json'),
+        tsconfigRootDir: path.resolve('.'),
+      },
     },
+
     settings: {
       react: { version: 'detect' },
+
+      // REQUIRED: resolve @/ aliases
+      'import/resolver': {
+        typescript: {
+          project: path.resolve('./tsconfig.json'),
+        },
+      },
+
+      // ----------------------------------------------
+      // Architectural boundaries (feature-based)
+      // ----------------------------------------------
+      'boundaries/elements': [
+        { type: 'feature', pattern: 'src/features/*' },
+        { type: 'feature-api', pattern: 'src/features/*/api/*' },
+        { type: 'hook', pattern: 'src/features/*/hooks/*' },
+
+        { type: 'ui', pattern: 'src/components/ui/*' },
+        { type: 'shared', pattern: 'src/components/shared/*' },
+
+        { type: 'auth', pattern: 'src/auth/*' },
+        { type: 'api-client', pattern: 'src/api/*' },
+        { type: 'app', pattern: 'src/routes/*' },
+      ],
     },
+
     plugins: {
       react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
       'simple-import-sort': simpleImportSort,
+      boundaries,
     },
+
     rules: {
-      // React + Hooks recommended rules (pull .rules explicitly for flat config)
+      // React
       ...react.configs.recommended?.rules,
       ...reactHooks.configs.recommended?.rules,
-
       'react/react-in-jsx-scope': 'off',
 
-      // React Refresh (Vite/fast-refresh)
+      // Fast refresh
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
 
-      // Simple import sort
+      // Imports
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
 
-      // TypeScript-specific tweaks
+      // TypeScript
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
 
-      // Restrict fragile relative-up imports
-      'no-restricted-imports': ['warn', { patterns: ['../../*', '../../../*', '../../../../*'] }],
+      // Prevent fragile relative imports
+      'no-restricted-imports': [
+        'warn',
+        { patterns: ['../../*', '../../../*', '../../../../*'] },
+      ],
+
+      // ----------------------------------------------
+      // Architectural enforcement
+      // ----------------------------------------------
+      'boundaries/element-types': [
+        'error',
+        {
+          default: 'allow',
+          rules: [
+            {
+              from: 'feature',
+              disallow: ['feature'],
+              message:
+                'Features must not import other features. Use shared components or hooks instead.',
+            },
+            {
+              from: 'hook',
+              disallow: ['api-client'],
+              message:
+                'Hooks must not import the API client directly. Use feature API modules.',
+            },
+            {
+              from: 'ui',
+              disallow: ['feature-api'],
+              message:
+                'UI components must not import feature API modules directly. Use hooks instead.',
+            },
+          ],
+        },
+      ],
     },
   },
 ];
