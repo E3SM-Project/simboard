@@ -1,10 +1,10 @@
-import type { RouteObject } from "react-router-dom"
+import type { RouteObject } from 'react-router-dom';
 
-import { DocsPage } from "./DocsPage"
+import { DocsPage } from '@/features/docs/DocsPage';
 
 export const docsRoutes = (): RouteObject[] => [
-    {
-        path: "/docs",
-        element: <DocsPage />,
-    },
-]
+  {
+    path: '/docs',
+    element: <DocsPage />,
+  },
+];
