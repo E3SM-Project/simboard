@@ -108,12 +108,32 @@ export default [
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
 
-      // Prevent fragile relative imports
+      // Import hygiene:
+      // - Prefer absolute imports (@/) over deep relative paths
+      // - Discourage deep cross-feature imports (boundaries handle final enforcement)
       'no-restricted-imports': [
         'warn',
-        { patterns: ['../../*', '../../../*', '../../../../*'] },
-      ],
+        {
+          patterns: [
+            // --------------------------------------------
+            // Deep relative imports (fragile)
+            // --------------------------------------------
+            '../..',
+            '../../*',
+            '../../..',
+            '../../../*',
+            '../../../..',
+            '../../../../*',
 
+            // --------------------------------------------
+            // Deep cross-feature imports (early guardrail)
+            // Allow domain feature: simulations
+            // --------------------------------------------
+            '@/features/*/*/*',
+            '!@/features/simulations/**',
+          ],
+        },
+      ],
       // ----------------------------------------------
       // Architectural enforcement
       // ----------------------------------------------

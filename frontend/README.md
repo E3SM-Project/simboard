@@ -24,10 +24,12 @@ information on how to get the frontend service started via Docker.
 ## Architecture
 
 - Features are the primary unit (e.g., `features/browse`)
+  - `simulations` is a domain feature.
+  - Other features (browse, compare, home) may depend on `simulations`.
+  - Features must not import or depend on each other directly.
 - API logic lives under `features/*/api`
 - Hooks live under `features/*/hooks`
 - Shared components must be truly shared
-- Features must not import each other
 
 ## Expanding the ESLint Configuration
 
