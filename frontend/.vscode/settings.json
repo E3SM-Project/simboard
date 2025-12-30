@@ -1,23 +1,48 @@
 {
+  // -----------------------------
+  // Prettier = formatting
+  // -----------------------------
   "[javascript]": {
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[javascriptreact]": {
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[typescript]": {
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[typescriptreact]": {
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "vscode.typescript-language-features"
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+
+  // -----------------------------
+  // ESLint = code quality fixes
+  // -----------------------------
   "eslint.enable": true,
-  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
-  "eslint.workingDirectories": [{ "directory": ".", "changeProcessCwd": true }],
-  "editor.codeActionsOnSave": { "source.fixAll.eslint": "always" },
-  "npm.packageManager": "pnpm"
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  "eslint.workingDirectories": [
+    { "directory": ".", "changeProcessCwd": true }
+  ],
+
+  // Run ESLint fixes on save (NOT formatting)
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always"
+  },
+
+  // -----------------------------
+  // Tooling
+  // -----------------------------
+  "npm.packageManager": "pnpm",
+
+  // Optional: avoid conflicts if installed
+  "prettier.requireConfig": true
 }
