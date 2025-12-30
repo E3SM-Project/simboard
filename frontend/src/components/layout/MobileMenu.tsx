@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import GitHubIcon from '@/components/icons/GitHubIcon';
+import { GitHubIcon } from '@/components/icons/GitHubIcon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import type { User } from '@/types/user';
@@ -20,7 +20,7 @@ interface MobileMenuProps {
   logout: () => void;
 }
 
-const MobileMenu = ({
+export const MobileMenu = ({
   navItems,
   selectedSimulationIds,
   isAuthenticated,
@@ -179,5 +179,3 @@ const MobileMenu = ({
     </>
   );
 };
-
-export default MobileMenu;

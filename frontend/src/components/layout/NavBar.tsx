@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthContext';
-import GitHubIcon from '@/components/icons/GitHubIcon';
-import MobileMenu from '@/components/layout/MobileMenu';
+import { GitHubIcon } from '@/components/icons/GitHubIcon';
+import { MobileMenu } from '@/components/layout/MobileMenu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +33,7 @@ interface NavBarProps {
   selectedSimulationIds: string[];
 }
 
-const Navbar = ({ selectedSimulationIds }: NavBarProps) => {
+export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -162,5 +162,3 @@ const Navbar = ({ selectedSimulationIds }: NavBarProps) => {
     </header>
   );
 };
-
-export default Navbar;

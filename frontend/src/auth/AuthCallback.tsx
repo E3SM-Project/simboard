@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/hooks/use-toast';
 
-const AuthCallback: React.FC = () => {
+export const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
 
@@ -57,5 +57,3 @@ const AuthCallback: React.FC = () => {
     </div>
   );
 };
-
-export default AuthCallback;

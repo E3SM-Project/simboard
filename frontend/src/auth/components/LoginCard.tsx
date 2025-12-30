@@ -1,9 +1,9 @@
 import { useAuth } from '@/auth/AuthContext';
-import GitHubIcon from '@/components/icons/GitHubIcon';
+import { GitHubIcon } from '@/components/icons/GitHubIcon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const LoginCard = () => {
+export const LoginCard = () => {
   const { loginWithGithub } = useAuth();
 
   return (
@@ -26,5 +26,3 @@ const LoginCard = () => {
     </div>
   );
 };
-
-export default LoginCard;

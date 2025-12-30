@@ -2,10 +2,8 @@ interface GitHubIconProps {
   className?: string;
 }
 
-const GitHubIcon = ({ className = 'h-5 w-5' }: GitHubIconProps) => (
+export const GitHubIcon = ({ className = 'h-5 w-5' }: GitHubIconProps) => (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
     <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.2-1.6-1.2-1.6-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.6 1.2 3.2.9.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.9 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2A11.5 11.5 0 0 1 12 6.8a11.5 11.5 0 0 1 3-.4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.6-2.7 5.5-5.3 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
   </svg>
 );
-
-export default GitHubIcon;

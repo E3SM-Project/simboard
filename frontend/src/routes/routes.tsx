@@ -1,6 +1,6 @@
 import { useRoutes } from 'react-router-dom';
 
-import AuthCallback from '@/auth/AuthCallback';
+import { AuthCallback } from '@/auth/AuthCallback';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { browseRoutes } from '@/features/browse/routes';
 import { compareRoutes } from '@/features/compare/routes';
@@ -32,15 +32,15 @@ export const AppRoutes = (props: RoutesProps) => {
     },
 
     {
-      path: "/auth/callback",
+      path: '/auth/callback',
       element: <AuthCallback />,
     },
 
     {
-      path: "*",
+      path: '*',
       element: <div className="p-8">404 - Page not found</div>,
     },
-  ]
+  ];
 
-  return useRoutes(routes)
-}
+  return useRoutes(routes);
+};

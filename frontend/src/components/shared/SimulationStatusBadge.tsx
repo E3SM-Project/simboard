@@ -4,7 +4,7 @@ interface SimulationStatusBadgeProps {
   status: 'complete' | 'running' | 'failed' | 'not-started' | string;
 }
 
-const SimulationStatusBadge = ({ status }: SimulationStatusBadgeProps) => (
+export const SimulationStatusBadge = ({ status }: SimulationStatusBadgeProps) => (
   <span
     className={`px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 ${
       status === 'complete'
@@ -23,5 +23,3 @@ const SimulationStatusBadge = ({ status }: SimulationStatusBadgeProps) => (
     {status === 'not-started' ? 'Not Started' : status.charAt(0).toUpperCase() + status.slice(1)}
   </span>
 );
-
-export default SimulationStatusBadge;

@@ -1,91 +1,73 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import SimulationStatusBadge from "@/components/shared/SimulationStatusBadge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
-import { SimulationPathCard } from "@/features/simulations/components/SimulationPathCard"
-import { SimulationTypeBadge } from "@/features/simulations/components/SimulationTypeBadge"
-import { cn } from "@/lib/utils"
-import type { SimulationOut } from "@/types"
-import { formatDate, getSimulationDuration } from "@/utils/utils"
+import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
+import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
+import { cn } from '@/lib/utils';
+import type { SimulationOut } from '@/types';
+import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
 interface SimulationDetailsViewProps {
-  simulation: SimulationOut
-  canEdit?: boolean
+  simulation: SimulationOut;
+  canEdit?: boolean;
 }
 
 // -------------------- Small UI helpers --------------------
-const FieldRow = ({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) => (
+const FieldRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="grid grid-cols-12 items-center gap-2">
-    <Label className="col-span-3 md:col-span-2 text-xs text-muted-foreground">
-      {label}
-    </Label>
+    <Label className="col-span-3 md:col-span-2 text-xs text-muted-foreground">{label}</Label>
     <div className="col-span-9 md:col-span-10">{children}</div>
   </div>
-)
+);
 
-const ReadonlyInput = ({
-  value,
-  className,
-}: {
-  value?: string
-  className?: string
-}) => (
-  <Input
-    value={value || "—"}
-    readOnly
-    className={cn("h-8 text-sm", className)}
-  />
-)
+const ReadonlyInput = ({ value, className }: { value?: string; className?: string }) => (
+  <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
+);
 
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
   canEdit = false,
 }: SimulationDetailsViewProps) => {
-  const [activeTab, setActiveTab] = useState("summary")
-  const [notes, setNotes] = useState(simulation.notesMarkdown || "")
+  const [activeTab, setActiveTab] = useState('summary');
+  const [notes, setNotes] = useState(simulation.notesMarkdown || '');
 
   // Temporary local-only comments
-  const [newComment, setNewComment] = useState("")
+  const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<
     { id: string; author: string; date: string; text: string }[]
   >([
     {
-      id: "c1",
-      author: "Jane Doe",
-      date: "2024-02-15T13:45:00Z",
-      text: "The sea-ice diagnostics will be added later.",
+      id: 'c1',
+      author: 'Jane Doe',
+      date: '2024-02-15T13:45:00Z',
+      text: 'The sea-ice diagnostics will be added later.',
     },
-  ])
+  ]);
 
   const addComment = () => {
-    if (!newComment.trim()) return
+    if (!newComment.trim()) return;
     setComments((prev) => [
       ...prev,
       {
         id: `c${prev.length + 1}`,
-        author: "You",
+        author: 'You',
         date: new Date().toISOString(),
         text: newComment.trim(),
       },
-    ])
-    setNewComment("")
-  }
+    ]);
+    setNewComment('');
+  };
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-6 py-8 space-y-6">
@@ -103,9 +85,7 @@ export const SimulationDetailsView = ({
               <>
                 <span>•</span>
                 <span>Version/Tag:</span>
-                <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                  {simulation.gitTag}
-                </code>
+                <code className="rounded bg-muted px-2 py-0.5 text-xs">{simulation.gitTag}</code>
               </>
             )}
             <span>•</span>
@@ -206,18 +186,20 @@ export const SimulationDetailsView = ({
                   </FieldRow>
                   <FieldRow label="Simulation End Date">
                     <span className="text-sm">
-                      {simulation.simulationEndDate ? formatDate(simulation.simulationEndDate) : '—'}
+                      {simulation.simulationEndDate
+                        ? formatDate(simulation.simulationEndDate)
+                        : '—'}
                     </span>
                   </FieldRow>
                   <FieldRow label="Total Duration">
                     <span className="text-sm">
                       {simulation.simulationStartDate && simulation.simulationEndDate
                         ? (() => {
-                          return getSimulationDuration(
-                            simulation.simulationStartDate,
-                            simulation.simulationEndDate,
-                          );
-                        })()
+                            return getSimulationDuration(
+                              simulation.simulationStartDate,
+                              simulation.simulationEndDate,
+                            );
+                          })()
                         : '—'}
                     </span>
                   </FieldRow>
@@ -302,7 +284,9 @@ export const SimulationDetailsView = ({
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground min-w-[100px]">Git Branch:</Label>
+                    <Label className="text-xs text-muted-foreground min-w-[100px]">
+                      Git Branch:
+                    </Label>
                     <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -518,41 +502,32 @@ export const SimulationDetailsView = ({
             kind="output"
             title="Output Paths"
             description="These are the primary output files generated by the simulation."
-            paths={
-              simulation.groupedArtifacts.output?.map((a) => a.uri) || []
-            }
+            paths={simulation.groupedArtifacts.output?.map((a) => a.uri) || []}
             emptyText="No output paths available."
           />
           <SimulationPathCard
             kind="archive"
             title="Archive Paths"
             description="These paths contain archived data files from the simulation."
-            paths={
-              simulation.groupedArtifacts.archive?.map((a) => a.uri) || []
-            }
+            paths={simulation.groupedArtifacts.archive?.map((a) => a.uri) || []}
             emptyText="No archive artifacts available."
           />
           <SimulationPathCard
             kind="runScript"
             title="Run Script Paths"
             description="Scripts used to run the simulation."
-            paths={
-              simulation.groupedArtifacts.runScript?.map((a) => a.uri) || []
-            }
+            paths={simulation.groupedArtifacts.runScript?.map((a) => a.uri) || []}
             emptyText="No run script artifacts available."
           />
           <SimulationPathCard
             kind="batchLog"
             title="Batch Log Paths"
             description="Log files generated during the batch processing of the simulation."
-            paths={
-              simulation.groupedArtifacts.batchLog?.map((a) => a.uri) || []
-            }
+            paths={simulation.groupedArtifacts.batchLog?.map((a) => a.uri) || []}
             emptyText="No batch log artifacts available."
           />
         </TabsContent>
       </Tabs>
     </div>
-  )
-}
-
+  );
+};
