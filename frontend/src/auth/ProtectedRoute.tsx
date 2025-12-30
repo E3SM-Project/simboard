@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthContext';
-import LoginCard from '@/components/shared/LoginCard';
+import LoginCard from '@/auth/components/LoginCard';
 
 export const ProtectedRoute = () => {
   const { isAuthenticated, loading } = useAuth();

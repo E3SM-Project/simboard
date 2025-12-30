@@ -1,13 +1,13 @@
 import { useRoutes } from 'react-router-dom';
 
 import AuthCallback from '@/auth/AuthCallback';
+import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { browseRoutes } from '@/features/browse/routes';
 import { compareRoutes } from '@/features/compare/routes';
 import { docsRoutes } from '@/features/docs/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { simulationsRoutes } from '@/features/simulations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
-import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {
