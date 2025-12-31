@@ -30,7 +30,7 @@ const FieldRow = ({ label, children }: { label: string; children: React.ReactNod
   </div>
 );
 
-const ReadonlyInput = ({ value, className }: { value?: string; className?: string }) => (
+const ReadonlyInput = ({ value, className }: { value?: string | null; className?: string }) => (
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
 
