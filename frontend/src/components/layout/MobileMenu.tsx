@@ -144,7 +144,7 @@ export const MobileMenu = ({
                     {user?.full_name || user?.email}
                   </span>
                 </div>
-                <Link
+                <button
                   className="self-start text-xs text-destructive hover:underline"
                   onClick={async () => {
                     setOpen(false);
@@ -152,7 +152,7 @@ export const MobileMenu = ({
                   }}
                 >
                   Log out
-                </Link>
+                </button>
               </div>
             )}
 

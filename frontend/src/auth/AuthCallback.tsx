@@ -18,13 +18,13 @@ export const AuthCallback: React.FC = () => {
         await refreshUser();
 
         toast({
-          title: (
+          title: 'Logged In',
+          description: (
             <div className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
-              Logged in
+              Welcome back!
             </div>
           ),
-          description: 'Welcome back!',
           duration: 2000,
         });
 
@@ -33,13 +33,13 @@ export const AuthCallback: React.FC = () => {
         console.error('OAuth post-login failed:', err);
 
         toast({
-          title: (
+          title: 'Login Failed',
+          description: (
             <div className="flex items-center gap-2">
               <XCircle className="h-5 w-5 text-red-600" />
-              Login Failed
+              <span>We couldn’t sign you in. Please try again.</span>
             </div>
           ),
-          description: 'We couldn’t sign you in. Please try again.',
           duration: 3000,
         });
 

@@ -1,4 +1,6 @@
-import axios, { AxiosError, AxiosResponse } from 'axios';
+import axios from 'axios';
+
+import { getAuthenticated } from '@/api/authState';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://127.0.0.1:8000/api';
 
@@ -6,6 +8,7 @@ export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
 
 export const registerLogoutHandler = (fn: LogoutFn): void => {
+  console.trace('🔥 onLogout CALLED');
   onLogout = fn;
 };
 
@@ -18,29 +21,15 @@ export const api = axios.create({
 
 // Intercept 401/403 to auto-logout.
 api.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: AxiosError) => {
-    const status = error.response?.status;
+  (res) => res,
+  (err) => {
+    const status = err.response?.status;
+    const url = err.config?.url ?? '';
 
-    if (status === 401 || status === 403) {
-      const logoutEndpoint = '/logout';
-      const requestUrl = error.config?.url ?? '';
-
-      // Avoid recursive logout when logout call itself fails.
-      const isLogoutRequest =
-        requestUrl.endsWith(logoutEndpoint) ||
-        requestUrl.includes(`${logoutEndpoint}?`) ||
-        requestUrl.includes(`${logoutEndpoint}/`);
-
-      if (!isLogoutRequest) {
-        onLogout?.({ silent: true });
-      }
+    if ((status === 401 || status === 403) && getAuthenticated() && !url.includes('/logout')) {
+      onLogout?.({ silent: true });
     }
 
-    if (import.meta.env.DEV) {
-      console.warn('API Error:', status, error.response?.data);
-    }
-
-    return Promise.reject(error);
+    return Promise.reject(err);
   },
 );
