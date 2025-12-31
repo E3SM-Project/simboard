@@ -17,17 +17,8 @@ const App = () => {
   const queryClient = useMemo(() => new QueryClient(), []);
 
   // Fetch simulations data using custom hook.
-  const rawSimulations = useSimulations();
-  const machines = useMachines();
-
-  const simulations = useMemo(() => {
-    if (!rawSimulations.data || !machines.data) return [];
-
-    return rawSimulations.data.map((simulation) => ({
-      ...simulation,
-      machine: machines.data.find((machine) => machine.id === simulation.machineId),
-    }));
-  }, [rawSimulations.data, machines.data]);
+  const simulations = useSimulations().data;
+  const machines = useMachines().data;
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -50,7 +41,7 @@ const App = () => {
         <NavBar selectedSimulationIds={selectedSimulationIds} />
         <AppRoutes
           simulations={simulations}
-          machines={machines.data}
+          machines={machines}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}
           selectedSimulations={selectedSimulations}

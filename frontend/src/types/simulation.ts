@@ -1,5 +1,6 @@
 import type { ArtifactIn, ArtifactOut } from '@/types/artifact';
 import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
+import type { Machine } from '@/types/machine';
 
 /**
  * Request payload for creating a new simulation.
@@ -83,6 +84,10 @@ export interface SimulationOut extends SimulationCreate {
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
+
+  // Relationsips
+  // ~~~~~~~~~~~~~~
+  machine: Machine;
 
   // Computed fields
   // ~~~~~~~~~~~~~~~
