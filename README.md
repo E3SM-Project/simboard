@@ -262,6 +262,9 @@ Pre-commit runs automatically on `git commit` and will block commits if checks f
 
 All hooks are configured in the root `.pre-commit-config.yaml`.
 
+> **Note:** Git hooks run in a non-interactive shell
+> Make sure that Node.js tools (such as `pnpm`) are available in your system `PATH` so pre-commit hooks can execute successfully.
+
 ---
 
 ### Installing pre-commit (recommended)

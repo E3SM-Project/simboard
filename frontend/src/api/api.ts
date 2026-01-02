@@ -8,7 +8,6 @@ export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
 
 export const registerLogoutHandler = (fn: LogoutFn): void => {
-  console.trace('🔥 onLogout CALLED');
   onLogout = fn;
 };
 

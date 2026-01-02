@@ -24,17 +24,30 @@ repos:
 
   # ------------------------
   # Frontend (Node / TS)
+  # NOTE: Git hooks run in a non-interactive shell. Node tooling (pnpm) must be available on PATH.
   # ------------------------
   - repo: local
     hooks:
-      - id: frontend-eslint
-        name: Frontend ESLint (staged files)
-        entry: bash -c 'pnpm --dir frontend run lint:fix:staged -- $(printf "%s\n" "$@" | sed "s|^frontend/||")'
-        language: system
-        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+    - id: frontend-eslint
+      name: Frontend ESLint (staged files)
+      entry: >
+        bash -c '
+          command -v pnpm >/dev/null 2>&1 ||
+            { echo "❌ pnpm not found on PATH (git hooks run non-interactively)"; exit 1; };
+          export PATH="$HOME/.local/bin:$HOME/.pnpm:$PATH";
+          pnpm --dir frontend run lint:fix:staged
+        '
+      language: system
+      files: ^frontend/.*\.(ts|tsx|js|jsx)$
 
-      - id: frontend-prettier
-        name: Frontend Prettier (staged files)
-        entry: bash -c 'pnpm --dir frontend run format:staged -- $(printf "%s\n" "$@" | sed "s|^frontend/||")'
-        language: system
-        files: ^frontend/.*\.(ts|tsx|js|jsx|css|json|md)$
+    - id: frontend-prettier
+      name: Frontend Prettier (staged files)
+      entry: >
+        bash -c '
+          command -v pnpm >/dev/null 2>&1 ||
+            { echo "❌ pnpm not found on PATH (git hooks run non-interactively)"; exit 1; };
+          export PATH="$HOME/.local/bin:$HOME/.pnpm:$PATH";
+          pnpm --dir frontend run format:staged
+        '
+      language: system
+      files: ^frontend/.*\.(ts|tsx|js|jsx|css|json|md)$
