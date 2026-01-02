@@ -1,0 +1,40 @@
+repos:
+  # ------------------------
+  # General sanity checks
+  # ------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  # ------------------------
+  # Backend (Python / FastAPI)
+  # ------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.14
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # ------------------------
+  # Frontend (Node / TS)
+  # ------------------------
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: Frontend ESLint (staged files)
+        entry: bash -c 'pnpm --dir frontend run lint:fix:staged -- $(printf "%s\n" "$@" | sed "s|^frontend/||")'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+
+      - id: frontend-prettier
+        name: Frontend Prettier (staged files)
+        entry: bash -c 'pnpm --dir frontend run format:staged -- $(printf "%s\n" "$@" | sed "s|^frontend/||")'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|css|json|md)$

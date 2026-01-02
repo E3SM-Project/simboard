@@ -9,8 +9,10 @@
     "preview": "vite preview",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx,json}\" --max-warnings=0 --no-error-on-unmatched-pattern",
-    "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx,json}\" --fix --no-error-on-unmatched-pattern",
+    "format:staged": "prettier --write --ignore-unknown",
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --max-warnings=0",
+    "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --fix",
+    "lint:fix:staged": "eslint --fix --no-error-on-unmatched-pattern --no-warn-ignored",
     "type-check": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run type-check",
     "pre-commit": "pnpm run lint:fix && pnpm run type-check"

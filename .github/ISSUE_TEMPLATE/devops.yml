@@ -1,6 +1,6 @@
 name: DevOps Task
 description: Template for tracking DevOps-related tasks and improvements.
-title: "[DevOps] "
+title: "[DevOps]: "
 labels: ["type: devops"]
 assignees: []
 
@@ -30,15 +30,6 @@ body:
         1. ...
         2. ...
         3. ...
-    validations:
-      required: false
-
-  - type: input
-    id: deadline
-    attributes:
-      label: Deadline
-      description: When should this task be completed by? (optional)
-      placeholder: YYYY-MM-DD
     validations:
       required: false
 

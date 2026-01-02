@@ -15,20 +15,26 @@ export default [
   // --------------------------------------------------
   {
     ignores: [
+      // build output
       'dist',
+
+      // generated / vendor UI
       'src/components/ui/**',
       'src/components/ui/use-toast.ts',
       'src/components/examples/**',
+
+      // tooling / config files
+      'tailwind.config.js',
+      'postcss.config.js',
+      'vite.config.ts',
     ],
   },
-
   // --------------------------------------------------
   // Base JS + TS
   // --------------------------------------------------
   js.configs.recommended,
   ...tseslint.configs.recommended,
   prettier,
-
   // --------------------------------------------------
   // Frontend project rules
   // --------------------------------------------------

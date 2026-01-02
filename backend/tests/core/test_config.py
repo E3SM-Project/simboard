@@ -1,6 +1,7 @@
 import os
-from pathlib import Path
+
 import pytest
+
 from app.core.config import get_env_file
 
 
@@ -23,7 +24,9 @@ class TestGetEnvFile:
         (root / ".envs/dev/backend.env.example").write_text("# example")
         example_env_file = root / ".envs/dev/backend.env.example"
 
-        with pytest.raises(FileNotFoundError, match="Refusing to load .example env files."):
+        with pytest.raises(
+            FileNotFoundError, match="Refusing to load .example env files."
+        ):
             if example_env_file.name.endswith(".example"):
                 raise FileNotFoundError("Refusing to load .example env files.")
 
@@ -45,7 +48,9 @@ class TestGetEnvFile:
 
         assert env_file.endswith("dev/backend.env")
 
-    def test_returns_dev_docker_env_file_when_app_env_is_dev_docker(self, tmp_path, monkeypatch):
+    def test_returns_dev_docker_env_file_when_app_env_is_dev_docker(
+        self, tmp_path, monkeypatch
+    ):
         monkeypatch.setenv("APP_ENV", "dev_docker")
         root = tmp_path
         (root / ".envs/dev_docker").mkdir(parents=True)
@@ -79,7 +84,9 @@ class TestGetEnvFile:
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)
 
-    def test_raises_when_env_file_is_missing_and_only_example_exists(self, tmp_path, monkeypatch):
+    def test_raises_when_env_file_is_missing_and_only_example_exists(
+        self, tmp_path, monkeypatch
+    ):
         monkeypatch.setenv("APP_ENV", "dev")
         root = tmp_path
         (root / ".envs/dev").mkdir(parents=True)

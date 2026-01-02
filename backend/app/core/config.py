@@ -1,8 +1,8 @@
+import os
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import os
-from pathlib import Path
 
 
 def get_env_file(project_root: Path | None = None) -> str:
