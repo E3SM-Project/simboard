@@ -16,7 +16,6 @@ const App = () => {
   // -------------------- Local State --------------------
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  // Fetch simulations data using custom hook.
   const simulations = useSimulations().data;
   const machines = useMachines().data;
 

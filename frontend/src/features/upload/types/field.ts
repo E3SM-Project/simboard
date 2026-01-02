@@ -1,5 +1,3 @@
-// Base types (no React, no generics)
-
 import { SimulationCreateForm } from '@/types/simulation';
 
 export type FieldType =
