@@ -145,9 +145,9 @@ class TestSimulationOutSchema:
 
         # Assert: Validate all fields
         for key, value in fields.items():
-            assert (
-                getattr(simulation_out, key) == value
-            ), f"Field '{key}' does not match the expected value."
+            assert getattr(simulation_out, key) == value, (
+                f"Field '{key}' does not match the expected value."
+            )
 
         # Assert: Validate optional fields are set to their defaults
         optional_fields = [
@@ -167,17 +167,17 @@ class TestSimulationOutSchema:
             "git_commit_hash",
         ]
         for field in optional_fields:
-            assert (
-                getattr(simulation_out, field) is None
-            ), f"Optional field '{field}' is not None by default."
+            assert getattr(simulation_out, field) is None, (
+                f"Optional field '{field}' is not None by default."
+            )
 
         # Assert: Validate default values for list fields
-        assert (
-            simulation_out.artifacts == []
-        ), "Field 'artifacts' is not an empty list by default."
-        assert (
-            simulation_out.links == []
-        ), "Field 'links' is not an empty list by default."
+        assert simulation_out.artifacts == [], (
+            "Field 'artifacts' is not an empty list by default."
+        )
+        assert simulation_out.links == [], (
+            "Field 'links' is not an empty list by default."
+        )
 
     def test_valid_simulation_out_optional_fields(self):
         required_fields = {

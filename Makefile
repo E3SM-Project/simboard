@@ -33,6 +33,9 @@ COMPOSE_FILE      := $(if $(filter prod,$(env)),$(COMPOSE_FILE_PROD),$(COMPOSE_F
 # ============================================================
 # 🧭 HELP MENU
 # ============================================================
+# ============================================================
+# 🧭 HELP MENU
+# ============================================================
 
 .PHONY: help
 help:
@@ -40,43 +43,75 @@ help:
 	@echo ""
 	@echo "$(BLUE)Environment:$(NC) APP_ENV=$(env)"
 	@echo ""
+
 	@echo "  $(YELLOW)Project Setup$(NC)"
-	@echo "    make setup-dev env=dev                     # Bare-metal dev setup"
-	@echo "    make setup-dev-docker env=dev_docker       # Docker dev setup"
-	@echo "    make setup-dev-assets env=<env>            # Ensure .env + certs exist"
-	@echo "    make copy-env env=<env>                    # Copy .env.example → .env"
-	@echo "    make gen-certs                             # Generate dev SSL certs"
+	@echo "    make install                             # Install backend + frontend deps + pre-commit"
+	@echo "    make setup-dev env=dev                   # Bare-metal dev setup"
+	@echo "    make setup-dev-docker env=dev_docker     # Docker dev setup"
+	@echo "    make setup-dev-assets env=<env>          # Ensure .env files + certs exist"
+	@echo "    make copy-env env=<env>                  # Copy .env.example → .env"
+	@echo "    make gen-certs                           # Generate dev SSL certs"
 	@echo ""
+
+	@echo "  $(YELLOW)Pre-commit$(NC)"
+	@echo "    make pre-commit-install                  # Install git pre-commit hooks"
+	@echo "    make pre-commit-run                      # Run all pre-commit hooks"
+	@echo ""
+
 	@echo "  $(YELLOW)Backend Commands$(NC)"
-	@echo "    make backend-install                       # Create venv + install deps"
-	@echo "    make backend-clean                         # Clean caches"
-	@echo "    make backend-run                           # Start FastAPI"
-	@echo "    make backend-reload                        # Start with auto-reload"
-	@echo "    make backend-migrate m='msg'               # Create Alembic migration"
-	@echo "    make backend-upgrade                       # Apply migrations"
-	@echo "    make backend-downgrade rev=<rev>           # Downgrade DB"
-	@echo "    make backend-test                          # Run pytest"
+	@echo "    make backend-install                     # Create venv (if missing) + install deps"
+	@echo "    make backend-reset                       # Recreate venv + reinstall deps"
+	@echo "    make backend-clean                       # Clean Python caches"
+	@echo "    make backend-run                         # Start FastAPI server"
+	@echo "    make backend-reload                      # Start FastAPI with auto-reload"
+	@echo "    make backend-migrate m='msg'             # Create Alembic migration"
+	@echo "    make backend-upgrade                     # Apply DB migrations"
+	@echo "    make backend-downgrade rev=<rev>         # Downgrade DB"
+	@echo "    make backend-test                        # Run pytest"
 	@echo ""
+
 	@echo "  $(YELLOW)Frontend Commands$(NC)"
-	@echo "    make frontend-install                      # Install dependencies"
-	@echo "    make frontend-dev                          # Start Vite dev server"
-	@echo "    make frontend-build                        # Build site"
-	@echo "    make frontend-preview                      # Preview built site"
-	@echo "    make frontend-lint                         # ESLint"
+	@echo "    make frontend-install                    # Install frontend dependencies"
+	@echo "    make frontend-clean                      # Remove node_modules + build artifacts"
+	@echo "    make frontend-dev                        # Start Vite dev server"
+	@echo "    make frontend-build                      # Build frontend"
+	@echo "    make frontend-preview                    # Preview production build"
+	@echo "    make frontend-lint                       # Run ESLint"
+	@echo "    make frontend-fix                        # Run ESLint with --fix"
 	@echo ""
-	@echo "  $(YELLOW)Docker$(NC)"
-	@echo "    make docker-up env=<env> svc=<svc>         # Start service(s)"
-	@echo "    make docker-build env=<env> svc=<svc>      # Build service images"
+
+	@echo "  $(YELLOW)Docker Commands$(NC)"
+	@echo "    make docker-build env=<env> svc=<svc>    # Build Docker image(s)"
+	@echo "    make docker-rebuild env=<env> svc=<svc>  # Build Docker image(s) without cache"
+	@echo "    make docker-up env=<env> svc=<svc>       # Start service(s)"
+	@echo "    make docker-up-detached env=<env> svc=<svc> # Start service(s) in background"
+	@echo "    make docker-down env=<env>               # Stop all services"
+	@echo "    make docker-restart env=<env> svc=<svc>  # Restart service(s)"
+	@echo "    make docker-logs env=<env> svc=<svc>     # Follow service logs"
+	@echo "    make docker-shell env=<env> svc=<svc>    # Shell into running container"
+	@echo "    make docker-ps env=<env>                 # List running containers"
+	@echo "    make docker-config env=<env>             # Show resolved docker-compose config"
 	@echo ""
+
 	@echo "  $(YELLOW)Database (via Docker)$(NC)"
-	@echo "    make db-init env=<env>                     # Migrate + seed dev DB"
+	@echo "    make db-migrate m='msg' env=<env>        # Create migration"
+	@echo "    make db-upgrade env=<env>                # Apply migrations"
+	@echo "    make db-rollback env=<env>               # Roll back last migration"
+	@echo "    make db-seed env=<env>                   # Seed database (non-prod only)"
+	@echo "    make db-init env=<env>                   # Migrate + seed database"
+	@echo ""
+
+	@echo "  $(YELLOW)Build & Cleanup$(NC)"
+	@echo "    make build                               # Build frontend"
+	@echo "    make preview                             # Preview frontend build"
+	@echo "    make clean                               # Clean backend + frontend artifacts"
 
 
 # ============================================================
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-dev setup-dev-docker setup-dev-assets copy-env gen-certs
+.PHONY: setup-dev setup-dev-docker setup-dev-assets copy-env gen-certs install
 
 # ------------------------------------------------------------
 # Bare-metal dev
@@ -153,6 +188,18 @@ gen-certs:
 	cd certs && ./generate-dev-certs.sh
 
 
+# ------------------------------------------------------------
+# Pre-commit
+# ------------------------------------------------------------
+
+.PHONY: pre-commit-install pre-commit-run
+
+pre-commit-install:
+	cd $(BACKEND_DIR) && uv run pre-commit install --install-hooks
+
+pre-commit-run:
+	cd $(BACKEND_DIR) && uv run pre-commit run --all-files
+
 # ============================================================
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
@@ -160,7 +207,15 @@ gen-certs:
 .PHONY: backend-install backend-clean backend-run backend-reload backend-migrate backend-upgrade backend-downgrade backend-test
 
 backend-install:
-	cd $(BACKEND_DIR) && uv venv .venv && uv sync --all-groups
+	cd $(BACKEND_DIR) && \
+	if [ ! -d .venv ]; then uv venv .venv; fi && \
+	uv sync --all-groups
+
+backend-reset:
+	cd $(BACKEND_DIR) && \
+	rm -rf .venv && \
+	uv venv .venv && \
+	uv sync --all-groups
 
 backend-clean:
 	cd $(BACKEND_DIR) && find . -type d -name "__pycache__" -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache build dist .mypy_cache
@@ -288,9 +343,7 @@ db-init:
 
 .PHONY: clean install
 
-install:
-	make backend-install
-	make frontend-install
+install: backend-install frontend-install pre-commit-install
 
 clean:
 	make backend-clean

@@ -243,15 +243,90 @@ Pull requests should include tests + documentation updates.
 
 ---
 
-## Makefile Overview
+## 🪝 Pre-commit Hooks
 
-The Makefile provides **unified commands** for backend, frontend, Docker, DB, and environment management.
+This repository uses **[pre-commit](https://pre-commit.com/)** to enforce consistent code quality checks for both the **backend (Python)** and **frontend (TypeScript)**.
 
-View all available commands:
+Pre-commit runs automatically on `git commit` and will block commits if checks fail.
+
+---
+
+### What pre-commit checks
+
+- **Backend**
+  - Ruff linting and formatting
+  - Python style and correctness checks
+- **Frontend**
+  - ESLint (auto-fix on staged files)
+  - Prettier formatting (staged files only)
+
+All hooks are configured in the root `.pre-commit-config.yaml`.
+
+---
+
+### Installing pre-commit (recommended)
+
+Pre-commit is installed **inside the backend uv environment** and wired up via the Makefile.
+
+After cloning the repo, run:
 
 ```bash
-make help
+make install
 ```
+
+This will:
+
+- Create the backend `uv` virtual environment (if missing)
+- Install Python and frontend dependencies
+- Install the git pre-commit hooks
+
+If you only want to (re)install the hooks:
+
+```bash
+make pre-commit-install
+```
+
+---
+
+### Running pre-commit manually
+
+To run all hooks against all files:
+
+```bash
+make pre-commit-run
+```
+
+Or directly:
+
+```bash
+cd backend
+uv run pre-commit run --all-files
+```
+
+You can also run pre-commit from **any directory inside the repo**; it always resolves the repo root configuration.
+
+---
+
+### Notes & expectations
+
+- Pre-commit uses the **existing project environments**:
+  - Python hooks run via `uv`
+  - Frontend hooks run via `pnpm`
+- The tools themselves (`uv`, `pnpm`, `node`) are expected to already be installed on your system
+- Hooks are **fast** and only run on staged files by default
+- Formatting issues are usually auto-fixed; re-stage files and retry the commit if needed
+
+---
+
+### Skipping hooks (not recommended)
+
+If you must bypass pre-commit temporarily:
+
+```bash
+git commit --no-verify
+```
+
+Please only do this when absolutely necessary.
 
 ---
 
