@@ -90,6 +90,26 @@ export default [
         // App-level routing & composition
         { type: 'routes', pattern: 'src/routes/**' },
       ],
+      'boundaries/element-types': [
+        'error',
+        {
+          default: 'disallow',
+          rules: [
+            {
+              from: 'feature',
+              allow: ['ui', 'shared', 'lib', 'types', 'api'],
+            },
+            {
+              from: 'routes',
+              allow: ['feature', 'ui', 'shared'],
+            },
+            {
+              from: 'ui',
+              allow: ['lib', 'types'],
+            },
+          ],
+        },
+      ],
     },
 
     plugins: {
@@ -146,29 +166,24 @@ export default [
         },
       ],
       // ----------------------------------------------
-      // Architectural enforcement
+      // Architectural boundaries
       // ----------------------------------------------
       'boundaries/element-types': [
         'error',
         {
-          default: 'allow',
+          default: 'disallow',
           rules: [
             {
               from: 'feature',
-              disallow: ['feature'],
-              message:
-                'Features must not import other features. Use shared components or hooks instead.',
+              allow: ['ui', 'shared', 'lib', 'types', 'api'],
             },
             {
-              from: 'hook',
-              disallow: ['api-client'],
-              message: 'Hooks must not import the API client directly. Use feature API modules.',
+              from: 'routes',
+              allow: ['feature', 'ui', 'shared'],
             },
             {
               from: 'ui',
-              disallow: ['feature-api'],
-              message:
-                'UI components must not import feature API modules directly. Use hooks instead.',
+              allow: ['lib', 'types'],
             },
           ],
         },
