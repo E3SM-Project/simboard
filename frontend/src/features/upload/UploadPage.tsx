@@ -5,11 +5,12 @@ import { useNavigate } from 'react-router-dom';
 
 import { createSimulation } from '@/features/simulations/api/api';
 import { ConfirmResetDialog } from '@/features/upload/components/ConfirmResetDialog';
-import FormSection from '@/features/upload/components/FormSection';
+import { FormSection } from '@/features/upload/components/FormSection';
 import { LinkField } from '@/features/upload/components/LinkField';
 import { ReviewFieldList } from '@/features/upload/components/Review/ReviewFieldList';
 import { ReviewLinkList } from '@/features/upload/components/Review/ReviewLinkList';
 import { ReviewSection } from '@/features/upload/components/Review/ReviewSection';
+import type { RenderableField } from '@/features/upload/types/field';
 import { toast } from '@/hooks/use-toast';
 import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
 import { ARTIFACT_KIND_MAP, ArtifactIn } from '@/types/artifact';
@@ -97,12 +98,12 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   // -------------------- Derived Data --------------------
   // --- Configuration fields (matches initialState order)
   const configFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
-        label: 'Simulation Name',
         name: 'name',
-        required: true,
+        label: 'Simulation Name',
         type: 'text',
+        required: true,
         placeholder: 'e.g., E3SM v3 LR Control 20190815',
       },
       {
@@ -174,7 +175,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Model Setup fields (matches initialState order)
   const modelFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Simulation Type',
         name: 'simulationType',
@@ -231,7 +232,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Version Control fields (matches initialState order)
   const versionFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Repository URL',
         name: 'gitRepositoryUrl',
@@ -260,7 +261,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Timeline fields (matches initialState order)
   const timelineFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Simulation Start Date',
         name: 'simulationStartDate',
@@ -289,7 +290,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Documentation fields (matches initialState order)
   const docFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Key Features',
         name: 'keyFeatures',
@@ -317,7 +318,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Metadata fields (matches initialState order)
   const metaFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Extra Metadata (JSON)',
         name: 'extra',
@@ -331,7 +332,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // --- Data Paths & Scripts fields (matches initialState order)
   const pathFields = useMemo(
-    () => [
+    (): RenderableField[] => [
       {
         label: 'Output Path',
         name: 'outputPath',
@@ -364,16 +365,16 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     [],
   );
 
-  // Calculate required fields based on field definitions
+  // Calculate required fields based on field definitions.
   const requiredFields = useMemo(
     () => ({
-      configuration: configFields.filter((f) => f.required).length,
-      modelSetup: modelFields.filter((f) => f.required).length,
-      timeline: timelineFields.filter((f) => f.required).length,
-      versionControl: versionFields.filter((f) => f.required).length,
-      paths: pathFields.filter((f) => f.required).length,
-      docs: docFields.filter((f) => f.required).length,
-      meta: metaFields.filter((f) => f.required).length,
+      configuration: configFields.filter((field) => field.required).length,
+      modelSetup: modelFields.filter((field) => field.required).length,
+      timeline: timelineFields.filter((field) => field.required).length,
+      versionControl: versionFields.filter((field) => field.required).length,
+      paths: pathFields.filter((field) => field.required).length,
+      docs: docFields.filter((field) => field.required).length,
+      meta: metaFields.filter((field) => field.required).length,
       review: 0,
     }),
     [configFields, modelFields, timelineFields, versionFields, pathFields, docFields, metaFields],
@@ -434,10 +435,12 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
   // Generic satisfied count calculator for required fields
   const getSatisfiedCount = useCallback(
-    (fields: { name: string; required: boolean }[]) =>
+    (fields: RenderableField[]) =>
       fields.reduce((count, f) => {
         if (!f.required) return count;
+
         const v = form[f.name as keyof SimulationCreateForm];
+
         return isFilled(v) ? count + 1 : count;
       }, 0),
     [form],
@@ -606,13 +609,13 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       const simulation = await createSimulation(payload);
 
       toast({
-        title: (
+        title: 'Simulation Created',
+        description: (
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-600" />
-            <span>Simulation created</span>
+            Your simulation has been successfully created.
           </div>
         ),
-        description: 'Your simulation has been successfully created.',
       });
 
       navigate(`/simulations/${simulation.id}`, {
@@ -722,15 +725,19 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       ].map((f) => f.name),
     );
 
-    const stateKeys = Object.keys(initialState).filter((k) => !ignore.has(k));
+    const stateKeys = Object.keys(initialState).filter(
+      (k) => !ignore.has(k),
+    ) as (keyof SimulationCreateForm)[];
 
     const missingInUI = stateKeys.filter((k) => !uiFieldSet.has(k));
     const missingInState = [...uiFieldSet].filter((k) => !stateKeys.includes(k));
 
     if (missingInUI.length || missingInState.length) {
       console.group('⚠️ Field mismatch detected');
+
       if (missingInUI.length) console.warn('State fields missing UI:', missingInUI);
       if (missingInState.length) console.warn('UI fields missing state:', missingInState);
+
       console.groupEnd();
     }
   }, [configFields, modelFields, versionFields, timelineFields, docFields, metaFields, pathFields]);
@@ -741,7 +748,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     fields: { name: string; label: string }[],
   ): React.ReactNode => {
     return Object.entries(errors)
-      .filter(([_, msg]) => !!msg)
+      .filter(([, msg]) => !!msg)
       .map(([field, msg]) => {
         const fieldDef = fields.find((f) => f.name === field);
         const label = fieldDef ? fieldDef.label : field;
@@ -796,7 +803,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                     errors[field.name] ? 'border-red-500' : 'border-gray-300'
                   }`}
                   name={field.name}
-                  value={form[field.name] ?? ''}
+                  value={(form[field.name] as string | null) ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                   rows={field.name === 'description' ? 2 : 4}
@@ -807,7 +814,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                     errors[field.name] ? 'border-red-500' : 'border-gray-300'
                   }`}
                   name={field.name}
-                  value={form[field.name] ?? ''}
+                  value={(form[field.name] as string | null) ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
@@ -842,7 +849,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                   }`}
                   type={field.type}
                   name={field.name}
-                  value={form[field.name] ?? ''}
+                  value={(form[field.name] as string | null) ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
@@ -875,7 +882,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                       errors[field.name] ? 'border-red-500' : 'border-gray-300'
                     }`}
                     name={field.name}
-                    value={form[field.name] ?? ''}
+                    value={(form[field.name] as string | null) ?? ''}
                     onChange={handleChange}
                   >
                     <option value="">Select...</option>
@@ -891,7 +898,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                       errors[field.name] ? 'border-red-500' : 'border-gray-300'
                     }`}
                     name={field.name}
-                    value={form[field.name] ?? ''}
+                    value={(form[field.name] as string | null) ?? ''}
                     onChange={handleChange}
                     placeholder={field.placeholder}
                   />
@@ -921,7 +928,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                     errors[field.name] ? 'border-red-500' : 'border-gray-300'
                   }`}
                   name={field.name}
-                  value={form[field.name] ?? ''}
+                  value={(form[field.name] as string | null) ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                 />
@@ -942,45 +949,45 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
           satisfiedCount={fieldsSatisfied.paths}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {pathFields.map((field) => (
-              <div key={field.name}>
-                <label className="text-sm font-medium">
-                  {field.label}
-                  {field.required && <span className="text-red-500">*</span>}
-                </label>
+            {pathFields.map((field) => {
+              const rawValue = form[field.name] as string | string[] | null | undefined;
 
-                <input
-                  className={`mt-1 w-full h-10 rounded-md border px-3 ${
-                    errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  name={field.name}
-                  value={
-                    Array.isArray(form[field.name])
-                      ? form[field.name].join(', ')
-                      : (form[field.name] ?? '')
-                  }
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  placeholder={field.placeholder}
-                />
+              return (
+                <div key={field.name}>
+                  <label className="text-sm font-medium">
+                    {field.label}
+                    {field.required && <span className="text-red-500">*</span>}
+                  </label>
 
-                {field.name === 'outputPath' && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter a single path (for example: <code>/path</code>)
-                  </p>
-                )}
-                {field.name !== 'outputPath' && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter a comma-separated list of paths (for example: <code>/path1,/path2</code>{' '}
-                    or <code>/path1, /path2</code>).
-                  </p>
-                )}
+                  <input
+                    className={`mt-1 w-full h-10 rounded-md border px-3 ${
+                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    name={field.name}
+                    value={Array.isArray(rawValue) ? rawValue.join(', ') : (rawValue ?? '')}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder={field.placeholder}
+                  />
 
-                {errors[field.name] && (
-                  <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
-                )}
-              </div>
-            ))}
+                  {field.name === 'outputPath' ? (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter a single path (for example: <code>/path</code>)
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter a comma-separated list of paths (for example: <code>/path1,/path2</code>{' '}
+                      or <code>/path1, /path2</code>).
+                    </p>
+                  )}
+
+                  {errors[field.name] && (
+                    <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                  )}
+                </div>
+              );
+            })}
+
             <LinkField
               title="Diagnostic Links"
               links={diagLinks}
@@ -1011,7 +1018,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 <textarea
                   className="mt-1 w-full rounded-md border px-3 py-2"
                   name={field.name}
-                  value={form[field.name as keyof SimulationCreateForm] ?? ''}
+                  value={(form[field.name] as string | null) ?? ''}
                   onChange={handleChange}
                   placeholder={field.placeholder}
                   rows={field.name === 'notesMarkdown' ? 4 : 2}
@@ -1020,30 +1027,34 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             ))}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {metaFields.map((field) => (
-                <div key={field.name}>
-                  <label className="text-sm font-medium">{field.label}</label>
+              {metaFields.map((field) => {
+                const rawValue = form[field.name] as string | null | undefined;
 
-                  <textarea
-                    className={`mt-1 w-full rounded-md border px-3 py-2 ${
-                      errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    name={field.name}
-                    value={
-                      field.name === 'extra'
-                        ? JSON.stringify(form.extra ?? {}, null, 2)
-                        : (form[field.name] ?? '')
-                    }
-                    onChange={handleChange}
-                    placeholder={field.placeholder}
-                    rows={4}
-                  />
+                return (
+                  <div key={field.name}>
+                    <label className="text-sm font-medium">{field.label}</label>
 
-                  {errors[field.name] && (
-                    <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
-                  )}
-                </div>
-              ))}
+                    <textarea
+                      className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                        errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      name={field.name}
+                      value={
+                        field.name === 'extra'
+                          ? JSON.stringify(form.extra ?? {}, null, 2)
+                          : (rawValue ?? '')
+                      }
+                      onChange={handleChange}
+                      placeholder={field.placeholder}
+                      rows={4}
+                    />
+
+                    {errors[field.name] && (
+                      <p className="text-red-500 text-xs mt-1">{errors[field.name]}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </FormSection>

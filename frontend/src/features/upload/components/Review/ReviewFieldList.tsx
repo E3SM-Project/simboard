@@ -1,17 +1,9 @@
-import { JSX } from 'react';
-
+import type { RenderableField } from '@/features/upload/types/field';
 import { SimulationCreateForm } from '@/types/simulation';
-
-interface ReviewFieldDef {
-  name: string;
-  label: string;
-  renderValue?: (value: unknown) => string | JSX.Element;
-  required?: boolean;
-}
 
 interface ReviewFieldListProps {
   form: SimulationCreateForm;
-  fields: ReviewFieldDef[];
+  fields: RenderableField[];
   className?: string;
 }
 export const ReviewFieldList = ({
@@ -37,9 +29,10 @@ export const ReviewFieldList = ({
           bgColor = isEmpty ? 'bg-yellow-100' : 'bg-green-100';
         }
 
-        let displayValue: string | JSX.Element | null | undefined = '—';
+        let displayValue: React.ReactNode = '—';
+
         if (!isEmpty && field.renderValue) {
-          displayValue = field.renderValue(value);
+          displayValue = field.renderValue(String(value));
         } else if (Array.isArray(value)) {
           displayValue = value.length ? value.join(', ') : '—';
         } else if (typeof value === 'object' && value !== null) {

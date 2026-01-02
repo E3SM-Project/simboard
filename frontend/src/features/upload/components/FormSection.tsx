@@ -9,7 +9,7 @@ interface FormSectionProps {
   children: React.ReactNode;
 }
 
-const FormSection = ({
+export const FormSection = ({
   title,
   isOpen,
   onToggle,
@@ -41,5 +41,3 @@ const FormSection = ({
     </div>
   );
 };
-
-export default FormSection;
