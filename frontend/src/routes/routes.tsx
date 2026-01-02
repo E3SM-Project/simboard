@@ -8,7 +8,8 @@ import { docsRoutes } from '@/features/docs/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { simulationsRoutes } from '@/features/simulations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
-import type { Machine, SimulationOut } from '@/types/index';
+import type { Machine } from '@/types/machine';
+import type { SimulationOut } from '@/types/simulation';
 
 interface RoutesProps {
   simulations: SimulationOut[];

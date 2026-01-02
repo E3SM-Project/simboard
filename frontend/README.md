@@ -7,71 +7,61 @@ Earth System Model) simulation metadata.
 
 ## Tech Stack
 
-> ℹ️ **Note:** The frontend runs as a Docker container.
-
 - **React 19** — Core UI library
 - **TypeScript** — Type-safe development
 - **Vite 6** — Lightning-fast build and dev environment
 - **Tailwind CSS** + **shadcn** — Styling and components
-- **ESLint + Prettier** — Code linting and formatting
+- **ESLint + Prettier** — Code linting, formatting, and architectural enforcement
 - **pnpm** — Dependency management
 
 ## Development Guide
 
-For the development guide, see the [root README.md file](../README.md). It includes
-information on how to get the frontend service started via Docker.
+For the development guide, see the [root README.md file](../README.md).
+It includes information on how to get the frontend service started via bare-metal or Docker.
 
 ## Architecture
 
-- Features are the primary unit (e.g., `features/browse`)
-  - `simulations` and `machines` are domain features
-  - Make sure to update the "Deep cross-feature imports" section under `no-restricted-imports` with new domain features.
-  - Other features (browse, compare, home) may depend on `simulations`.
-  - Features must not import or depend on each other directly.
+This frontend follows a **feature-based architecture** enforced by **ESLint architectural boundaries**.
+
+### Feature Organization
+
+- **Features are the primary unit of organization** (e.g. `features/browse`, `features/upload`)
+- Domain features such as **`simulations`** and **`machines`** represent core application data
+- UI-oriented features (browse, compare, home) may depend on domain features
+- **Features must not depend on other features directly**
 - API logic lives under `features/*/api`
-- Hooks live under `features/*/hooks`
-- Shared components must be truly shared
+- Feature-specific hooks live under `features/*/hooks`
+- Shared components must be genuinely reusable and belong under `components/shared`
 
-## Expanding the ESLint Configuration
+### Architectural Boundaries (ESLint)
 
-If you are developing a production-grade application, you can enable **type-aware lint rules** for better code quality and consistency.
+The project uses **`eslint-plugin-boundaries`** to enforce architectural rules at import time.
 
-```js
-export default tseslint.config({
-  extends: [
-    // Replace basic recommendations with stricter, type-aware configs
-    ...tseslint.configs.recommendedTypeChecked,
-    // Optionally enable stricter or stylistic rules
-    ...tseslint.configs.strictTypeChecked,
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-});
-```
+Each file is classified into a single architectural layer based on its path:
 
-You can also install React-specific ESLint plugins for improved linting:
+- **`routes`** — Application routing and top-level composition
+- **`feature`** — Feature modules (browse, upload, compare, etc.)
+- **`ui`** — Design-system primitives and low-level UI components
+- **`shared`** — Reusable composite components
+- **`lib`** — Generic utilities and helpers
+- **`types`** — Domain and API contract types
+- **`api`** — API clients and adapters
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x';
-import reactDom from 'eslint-plugin-react-dom';
+#### Dependency Rules
 
-export default tseslint.config({
-  plugins: {
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-});
-```
+- **Features are isolated**
+  Features may not import or depend on other features directly.
+
+- **Routes compose the application**
+  Routes may import features, shared/UI components, and domain types.
+
+- **UI remains presentation-only**
+  UI components may depend only on utilities and types.
+
+- **Types are globally safe**
+  Type definitions may be imported from any layer.
+
+Any import that violates these rules is reported as an ESLint error, preventing invalid architectural dependencies from being introduced.
 
 ## License
 

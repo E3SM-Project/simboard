@@ -18,7 +18,7 @@ export default [
       'dist',
       'src/components/ui/**',
       'src/components/ui/use-toast.ts',
-      'src/components/examples/**', // auto-generated examples
+      'src/components/examples/**',
     ],
   },
 
@@ -26,9 +26,7 @@ export default [
   // Base JS + TS
   // --------------------------------------------------
   js.configs.recommended,
-  // TypeScript recommended (array of flat configs)
   ...tseslint.configs.recommended,
-  // Prettier: disable conflicting stylistic rules
   prettier,
 
   // --------------------------------------------------
@@ -48,7 +46,6 @@ export default [
         document: 'readonly',
       },
 
-      // REQUIRED for monorepo + path aliases
       parserOptions: {
         project: path.resolve('./tsconfig.json'),
         tsconfigRootDir: path.resolve('.'),
@@ -58,7 +55,6 @@ export default [
     settings: {
       react: { version: 'detect' },
 
-      // REQUIRED: resolve @/ aliases
       'import/resolver': {
         typescript: {
           project: path.resolve('./tsconfig.json'),
@@ -66,49 +62,16 @@ export default [
       },
 
       // ----------------------------------------------
-      // Architectural boundaries (feature-based)
+      // Architectural boundaries (definitions only)
       // ----------------------------------------------
       'boundaries/elements': [
-        // Feature modules (entire subtree)
         { type: 'feature', pattern: 'src/features/**' },
-
-        // Design system / UI primitives
         { type: 'ui', pattern: 'src/components/ui/**' },
-
-        // Shared composite components
         { type: 'shared', pattern: 'src/components/shared/**' },
-
-        // Utilities
         { type: 'lib', pattern: 'src/lib/**' },
-
-        // Domain / API contract types
         { type: 'types', pattern: 'src/types/**' },
-
-        // API client & adapters
         { type: 'api', pattern: 'src/api/**' },
-
-        // App-level routing & composition
         { type: 'routes', pattern: 'src/routes/**' },
-      ],
-      'boundaries/element-types': [
-        'error',
-        {
-          default: 'disallow',
-          rules: [
-            {
-              from: 'feature',
-              allow: ['ui', 'shared', 'lib', 'types', 'api'],
-            },
-            {
-              from: 'routes',
-              allow: ['feature', 'ui', 'shared'],
-            },
-            {
-              from: 'ui',
-              allow: ['lib', 'types'],
-            },
-          ],
-        },
       ],
     },
 
@@ -138,33 +101,14 @@ export default [
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
 
-      // Import hygiene:
-      // - Prefer absolute imports (@/) over deep relative paths
-      // - Discourage deep cross-feature imports (boundaries handle final enforcement)
+      // Import hygiene (relative only)
       'no-restricted-imports': [
         'warn',
         {
-          patterns: [
-            // --------------------------------------------
-            // Deep relative imports (fragile)
-            // --------------------------------------------
-            '../..',
-            '../../*',
-            '../../..',
-            '../../../*',
-            '../../../..',
-            '../../../../*',
-
-            // --------------------------------------------
-            // Deep cross-feature imports (early guardrail)
-            // Allow domain feature: simulations
-            // --------------------------------------------
-            '@/features/*/*/*',
-            '!@/features/simulations/**',
-            '!@/features/machines/**',
-          ],
+          patterns: ['../..', '../../*', '../../..', '../../../*', '../../../..', '../../../../*'],
         },
       ],
+
       // ----------------------------------------------
       // Architectural boundaries
       // ----------------------------------------------
@@ -179,7 +123,7 @@ export default [
             },
             {
               from: 'routes',
-              allow: ['feature', 'ui', 'shared'],
+              allow: ['feature', 'ui', 'shared', 'types'],
             },
             {
               from: 'ui',
