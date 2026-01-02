@@ -2,7 +2,7 @@ import { ChevronDown, LogOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { useAuth } from '@/auth/AuthContext';
+import { useAuth } from '@/auth/hooks/useAuth';
 import { GitHubIcon } from '@/components/icons/GitHubIcon';
 import { MobileMenu } from '@/components/layout/MobileMenu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

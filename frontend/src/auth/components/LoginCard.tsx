@@ -1,4 +1,4 @@
-import { useAuth } from '@/auth/AuthContext';
+import { useAuth } from '@/auth/hooks/useAuth';
 import { GitHubIcon } from '@/components/icons/GitHubIcon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

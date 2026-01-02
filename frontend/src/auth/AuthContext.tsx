@@ -1,30 +1,11 @@
 import { LogOut } from 'lucide-react';
-import React, {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, registerLogoutHandler } from '@/api/api';
+import { setAuthenticated } from '@/api/authState';
+import { AuthContext, AuthContextType } from '@/auth/context';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/types/user';
-
-import { setAuthenticated } from '../api/authState';
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  isAuthenticated: boolean;
-  loginWithGithub: () => void;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -109,10 +90,4 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
 };

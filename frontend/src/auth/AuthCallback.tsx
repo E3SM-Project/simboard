@@ -2,7 +2,7 @@ import { CheckCircle, XCircle } from 'lucide-react';
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { useAuth } from '@/auth/AuthContext';
+import { useAuth } from '@/auth/hooks/useAuth';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/hooks/use-toast';
 
