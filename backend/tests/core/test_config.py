@@ -100,7 +100,7 @@ class TestGetEnvFile:
             get_env_file(project_root=root)
 
     def test_returns_none_if_environment_is_ci(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("CI", True)
+        monkeypatch.setenv("CI", "true")
         root = tmp_path
         env_file = get_env_file(project_root=root)
 

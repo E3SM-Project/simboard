@@ -28,6 +28,10 @@ repos:
       - id: mypy
         name: mypy (type checking)
         files: ^backend/.*\.py$
+        additional_dependencies:
+          - fastapi
+          - pydantic
+          - sqlalchemy
 
   # ------------------------
   # Frontend (Node / TS)

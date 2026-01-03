@@ -28,8 +28,7 @@ def get_env_file(project_root: Path | None = None) -> str | None:
     Raises
     ------
     FileNotFoundError
-        If the required environment file does not exist or if attempting to load
-        a `.example` file.
+        If the required environment file does not exist.
     """
     # In CI, do not require an env file
     if os.getenv("CI", "").lower() == "true":
