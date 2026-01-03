@@ -1,7 +1,8 @@
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import dotenv from 'dotenv';
+import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 // ---------------------------------------------------------------------
@@ -15,17 +16,27 @@ const appEnv = process.env.APP_ENV ?? 'dev';
 // IMPORTANT: We DO NOT pass `appEnv` as the Vite mode, because
 // Vite modes can ONLY be: development, production, test
 // ---------------------------------------------------------------------
-const envDir = path.resolve(__dirname, `.envs/${appEnv}`);
-// rawEnv forced to "development" for local dev server
-const rawEnv = loadEnv('development', envDir, '');
+const envFile = path.resolve(__dirname, `../.envs/${appEnv}/frontend.env`);
+
+// In CI, rely solely on environment variables
+if (!process.env.CI) {
+  if (!fs.existsSync(envFile)) {
+    throw new Error(
+      `Environment file '${envFile}' does not exist. ` +
+        'Create it or set CI=true to rely on environment variables.',
+    );
+  }
+
+  dotenv.config({ path: envFile });
+}
 
 // ---------------------------------------------------------------------
 // Filter ONLY variables that start with VITE_
 // ---------------------------------------------------------------------
 const viteEnv: Record<string, string> = {};
-for (const key in rawEnv) {
-  if (key.startsWith('VITE_')) {
-    viteEnv[key] = rawEnv[key];
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith('VITE_') && value !== undefined) {
+    viteEnv[key] = value;
   }
 }
 
