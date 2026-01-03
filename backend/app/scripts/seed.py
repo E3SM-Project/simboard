@@ -98,7 +98,7 @@ def create_dev_oauth_user(db: Session):
     print(f"✅ Created dummy user: {user.email}")
 
     # 3. Create the linked OAuthAccount
-    oauth: OAuthAccount = OAuthAccount(
+    oauth = OAuthAccount(
         user_id=user.id,
         oauth_name=provider,
         account_id="123456",  # fake GitHub user ID
