@@ -85,7 +85,7 @@ export interface SimulationOut extends SimulationCreate {
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
 
-  // Relationsips
+  // Relationships
   // ~~~~~~~~~~~~~~
   machine: Machine;
 

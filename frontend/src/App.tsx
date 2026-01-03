@@ -16,8 +16,8 @@ const App = () => {
   // -------------------- Local State --------------------
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  const simulations = useSimulations().data;
-  const machines = useMachines().data;
+  const { data: simulations = [] } = useSimulations();
+  const { data: machines = [] } = useMachines();
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);

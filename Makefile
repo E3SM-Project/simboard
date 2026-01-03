@@ -207,15 +207,10 @@ pre-commit-run:
 .PHONY: backend-install backend-clean backend-run backend-reload backend-migrate backend-upgrade backend-downgrade backend-test
 
 backend-install:
-	cd $(BACKEND_DIR) && \
-	if [ ! -d .venv ]; then uv venv .venv; fi && \
-	uv sync --all-groups
+	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
 
 backend-reset:
-	cd $(BACKEND_DIR) && \
-	rm -rf .venv && \
-	uv venv .venv && \
-	uv sync --all-groups
+	cd $(BACKEND_DIR) && rm -rf .venv && uv venv .venv && uv sync --all-groups
 
 backend-clean:
 	cd $(BACKEND_DIR) && find . -type d -name "__pycache__" -exec rm -rf {} + && rm -rf .pytest_cache .ruff_cache build dist .mypy_cache
