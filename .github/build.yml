@@ -1,0 +1,88 @@
+name: CI/CD Build Workflow
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # Checkout
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Python
+      # -------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # -------------------------
+      # Install uv
+      # -------------------------
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # -------------------------
+      # Cache uv + Python deps
+      # -------------------------
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            backend/.venv
+          key: >
+            uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      # -------------------------
+      # Install backend deps
+      # -------------------------
+      - name: Create uv environment + install deps
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv sync --all-groups
+
+      # -------------------------
+      # Cache pre-commit
+      # -------------------------
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: >
+            pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      # -------------------------
+      # Pre-commit
+      # -------------------------
+      - name: Run pre-commit
+        working-directory: backend
+        run: |
+          uv run pre-commit run --all-files
+
+      # -------------------------
+      # Pytest
+      # -------------------------
+      - name: Run pytest
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: |
+          uv run pytest
