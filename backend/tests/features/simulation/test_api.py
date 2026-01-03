@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from app.api.constants import API_BASE
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.user.manager import current_active_user
@@ -66,7 +67,7 @@ class TestCreateSimulation:
             ],
         }
 
-        res = client.post("/api/simulations", json=payload)
+        res = client.post(f"{API_BASE}/simulations", json=payload)
         assert res.status_code == 201
         data = res.json()
         assert data["name"] == payload["name"]
@@ -78,7 +79,7 @@ class TestCreateSimulation:
 
 class TestListSimulations:
     def test_endpoint_returns_empty_list(self, client):
-        res = client.get("/api/simulations")
+        res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
         assert res.json() == []
 
@@ -109,7 +110,7 @@ class TestListSimulations:
         db.commit()
         db.refresh(sim)
 
-        res = client.get("/api/simulations")
+        res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
         data = res.json()
         assert len(data) == 1
@@ -142,11 +143,11 @@ class TestGetSimulation:
         db.commit()
         db.refresh(sim)
 
-        res = client.get(f"/api/simulations/{sim.id}")
+        res = client.get(f"{API_BASE}/simulations/{sim.id}")
         assert res.status_code == 200
         assert res.json()["name"] == sim.name
 
     def test_endpoint_raises_404_if_simulation_not_found(self, client):
-        res = client.get(f"/api/simulations/{uuid4()}")
+        res = client.get(f"{API_BASE}/simulations/{uuid4()}")
         assert res.status_code == 404
         assert res.json() == {"detail": "Simulation not found"}

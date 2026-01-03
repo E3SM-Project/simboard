@@ -3,6 +3,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.constants import API_BASE
 from app.features.machine.api import create_machine, get_machine, list_machines
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate
@@ -35,7 +36,7 @@ class TestCreateMachine:
             "notes": "Another test machine",
         }
 
-        res = client.post("/api/machines", json=payload)
+        res = client.post(f"{API_BASE}/machines", json=payload)
 
         assert res.status_code == 201
         data = res.json()
@@ -93,7 +94,7 @@ class TestCreateMachine:
             "notes": "Duplicate machine",
         }
 
-        res = client.post("/api/machines", json=payload)
+        res = client.post(f"{API_BASE}/machines", json=payload)
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine with this name already exists"
 
@@ -128,7 +129,7 @@ class TestListMachines:
             "chrysalis",
         }
 
-        res = client.get("/api/machines")
+        res = client.get(f"{API_BASE}/machines")
         assert res.status_code == 200
         data = res.json()
 
@@ -167,7 +168,7 @@ class TestGetMachine:
         db.commit()
         db.refresh(expected)
 
-        res = client.get(f"/api/machines/{expected.id}")
+        res = client.get(f"{API_BASE}/machines/{expected.id}")
         assert res.status_code == 200
 
         result_endpoint = res.json()
@@ -185,6 +186,6 @@ class TestGetMachine:
     def test_endpoint_raises_404_if_machine_not_found(self, client):
         random_id = uuid4()
 
-        res = client.get(f"/api/machines/{random_id}")
+        res = client.get(f"{API_BASE}/machines/{random_id}")
         assert res.status_code == 404
         assert res.json()["detail"] == "Machine not found"

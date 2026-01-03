@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.constants import API_BASE
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import _setup_root_logger
@@ -28,10 +29,10 @@ def create_app() -> FastAPI:
     )
 
     # Register routers.
-    app.include_router(simulations_router, prefix="/api")
-    app.include_router(machine_router, prefix="/api")
-    app.include_router(user_router, prefix="/api")
-    app.include_router(auth_router, prefix="/api")
+    app.include_router(simulations_router, prefix=API_BASE)
+    app.include_router(machine_router, prefix=API_BASE)
+    app.include_router(user_router, prefix=API_BASE)
+    app.include_router(auth_router, prefix=API_BASE)
 
     @app.get("/health")
     async def health():
