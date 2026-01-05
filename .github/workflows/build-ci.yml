@@ -148,5 +148,10 @@ jobs:
       # Run pytest
       # -------------------------
       - name: Run pytest
+        # NOTE:
+        # Pytest (and Alembic) must run from the backend directory so relative paths
+        # like alembic.ini and script_location resolve correctly. `--project` only
+        # selects the virtualenv; it does not change the working directory.
+        working-directory: backend
         run: |
-          uv run --project backend pytest --strict-markers
+          uv run pytest --strict-markers
