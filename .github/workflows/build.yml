@@ -137,9 +137,13 @@ jobs:
       # -------------------------
       # Run pre-commit
       # -------------------------
-      - name: Run pre-commit
+      - name: Run pre-commit (backend only)
         run: |
-          uv run --project backend pre-commit run --all-files
+          uv run --project backend pre-commit run \
+            ruff \
+            ruff-format \
+            mypy \
+            --all-files
 
       # -------------------------
       # Run pytest
