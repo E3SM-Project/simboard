@@ -251,19 +251,49 @@ Pre-commit runs automatically on `git commit` and will block commits if checks f
 
 ---
 
+### ⚠️ Important: Where to run pre-commit
+
+**Pre-commit must always be run from the repository root.**
+
+Some hooks (notably `mypy`) reference configuration files using paths relative to the repo root (for example, `backend/pyproject.toml`). Running pre-commit from a subdirectory such as `backend/` can cause those configurations to be missed, leading to inconsistent or misleading results.
+
+✅ Correct:
+
+```bash
+pre-commit run --all-files
+```
+
+❌ Incorrect:
+
+```bash
+cd backend
+pre-commit run --all-files
+```
+
+In CI, pre-commit is also executed from the repository root for this reason.
+
+> **Note:** When using `uv`, CI runs pre-commit via
+> `uv run --project backend pre-commit run --all-files`.
+> The `--project` flag selects the backend virtual environment, but **does not change the working directory**. Pre-commit itself must still be invoked from the repo root so configuration paths resolve correctly.
+
+---
+
 ### What pre-commit checks
 
 - **Backend**
+
   - Ruff linting and formatting
-  - Python style and correctness checks
+  - Python style and correctness checks (mypy)
+
 - **Frontend**
+
   - ESLint (auto-fix on staged files)
   - Prettier formatting (staged files only)
 
 All hooks are configured in the root `.pre-commit-config.yaml`.
 
-> **Note:** Git hooks run in a non-interactive shell
-> Make sure that Node.js tools (such as `pnpm`) are available in your system `PATH` so pre-commit hooks can execute successfully.
+> **Note:** Git hooks run in a non-interactive shell.
+> Make sure that Node.js tools (such as `pnpm`) are available in your system `PATH` so frontend hooks can execute successfully.
 
 ---
 
@@ -293,7 +323,7 @@ make pre-commit-install
 
 ### Running pre-commit manually
 
-To run all hooks against all files:
+To run all hooks against all files (from the repo root):
 
 ```bash
 make pre-commit-run
@@ -302,11 +332,8 @@ make pre-commit-run
 Or directly:
 
 ```bash
-cd backend
 uv run pre-commit run --all-files
 ```
-
-You can also run pre-commit from **any directory inside the repo**; it always resolves the repo root configuration.
 
 ---
 
