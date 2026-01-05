@@ -139,12 +139,11 @@ jobs:
       # -------------------------
       - name: Run pre-commit
         run: |
-          uv run pre-commit run --all-files
+          uv run --project backend pre-commit run --all-files
 
       # -------------------------
       # Run pytest
       # -------------------------
       - name: Run pytest
-        working-directory: backend
         run: |
-          uv run pytest
+          uv run --project=backend pytest
