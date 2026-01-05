@@ -108,15 +108,13 @@ jobs:
       # -------------------------
       # Cache uv + dependencies
       # -------------------------
-      - name: Cache uv
+      - name: Cache uv cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/uv
-            backend/.venv
-          key: uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          path: ~/.cache/uv
+          key: uv-cache-${{ runner.os }}
           restore-keys: |
-            uv-${{ runner.os }}-
+            uv-cache-${{ runner.os }}-
 
       # -------------------------
       # Install backend deps
@@ -135,8 +133,6 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            pre-commit-${{ runner.os }}-
 
       # -------------------------
       # Run pre-commit
