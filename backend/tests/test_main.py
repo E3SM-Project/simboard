@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.version import API_BASE
 from app.main import app
 
 
@@ -11,13 +12,13 @@ def client():
 
 class TestApp:
     def test_health_endpoint(self, client):
-        response = client.get("/health")
+        response = client.get(f"{API_BASE}/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
     def test_meta_endpoint(self, client):
-        response = client.get("/meta")
+        response = client.get(f"{API_BASE}/meta")
 
         assert response.status_code == 200
         assert response.json() == {
