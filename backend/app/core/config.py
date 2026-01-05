@@ -31,6 +31,7 @@ def get_env_file(project_root: Path | None = None) -> str | None:
         If the required environment file does not exist.
     """
     # In CI, do not require an env file
+    print("DEBUG CI =", repr(os.getenv("CI")))
     if os.getenv("CI"):
         return None
 
