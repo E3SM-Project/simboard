@@ -10,28 +10,39 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
 
-  # ------------------------
-  # Backend (Python / FastAPI)
-  # ------------------------
+# ------------------------
+# Backend (Python / FastAPI)
+# ------------------------
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
       - id: ruff-check
-        args: [--fix]
-        files: ^backend/
+        name: ruff (lint)
+        args:
+          - --config=backend/pyproject.toml
+          - --fix
+        files: ^backend/.*\.py$
+
       - id: ruff-format
-        files: ^backend/
+        name: ruff (format)
+        args:
+          - --config=backend/pyproject.toml
+        files: ^backend/.*\.py$
+
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
     hooks:
       - id: mypy
         name: mypy (type checking)
+        args:
+          - --config-file=backend/pyproject.toml
         files: ^backend/.*\.py$
         additional_dependencies:
           - fastapi
           - pydantic
           - sqlalchemy
+
 
   # ------------------------
   # Frontend (Node / TS)
