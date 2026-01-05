@@ -36,7 +36,8 @@ def get_env_file(project_root: Path | None = None) -> str | None:
 
     app_env = os.getenv("APP_ENV", "dev")
 
-    if project_root is None:
+    # project_root is only specified during testing to point to temp dirs.
+    if project_root is None:  # pragma: no cover
         project_root = Path(__file__).resolve().parents[3]
 
     env_file = project_root / ".envs" / app_env / "backend.env"
