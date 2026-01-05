@@ -139,16 +139,14 @@ jobs:
       # Run pre-commit
       # -------------------------
       - name: Run pre-commit (backend only)
+        env:
+          SKIP: frontend-eslint,frontend-prettier
         run: |
-          uv run --project backend pre-commit run \
-            ruff \
-            ruff-format \
-            mypy \
-            --all-files
+          uv run --project backend pre-commit run --all-files
 
       # -------------------------
       # Run pytest
       # -------------------------
       - name: Run pytest
         run: |
-          uv run --projec =backend pytest --strict-markers
+          uv run --project backend pytest --strict-markers
