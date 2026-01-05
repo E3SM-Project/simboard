@@ -99,8 +99,9 @@ class TestGetEnvFile:
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)
 
-    def test_returns_none_if_environment_is_ci(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("CI", "true")
+    @pytest.mark.parametrize("ci_value", ["true", "1", "yes", "TRUE"])
+    def test_returns_none_if_environment_is_ci(self, tmp_path, monkeypatch, ci_value):
+        monkeypatch.setenv("CI", ci_value)
         root = tmp_path
         env_file = get_env_file(project_root=root)
 
