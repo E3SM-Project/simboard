@@ -1,6 +1,7 @@
 import os
 import uuid
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Generator
 from urllib.parse import urlparse
 
@@ -26,7 +27,9 @@ from app.main import app
 
 logger = _setup_custom_logger(__name__)
 
-ALEMBIC_INI_PATH = "alembic.ini"
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+ALEMBIC_INI_PATH = BASE_DIR / "alembic.ini"
 
 
 # -----------------------------------------------
