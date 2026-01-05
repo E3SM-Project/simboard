@@ -125,6 +125,9 @@ convention = "numpy"
 "app/features/*/api.py" = ["B008"]
 "app/features/*/api/*.py" = ["B008"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
 [tool.pytest.ini_options]
 # Docs: https://docs.pytest.org/en/7.2.x/reference/customize.html#configuration
 junit_family = "xunit2"
