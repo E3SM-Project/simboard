@@ -51,7 +51,7 @@ dev = [
   # --- Development Tools ---
   "ruff==0.14.1",
   "pre-commit==4.3.0",
-  "mypy==1.18.2",
+  "mypy==1.19.1",
 
   # --- Runtime / ML ---
   "torch==2.7.1",
