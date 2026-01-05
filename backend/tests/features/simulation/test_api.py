@@ -122,6 +122,8 @@ class TestGetSimulation:
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
         sim = Simulation(
             name="Test Simulation",
             case_name="test_case",
@@ -132,7 +134,7 @@ class TestGetSimulation:
             initialization_type="startup",
             simulation_type="control",
             status="created",
-            machine_id=machine.id,  # type: ignore[union-attr]
+            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             git_tag="v1.0",
             git_commit_hash="abc123",
