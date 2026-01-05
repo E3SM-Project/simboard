@@ -11,6 +11,7 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -112,7 +113,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
-          key: uv-cache-${{ runner.os }}
+          key: uv-cache-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
           restore-keys: |
             uv-cache-${{ runner.os }}-
 
@@ -150,4 +151,4 @@ jobs:
       # -------------------------
       - name: Run pytest
         run: |
-          uv run --project=backend pytest
+          uv run --projec =backend pytest --strict-markers
