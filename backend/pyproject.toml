@@ -122,8 +122,8 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI’s use of Depends(...) in defaults is safe and idiomatic. Ignore B008 (do not call a method in argument defaults) in router files.
-"app/features/*/api.py" = ["B008"]
-"app/features/*/api/*.py" = ["B008"]
+"**/app/features/*/api.py" = ["B008"]
+"**/app/features/*/api/*.py" = ["B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

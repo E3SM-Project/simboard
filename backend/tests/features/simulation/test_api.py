@@ -132,7 +132,7 @@ class TestGetSimulation:
             initialization_type="startup",
             simulation_type="control",
             status="created",
-            machine_id=machine.id,
+            machine_id=machine.id,  # type: ignore[union-attr]
             simulation_start_date="2023-01-01T00:00:00Z",
             git_tag="v1.0",
             git_commit_hash="abc123",
