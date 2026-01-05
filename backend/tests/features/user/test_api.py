@@ -7,7 +7,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from httpx import AsyncClient
 
-from app.api.constants import API_BASE
+from app.api.version import API_BASE
 from app.core.config import settings
 from app.features.user import oauth
 from app.features.user.models import UserRole

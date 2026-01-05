@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from app.api.constants import API_BASE
+from app.api.version import API_BASE
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.user.manager import current_active_user

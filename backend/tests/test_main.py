@@ -12,8 +12,20 @@ def client():
 class TestApp:
     def test_health_endpoint(self, client):
         response = client.get("/health")
+
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+    def test_meta_endpoint(self, client):
+        response = client.get("/meta")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "version": "v1",
+            "status": "internal",
+            "breaking_changes": "requires new API version",
+            "build": None,
+        }
 
     def test_app_title(self):
         assert app.title == "SimBoard API"

@@ -1,4 +1,0 @@
-API_PREFIX = "/api"
-API_VERSION = "v1"
-
-API_BASE = f"{API_PREFIX}/{API_VERSION}"

@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.constants import API_BASE
+from app.api.health import router as health_router
+from app.api.meta import router as meta_router
+from app.api.version import API_BASE
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import _setup_root_logger
@@ -33,10 +35,8 @@ def create_app() -> FastAPI:
     app.include_router(machine_router, prefix=API_BASE)
     app.include_router(user_router, prefix=API_BASE)
     app.include_router(auth_router, prefix=API_BASE)
-
-    @app.get("/health")
-    async def health():
-        return {"status": "ok"}
+    app.include_router(meta_router, prefix=API_BASE)
+    app.include_router(health_router, prefix=API_BASE)
 
     return app
 

@@ -3,7 +3,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.constants import API_BASE
+from app.api.version import API_BASE
 from app.features.machine.api import create_machine, get_machine, list_machines
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate
