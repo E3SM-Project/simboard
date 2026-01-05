@@ -138,7 +138,6 @@ jobs:
       # Run pre-commit
       # -------------------------
       - name: Run pre-commit
-        working-directory: backend
         run: |
           uv run pre-commit run --all-files
 
