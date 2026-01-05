@@ -24,7 +24,10 @@ class TestApp:
         assert response.json() == {
             "version": "v1",
             "status": "internal",
-            "breaking_changes": "requires new API version",
+            "breaking_changes": (
+                "No breaking changes are currently declared. This field will describe "
+                "required upgrade paths when incompatible API versions are introduced.",
+            ),
             "build": None,
         }
 
