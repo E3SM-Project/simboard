@@ -34,10 +34,10 @@ class TestGetEnvFile:
     def test_raises_when_env_file_is_example(self, tmp_path, monkeypatch):
         monkeypatch.setenv("APP_ENV", "dev")
         root = tmp_path
-        (root / ".envs/dev").mkdir(parents=True)
-        (root / ".envs/dev/backend.env").write_text("OK")
-        (root / ".envs/dev/backend.env.example").write_text("# example")
-        example_env_file = root / ".envs/dev/backend.env.example"
+        (root / ".envs/").mkdir(parents=True)
+        (root / ".envs/backend.env").write_text("OK")
+        (root / ".envs/backend.env.example").write_text("# example")
+        example_env_file = root / ".envs/backend.env.example"
 
         with pytest.raises(
             FileNotFoundError, match="Refusing to load .example env files."
@@ -48,46 +48,26 @@ class TestGetEnvFile:
     def test_returns_dev_env_file_by_default(self, tmp_path, monkeypatch):
         monkeypatch.delenv("APP_ENV", raising=False)
         root = tmp_path
-        (root / ".envs/dev").mkdir(parents=True)
-        (root / ".envs/dev/backend.env").write_text("OK")
+        (root / ".envs/").mkdir(parents=True)
+        (root / ".envs/backend.env").write_text("OK")
         env_file = get_env_file(project_root=root)
 
-        assert env_file.endswith("dev/backend.env")  # type: ignore[union-attr]
+        assert env_file.endswith("backend.env")  # type: ignore[union-attr]
 
     def test_returns_dev_env_file_when_app_env_is_dev(self, tmp_path, monkeypatch):
         monkeypatch.setenv("APP_ENV", "dev")
         root = tmp_path
-        (root / ".envs/dev").mkdir(parents=True)
-        (root / ".envs/dev/backend.env").write_text("OK")
+        (root / ".envs/").mkdir(parents=True)
+        (root / ".envs/backend.env").write_text("OK")
         env_file = get_env_file(project_root=root)
 
-        assert env_file.endswith("dev/backend.env")  # type: ignore[union-attr]
-
-    def test_returns_dev_docker_env_file_when_app_env_is_dev_docker(
-        self, tmp_path, monkeypatch
-    ):
-        monkeypatch.setenv("APP_ENV", "dev_docker")
-        root = tmp_path
-        (root / ".envs/dev_docker").mkdir(parents=True)
-        (root / ".envs/dev_docker/backend.env").write_text("OK")
-
-        env_file = get_env_file(project_root=root)
-        assert env_file.endswith("dev_docker/backend.env")  # type: ignore[union-attr]
-
-    def test_returns_prod_env_file_when_app_env_is_prod(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APP_ENV", "prod")
-        root = tmp_path
-        (root / ".envs/prod").mkdir(parents=True)
-        (root / ".envs/prod/backend.env").write_text("OK")
-
-        env_file = get_env_file(project_root=root)
-        assert env_file.endswith("prod/backend.env")  # type: ignore[union-attr]
+        assert env_file.endswith("backend.env")  # type: ignore[union-attr]
 
     def test_raises_when_only_example_env_file_exists(self, tmp_path, monkeypatch):
         monkeypatch.setenv("APP_ENV", "dev")
         root = tmp_path
-        (root / ".envs/dev").mkdir(parents=True)
-        (root / ".envs/dev/backend.env.example").write_text("# example")
+        (root / ".envs/local").mkdir(parents=True)
+        (root / ".envs/backend.env.example").write_text("# example")
 
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)

@@ -10,13 +10,13 @@ def get_env_file(project_root: Path | None = None) -> str | None:
 
     Behavior:
         - In CI (CI=true), rely solely on environment variables.
-        - Otherwise, require `.envs/<APP_ENV>/backend.env`.
+        - Otherwise, require `.envs/backend.env`.
 
     This avoids brittle heuristics based on partial env var presence.
 
     Parameters
     ----------
-    project_root : str or Path or None, optional
+    project_root : Path or None, optional
         The root directory of the project. If None, it is inferred from the file
         location.
 
@@ -34,21 +34,17 @@ def get_env_file(project_root: Path | None = None) -> str | None:
     if os.getenv("CI"):
         return None
 
-    app_env = os.getenv("APP_ENV", "dev")
-
-    # project_root is only specified during testing to point to temp dirs.
+    # NOTE: project_root is only specified during testing to point to temp dirs.
     if project_root is None:  # pragma: no cover
         project_root = Path(__file__).resolve().parents[3]
 
-    env_file = project_root / ".envs" / app_env / "backend.env"
+    env_file = project_root / ".envs" / "backend.env"
 
     if not env_file.exists():
         raise FileNotFoundError(
             f"Environment file '{env_file}' does not exist. "
             "Create it or set CI=true to rely on environment variables."
         )
-
-    # TODO: Validate that required env vars are present?
 
     return str(env_file)
 
