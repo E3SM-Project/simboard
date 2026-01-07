@@ -29,62 +29,57 @@ COMPOSE_FILE_PROD := docker-compose.yml
 help:
 	@echo "$(YELLOW)SimBoard Monorepo Commands$(NC)"
 	@echo ""
-	@echo "$(BLUE)Environment:$(NC)"
+
+	@echo "$(BLUE)Setup & Installation:$(NC)"
+	@echo "  make install                               # Install backend, frontend, and pre-commit dependencies"
+	@echo "  make setup-local                           # Bare-metal local environment setup"
+	@echo "  make setup-local-assets                    # Ensure .env files + certs exist"
+	@echo "  make copy-env-files                        # Copy .env.example → .env"
+	@echo "  make gen-certs                             # Generate local SSL certs"
 	@echo ""
 
-	@echo "  $(YELLOW)Project Setup$(NC)"
-	@echo "    make install                             # Install backend + frontend deps + pre-commit"
-	@echo "    make setup-local               			# Bare-metal local environment setup"
-	@echo "    make setup-local-assets                  # Ensure .env files + certs exist"
-	@echo "    make copy-env-files                      # Copy .env.example → .env"
-	@echo "    make gen-certs                           # Generate local SSL certs"
+	@echo "$(BLUE)Cleanup:$(NC)"
+	@echo "  make clean                                 # Remove backend and frontend build/cache artifacts"
+	@echo "  make backend-clean                         # Clean Python caches"
+	@echo "  make frontend-clean                        # Remove node_modules + build artifacts"
 	@echo ""
 
-	@echo "  $(YELLOW)Pre-commit$(NC)"
-	@echo "    make pre-commit-install                  # Install git pre-commit hooks"
-	@echo "    make pre-commit-run                      # Run all pre-commit hooks"
+	@echo "$(BLUE)Backend:$(NC)"
+	@echo "  make backend-install                       # Create venv (if missing) + install deps"
+	@echo "  make backend-reset                         # Recreate venv + reinstall deps"
+	@echo "  make backend-run                           # Start FastAPI server with hot reload"
+	@echo "  make backend-migrate m='msg'               # Create Alembic migration"
+	@echo "  make backend-upgrade                       # Apply DB migrations"
+	@echo "  make backend-downgrade rev=<rev>           # Downgrade DB"
+	@echo "  make backend-test                          # Run pytest"
 	@echo ""
 
-	@echo "  $(YELLOW)Backend Commands$(NC)"
-	@echo "    make backend-install                     # Create venv (if missing) + install deps"
-	@echo "    make backend-reset                       # Recreate venv + reinstall deps"
-	@echo "    make backend-clean                       # Clean Python caches"
-	@echo "    make backend-run                         # Start FastAPI server with hot reload"
-	@echo "    make backend-migrate m='msg'             # Create Alembic migration"
-	@echo "    make backend-upgrade                     # Apply DB migrations"
-	@echo "    make backend-downgrade rev=<rev>         # Downgrade DB"
-	@echo "    make backend-test                        # Run pytest"
+	@echo "$(BLUE)Frontend:$(NC)"
+	@echo "  make frontend-install                      # Install frontend dependencies"
+	@echo "  make frontend-run                          # Start Vite dev server with hot reload"
+	@echo "  make frontend-build                        # Build frontend"
+	@echo "  make frontend-preview                      # Preview production build"
+	@echo "  make frontend-lint                         # Run ESLint"
+	@echo "  make frontend-fix                          # Run ESLint with --fix"
 	@echo ""
 
-	@echo "  $(YELLOW)Frontend Commands$(NC)"
-	@echo "    make frontend-install                    # Install frontend dependencies"
-	@echo "    make frontend-clean                      # Remove node_modules + build artifacts"
-	@echo "    make frontend-run                      	# Start Vite dev server with hot reload"
-	@echo "    make frontend-build                      # Build frontend"
-	@echo "    make frontend-preview                    # Preview production build"
-	@echo "    make frontend-lint                       # Run ESLint"
-	@echo "    make frontend-fix                        # Run ESLint with --fix"
+	@echo "$(BLUE)Pre-commit:$(NC)"
+	@echo "  make pre-commit-install                    # Install git pre-commit hooks"
+	@echo "  make pre-commit-run                        # Run all pre-commit hooks"
 	@echo ""
 
-	@echo "  $(YELLOW)Build & Cleanup$(NC)"
-	@echo "    make build                               # Build frontend"
-	@echo "    make preview                             # Preview frontend build"
-	@echo "    make clean                               # Clean backend + frontend artifacts"
+	@echo "$(BLUE)Docker Compose:$(NC)"
+	@echo "  make docker-build svc=<svc>                # Build Docker image(s)"
+	@echo "  make docker-rebuild svc=<svc>              # Build Docker image(s) without cache"
+	@echo "  make docker-up svc=<svc>                   # Start service(s)"
+	@echo "  make docker-up-detached svc=<svc>          # Start service(s) in background"
+	@echo "  make docker-down                           # Stop all services"
+	@echo "  make docker-restart svc=<svc>              # Restart service(s)"
+	@echo "  make docker-logs svc=<svc>                 # Follow service logs"
+	@echo "  make docker-shell svc=<svc>                # Shell into running container"
+	@echo "  make docker-ps                             # List running containers"
+	@echo "  make docker-config                         # Show resolved docker-compose config"
 	@echo ""
-
-	@echo "  $(YELLOW)Docker Compose Commands$(NC)"
-	@echo "    make docker-build svc=<svc>              # Build Docker image(s)"
-	@echo "    make docker-rebuild svc=<svc>            # Build Docker image(s) without cache"
-	@echo "    make docker-up svc=<svc>                 # Start service(s)"
-	@echo "    make docker-up-detached svc=<svc>        # Start service(s) in background"
-	@echo "    make docker-down                         # Stop all services"
-	@echo "    make docker-restart svc=<svc>            # Restart service(s)"
-	@echo "    make docker-logs svc=<svc>               # Follow service logs"
-	@echo "    make docker-shell svc=<svc>              # Shell into running container"
-	@echo "    make docker-ps                           # List running containers"
-	@echo "    make docker-config                       # Show resolved docker-compose config"
-	@echo ""
-
 
 # ============================================================
 # ⚙️ CORE SETUP
@@ -111,6 +106,7 @@ setup-local: setup-local-assets install
 	@echo "$(GREEN)✨ Bare-metal local environment is ready!$(NC)"
 	@echo "$(CYAN)Run:  make backend-run"
 	@echo "$(CYAN)Run:  make frontend-run"
+
 # ------------------------------------------------------------
 # Environment Files + Certificates
 # ------------------------------------------------------------
@@ -179,18 +175,6 @@ install: backend-install frontend-install pre-commit-install
 clean:
 	make backend-clean
 	make frontend-clean
-
-# ============================================================
-# 🚀 BUILD & PREVIEW
-# ============================================================
-
-build:
-	make frontend-build
-	@echo "$(GREEN)Backend handled via Docker or packaging.$(NC)"
-
-preview:
-	make frontend-preview
-
 
 # ============================================================
 # 🧑‍💻 BACKEND COMMANDS
