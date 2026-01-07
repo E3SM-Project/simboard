@@ -7,13 +7,25 @@ services:
         - ENV=production
     image: ${DOCKER_IMAGE_BACKEND:-simboard-backend}
     restart: always
-    env_file:
-      - ./.env
-      - ./backend/.env
     environment:
-      - ENV=production
-      - DOMAIN=${DOMAIN}
-      - FRONTEND_ORIGIN=https://app.${DOMAIN}
+      ENV: production
+      ENVIRONMENT: production
+      PORT: "8000"
+      STACK_NAME: simboard
+
+      DOMAIN: ${DOMAIN:-localhost}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      FRONTEND_AUTH_REDIRECT_URL: ${FRONTEND_AUTH_REDIRECT_URL:-http://localhost:5173/auth/callback}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/github/callback}
+
+      COOKIE_NAME: simboard_auth
+      COOKIE_SECURE: "true"
+      COOKIE_HTTPONLY: "true"
+      COOKIE_SAMESITE: lax
+      COOKIE_MAX_AGE: "3600"
+
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+
     expose:
       - "8000"
     volumes: []
@@ -46,12 +58,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=https://api.${DOMAIN}
+        - VITE_API_BASE_URL=https://127.0.0.1:8000/api/v1
         - NODE_ENV=production
     image: ${DOCKER_IMAGE_FRONTEND:-simboard-frontend}
     restart: always
     env_file:
-      - ./frontend/.env
+      - ./.envs/prod/frontend.env
     expose:
       - "80"
     depends_on:
@@ -74,25 +86,6 @@ services:
       - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.tls=true
       - traefik.http.routers.${STACK_NAME:-simboard}-frontend-https.tls.certresolver=le
-
-  ########################################
-  # Database (Postgres)
-  ########################################
-  db:
-    image: postgres:17
-    restart: always
-    env_file:
-      - ./backend/.env
-    environment:
-      - PGDATA=/var/lib/postgresql/data/pgdata
-    volumes:
-      - db-data:/var/lib/postgresql/data/pgdata
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simboard} -d ${POSTGRES_DB:-simboard}"]
-      interval: 10s
-      retries: 5
-      start_period: 20s
-      timeout: 5s
 
   traefik:
     image: traefik:v3.1
