@@ -35,7 +35,7 @@ help:
 	@echo "    make install                             # Install backend + frontend deps + pre-commit"
 	@echo "    make setup-local               			# Bare-metal local environment setup"
 	@echo "    make setup-local-assets                  # Ensure .env files + certs exist"
-	@echo "    make copy-env                            # Copy .env.example → .env"
+	@echo "    make copy-env-files                      # Copy .env.example → .env"
 	@echo "    make gen-certs                           # Generate local SSL certs"
 	@echo ""
 
@@ -89,7 +89,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env gen-certs install
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -115,21 +115,21 @@ setup-local: setup-local-assets install
 # ------------------------------------------------------------
 setup-local-assets:
 	@echo "$(GREEN)✨ Ensuring env + certs exist...$(NC)"
-	make copy-env env=$(env)
+	make copy-env-files env=$(env)
 	make gen-certs
 
-copy-env:
+copy-env-files:
 	@envs="local"; \
 	echo ""; \
 	for e in $$envs; do \
 		echo "$(BLUE)🔧 Environment: $$e$(NC)"; \
+		mkdir -p ".envs/$$e"; \
 		for file in backend frontend db; do \
-			src=".envs/example/$$file.env"; \
+			src=".envs/example/$$file.env.example"; \
 			dst=".envs/$$e/$$file.env"; \
 			if [ -f "$$dst" ]; then \
 				echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
 			elif [ -f "$$src" ]; then \
-				mkdir -p ".envs/$$e"; \
 				cp "$$src" "$$dst"; \
 				echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
 			else \
@@ -137,15 +137,16 @@ copy-env:
 			fi; \
 		done; \
 	done; \
-	\
-	# Optional: root .env for bare-metal dev
-	if [ -f ".env" ]; then \
-		echo "$(YELLOW)⚠️  .env exists, skipping$(NC)"; \
-	elif [ -f ".envs/example/.env" ]; then \
-		cp ".envs/example/.env" ".env"; \
-		echo "$(GREEN)✔ .envs/example/.env → .env$(NC)"; \
+	src=".envs/example/.env.example"; \
+	dst=".envs/local/.env"; \
+	if [ -f "$$dst" ]; then \
+		echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+	elif [ -f "$$src" ]; then \
+		mkdir -p ".envs/local"; \
+		cp "$$src" "$$dst"; \
+		echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠️ Missing .envs/example/.env$(NC)"; \
+		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 	fi
 
 
