@@ -18,7 +18,8 @@ NC     := \033[0m
 BACKEND_DIR  := backend
 FRONTEND_DIR := frontend
 
-COMPOSE_FILE := docker-compose.yml
+COMPOSE_FILE_LOCAL := docker-compose.local.yml
+COMPOSE_FILE_PROD := docker-compose.yml
 
 # ============================================================
 # 🧭 HELP MENU
@@ -97,19 +98,19 @@ help:
 # Always use env=local for bare-metal setup.
 setup-local: setup-local-assets install
 	@echo "$(GREEN)🚀 Starting Postgres (Docker-only)...$(NC)"
-	@docker compose -f $(COMPOSE_FILE_local) up -d db
+	@docker compose -f $(COMPOSE_FILE_LOCAL) up -d db
 
 	@echo "$(GREEN)⏳ Waiting for Postgres...$(NC)"
-	@until docker compose -f $(COMPOSE_FILE_local) exec db pg_isready -U simboard -d simboard >/local/null 2>&1; do printf "."; sleep 1; done
+	@until docker compose -f $(COMPOSE_FILE_LOCAL) exec db pg_isready -U simboard -d simboard >/dev/null 2>&1; do printf "."; sleep 1; done
 	@echo "$(GREEN)\n✅ Postgres is ready!$(NC)"
 
 	@echo "$(GREEN)📜 Running migrations + seeding via bare-metal backend...$(NC)"
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 	cd $(BACKEND_DIR) && uv run python app/scripts/seed.py || true
 
-	@echo "$(GREEN)✨ Bare-metal local is ready!$(NC)"
-	@echo "$(CYAN)Run:  make backend-run env=local$(NC)"
-	@echo "$(CYAN)Run:  make frontend-run env=local$(NC)"
+	@echo "$(GREEN)✨ Bare-metal local environment is ready!$(NC)"
+	@echo "$(CYAN)Run:  make backend-run"
+	@echo "$(CYAN)Run:  make frontend-run"
 # ------------------------------------------------------------
 # Environment Files + Certificates
 # ------------------------------------------------------------
@@ -267,31 +268,31 @@ docker-help:
 	@echo "  make docker-down"
 
 docker-build:
-	docker compose -f $(COMPOSE_FILE) build $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) build $(svc)
 
 docker-rebuild:
-	docker compose -f $(COMPOSE_FILE) build --no-cache $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) build --no-cache $(svc)
 
 docker-up:
-	docker compose -f $(COMPOSE_FILE) up $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) up $(svc)
 
 docker-up-detached:
-	docker compose -f $(COMPOSE_FILE) up -d $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) up -d $(svc)
 
 docker-down:
-	docker compose -f $(COMPOSE_FILE) down
+	docker compose -f $(COMPOSE_FILE_PROD) down
 
 docker-restart:
-	docker compose -f $(COMPOSE_FILE) restart $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) restart $(svc)
 
 docker-logs:
-	docker compose -f $(COMPOSE_FILE) logs -f $(svc)
+	docker compose -f $(COMPOSE_FILE_PROD) logs -f $(svc)
 
 docker-shell:
-	docker compose -f $(COMPOSE_FILE) exec $(svc) bash
+	docker compose -f $(COMPOSE_FILE_PROD) exec $(svc) bash
 
 docker-ps:
-	docker compose -f $(COMPOSE_FILE) ps
+	docker compose -f $(COMPOSE_FILE_PROD) ps
 
 docker-config:
-	docker compose -f $(COMPOSE_FILE) config
+	docker compose -f $(COMPOSE_FILE_PROD) config
