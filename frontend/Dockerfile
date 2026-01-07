@@ -17,22 +17,17 @@ COPY pnpm-lock.yaml package.json ./
 
 # Install dependencies (with caching)
 RUN --mount=type=cache,target=/root/.pnpm-store \
-    # --mount=type=cache,target=node_modules \
     pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
-# Build with configurable API URL
-ARG VITE_API_URL=/api
-ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm run build
 
 ########################################
 # Stage 2: Serve with Nginx
 ########################################
 FROM nginx:1.29.3-alpine AS production-stage
-RUN apk --no-cache upgrade
 
 # Copy built static assets
 COPY --from=build-stage /app/dist /usr/share/nginx/html
