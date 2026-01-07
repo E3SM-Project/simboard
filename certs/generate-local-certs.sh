@@ -3,7 +3,7 @@ set -e
 
 CERT_DIR="$(dirname "$0")"
 
-echo "🔐 Generating self-signed dev SSL certificates..."
+echo "🔐 Generating self-signed local SSL certificates..."
 
 # --- Detect OS -------------------------------------------------------------
 
@@ -52,12 +52,12 @@ fi
 echo "🔧 Installing mkcert root CA (first time only)..."
 mkcert -install
 
-echo "📜 Creating dev.key and dev.crt in $CERT_DIR..."
+echo "📜 Creating local.key and local.crt in $CERT_DIR..."
 mkcert \
-  -key-file "$CERT_DIR/dev.key" \
-  -cert-file "$CERT_DIR/dev.crt" \
+  -key-file "$CERT_DIR/local.key" \
+  -cert-file "$CERT_DIR/local.crt" \
   "localhost" "127.0.0.1" "::1"
 
 echo "✅ Done!"
-echo "   Key : $CERT_DIR/dev.key"
-echo "   Cert: $CERT_DIR/dev.crt"
+echo "   Key : $CERT_DIR/local.key"
+echo "   Cert: $CERT_DIR/local.crt"
