@@ -64,14 +64,15 @@ COPY entrypoint.sh /app/entrypoint.sh
 # Make it executable WHILE STILL ROOT
 RUN chmod +x /app/entrypoint.sh
 
-# Create non-root user for runtime safety
-# NOTE: Might not need to do this in Spinup environments, need follow up with John.
-# RUN adduser --disabled-password --gecos "" appuser
-# USER appuser
-
 EXPOSE 8000
 
 # Healthcheck endpoint (optional)
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O- http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+# NOTE:
+# Running as root is intentional on NERSC Spin.
+# Spin-managed volumes and project filesystems cause permission issues
+# when using a non-root container user.
+# Spin provides sufficient isolation for this service.
