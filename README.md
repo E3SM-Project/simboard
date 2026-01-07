@@ -115,88 +115,12 @@ make test
 
 ---
 
-## Developer Quickstart (Docker)
-
-Use this workflow when you need **production-like dev**:
-
-- Same OS/runtime
-- Validates Docker networking & build steps
-- Ideal for integration testing
-
-### Commands
-
-```bash
-cd simboard
-
-# Build images, generate envs, run migrations, seed DB
-make setup-dev-docker env=dev_docker
-
-# Start backend container
-make docker-up env=dev_docker svc=backend
-
-# Start frontend container
-make docker-up env=dev_docker svc=frontend
-
-# Open API and UI
-open https://127.0.0.1:5173
-open https://127.0.0.1:8000/docs
-```
-
----
-
-## Environment System
-
-SimBoard uses a **multi-environment .env layout**:
-
-```bash
-.envs/
-  dev/
-    backend.env
-    frontend.env
-  dev_docker/
-    backend.env
-    frontend.env
-  prod/
-    backend.env
-    frontend.env
-```
-
-Environment selection is controlled by:
-
-```bash
-make <command> env=<env_name>
-```
-
-Examples:
-
-```bash
-make backend-reload env=dev
-make frontend-dev env=dev
-make docker-up env=prod svc=backend
-```
-
-Under the hood, every command receives:
-
-```bash
-APP_ENV=$(env)
-```
-
-Backend and frontend automatically load:
-
-```
-.envs/<env>/backend.env
-.envs/<env>/frontend.env
-```
-
----
-
 ## GitHub OAuth Configuration
 
 Environment variables must be placed in the appropriate folder, e.g.:
 
 ```bash
-.envs/dev/backend.env
-.envs/dev_docker/backend.env
+.envs/backend.env
 ```
 
 Example config:
@@ -221,7 +145,7 @@ GITHUB_STATE_SECRET_KEY=your_secret
 simboard/
 ├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
 ├── frontend/       # Vite + React + Tailwind + shadcn
-├── .envs/          # dev / dev_docker / prod environment sets
+├── .envs/          # Stores .env files for local development.
 ├── docker-compose.dev.yml
 ├── docker-compose.yml
 ├── Makefile        # unified monorepo automation
@@ -234,9 +158,6 @@ simboard/
 
 - Backend dependencies managed using **uv**
 - Frontend dependencies managed using **pnpm**
-- Environment switching handled automatically via `APP_ENV`
-- `.envs/<env>` contains all environment-specific configs
-- Docker Compose uses `.envs/dev_docker/*` when running containers
 
 Use [GitHub Issues](https://github.com/E3SM-Project/simboard/issues/new/choose) to report bugs or propose features.
 Pull requests should include tests + documentation updates.
@@ -365,8 +286,8 @@ Please only do this when absolutely necessary.
 SimBoard uses **local HTTPS** with development certificates:
 
 ```bash
-certs/dev.crt
-certs/dev.key
+certs/local.crt
+certs/local.key
 ```
 
 Generated via:
@@ -379,6 +300,29 @@ Used automatically by:
 
 - FastAPI (Uvicorn SSL)
 - Vite (via `VITE_SSL_CERT`, `VITE_SSL_KEY`)
+
+## Building Docker Containers for NERSC Spin
+
+- Harbor (Registry): <https://registry.nersc.gov/harbor/projects>
+- Rancher (Dashboard): <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
+
+Commands:
+
+```bash
+cd backend
+
+docker buildx build --platform=linux/amd64,linux/arm64 -t registry.nersc.gov/e3sm/simboard/backend .
+
+docker push registry.nersc.gov/e3sm/simboard/backend
+```
+
+Helpful Commands:
+
+```bash
+docker container ls
+docker image ls
+docker tag ...
+```
 
 ---
 
