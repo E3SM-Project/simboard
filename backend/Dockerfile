@@ -20,8 +20,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 # Copy dependency manifests
 COPY pyproject.toml uv.lock* /app/
 
-# Install deps into uv-managed virtualenv
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
+# Install deps into uv-managed virtualenv (dependencies only, no project install)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
 
 # Copy only required app files
 COPY app /app/app
@@ -30,8 +31,9 @@ COPY pyproject.toml /app/
 COPY README.md /app/
 COPY alembic.ini /app/
 
-# Install project in editable mode
-RUN --mount=type=cache,target=/root/.cache/uv uv sync
+# Build wheel and install project non-editable (production-safe, Spin-compatible)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv build && uv pip install dist/*.whl
 
 ########################################
 # Stage 2: Runtime
