@@ -2,99 +2,88 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-// ---------------------------------------------------------------------
-// Determine application environment (APP_ENV) mapped to .envs/<env>
-// Defaults to "dev" (replacing old "local")
-// ---------------------------------------------------------------------
-const appEnv = process.env.APP_ENV ?? 'dev';
+export default defineConfig(({ mode }) => {
+  // -------------------------------------------------------------------
+  // Environment classification
+  // -------------------------------------------------------------------
+  const isLocalDev = mode === 'development';
 
-// ---------------------------------------------------------------------
-// Load environment variables from .envs/<env>/frontend.env
-// IMPORTANT: We DO NOT pass `appEnv` as the Vite mode, because
-// Vite modes can ONLY be: development, production, test
-// ---------------------------------------------------------------------
-const envFile = path.resolve(__dirname, `../.envs/${appEnv}/frontend.env`);
+  // -------------------------------------------------------------------
+  // Load env file ONLY for local bare-metal dev
+  // -------------------------------------------------------------------
+  if (isLocalDev) {
+    const envFile = path.resolve(__dirname, '../.envs/frontend.env');
 
-// In CI, rely solely on environment variables
-if (!process.env.CI) {
-  if (!fs.existsSync(envFile)) {
-    throw new Error(
-      `Environment file '${envFile}' does not exist. ` +
-        'Create it or set CI=true to rely on environment variables.',
-    );
+    if (!fs.existsSync(envFile)) {
+      throw new Error(
+        `Environment file '${envFile}' does not exist. ` +
+          'Create it for local dev or run in CI/production.',
+      );
+    }
+
+    dotenv.config({ path: envFile });
   }
 
-  dotenv.config({ path: envFile });
-}
-
-// ---------------------------------------------------------------------
-// Filter ONLY variables that start with VITE_
-// ---------------------------------------------------------------------
-const viteEnv: Record<string, string> = {};
-for (const [key, value] of Object.entries(process.env)) {
-  if (key.startsWith('VITE_') && value !== undefined) {
-    viteEnv[key] = value;
+  // -------------------------------------------------------------------
+  // Filter ONLY variables that start with VITE_
+  // -------------------------------------------------------------------
+  const viteEnv: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('VITE_') && value !== undefined) {
+      viteEnv[key] = value;
+    }
   }
-}
 
-// ---------------------------------------------------------------------
-// Certificate path setup
-// ---------------------------------------------------------------------
-const keyPath = viteEnv.VITE_SSL_KEY ?? '../certs/dev.key';
-const certPath = viteEnv.VITE_SSL_CERT ?? '../certs/dev.crt';
+  // -------------------------------------------------------------------
+  // Certificate path setup (local dev only)
+  // -------------------------------------------------------------------
+  const keyPath = viteEnv.VITE_SSL_KEY ?? '../certs/local.key';
+  const certPath = viteEnv.VITE_SSL_CERT ?? '../certs/local.crt';
 
-// Resolve relative files based on THIS directory, not CWD
-const resolveIfExists = (p: string) => {
-  const full = path.resolve(__dirname, p);
+  const resolveIfExists = (p: string) => {
+    const full = path.resolve(__dirname, p);
+    return fs.existsSync(full) ? full : null;
+  };
 
-  return fs.existsSync(full) ? full : null;
-};
+  const finalKey = resolveIfExists(keyPath);
+  const finalCert = resolveIfExists(certPath);
 
-const finalKey = resolveIfExists(keyPath);
-const finalCert = resolveIfExists(certPath);
+  // -------------------------------------------------------------------
+  // Local-only safety check
+  // -------------------------------------------------------------------
+  if (isLocalDev && (!finalKey || !finalCert)) {
+    throw new Error('❌ Local SSL certificates missing for Vite dev server.');
+  }
 
-// ---------------------------------------------------------------------
-// Optional safety checks
-// ---------------------------------------------------------------------
+  // -------------------------------------------------------------------
+  // Final Vite config
+  // -------------------------------------------------------------------
+  return {
+    plugins: [react(), tsconfigPaths()],
 
-// Warn if HTTPS cannot be enabled locally
-if (!finalKey || !finalCert) {
-  console.warn('⚠️  HTTPS disabled: missing dev.key or dev.crt');
-}
+    // Expose ONLY VITE_* variables
+    define: {
+      ...Object.fromEntries(
+        Object.entries(viteEnv).map(([key, value]) => [
+          `import.meta.env.${key}`,
+          JSON.stringify(value),
+        ]),
+      ),
+    },
 
-// In CI or prod-like environments, fail if certs are missing
-if (process.env.CI && (!finalKey || !finalCert)) {
-  throw new Error('❌ SSL certificates missing in CI environment.');
-}
-
-// ---------------------------------------------------------------------
-// Final Vite config
-// ---------------------------------------------------------------------
-export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
-
-  // Expose ONLY VITE_* variables
-  define: {
-    ...Object.fromEntries(
-      Object.entries(viteEnv).map(([key, value]) => [
-        `import.meta.env.${key}`,
-        JSON.stringify(value),
-      ]),
-    ),
-  },
-
-  server: {
-    host: '127.0.0.1',
-    port: 5173,
-    // https:
-    //   finalKey && finalCert
-    //     ? {
-    //         key: fs.readFileSync(finalKey),
-    //         cert: fs.readFileSync(finalCert),
-    //       }
-    //     : undefined,
-  },
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      https:
+        isLocalDev && finalKey && finalCert
+          ? {
+              key: fs.readFileSync(finalKey),
+              cert: fs.readFileSync(finalCert),
+            }
+          : undefined,
+    },
+  };
 });
