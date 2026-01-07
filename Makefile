@@ -119,17 +119,35 @@ setup-local-assets:
 	make gen-certs
 
 copy-env:
-	@if [ -n "$(env)" ]; then envs="$(env)"; else envs="local prod"; fi; \
+	@envs="local"; \
+	echo ""; \
 	for e in $$envs; do \
-		echo ""; echo "$(BLUE)🔧 Environment: $$e$(NC)"; \
-		for file in backend frontend; do \
-			src=".envs/$$e/$$file.env.example"; \
+		echo "$(BLUE)🔧 Environment: $$e$(NC)"; \
+		for file in backend frontend db; do \
+			src=".envs/example/$$file.env"; \
 			dst=".envs/$$e/$$file.env"; \
-			if [ -f "$$dst" ]; then echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
-			elif [ -f "$$src" ]; then cp "$$src" "$$dst"; echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
-			else echo "$(YELLOW)⚠️ Missing $$src$(NC)"; fi; \
+			if [ -f "$$dst" ]; then \
+				echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+			elif [ -f "$$src" ]; then \
+				mkdir -p ".envs/$$e"; \
+				cp "$$src" "$$dst"; \
+				echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
+			else \
+				echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
+			fi; \
 		done; \
-	done
+	done; \
+	\
+	# Optional: root .env for bare-metal dev
+	if [ -f ".env" ]; then \
+		echo "$(YELLOW)⚠️  .env exists, skipping$(NC)"; \
+	elif [ -f ".envs/example/.env" ]; then \
+		cp ".envs/example/.env" ".env"; \
+		echo "$(GREEN)✔ .envs/example/.env → .env$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️ Missing .envs/example/.env$(NC)"; \
+	fi
+
 
 gen-certs:
 	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"

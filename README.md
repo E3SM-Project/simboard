@@ -120,7 +120,7 @@ make test
 Environment variables must be placed in the appropriate folder, e.g.:
 
 ```bash
-.envs/backend.env
+.envs/local/backend.env
 ```
 
 Example config:

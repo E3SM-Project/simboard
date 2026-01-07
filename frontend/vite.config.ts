@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
   // Load env file ONLY for local bare-metal dev
   // -------------------------------------------------------------------
   if (isLocalDev) {
-    const envFile = path.resolve(__dirname, '../.envs/frontend.env');
+    const envFile = path.resolve(__dirname, '../.envs/local/frontend.env');
 
     if (!fs.existsSync(envFile)) {
       throw new Error(

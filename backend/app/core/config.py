@@ -10,7 +10,7 @@ def get_env_file(project_root: Path | None = None) -> str | None:
 
     Behavior:
         - In CI (CI=true), rely solely on environment variables.
-        - Otherwise, require `.envs/backend.env`.
+        - Otherwise, require `.envs/local/backend.env`.
 
     This avoids brittle heuristics based on partial env var presence.
 
@@ -38,7 +38,7 @@ def get_env_file(project_root: Path | None = None) -> str | None:
     if project_root is None:  # pragma: no cover
         project_root = Path(__file__).resolve().parents[3]
 
-    env_file = project_root / ".envs" / "backend.env"
+    env_file = project_root / ".envs" / "local" / "backend.env"
 
     if not env_file.exists():
         raise FileNotFoundError(
