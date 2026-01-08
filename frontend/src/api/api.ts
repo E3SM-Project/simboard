@@ -3,8 +3,15 @@ import axios from 'axios';
 import { getAuthenticated } from '@/api/authState';
 
 export const API_PREFIX = '/api/v1';
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL;
-export const API_BASE_URL = new URL(API_PREFIX, API_ORIGIN || window.location.origin).toString();
+
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? '';
+
+const stripTrailingSlashes = (s: string) => s.replace(/\/+$/, '');
+const stripLeadingSlashes = (s: string) => s.replace(/^\/+/, '');
+
+export const API_BASE_URL =
+  `${stripTrailingSlashes(API_ORIGIN || window.location.origin)}` +
+  `/${stripLeadingSlashes(API_PREFIX)}`;
 
 export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
