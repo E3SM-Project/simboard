@@ -3,7 +3,7 @@ import axios from 'axios';
 import { getAuthenticated } from '@/api/authState';
 
 export const API_PREFIX = '/api/v1';
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN;
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL;
 export const API_BASE_URL = new URL(API_PREFIX, API_ORIGIN || window.location.origin).toString();
 
 export type LogoutFn = (opts?: { silent?: boolean }) => void;
