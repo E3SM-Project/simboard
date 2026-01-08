@@ -55,8 +55,6 @@ services:
         - NODE_ENV=production
     image: ${DOCKER_IMAGE_FRONTEND:-simboard-frontend}
     restart: always
-    ports:
-      - "8080:80"
     expose:
       - "80"
     depends_on:
