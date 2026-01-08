@@ -4,9 +4,7 @@ import { getAuthenticated } from '@/api/authState';
 
 export const API_PREFIX = '/api/v1';
 
-const API_ORIGIN = import.meta.env.DEV
-  ? (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000')
-  : '';
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
 export const API_BASE_URL = `${API_ORIGIN}${API_PREFIX}`;
 
