@@ -2,13 +2,13 @@ import axios from 'axios';
 
 import { getAuthenticated } from '@/api/authState';
 
-let API_BASE_URL: string;
+export const API_PREFIX = '/api/v1';
 
-if (import.meta.env.DEV) {
-  API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
-} else {
-  API_BASE_URL = '/api/v1';
-}
+const API_ORIGIN = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000')
+  : '';
+
+export const API_BASE_URL = `${API_ORIGIN}${API_PREFIX}`;
 
 export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
