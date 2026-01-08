@@ -91,10 +91,7 @@ help:
 # Bare-metal environment
 # ------------------------------------------------------------
 # Always use env=local for bare-metal setup.
-setup-local: setup-local-assets install
-	@echo "$(GREEN)🚀 Starting Postgres (Docker-only)...$(NC)"
-	@docker compose -f $(COMPOSE_FILE_LOCAL) up -d db
-
+setup-local: setup-local-assets db-up install
 	@echo "$(GREEN)⏳ Waiting for Postgres...$(NC)"
 	@until docker compose -f $(COMPOSE_FILE_LOCAL) exec db pg_isready -U simboard -d simboard >/dev/null 2>&1; do printf "."; sleep 1; done
 	@echo "$(GREEN)\n✅ Postgres is ready!$(NC)"
@@ -106,6 +103,10 @@ setup-local: setup-local-assets install
 	@echo "$(GREEN)✨ Bare-metal local environment is ready!$(NC)"
 	@echo "$(CYAN)Run:  make backend-run"
 	@echo "$(CYAN)Run:  make frontend-run"
+
+db-up:
+	@echo "$(GREEN)🚀 Starting Postgres (Docker-only)...$(NC)"
+	@docker compose -f $(COMPOSE_FILE_LOCAL) up -d db
 
 # ------------------------------------------------------------
 # Environment Files + Certificates
@@ -133,7 +134,19 @@ copy-env-files:
 				echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 			fi; \
 		done; \
+		\
+		src=".envs/example/backend.production.env.example"; \
+		dst=".envs/$$e/backend.production.env"; \
+		if [ -f "$$dst" ]; then \
+			echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+		elif [ -f "$$src" ]; then \
+			cp "$$src" "$$dst"; \
+			echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
+		else \
+			echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
+		fi; \
 	done; \
+	\
 	src=".envs/example/.env.example"; \
 	dst=".envs/local/.env"; \
 	if [ -f "$$dst" ]; then \
@@ -145,7 +158,6 @@ copy-env-files:
 	else \
 		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 	fi
-
 
 gen-certs:
 	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"
@@ -245,38 +257,38 @@ frontend-fix:
 
 .PHONY: docker-help docker-build docker-rebuild docker-up docker-down docker-restart docker-logs docker-shell docker-ps docker-config
 
-docker-help:
-	@echo "$(YELLOW)Docker commands:$(NC)"
-	@echo "  make docker-build svc=<svc>"
-	@echo "  make docker-up svc=<svc>"
-	@echo "  make docker-down"
+ENV_PROD := \
+	--env-file .env \
+	--env-file .envs/local/backend.production.env
+
+COMPOSE := docker compose $(ENV_PROD) -f docker-compose.yml
 
 docker-build:
-	docker compose -f $(COMPOSE_FILE_PROD) build $(svc)
+	$(COMPOSE) build $(svc)
 
 docker-rebuild:
-	docker compose -f $(COMPOSE_FILE_PROD) build --no-cache $(svc)
+	$(COMPOSE) build --no-cache $(svc)
 
 docker-up:
-	docker compose -f $(COMPOSE_FILE_PROD) up $(svc)
+	$(COMPOSE) up $(svc)
 
 docker-up-detached:
-	docker compose -f $(COMPOSE_FILE_PROD) up -d $(svc)
+	$(COMPOSE) up -d $(svc)
 
 docker-down:
-	docker compose -f $(COMPOSE_FILE_PROD) down
+	$(COMPOSE) down
 
 docker-restart:
-	docker compose -f $(COMPOSE_FILE_PROD) restart $(svc)
+	$(COMPOSE) restart $(svc)
 
 docker-logs:
-	docker compose -f $(COMPOSE_FILE_PROD) logs -f $(svc)
+	$(COMPOSE) logs -f $(svc)
 
 docker-shell:
-	docker compose -f $(COMPOSE_FILE_PROD) exec $(svc) bash
+	$(COMPOSE) exec $(svc) bash
 
 docker-ps:
-	docker compose -f $(COMPOSE_FILE_PROD) ps
+	$(COMPOSE) ps
 
 docker-config:
-	docker compose -f $(COMPOSE_FILE_PROD) config
+	$(COMPOSE) config

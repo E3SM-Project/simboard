@@ -14,7 +14,7 @@ def disable_ci(monkeypatch):
     to return None and rely solely on environment variables.
 
     This test suite validates the *file-based* behavior used in local
-    development (i.e., resolving `.envs/<APP_ENV>/backend.env`), so we
+    development (i.e., resolving `.envs/<ENV>/backend.env`), so we
     explicitly unset `CI` here to avoid CI-specific code paths.
     """
     monkeypatch.delenv("CI", raising=False)
@@ -23,20 +23,20 @@ def disable_ci(monkeypatch):
 class TestGetEnvFile:
     @pytest.fixture(autouse=True)
     def restore_env(self, monkeypatch):
-        """Save & restore APP_ENV across tests."""
-        original = os.environ.get("APP_ENV")
+        """Save & restore ENV across tests."""
+        original = os.environ.get("ENV")
         yield
         if original is not None:
-            monkeypatch.setenv("APP_ENV", original)
+            monkeypatch.setenv("ENV", original)
         else:
-            monkeypatch.delenv("APP_ENV", raising=False)
+            monkeypatch.delenv("ENV", raising=False)
 
     def test_raises_when_env_file_is_example(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APP_ENV", "dev")
+        monkeypatch.setenv("ENV", "development")
         root = tmp_path
-        (root / ".envs/").mkdir(parents=True)
-        (root / ".envs/backend.env").write_text("OK")
-        (root / ".envs/backend.env.example").write_text("# example")
+        (root / ".envs/local/").mkdir(parents=True)
+        (root / ".envs/local/backend.env").write_text("OK")
+        (root / ".envs/local/backend.env.example").write_text("# example")
         example_env_file = root / ".envs/backend.env.example"
 
         with pytest.raises(
@@ -45,26 +45,27 @@ class TestGetEnvFile:
             if example_env_file.name.endswith(".example"):
                 raise FileNotFoundError("Refusing to load .example env files.")
 
-    def test_returns_dev_env_file_by_default(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("APP_ENV", raising=False)
+    def test_returns_dev_env_file_when_ENV_is_dev(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ENV", "development")
+
+        root = tmp_path
+        (root / ".envs/local").mkdir(parents=True)
+        (root / ".envs/local/backend.env").write_text("OK")
+        env_file = get_env_file(project_root=root)
+
+        assert env_file.endswith("backend.env")  # type: ignore[union-attr]
+
+    def test_returns_none_if_when_ENV_is_not_dev(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ENV", "production")
         root = tmp_path
         (root / ".envs/").mkdir(parents=True)
         (root / ".envs/backend.env").write_text("OK")
         env_file = get_env_file(project_root=root)
 
-        assert env_file.endswith("backend.env")  # type: ignore[union-attr]
-
-    def test_returns_dev_env_file_when_app_env_is_dev(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APP_ENV", "dev")
-        root = tmp_path
-        (root / ".envs/").mkdir(parents=True)
-        (root / ".envs/backend.env").write_text("OK")
-        env_file = get_env_file(project_root=root)
-
-        assert env_file.endswith("backend.env")  # type: ignore[union-attr]
+        assert env_file is None
 
     def test_raises_when_only_example_env_file_exists(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APP_ENV", "dev")
+        monkeypatch.setenv("ENV", "development")
         root = tmp_path
         (root / ".envs/local").mkdir(parents=True)
         (root / ".envs/backend.env.example").write_text("# example")
@@ -73,16 +74,8 @@ class TestGetEnvFile:
             get_env_file(project_root=root)
 
     def test_raises_when_env_file_does_not_exist(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APP_ENV", "ghost")
+        monkeypatch.setenv("ENV", "development")
         root = tmp_path
 
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)
-
-    @pytest.mark.parametrize("ci_value", ["true", "1", "yes", "TRUE"])
-    def test_returns_none_if_environment_is_ci(self, tmp_path, monkeypatch, ci_value):
-        monkeypatch.setenv("CI", ci_value)
-        root = tmp_path
-        env_file = get_env_file(project_root=root)
-
-        assert env_file is None
