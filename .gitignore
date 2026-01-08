@@ -83,4 +83,4 @@ dmypy.json
 *.crt
 *.pem
 # But keep the generator script
-!certs/generate-dev-certs.sh
+!certs/generate-local-certs.sh

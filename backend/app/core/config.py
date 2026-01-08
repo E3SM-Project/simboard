@@ -6,46 +6,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def get_env_file(project_root: Path | None = None) -> str | None:
-    """Determine which environment-specific .env file to load.
-
-    Behavior:
-        - In CI (CI=true), rely solely on environment variables.
-        - Otherwise, require `.envs/<APP_ENV>/backend.env`.
-
-    This avoids brittle heuristics based on partial env var presence.
-
-    Parameters
-    ----------
-    project_root : str or Path or None, optional
-        The root directory of the project. If None, it is inferred from the file
-        location.
-
-    Returns
-    -------
-    str or None
-        The path to the environment file as a string, or None if running in CI.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the required environment file does not exist.
     """
-    # In CI, do not require an env file
-    if os.getenv("CI"):
+    Determine which .env file to load based on ENV.
+
+    - ENV=development → load .envs/local/backend.env
+    - ENV=production  → rely on process environment only
+    - ENV=test        → rely on test harness
+    """
+    env = os.getenv("ENV", "development")
+
+    if env != "development":
         return None
 
-    app_env = os.getenv("APP_ENV", "dev")
-
-    # project_root is only specified during testing to point to temp dirs.
     if project_root is None:  # pragma: no cover
         project_root = Path(__file__).resolve().parents[3]
 
-    env_file = project_root / ".envs" / app_env / "backend.env"
+    env_file = project_root / ".envs" / "local" / "backend.env"
 
     if not env_file.exists():
         raise FileNotFoundError(
-            f"Environment file '{env_file}' does not exist. "
-            "Create it or set CI=true to rely on environment variables."
+            f"Missing development env file: {env_file}\n"
+            "Create it or set ENV=production to rely on environment variables."
         )
 
     return str(env_file)

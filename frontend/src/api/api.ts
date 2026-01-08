@@ -2,14 +2,16 @@ import axios from 'axios';
 
 import { getAuthenticated } from '@/api/authState';
 
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-const API_BASE_URL = rawApiBaseUrl ?? (import.meta.env.DEV ? 'http://localhost:3000' : undefined);
+export const API_PREFIX = '/api/v1';
 
-if (!API_BASE_URL) {
-  throw new Error(
-    'VITE_API_BASE_URL is not defined. Please set it in your environment (e.g., .env file).',
-  );
-}
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? '';
+
+const stripTrailingSlashes = (s: string) => s.replace(/\/+$/, '');
+const stripLeadingSlashes = (s: string) => s.replace(/^\/+/, '');
+
+export const API_BASE_URL =
+  `${stripTrailingSlashes(API_ORIGIN || window.location.origin)}` +
+  `/${stripLeadingSlashes(API_PREFIX)}`;
 
 export type LogoutFn = (opts?: { silent?: boolean }) => void;
 let onLogout: LogoutFn | null = null;
