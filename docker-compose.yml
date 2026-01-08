@@ -10,10 +10,6 @@ services:
     image: ${DOCKER_IMAGE_BACKEND:-simboard-backend}
     restart: always
     environment:
-      # Must set CI to true in order to use os environment variables with FastAPI,
-      # rather than looking for the backend.env file.
-      CI: true
-
       ENV: production
       ENVIRONMENT: production
       PORT: "8000"
@@ -55,6 +51,8 @@ services:
         - NODE_ENV=production
     image: ${DOCKER_IMAGE_FRONTEND:-simboard-frontend}
     restart: always
+    ports:
+      - "8080:80"
     expose:
       - "80"
     depends_on:
