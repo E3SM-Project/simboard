@@ -67,8 +67,8 @@ class TestGetEnvFile:
     def test_raises_when_only_example_env_file_exists(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "development")
         root = tmp_path
-        (root / ".envs/local").mkdir(parents=True)
-        (root / ".envs/backend.env.example").write_text("# example")
+        (root / ".envs/example").mkdir(parents=True)
+        (root / ".envs/example/backend.env.example").write_text("# example")
 
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)

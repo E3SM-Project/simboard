@@ -1,3 +1,12 @@
+# NOTE:
+# Running as root is intentional for deployment on NERSC Spin.
+# Spin-managed volumes and project filesystems enforce ownership and
+# permission models that break non-root container users.
+#
+# The container does NOT run in privileged mode and does not require
+# elevated Linux capabilities. Runtime isolation is provided by
+# Kubernetes pod and node-level controls enforced by Spin.
+
 # syntax=docker/dockerfile:1.6
 
 ########################################
@@ -33,7 +42,9 @@ COPY alembic.ini /app/
 
 # Build wheel and install project non-editable (production-safe, Spin-compatible)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv build && uv pip install dist/*.whl
+    uv build && \
+    ls dist/*.whl >/dev/null 2>&1 || (printf '%s\n' 'Error: no wheel files produced in dist/ after uv build.' >&2 && exit 1) && \
+    uv pip install dist/*.whl
 
 ########################################
 # Stage 2: Runtime
@@ -67,12 +78,6 @@ RUN chmod +x /app/entrypoint.sh
 EXPOSE 8000
 
 # Healthcheck endpoint (optional)
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O- http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O- http://localhost:8000/api/v1/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# NOTE:
-# Running as root is intentional on NERSC Spin.
-# Spin-managed volumes and project filesystems cause permission issues
-# when using a non-root container user.
-# Spin provides sufficient isolation for this service.

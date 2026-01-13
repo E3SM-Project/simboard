@@ -233,7 +233,7 @@ frontend-clean:
 	cd $(FRONTEND_DIR) && rm -rf node_modules dist .turbo
 
 frontend-local:
-	cd $(FRONTEND_DIR) && pnpm local
+	cd $(FRONTEND_DIR) && pnpm dev
 
 frontend-build:
 	cd $(FRONTEND_DIR) && pnpm build

@@ -145,8 +145,8 @@ GITHUB_STATE_SECRET_KEY=your_secret
 simboard/
 ├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
 ├── frontend/       # Vite + React + Tailwind + shadcn
-├── .envs/          # Stores .env files for local development.
-├── docker-compose.dev.yml
+├── .envs/          # Env configs: example/ (templates, committed) + local/ (developer values, ignored)
+├── docker-compose.local.yml
 ├── docker-compose.yml
 ├── Makefile        # unified monorepo automation
 └── certs/          # dev HTTPS certificates
@@ -301,27 +301,42 @@ Used automatically by:
 - FastAPI (Uvicorn SSL)
 - Vite (via `VITE_SSL_CERT`, `VITE_SSL_KEY`)
 
-## Building Docker Containers for NERSC Spin
+## Building Docker Containers for NERSC Spin (Manual)
 
-- Harbor (Registry): <https://registry.nersc.gov/harbor/projects>
-- Rancher (Dashboard): <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
+- **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
+- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
 
-Commands:
+To build and push multi-architecture Docker images for deployment on NERSC Spin, run the
+following commands from the repository root.
+
+**Backend:**
 
 ```bash
 cd backend
-
-docker buildx build --platform=linux/amd64,linux/arm64 -t registry.nersc.gov/e3sm/simboard/backend .
-
-docker push registry.nersc.gov/e3sm/simboard/backend
+docker buildx build \
+  --platform=linux/amd64,linux/arm64 \
+  -t registry.nersc.gov/e3sm/simboard/backend . \
+  --push
 ```
 
-Helpful Commands:
+**Frontend:**
 
 ```bash
-docker container ls
-docker image ls
-docker tag ...
+cd frontend
+docker buildx build \
+  --platform=linux/amd64,linux/arm64 \
+  -t registry.nersc.gov/e3sm/simboard/frontend . \
+  --push
+```
+
+---
+
+**Helpful Docker Commands:**
+
+```bash
+docker container ls      # List running containers
+docker image ls          # List local images
+docker tag <src> <dest>  # Tag an image
 ```
 
 ---
