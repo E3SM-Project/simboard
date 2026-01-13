@@ -114,38 +114,36 @@ class ArtifactOut(CamelOutBaseModel):
     ]
 
 
-class SimulationCreate(CamelInBaseModel):
-    """Schema for creating a new Simulation."""
+class SimulationBase(CamelInBaseModel):
+    """Base schema for Simulation shared fields."""
 
-    # Configuration
-    # --------------
-    name: Annotated[str, Field(..., description="Name of the simulation")]
+    name: Annotated[str | None, Field(None, description="Name of the simulation")]
     case_name: Annotated[
-        str, Field(..., description="Case name associated with the simulation")
+        str | None, Field(None, description="Case name associated with the simulation")
     ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
     compset: Annotated[
-        str, Field(..., description="Component set used in the simulation")
+        str | None, Field(None, description="Component set used in the simulation")
     ]
-    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
+    compset_alias: Annotated[
+        str | None, Field(None, description="Alias for the component set")
+    ]
     grid_name: Annotated[
-        str, Field(..., description="Grid name used in the simulation")
+        str | None, Field(None, description="Grid name used in the simulation")
     ]
     grid_resolution: Annotated[
-        str, Field(..., description="Grid resolution used in the simulation")
+        str | None, Field(None, description="Grid resolution used in the simulation")
     ]
     parent_simulation_id: Annotated[
         UUID | None, Field(None, description="Optional ID of the parent simulation")
     ]
-
-    # Model setup/context
-    # -------------------
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
+    simulation_type: Annotated[
+        str | None, Field(None, description="Type of the simulation")
+    ]
     status: Annotated[
-        SimulationStatus, Field(..., description="Current status of the simulation")
+        str | None, Field(None, description="Current status of the simulation")
     ]
     campaign_id: Annotated[
         str | None, Field(None, description="Optional ID of the associated campaign")
@@ -154,20 +152,18 @@ class SimulationCreate(CamelInBaseModel):
         str | None, Field(None, description="Optional ID of the experiment type")
     ]
     initialization_type: Annotated[
-        str, Field(..., description="Initialization type for the simulation")
+        str | None, Field(None, description="Initialization type for the simulation")
     ]
     group_name: Annotated[
         str | None,
         Field(None, description="Optional group name associated with the simulation"),
     ]
-
-    # Model timeline
-    # --------------
     machine_id: Annotated[
-        UUID, Field(..., description="ID of the machine used for the simulation")
+        UUID | None,
+        Field(None, description="ID of the machine used for the simulation"),
     ]
     simulation_start_date: Annotated[
-        datetime, Field(..., description="Start date of the simulation")
+        datetime | None, Field(None, description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
         datetime | None, Field(None, description="Optional end date of the simulation")
@@ -183,9 +179,6 @@ class SimulationCreate(CamelInBaseModel):
     compiler: Annotated[
         str | None, Field(None, description="Optional compiler used for the simulation")
     ]
-
-    # Metadata & audit
-    # -----------------
     key_features: Annotated[
         str | None, Field(None, description="Optional key features of the simulation")
     ]
@@ -196,11 +189,8 @@ class SimulationCreate(CamelInBaseModel):
         str | None,
         Field(None, description="Optional additional notes in markdown format"),
     ]
-
-    # Version control
-    # ---------------
     git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
+        str | None, Field(None, description="Optional Git repository URL")
     ]
     git_branch: Annotated[
         str | None,
@@ -218,25 +208,62 @@ class SimulationCreate(CamelInBaseModel):
         ),
     ]
 
-    # Provenance & submission
-    # -----------------------
-    created_by: Annotated[
-        UUID | None,
+    extra: Annotated[
+        dict | None,
         Field(
             None,
-            description="User ID who created the simulation, defined at creation time.",
+            description="Optional extra metadata in flexible dictionary/JSON format",
         ),
     ]
-    last_updated_by: Annotated[
-        UUID | None,
+    artifacts: Annotated[
+        list[ArtifactCreate] | None,
         Field(
             None,
-            description="User ID who last updated the simulation, defined at update time.",
+            description="Optional list of artifacts associated with the simulation",
+        ),
+    ]
+    links: Annotated[
+        list[ExternalLinkCreate] | None,
+        Field(
+            None,
+            description="Optional list of external links associated with the simulation",
         ),
     ]
 
-    # Miscellaneous
-    # -----------------
+
+class SimulationCreate(SimulationBase):
+    """Schema for creating a new Simulation."""
+
+    name: Annotated[str, Field(..., description="Name of the simulation")]
+    case_name: Annotated[
+        str, Field(..., description="Case name associated with the simulation")
+    ]
+    compset: Annotated[
+        str, Field(..., description="Component set used in the simulation")
+    ]
+    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
+    grid_name: Annotated[
+        str, Field(..., description="Grid name used in the simulation")
+    ]
+    grid_resolution: Annotated[
+        str, Field(..., description="Grid resolution used in the simulation")
+    ]
+    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+    initialization_type: Annotated[
+        str, Field(..., description="Initialization type for the simulation")
+    ]
+    machine_id: Annotated[
+        UUID, Field(..., description="ID of the machine used for the simulation")
+    ]
+    simulation_start_date: Annotated[
+        datetime, Field(..., description="Start date of the simulation")
+    ]
+
+    # Optional/nullable fields remain as in base, but override to provide default_factory
+    # for creation
     extra: Annotated[
         dict,
         Field(
@@ -261,6 +288,26 @@ class SimulationCreate(CamelInBaseModel):
             description="Optional list of external links associated with the simulation",
         ),
     ]
+    created_by: Annotated[
+        UUID | None,
+        Field(
+            None,
+            description="User ID who created the simulation, defined at creation time.",
+        ),
+    ]
+    last_updated_by: Annotated[
+        UUID | None,
+        Field(
+            None,
+            description="User ID who last updated the simulation, defined at update time.",
+        ),
+    ]
+
+
+class SimulationUpdate(SimulationBase):
+    """Schema for updating a Simulation (partial fields allowed)."""
+
+    pass
 
 
 class SimulationOut(CamelOutBaseModel):
