@@ -1,9 +1,11 @@
 import { useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/hooks/useAuth';
 import { SimulationDetailsView } from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 
 export const SimulationDetailsPage = () => {
+  const { user, isAuthenticated } = useAuth();
   const { id } = useParams<{ id: string }>();
   const { data: simulation, loading, error } = useSimulation(id ?? '');
 
@@ -39,5 +41,12 @@ export const SimulationDetailsPage = () => {
     );
   }
 
-  return <SimulationDetailsView simulation={simulation} />;
+  const canEdit = !!(
+    isAuthenticated &&
+    user &&
+    simulation.createdBy &&
+    user.id === simulation.createdBy
+  );
+
+  return <SimulationDetailsView simulation={simulation} canEdit={canEdit} />;
 };

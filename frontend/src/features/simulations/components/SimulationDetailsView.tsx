@@ -40,13 +40,11 @@ export const SimulationDetailsView = ({
   canEdit = false,
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState({ ...simulation });
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
-
-  // Temporary local-only comments
   const [newComment, setNewComment] = useState('');
-  const [comments, setComments] = useState<
-    { id: string; author: string; date: string; text: string }[]
-  >([
+  const [comments, setComments] = useState([
     {
       id: 'c1',
       author: 'Jane Doe',
@@ -54,7 +52,7 @@ export const SimulationDetailsView = ({
       text: 'The sea-ice diagnostics will be added later.',
     },
   ]);
-
+  const handleChange = (field: keyof SimulationOut, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
   const addComment = () => {
     if (!newComment.trim()) return;
     setComments((prev) => [
@@ -74,7 +72,13 @@ export const SimulationDetailsView = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{simulation.name}</h1>
+          <h1 className="text-2xl font-bold">
+            {editMode ? (
+              <Input value={form.name} onChange={e => handleChange('name', e.target.value)} />
+            ) : (
+              simulation.name
+            )}
+          </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Type:</span>
             <SimulationTypeBadge simulationType={simulation.simulationType} />
@@ -98,7 +102,14 @@ export const SimulationDetailsView = ({
           <Button variant="outline" asChild>
             <Link to="/compare">Add to Compare</Link>
           </Button>
-          <Button disabled={!canEdit}>Save</Button>
+          {editMode ? (
+            <>
+              <Button>Save</Button>
+              <Button variant="secondary" onClick={() => { setEditMode(false); setForm({ ...simulation }); }}>Cancel</Button>
+            </>
+          ) : (
+            <Button onClick={() => setEditMode(true)} disabled={!canEdit}>Edit</Button>
+          )}
         </div>
       </div>
 
@@ -118,31 +129,67 @@ export const SimulationDetailsView = ({
               </CardHeader>
               <CardContent className="space-y-3">
                 <FieldRow label="Simulation Name">
-                  <ReadonlyInput value={simulation.name} />
+                  {editMode ? (
+                    <Input value={form.name} onChange={e => handleChange('name', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.name} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Case Name">
-                  <ReadonlyInput value={simulation.caseName} />
+                  {editMode ? (
+                    <Input value={form.caseName} onChange={e => handleChange('caseName', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.caseName} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Model Version">
-                  <ReadonlyInput value={simulation.gitTag ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.gitTag ?? ''} onChange={e => handleChange('gitTag', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.gitTag ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Compset">
-                  <ReadonlyInput value={simulation.compset ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.compset ?? ''} onChange={e => handleChange('compset', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.compset ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Grid Name">
-                  <ReadonlyInput value={simulation.gridName ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.gridName ?? ''} onChange={e => handleChange('gridName', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.gridName ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Grid Resolution">
-                  <ReadonlyInput value={simulation.gridResolution ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.gridResolution ?? ''} onChange={e => handleChange('gridResolution', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.gridResolution ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Initialization Type">
-                  <ReadonlyInput value={simulation.initializationType ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.initializationType ?? ''} onChange={e => handleChange('initializationType', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.initializationType ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Compiler">
-                  <ReadonlyInput value={simulation.compiler ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.compiler ?? ''} onChange={e => handleChange('compiler', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.compiler ?? undefined} />
+                  )}
                 </FieldRow>
                 <FieldRow label="Parent Simulation ID">
-                  <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
+                  {editMode ? (
+                    <Input value={form.parentSimulationId ?? ''} onChange={e => handleChange('parentSimulationId', e.target.value)} />
+                  ) : (
+                    <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
+                  )}
                 </FieldRow>
               </CardContent>
             </Card>
