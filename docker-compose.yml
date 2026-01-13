@@ -16,9 +16,9 @@ services:
       STACK_NAME: simboard
 
       DOMAIN: ${DOMAIN:-localhost}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
-      FRONTEND_AUTH_REDIRECT_URL: ${FRONTEND_AUTH_REDIRECT_URL:-http://localhost:5173/auth/callback}
-      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/github/callback}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://localhost:5173}
+      FRONTEND_AUTH_REDIRECT_URL: ${FRONTEND_AUTH_REDIRECT_URL:-https://localhost:5173/auth/callback}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-https://localhost/api/v1/auth/github/callback}
 
       COOKIE_NAME: simboard_auth
       COOKIE_SECURE: "true"
@@ -37,7 +37,7 @@ services:
     networks:
       - default
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "wget", "-q", "-O", "-", "https://localhost:8000/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 3
