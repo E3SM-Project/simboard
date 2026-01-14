@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { updateSimulation } from '@/features/simulations/api/api';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
+import { canEditSimulationField, SIMULATION_FIELDS } from '@/features/simulations/simulationFields';
 import { cn } from '@/lib/utils';
-import type { SimulationOut } from '@/types';
+import type { SimulationOut, SimulationUpdate } from '@/types';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
@@ -41,7 +43,7 @@ export const SimulationDetailsView = ({
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [editMode, setEditMode] = useState(false);
-  const [form, setForm] = useState({ ...simulation });
+  const [form, setForm] = useState<SimulationOut>({ ...simulation });
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState([
@@ -52,7 +54,17 @@ export const SimulationDetailsView = ({
       text: 'The sea-ice diagnostics will be added later.',
     },
   ]);
-  const handleChange = (field: keyof SimulationOut, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const ctx = { isOwner: canEdit, isAdmin: false };
+
+  const canEditField = (name: keyof typeof SIMULATION_FIELDS) =>
+    editMode && canEditSimulationField(SIMULATION_FIELDS[name], ctx);
+
+  const handleChange = <K extends keyof SimulationOut>(field: K, value: SimulationOut[K]) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
   const addComment = () => {
     if (!newComment.trim()) return;
     setComments((prev) => [
@@ -67,14 +79,41 @@ export const SimulationDetailsView = ({
     setNewComment('');
   };
 
+  const handleSave = async () => {
+    setSaving(true);
+    setErrorMsg(null);
+
+    const payload: SimulationUpdate = {};
+
+    (Object.keys(SIMULATION_FIELDS) as (keyof typeof SIMULATION_FIELDS)[]).forEach((key) => {
+      if (!canEditSimulationField(SIMULATION_FIELDS[key], ctx)) return;
+      if (form[key] !== simulation[key]) {
+        (payload as any)[key] = form[key];
+      }
+    });
+
+    if (notes !== simulation.notesMarkdown) {
+      payload.notesMarkdown = notes;
+    }
+
+    try {
+      await updateSimulation(simulation.id, payload);
+      window.location.reload();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update simulation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1200px] px-6 py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
-            {editMode ? (
-              <Input value={form.name} onChange={e => handleChange('name', e.target.value)} />
+            {canEditField('name') ? (
+              <Input value={form.name} onChange={(e) => handleChange('name', e.target.value)} />
             ) : (
               simulation.name
             )}
@@ -85,180 +124,176 @@ export const SimulationDetailsView = ({
             <span>•</span>
             <span>Status:</span>
             <SimulationStatusBadge status={simulation.status} />
-            {simulation.gitTag && (
-              <>
-                <span>•</span>
-                <span>Version/Tag:</span>
-                <code className="rounded bg-muted px-2 py-0.5 text-xs">{simulation.gitTag}</code>
-              </>
-            )}
             <span>•</span>
             <Link to="/browse" className="text-blue-600 hover:underline">
               Back to results
             </Link>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link to="/compare">Add to Compare</Link>
           </Button>
+
           {editMode ? (
             <>
-              <Button>Save</Button>
-              <Button variant="secondary" onClick={() => { setEditMode(false); setForm({ ...simulation }); }}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditMode(false);
+                  setForm({ ...simulation });
+                  setNotes(simulation.notesMarkdown || '');
+                }}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
             </>
           ) : (
-            <Button onClick={() => setEditMode(true)} disabled={!canEdit}>Edit</Button>
+            <Button onClick={() => setEditMode(true)} disabled={!canEdit}>
+              Edit
+            </Button>
           )}
         </div>
       </div>
 
+      {errorMsg && <div className="text-red-600 text-sm">{errorMsg}</div>}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start">
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="outputs">Outputs & Logs</TabsTrigger>
         </TabsList>
 
-        {/* SUMMARY TAB */}
+        {/* ================= SUMMARY TAB ================= */}
         <TabsContent value="summary" className="space-y-6">
+          {/* Configuration + Model Setup */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Configuration */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <FieldRow label="Simulation Name">
-                  {editMode ? (
-                    <Input value={form.name} onChange={e => handleChange('name', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.name} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Case Name">
-                  {editMode ? (
-                    <Input value={form.caseName} onChange={e => handleChange('caseName', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.caseName} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Model Version">
-                  {editMode ? (
-                    <Input value={form.gitTag ?? ''} onChange={e => handleChange('gitTag', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.gitTag ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Compset">
-                  {editMode ? (
-                    <Input value={form.compset ?? ''} onChange={e => handleChange('compset', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.compset ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Grid Name">
-                  {editMode ? (
-                    <Input value={form.gridName ?? ''} onChange={e => handleChange('gridName', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.gridName ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Grid Resolution">
-                  {editMode ? (
-                    <Input value={form.gridResolution ?? ''} onChange={e => handleChange('gridResolution', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.gridResolution ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Initialization Type">
-                  {editMode ? (
-                    <Input value={form.initializationType ?? ''} onChange={e => handleChange('initializationType', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.initializationType ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Compiler">
-                  {editMode ? (
-                    <Input value={form.compiler ?? ''} onChange={e => handleChange('compiler', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.compiler ?? undefined} />
-                  )}
-                </FieldRow>
-                <FieldRow label="Parent Simulation ID">
-                  {editMode ? (
-                    <Input value={form.parentSimulationId ?? ''} onChange={e => handleChange('parentSimulationId', e.target.value)} />
-                  ) : (
-                    <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
-                  )}
-                </FieldRow>
+                {(
+                  [
+                    'caseName',
+                    'compset',
+                    'compsetAlias',
+                    'gridName',
+                    'gridResolution',
+                    'initializationType',
+                    'compiler',
+                    'parentSimulationId',
+                  ] as const
+                ).map((f) => (
+                  <FieldRow key={f} label={SIMULATION_FIELDS[f].label}>
+                    {canEditField(f) ? (
+                      <Input
+                        value={(form as any)[f] ?? ''}
+                        onChange={(e) => handleChange(f as any, e.target.value)}
+                      />
+                    ) : (
+                      <ReadonlyInput value={(simulation as any)[f]} />
+                    )}
+                  </FieldRow>
+                ))}
               </CardContent>
             </Card>
+
+            {/* Model Setup */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Model Setup</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <FieldRow label="Simulation Type">
+                <FieldRow label={SIMULATION_FIELDS.simulationType.label}>
                   <ReadonlyInput value={simulation.simulationType} />
                 </FieldRow>
-                <FieldRow label="Status">
+                <FieldRow label={SIMULATION_FIELDS.status.label}>
                   <ReadonlyInput value={simulation.status} />
                 </FieldRow>
-                <FieldRow label="Campaign ID">
+                <FieldRow label={SIMULATION_FIELDS.campaignId.label}>
                   <ReadonlyInput value={simulation.campaignId} />
                 </FieldRow>
-                <FieldRow label="Experiment Type ID">
+                <FieldRow label={SIMULATION_FIELDS.experimentTypeId.label}>
                   <ReadonlyInput value={simulation.experimentTypeId} />
                 </FieldRow>
-                <FieldRow label="Machine">
+                <FieldRow label={SIMULATION_FIELDS.machineId.label}>
                   <ReadonlyInput value={simulation.machine.name} />
                 </FieldRow>
               </CardContent>
             </Card>
           </div>
 
+          {/* Timeline + Provenance (side-by-side) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Timeline */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Timeline</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <FieldRow label="Simulation Start Date">
-                  <span className="text-sm">
-                    {simulation.simulationStartDate
-                      ? formatDate(simulation.simulationStartDate)
-                      : '—'}
-                  </span>
+                <FieldRow label={SIMULATION_FIELDS.simulationStartDate.label}>
+                  <span className="text-sm">{formatDate(simulation.simulationStartDate)}</span>
                 </FieldRow>
-                <FieldRow label="Simulation End Date">
-                  <span className="text-sm">
-                    {simulation.simulationEndDate ? formatDate(simulation.simulationEndDate) : '—'}
-                  </span>
+
+                <FieldRow label={SIMULATION_FIELDS.simulationEndDate.label}>
+                  {canEditField('simulationEndDate') ? (
+                    <Input
+                      type="datetime-local"
+                      value={
+                        form.simulationEndDate
+                          ? new Date(form.simulationEndDate).toISOString().slice(0, 19)
+                          : ''
+                      }
+                      onChange={(e) =>
+                        handleChange(
+                          'simulationEndDate',
+                          e.target.value ? new Date(e.target.value + 'Z').toISOString() : null,
+                        )
+                      }
+                    />
+                  ) : (
+                    <span className="text-sm">
+                      {simulation.simulationEndDate
+                        ? formatDate(simulation.simulationEndDate)
+                        : '—'}
+                    </span>
+                  )}
                 </FieldRow>
+
                 <FieldRow label="Total Duration">
                   <span className="text-sm">
-                    {simulation.simulationStartDate && simulation.simulationEndDate
-                      ? (() => {
-                          return getSimulationDuration(
-                            simulation.simulationStartDate,
-                            simulation.simulationEndDate,
-                          );
-                        })()
+                    {simulation.simulationEndDate
+                      ? getSimulationDuration(
+                          simulation.simulationStartDate,
+                          simulation.simulationEndDate,
+                        )
                       : '—'}
                   </span>
                 </FieldRow>
+
                 {simulation.runStartDate && (
-                  <FieldRow label="Run Start Date">
+                  <FieldRow label={SIMULATION_FIELDS.runStartDate.label}>
                     <span className="text-sm">{formatDate(simulation.runStartDate)}</span>
                   </FieldRow>
                 )}
+
                 {simulation.runEndDate && (
-                  <FieldRow label="Run End Date">
+                  <FieldRow label={SIMULATION_FIELDS.runEndDate.label}>
                     <span className="text-sm">{formatDate(simulation.runEndDate)}</span>
                   </FieldRow>
                 )}
               </CardContent>
             </Card>
+
+            {/* Provenance */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Provenance</CardTitle>
@@ -266,26 +301,22 @@ export const SimulationDetailsView = ({
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground min-w-[100px]">Created:</Label>
-                  <span className="text-sm">
-                    {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
-                  </span>
+                  <span className="text-sm">{formatDate(simulation.createdAt)}</span>
                   {simulation.createdBy && (
                     <span className="text-sm">by {simulation.createdBy}</span>
                   )}
                 </div>
-                {/* Last edited row */}
+
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground min-w-[100px]">
                     Last edited:
                   </Label>
-                  <span className="text-sm">
-                    {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
-                  </span>
+                  <span className="text-sm">{formatDate(simulation.updatedAt)}</span>
                   {simulation.lastUpdatedBy && (
                     <span className="text-sm">by {simulation.lastUpdatedBy}</span>
                   )}
                 </div>
-                {/* Simulation UUID row */}
+
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground min-w-[100px]">
                     Simulation UUID:
@@ -297,53 +328,19 @@ export const SimulationDetailsView = ({
                         : undefined
                     }
                   />
-                  {simulation.id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(simulation.id)}
-                      title="Copy full Simulation ID"
-                    >
-                      Copy
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">
-                    Git Repository:
-                  </Label>
-                  {simulation.gitRepositoryUrl ? (
-                    <a
-                      href={simulation.gitRepositoryUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      {simulation.gitRepositoryUrl}
-                    </a>
-                  ) : (
-                    <p className="text-sm">—</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Branch:</Label>
-                  <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">Git Tag:</Label>
-                  <p className="text-sm">{simulation.gitTag ?? '—'}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">
-                    Git Commit Hash:
-                  </Label>
-                  <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigator.clipboard.writeText(simulation.id)}
+                  >
+                    Copy
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* External Resources */}
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -391,6 +388,7 @@ export const SimulationDetailsView = ({
                     </div>
                   )}
                 </div>
+
                 <div>
                   <Label className="mb-1 block text-sm">Performance</Label>
                   {simulation.groupedLinks.performance?.length ? (
@@ -431,6 +429,8 @@ export const SimulationDetailsView = ({
                   )}
                 </div>
               </div>
+
+              {/* Other link groups */}
               <div>
                 {Object.entries(simulation.groupedLinks)
                   .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
@@ -472,36 +472,28 @@ export const SimulationDetailsView = ({
               </div>
             </CardContent>
           </Card>
+
+          {/* Notes */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Notes</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
-                placeholder="Add notes..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-[120px]"
+                disabled={!canEdit}
               />
-              {!canEdit && (
-                <p className="text-xs text-muted-foreground">
-                  A user account with write privilege is required to update this simulation page.
-                </p>
-              )}
-              <div>
-                <Button disabled={!canEdit}>Save</Button>
-              </div>
             </CardContent>
           </Card>
+
+          {/* Comments (placeholder) */}
           <div>
             <h3 className="mb-2 text-sm font-semibold tracking-tight">Comments</h3>
             <div className="space-y-4">
               {comments.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex gap-3 py-4 px-2 rounded transition-all"
-                  style={{ marginBottom: '16px', marginTop: '16px' }}
-                >
+                <div key={c.id} className="flex gap-3 py-4 px-2 rounded">
                   <Avatar className="h-8 w-8 mt-1">
                     <AvatarFallback>
                       {c.author
@@ -517,11 +509,13 @@ export const SimulationDetailsView = ({
                       <span>•</span>
                       <span>{formatDate(c.date)}</span>
                     </div>
-                    <p className="text-sm leading-relaxed">{c.text}</p>
+                    <p className="text-sm">{c.text}</p>
                   </div>
                 </div>
               ))}
+
               <Separator />
+
               <div className="flex items-start gap-2">
                 <Textarea
                   placeholder="Add a comment ..."
@@ -529,27 +523,25 @@ export const SimulationDetailsView = ({
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                 />
-                <Button onClick={addComment} className="shrink-0">
-                  Post
-                </Button>
+                <Button onClick={addComment}>Post</Button>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* OUTPUTS TAB */}
+        {/* ================= OUTPUTS TAB ================= */}
         <TabsContent value="outputs" className="space-y-6">
           <SimulationPathCard
             kind="output"
             title="Output Paths"
-            description="These are the primary output files generated by the simulation."
+            description="Primary output files generated by the simulation."
             paths={simulation.groupedArtifacts.output?.map((a) => a.uri) || []}
             emptyText="No output paths available."
           />
           <SimulationPathCard
             kind="archive"
             title="Archive Paths"
-            description="These paths contain archived data files from the simulation."
+            description="Archived simulation data."
             paths={simulation.groupedArtifacts.archive?.map((a) => a.uri) || []}
             emptyText="No archive artifacts available."
           />
@@ -563,7 +555,7 @@ export const SimulationDetailsView = ({
           <SimulationPathCard
             kind="batchLog"
             title="Batch Log Paths"
-            description="Log files generated during the batch processing of the simulation."
+            description="Log files generated during batch processing."
             paths={simulation.groupedArtifacts.batchLog?.map((a) => a.uri) || []}
             emptyText="No batch log artifacts available."
           />
