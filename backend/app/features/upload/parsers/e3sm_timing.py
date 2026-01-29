@@ -1,16 +1,26 @@
 """
 E3SM Timing File Parser
 
-Parses E3SM timing files (plain or gzipped) and extracts core simulation metadata.
+Parses E3SM timing files (plain or gzipped) and extracts core simulation metadata including:
+- Case name
+- Machine name
+- User
+- LID
+- Date
+- Grid resolution
+- Compset
+- Run configuration (stop option, stop_n, run length)
+
 Reference: https://github.com/tomvothecoder/pace/blob/master/portal/pace/e3sm/e3smParser/parseE3SMTiming.py
 Analysis: https://github.com/tomvothecoder/pace/blob/copilot/analyze-e3sm-metadata-parsing/E3SM_PARSING_ANALYSIS.md
 """
 
-import gzip
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+
+from app.features.upload.parsers.utils import _open_text
 
 
 def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
@@ -46,6 +56,7 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
     }
 
     date = None
+
     if metadata["date_str"]:
         try:
             date = datetime.strptime(metadata["date_str"], "%a %b %d %H:%M:%S %Y")
@@ -73,28 +84,6 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
     return result
 
 
-def _open_text(path: Path) -> str:
-    """
-    Open a file (plain or gzipped) and return its text content.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the file.
-
-    Returns
-    -------
-    str
-        File contents as a string.
-    """
-    if str(path).endswith(".gz"):
-        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
-            return f.read()
-    else:
-        with open(path, "rt", encoding="utf-8", errors="replace") as f:
-            return f.read()
-
-
 def _extract(lines: list[str], pattern: str, group: int = 1) -> Optional[str]:
     """Extract the first regex group matching a pattern from a list of lines.
 
@@ -114,6 +103,7 @@ def _extract(lines: list[str], pattern: str, group: int = 1) -> Optional[str]:
     """
     for line in lines:
         m = re.match(pattern, line.strip())
+
         if m:
             return m.group(group).strip()
 
@@ -140,14 +130,19 @@ def _extract_stop_option_and_stop_n(
     """
     stop_option: str | None = None
     stop_n: str | None = None
+
     for line in lines:
         m = re.match(r"stop option\s*[:=]\s*([^,]+)", line.strip())
+
         if m:
             stop_option = m.group(1).strip()
             m2 = re.search(r"stop_n\s*[=:]\s*(\d+)", line)
+
             if m2:
                 stop_n = m2.group(1).strip()
+
             break
+
     if stop_n is None:
         stop_n = _extract(lines, r"stop_n\s*[=:]\s*(.+)")
 
