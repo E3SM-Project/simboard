@@ -10,6 +10,7 @@ def validate_e3sm_experiment(exp_dir):
         "timing.*.tar.gz",
         "README.case.*",
         "GIT_DESCRIBE.*",
+        "CaseStatus.*",
         "CaseDocs.*/",
     ]
 
