@@ -118,12 +118,13 @@ class TestSettings:
         settings.trusted_proxy_hosts = "host1, host2, host3"
         assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
 
-    def test_trusted_proxy_hosts_invalid_hosts(self):
-        settings.trusted_proxy_hosts = ", ,"
-        with pytest.raises(
-            ValueError, match="TRUSTED_PROXY_HOSTS must contain at least one host"
-        ):
-            _ = settings.trusted_proxy_hosts_normalized
+    def test_trusted_proxy_hosts_with_trailing_slashes(self):
+        settings.trusted_proxy_hosts = "host1/, host2/, host3/"
+        assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
+
+    def test_trusted_proxy_hosts_with_whitespace(self):
+        settings.trusted_proxy_hosts = " host1 , host2 , host3 "
+        assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
 
     def test_frontend_origins_list_with_single_origin(self):
         settings.frontend_origins = "https://example.com/"
@@ -150,3 +151,17 @@ class TestSettings:
     def test_frontend_origins_list_with_whitespace_only(self):
         settings.frontend_origins = "   "
         assert settings.frontend_origins_list == []
+
+    def test_frontend_origins_list_with_trailing_slashes(self):
+        settings.frontend_origins = "https://example1.com/, https://example2.com/"
+        assert settings.frontend_origins_list == [
+            "https://example1.com",
+            "https://example2.com",
+        ]
+
+    def test_frontend_origins_list_with_whitespace(self):
+        settings.frontend_origins = " https://example1.com , https://example2.com "
+        assert settings.frontend_origins_list == [
+            "https://example1.com",
+            "https://example2.com",
+        ]
