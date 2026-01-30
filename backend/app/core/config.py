@@ -73,3 +73,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+# Strip trailing slash from frontend_origin to prevent issues with CORS and
+# redirects.
+settings.frontend_origin = settings.frontend_origin.rstrip("/")
