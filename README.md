@@ -309,6 +309,13 @@ Used automatically by:
 To build and push multi-architecture Docker images for deployment on NERSC Spin, run the
 following commands from the repository root.
 
+**Login to registry.nersc.gov using your NERSC credentials:**
+
+```bash
+# Source: https://docs.nersc.gov/development/containers/registry/
+docker login registry.nersc.gov
+```
+
 **Backend:**
 
 ```bash
