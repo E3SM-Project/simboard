@@ -83,12 +83,30 @@ class TestSettings:
         settings.frontend_origin = "http://localhost:3000/"
         assert settings.frontend_origin_normalized == "http://localhost:3000"
 
-    def test_trusted_proxy_hosts_empty(self):
+    def test_trusted_proxy_hosts_normalized_raises_value_error_for_empty_or_whitespace(
+        self,
+    ):
+        settings.trusted_proxy_hosts = ["", "  "]
+        with pytest.raises(
+            ValueError, match="TRUSTED_PROXY_HOSTS must contain at least one host"
+        ):
+            _ = settings.trusted_proxy_hosts_normalized
+
+    def test_trusted_proxy_hosts_normalized_raises_type_error_for_incorrect_type(
+        self,
+    ):
+        settings.trusted_proxy_hosts = 123  # type: ignore[assignment]
+        with pytest.raises(
+            TypeError, match="TRUSTED_PROXY_HOSTS must be a string or a list of strings"
+        ):
+            _ = settings.trusted_proxy_hosts_normalized
+
+    def test_trusted_proxy_hosts_normalized_empty_string(self):
         settings.trusted_proxy_hosts = ""
         with pytest.raises(ValueError, match="TRUSTED_PROXY_HOSTS cannot be empty"):
             _ = settings.trusted_proxy_hosts_normalized
 
-    def test_trusted_proxy_hosts_wildcard_in_production(self):
+    def test_trusted_proxy_hosts_normalized_wildcard_in_production(self):
         settings.env = "production"
         settings.trusted_proxy_hosts = "*"
         with pytest.raises(
@@ -96,20 +114,20 @@ class TestSettings:
         ):
             _ = settings.trusted_proxy_hosts_normalized
 
-    def test_trusted_proxy_hosts_wildcard_in_development(self):
+    def test_trusted_proxy_hosts_normalized_wildcard_in_development(self):
         settings.env = "development"
         settings.trusted_proxy_hosts = "*"
         assert settings.trusted_proxy_hosts_normalized == "*"
 
-    def test_trusted_proxy_hosts_valid_hosts(self):
+    def test_trusted_proxy_hosts_normalized_valid_hosts(self):
         settings.trusted_proxy_hosts = "host1, host2, host3"
         assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
 
-    def test_trusted_proxy_hosts_with_trailing_slashes(self):
+    def test_trusted_proxy_hosts_normalized_with_trailing_slashes(self):
         settings.trusted_proxy_hosts = "host1/, host2/, host3/"
         assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
 
-    def test_trusted_proxy_hosts_with_whitespace(self):
+    def test_trusted_proxy_hosts_normalized_with_whitespace(self):
         settings.trusted_proxy_hosts = " host1 , host2 , host3 "
         assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
 
