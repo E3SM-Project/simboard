@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|docs|openapi.json).*)",
       "destination": "/index.html"
     }
   ]
