@@ -5,21 +5,6 @@ import pytest
 from app.core.config import get_env_file, settings
 
 
-@pytest.fixture(autouse=True)
-def disable_ci(monkeypatch):
-    """
-    Ensure tests exercise local development behavior.
-
-    In CI, we intentionally set `CI=true`, which causes `get_env_file()`
-    to return None and rely solely on environment variables.
-
-    This test suite validates the *file-based* behavior used in local
-    development (i.e., resolving `.envs/<ENV>/backend.env`), so we
-    explicitly unset `CI` here to avoid CI-specific code paths.
-    """
-    monkeypatch.delenv("CI", raising=False)
-
-
 class TestGetEnvFile:
     @pytest.fixture(autouse=True)
     def restore_env(self, monkeypatch):
