@@ -118,3 +118,14 @@ class TestSettings:
             ValueError, match="TRUSTED_PROXY_HOSTS must contain at least one host"
         ):
             _ = settings.trusted_proxy_hosts_normalized
+
+    def test_frontend_origins_list_with_single_origin(self):
+        settings.frontend_origins = "https://example.com"
+        assert settings.frontend_origins_list == ["https://example.com"]
+
+    def test_frontend_origins_list_with_multiple_origins(self):
+        settings.frontend_origins = ["https://example1.com", "https://example2.com"]
+        assert settings.frontend_origins_list == [
+            "https://example1.com",
+            "https://example2.com",
+        ]
