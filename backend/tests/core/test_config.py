@@ -89,3 +89,32 @@ class TestSettings:
 
         # Assert that the trailing slash is stripped
         assert stripped_origin == "http://localhost:3000"
+
+    def test_trusted_proxy_hosts_empty(self):
+        settings.trusted_proxy_hosts = ""
+        with pytest.raises(ValueError, match="TRUSTED_PROXY_HOSTS cannot be empty"):
+            _ = settings.trusted_proxy_hosts_normalized
+
+    def test_trusted_proxy_hosts_wildcard_in_production(self):
+        settings.env = "production"
+        settings.trusted_proxy_hosts = "*"
+        with pytest.raises(
+            ValueError, match=r"TRUSTED_PROXY_HOSTS='\*' is not allowed in production"
+        ):
+            _ = settings.trusted_proxy_hosts_normalized
+
+    def test_trusted_proxy_hosts_wildcard_in_development(self):
+        settings.env = "development"
+        settings.trusted_proxy_hosts = "*"
+        assert settings.trusted_proxy_hosts_normalized == "*"
+
+    def test_trusted_proxy_hosts_valid_hosts(self):
+        settings.trusted_proxy_hosts = "host1, host2, host3"
+        assert settings.trusted_proxy_hosts_normalized == ["host1", "host2", "host3"]
+
+    def test_trusted_proxy_hosts_invalid_hosts(self):
+        settings.trusted_proxy_hosts = ", ,"
+        with pytest.raises(
+            ValueError, match="TRUSTED_PROXY_HOSTS must contain at least one host"
+        ):
+            _ = settings.trusted_proxy_hosts_normalized

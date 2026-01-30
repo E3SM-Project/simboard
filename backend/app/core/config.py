@@ -44,6 +44,29 @@ class Settings(BaseSettings):
     env: str = "development"
     port: int = 8000
 
+    # Network Configuration
+    # ----------------------------------------
+    trusted_proxy_hosts: str
+
+    @property
+    def trusted_proxy_hosts_normalized(self) -> str | list[str]:
+        value = self.trusted_proxy_hosts.strip()
+
+        if not value:
+            raise ValueError("TRUSTED_PROXY_HOSTS cannot be empty")
+
+        if value == "*":
+            if self.env == "production":
+                raise ValueError("TRUSTED_PROXY_HOSTS='*' is not allowed in production")
+            return "*"
+
+        hosts = [h.strip() for h in value.split(",") if h.strip()]
+
+        if not hosts:
+            raise ValueError("TRUSTED_PROXY_HOSTS must contain at least one host")
+
+        return hosts
+
     # Frontend
     # ----------------------------------------
     frontend_origin: str = "https://127.0.0.1:5173"
