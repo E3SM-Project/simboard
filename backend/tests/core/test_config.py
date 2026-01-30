@@ -85,12 +85,14 @@ class TestSettings:
         original_env = settings.env
         original_trusted_proxy_hosts = settings.trusted_proxy_hosts
         original_frontend_origin = settings.frontend_origin
+        original_frontend_origins = settings.frontend_origins
 
         yield
 
         settings.env = original_env
         settings.trusted_proxy_hosts = original_trusted_proxy_hosts
         settings.frontend_origin = original_frontend_origin
+        settings.frontend_origins = original_frontend_origins
 
     def test_frontend_origin_has_no_trailing_slash(self):
         settings.frontend_origin = "http://localhost:3000/"
