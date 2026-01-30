@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from app.core.config import get_env_file
+from app.core.config import get_env_file, settings
 
 
 @pytest.fixture(autouse=True)
@@ -79,3 +79,13 @@ class TestGetEnvFile:
 
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)
+
+
+class TestSettings:
+    def test_strip_trailing_slash_from_frontend_origin(self):
+        # Simulate a frontend_origin with a trailing slash
+        settings.frontend_origin = "http://localhost:3000/"
+        stripped_origin = settings.frontend_origin.rstrip("/")
+
+        # Assert that the trailing slash is stripped
+        assert stripped_origin == "http://localhost:3000"

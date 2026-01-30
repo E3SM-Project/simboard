@@ -22,11 +22,9 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # CORS setup
-    # Strip trailing slash if present to avoid issues.
-    allowed_origin = settings.frontend_origin.rstrip("/")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[allowed_origin],
+        allow_origins=[settings.frontend_origin],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
