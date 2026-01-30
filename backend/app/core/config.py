@@ -76,6 +76,10 @@ class Settings(BaseSettings):
         description="Primary frontend origin (staging or production)",
     )
 
+    @property
+    def frontend_origin_normalized(self) -> str:
+        return self.frontend_origin.rstrip("/")
+
     frontend_auth_redirect_url: str = Field(
         validation_alias="FRONTEND_AUTH_REDIRECT_URL",
         description="OAuth redirect URL on the primary frontend",
@@ -90,9 +94,16 @@ class Settings(BaseSettings):
     @property
     def frontend_origins_list(self) -> list[str]:
         if isinstance(self.frontend_origins, str):
-            return [self.frontend_origins]
+            origins = self.frontend_origins.strip().split(",")
+        else:
+            origins = self.frontend_origins
 
-        return self.frontend_origins
+        # Clean up each origin by stripping whitespace and trailing slashes
+        cleaned_origins = [
+            origin.strip().rstrip("/") for origin in origins if origin.strip()
+        ]
+
+        return cleaned_origins
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------
@@ -118,6 +129,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-# Strip trailing slash from frontend_origin to prevent issues with CORS and
-# redirects.
-settings.frontend_origin = settings.frontend_origin.rstrip("/")

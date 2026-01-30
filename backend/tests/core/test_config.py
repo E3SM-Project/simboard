@@ -94,8 +94,7 @@ class TestSettings:
 
     def test_frontend_origin_has_no_trailing_slash(self):
         settings.frontend_origin = "http://localhost:3000/"
-        settings.frontend_origin = settings.frontend_origin.rstrip("/")
-        assert settings.frontend_origin == "http://localhost:3000"
+        assert settings.frontend_origin_normalized == "http://localhost:3000"
 
     def test_trusted_proxy_hosts_empty(self):
         settings.trusted_proxy_hosts = ""
@@ -127,12 +126,27 @@ class TestSettings:
             _ = settings.trusted_proxy_hosts_normalized
 
     def test_frontend_origins_list_with_single_origin(self):
-        settings.frontend_origins = "https://example.com"
+        settings.frontend_origins = "https://example.com/"
         assert settings.frontend_origins_list == ["https://example.com"]
 
-    def test_frontend_origins_list_with_multiple_origins(self):
-        settings.frontend_origins = ["https://example1.com", "https://example2.com"]
+    def test_frontend_origins_list_with_multiple_origins_as_string(self):
+        settings.frontend_origins = "https://example1.com/, https://example2.com/"
         assert settings.frontend_origins_list == [
             "https://example1.com",
             "https://example2.com",
         ]
+
+    def test_frontend_origins_list_with_multiple_origins_as_list(self):
+        settings.frontend_origins = ["https://example1.com/", "https://example2.com/"]
+        assert settings.frontend_origins_list == [
+            "https://example1.com",
+            "https://example2.com",
+        ]
+
+    def test_frontend_origins_list_with_empty_string(self):
+        settings.frontend_origins = ""
+        assert settings.frontend_origins_list == []
+
+    def test_frontend_origins_list_with_whitespace_only(self):
+        settings.frontend_origins = "   "
+        assert settings.frontend_origins_list == []
