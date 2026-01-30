@@ -8,8 +8,11 @@ from app.core.config import get_env_file, settings
 class TestGetEnvFile:
     @pytest.fixture(autouse=True)
     def restore_env(self, monkeypatch):
+        """Save and restore the ENV environment variable around each test."""
         original = os.environ.get("ENV")
+
         yield
+
         if original is not None:
             monkeypatch.setenv("ENV", original)
         else:
@@ -17,6 +20,7 @@ class TestGetEnvFile:
 
     def test_raises_when_env_file_is_example(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "development")
+
         root = tmp_path
         (root / ".envs/local").mkdir(parents=True)
         (root / ".envs/local/backend.env").write_text("OK")
@@ -31,6 +35,7 @@ class TestGetEnvFile:
 
     def test_returns_dev_env_file_when_ENV_is_dev(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "development")
+
         root = tmp_path
         (root / ".envs/local").mkdir(parents=True)
         (root / ".envs/local/backend.env").write_text("OK")
@@ -40,6 +45,7 @@ class TestGetEnvFile:
 
     def test_returns_none_when_ENV_is_not_dev(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "production")
+
         root = tmp_path
         (root / ".envs").mkdir(parents=True)
         (root / ".envs/backend.env").write_text("OK")
@@ -49,6 +55,7 @@ class TestGetEnvFile:
 
     def test_raises_when_only_example_env_file_exists(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "development")
+
         root = tmp_path
         (root / ".envs/example").mkdir(parents=True)
         (root / ".envs/example/backend.env.example").write_text("# example")
@@ -58,6 +65,7 @@ class TestGetEnvFile:
 
     def test_raises_when_env_file_does_not_exist(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ENV", "development")
+
         root = tmp_path
 
         with pytest.raises(FileNotFoundError):
