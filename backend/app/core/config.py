@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,8 +70,29 @@ class Settings(BaseSettings):
 
     # Frontend
     # ----------------------------------------
-    frontend_origin: str = "https://127.0.0.1:5173"
-    frontend_auth_redirect_url: str = "https://127.0.0.1:5173/auth/callback"
+    # Primary frontend (used for redirects, links, emails, etc.)
+    frontend_origin: str = Field(
+        validation_alias="FRONTEND_ORIGIN",
+        description="Primary frontend origin (staging or production)",
+    )
+
+    frontend_auth_redirect_url: str = Field(
+        validation_alias="FRONTEND_AUTH_REDIRECT_URL",
+        description="OAuth redirect URL on the primary frontend",
+    )
+
+    # All frontends allowed to call the API (CORS)
+    frontend_origins: str | list[str] = Field(
+        validation_alias="FRONTEND_ORIGINS",
+        description="Comma-separated list of allowed frontend origins",
+    )
+
+    @property
+    def frontend_origins_list(self) -> list[str]:
+        if isinstance(self.frontend_origins, str):
+            return [self.frontend_origins]
+
+        return self.frontend_origins
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------

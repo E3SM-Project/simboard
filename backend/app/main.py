@@ -22,18 +22,18 @@ def create_app() -> FastAPI:
     # responses.
     register_exception_handlers(app)
 
-    # CORS setup
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[settings.frontend_origin],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     # Trust X-Forwarded-Proto / X-Forwarded-For from ingress (e.g., nginx).
     app.add_middleware(
         ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts_normalized
+    )
+
+    # CORS setup
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.frontend_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # Register routers.
