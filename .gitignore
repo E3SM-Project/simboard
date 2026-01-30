@@ -84,3 +84,6 @@ dmypy.json
 *.pem
 # But keep the generator script
 !certs/generate-local-certs.sh
+
+# Ignore experiment directories
+exp_archive
