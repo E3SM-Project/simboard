@@ -84,3 +84,6 @@ dmypy.json
 *.pem
 # But keep the generator script
 !certs/generate-local-certs.sh
+
+# Any QA related files.
+*/qa/*
