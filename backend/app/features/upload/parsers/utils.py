@@ -39,3 +39,13 @@ def _open_text(path: Path) -> str:
     else:
         with open(path, "rt", encoding="utf-8", errors="replace") as f:
             return f.read()
+
+
+def _get_open_func(file_path: str):
+    """
+    Return the appropriate open function for a file, using gzip.open for .gz files.
+    """
+    if file_path.endswith(".gz"):
+        return gzip.open
+
+    return open

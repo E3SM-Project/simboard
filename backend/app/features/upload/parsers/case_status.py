@@ -3,6 +3,8 @@ from typing import Any
 
 from dateutil.relativedelta import relativedelta
 
+from app.features.upload.parsers.utils import _get_open_func
+
 
 def parse_case_status(file_path: str) -> dict[str, Any]:
     """
@@ -24,14 +26,16 @@ def parse_case_status(file_path: str) -> dict[str, Any]:
         "run_end_date": None,
     }
 
-    with open(file_path, "r") as file:
+    open_func = _get_open_func(file_path)
+    with open_func(file_path, "rt") as file:
         for line in file:
             if "RUN_STARTDATE" in line:
                 result["run_start_date"] = line.split("RUN_STARTDATE=")[1]
                 result["run_start_date"] = result["run_start_date"].split()[0]
             elif "STOP_OPTION" in line and "STOP_N" in line:
                 stop_option = line.split("STOP_OPTION=")[1].split(",")[0]
-                stop_n = int(line.split("STOP_N=")[1].split()[0])
+                stop_n_str = line.split("STOP_N=")[1].split(",")[0].split()[0]
+                stop_n = int(stop_n_str)
 
                 result["run_end_date"] = _calculate_run_end_date(
                     result["run_start_date"], stop_option, stop_n

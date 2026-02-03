@@ -41,13 +41,13 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
     lines = text.splitlines()
 
     metadata_fields = {
-        "case": r"Case\s*[:=]\s*(.+)",
+        "case_name": r"Case\s*[:=]\s*(.+)",
         "machine": r"Machine\s*[:=]\s*(.+)",
         "user": r"User\s*[:=]\s*(.+)",
         "lid": r"LID\s*[:=]\s*(.+)",
-        "date_str": r"Curr Date\s*[:=]\s*(.+)",
-        "grid_long": r"grid\s*[:=]\s*(.+)",
-        "compset_long": r"compset\s*[:=]\s*(.+)",
+        "simulation_start_date": r"Curr Date\s*[:=]\s*(.+)",
+        "grid_resolution": r"grid\s*[:=]\s*(.+)",
+        "compset": r"compset\s*[:=]\s*(.+)",
         "run_length": r"run length\s*[:=]\s*(.+)",
     }
 
@@ -57,23 +57,26 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
 
     date = None
 
-    if metadata["date_str"]:
+    if metadata["simulation_start_date"]:
         try:
-            date = datetime.strptime(metadata["date_str"], "%a %b %d %H:%M:%S %Y")
+            date = datetime.strptime(
+                metadata["simulation_start_date"], "%a %b %d %H:%M:%S %Y"
+            ).isoformat()
         except ValueError:
-            date = metadata["date_str"]  # fallback to raw string if format fails
+            # fallback to raw string if format fails
+            date = metadata["simulation_start_date"]
 
     # Extract run configuration
     stop_option, stop_n = _extract_stop_option_and_stop_n(lines)
 
     result = {
-        "case": metadata["case"],
+        "case_name": metadata["case_name"],
         "machine": metadata["machine"],
         "user": metadata["user"],
         "lid": metadata["lid"],
-        "date": date,
-        "grid_long": metadata["grid_long"],
-        "compset_long": metadata["compset_long"],
+        "simulation_start_date": date,
+        "grid_resolution": metadata["grid_resolution"],
+        "compset": metadata["compset"],
         "run_config": {
             "stop_option": stop_option,
             "stop_n": stop_n,
@@ -113,7 +116,6 @@ def _extract(lines: list[str], pattern: str, group: int = 1) -> Optional[str]:
 def _extract_stop_option_and_stop_n(
     lines: list[str],
 ) -> tuple[Optional[str], Optional[str]]:
-    stop_option = None
     """
     Extract stop_option and stop_n from lines, handling both same-line and
     separate-line cases.

@@ -11,12 +11,11 @@ Analysis: https://github.com/tomvothecoder/pace/blob/copilot/analyze-e3sm-metada
 
 import re
 from pathlib import Path
-from typing import Any
 
 from app.features.upload.parsers.utils import _open_text
 
 
-def parse_readme_case(path: str | Path) -> dict[str, Any]:
+def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     """
     Parse a README.case file and extract creation date, resolution, and compset.
 
@@ -27,7 +26,7 @@ def parse_readme_case(path: str | Path) -> dict[str, Any]:
 
     Returns
     -------
-    dict
+    dict[str, str | None]
         Dictionary with keys: 'creation_date', 'res', 'compset'.
     """
     path = Path(path)
@@ -47,8 +46,10 @@ def _extract_timestamp(lines: list[str]) -> str | None:
     """
     if lines:
         m = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", lines[0])
+
         if m:
             return m.group(1)
+
     return None
 
 
