@@ -158,70 +158,70 @@ def _find_experiment_dirs(root_dir: str) -> list[str]:
     return matches
 
 
-def _locate_files(exp_dir: str) -> ExpResults:  # noqa: C901
-    """Locate required and optional files in the experiment directory.
-
-    Parameters
-    ----------
-    exp_dir : str
-        Path to the experiment directory.
-
-    Returns
-    -------
-    ExpResults
-        Dictionary with keys for each file type and absolute paths as values.
-
-    Raises
-    ------
-    FileNotFoundError
-        If any required file is not found in the experiment directory.
-    """
+def _locate_files(exp_dir: str) -> ExpResults:
+    """Locate required and optional files in the experiment directory."""
     files: ExpResults = {key: None for key in FILE_SPECS}
 
-    # Root-level files
-    for fname in os.listdir(exp_dir):
-        fpath = os.path.join(exp_dir, fname)
+    files = _find_root_files(exp_dir, files)
+    files = _find_casedocs_files(exp_dir, files)
+    _check_missing_files(files, exp_dir)
 
-        for key, spec in FILE_SPECS.items():
+    return files
+
+
+def _find_file_in_dir(directory: str, pattern: str) -> str | None:
+    """Find a file matching the pattern in the specified directory."""
+    for fname in os.listdir(directory):
+        if re.match(pattern, fname):
+            return os.path.join(directory, fname)
+
+    return None
+
+
+def _find_root_files(exp_dir: str, files: ExpResults) -> ExpResults:
+    """Find files located in the root of the experiment directory."""
+    for key, spec in FILE_SPECS.items():
+        if spec["location"] == "root":
             pattern = str(spec["pattern"])
+            files[key] = _find_file_in_dir(exp_dir, pattern)
 
-            if spec["location"] != "root":
-                continue
+    return files
 
-            if re.match(pattern, fname):
-                files[key] = fpath
 
-    # CaseDocs files
-    for subdir in os.listdir(exp_dir):
-        subdir_path = os.path.join(exp_dir, subdir)
+def _find_casedocs_files(exp_dir: str, files: ExpResults) -> ExpResults:
+    for key, spec in FILE_SPECS.items():
+        if spec["location"] == "casedocs":
+            pattern = str(spec["pattern"])
+            for subdir in os.listdir(exp_dir):
+                subdir_path = os.path.join(exp_dir, subdir)
+                if os.path.isdir(subdir_path) and subdir.startswith("CaseDocs"):
+                    match = _find_file_in_dir(subdir_path, pattern)
+                    if match:
+                        files[key] = match
+                        break
+    return files
 
-        if not (os.path.isdir(subdir_path) and subdir.startswith("CaseDocs")):
-            continue
 
-        for fname in os.listdir(subdir_path):
-            fpath = os.path.join(subdir_path, fname)
-
-            for key, spec in FILE_SPECS.items():
-                pattern = str(spec["pattern"])
-
-                if spec["location"] != "casedocs":
-                    continue
-
-                if re.match(pattern, fname):
-                    files[key] = fpath
-
+def _check_missing_files(files: ExpResults, exp_dir: str) -> None:
     missing_required = [
         key
         for key, spec in FILE_SPECS.items()
         if spec.get("required", False) and not files.get(key)
     ]
-
     if missing_required:
         raise FileNotFoundError(
             f"Required files not found in experiment directory '{exp_dir}': {', '.join(missing_required)}"
         )
 
-    return files
+    missing_optional = [
+        key
+        for key, spec in FILE_SPECS.items()
+        if not spec.get("required", False) and not files.get(key)
+    ]
+    if missing_optional:
+        logger.warning(
+            f"Optional files missing in experiment directory '{exp_dir}': {', '.join(missing_optional)}"
+        )
 
 
 def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
