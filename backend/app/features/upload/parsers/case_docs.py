@@ -10,35 +10,43 @@ from pathlib import Path
 from app.features.upload.parsers.utils import _open_text
 
 
-def parse_env_files(
-    env_case_path: str | Path, env_build_path: str | Path
-) -> dict[str, str | None]:
-    """Parse env_case.xml and env_build.xml (plain or gzipped).
+def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
+    """Parse env_case.xml (plain or gzipped) to extract group_name.
 
     Parameters
     ----------
     env_case_path : str or Path
         Path to the env_case.xml file (plain or .gz)
+
+    Returns
+    -------
+    dict
+        Dictionary with key 'group_name' (str or None)
+    """
+    env_case_path = Path(env_case_path)
+    group_name = _extract_value_from_file(env_case_path, "CASE_GROUP")
+
+    return {"group_name": group_name}
+
+
+def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
+    """Parse env_build.xml (plain or gzipped) to extract compiler and mpilib.
+
+    Parameters
+    ----------
     env_build_path : str or Path
         Path to the env_build.xml file (plain or .gz)
 
     Returns
     -------
     dict
-        Dictionary with keys 'case_group', 'compiler', 'mpilib' (str or None)
+        Dictionary with keys 'compiler', 'mpilib' (str or None)
     """
-    env_case_path = Path(env_case_path)
     env_build_path = Path(env_build_path)
-
-    # Extract case_group from env_case.xml
-    case_group = _extract_value_from_file(env_case_path, "CASE_GROUP")
-
-    # Extract compiler and mpilib from env_build.xml
     compiler = _extract_value_from_file(env_build_path, "COMPILER")
     mpilib = _extract_value_from_file(env_build_path, "MPILIB")
 
     return {
-        "case_group": case_group,
         "compiler": compiler,
         "mpilib": mpilib,
     }

@@ -1,59 +1,21 @@
-"""
-# Parser Main Entrypoint Requirements
-
-Implement a main entrypoint for the parser that performs file discovery and extraction with the following capabilities:
-
-## Archive Extraction
-
-## Experiment Directory Discovery
-  Example: `1085209.251220-105556`
-
-## File Pattern Matching
-  - **Required files:**
-    - `e3sm_timing.<case>.<LID>`
-    - `README.case.<LID>.gz`
-    - `GIT_DESCRIBE.<LID>.gz`
-    - `CaseStatus.<LID>.gz`
-  - **Optional files:**
-    - `CaseDocs.<LID>/env_case.xml.<LID>.gz`
-    - `CaseDocs.<LID>/env_build.xml.<LID>.gz`
-    - Other XML/namelist files in `CaseDocs.<LID>/` (ignored or extra)
-
-
-## Parsing Workflow
-  - Collect absolute paths for required files.
-  - Pass each file to its respective parser function:
-    - `README.case*` → `readme_case.parse_readme_case`
-    - `CaseDocs` XML files → `case_docs.parse_env_files`
-    - `e3sm_timing.*` → `e3sm_timing.parse_e3sm_timing`
-    - `CaseStatus.*` → `case_status.parse_case_status`
-
-## Directory Layout Example
-import os
-import re
-import tarfile
-import zipfile
-├── GIT_DESCRIBE.<LID>.gz
-├── CaseStatus.<LID>.gz
-├── replay.sh.<LID>.gz
-├── run_e3sm.sh.<LID>.gz
-└── CaseDocs.<LID>/
-├── env_case.xml.<LID>.gz
-├── env_build.xml.<LID>.gz
-└── other XML / namelist files
-```
-"""
+"""Main parser module for processing experiment upload archives."""
 
 import os
 import re
 import tarfile
 import zipfile
 from pathlib import Path
+from typing import Callable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.upload.parsers.case_docs import parse_env_files
+from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
 from app.features.upload.parsers.case_status import parse_case_status
 from app.features.upload.parsers.e3sm_timing import parse_e3sm_timing
+from app.features.upload.parsers.git_info import (
+    parse_git_config,
+    parse_git_describe,
+    parse_git_status,
+)
 from app.features.upload.parsers.readme_case import parse_readme_case
 
 ExpResults = dict[str, str | None]
@@ -62,9 +24,71 @@ AllExpResults = dict[str, ExpResults]
 logger = _setup_custom_logger(__name__)
 
 
+# The specifications for each file type to be parsed.
+class FileSpec(TypedDict, total=False):
+    pattern: str
+    location: str
+    parser: Callable
+    required: bool
+    single_value: str
+
+
+FILE_SPECS: dict[str, FileSpec] = {
+    "e3sm_timing": {
+        "pattern": r"e3sm_timing\..*\..*",
+        "location": "root",
+        "parser": parse_e3sm_timing,
+        "required": True,
+    },
+    "readme_case": {
+        "pattern": r"README\.case\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_readme_case,
+        "required": True,
+    },
+    "case_status": {
+        "pattern": r"CaseStatus\..*\.gz",
+        "location": "root",
+        "parser": parse_case_status,
+        "required": True,
+    },
+    "case_docs_env_case": {
+        "pattern": r"env_case\.xml\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_env_case,
+        "required": False,
+    },
+    "case_docs_env_build": {
+        "pattern": r"env_build\.xml\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_env_build,
+        "required": False,
+    },
+    "git_describe": {
+        "pattern": r"GIT_DESCRIBE\..*\.gz",
+        "location": "root",
+        "parser": parse_git_describe,
+        "required": True,
+    },
+    "git_config": {
+        "pattern": r"GIT_CONFIG\..*\.gz",
+        "location": "root",
+        "parser": parse_git_config,
+        "single_value": "git_respository_url",
+        "required": False,
+    },
+    "git_status": {
+        "pattern": r"GIT_STATUS\..*\.gz",
+        "location": "root",
+        "parser": parse_git_status,
+        "single_value": "git_branch",
+        "required": False,
+    },
+}
+
+
 def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResults:
-    """
-    Main entrypoint for parser workflow.
+    """Main entrypoint for parser workflow.
 
     Parameters
     ----------
@@ -78,15 +102,10 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResul
     AllExpResults
         Dictionary mapping experiment directory paths to their parsed results.
     """
-    archive_path = str(archive_path)  # Ensure archive_path is a string
-    output_dir = str(output_dir)  # Ensure output_dir is a string
+    archive_path = str(archive_path)
+    output_dir = str(output_dir)
 
-    if archive_path.endswith(".zip"):
-        _extract_zip(archive_path, output_dir)
-    elif archive_path.endswith(".tar.gz") or archive_path.endswith(".tgz"):
-        _extract_tar_gz(archive_path, output_dir)
-    else:
-        raise ValueError(f"Unsupported archive format: {archive_path}")
+    _extract_archive(archive_path, output_dir)
 
     results: AllExpResults = {}
 
@@ -98,61 +117,35 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResul
         results[exp_dir] = _parse_experiment_files(files)
 
     logger.info("Completed parsing all experiment directories.")
-
     return results
 
 
+def _extract_archive(archive_path: str, output_dir: str) -> None:
+    """Extracts supported archive formats to the target directory."""
+    if archive_path.endswith(".zip"):
+        _extract_zip(archive_path, output_dir)
+    elif archive_path.endswith((".tar.gz", ".tgz")):
+        _extract_tar_gz(archive_path, output_dir)
+    else:
+        raise ValueError(f"Unsupported archive format: {archive_path}")
+
+
 def _extract_zip(zip_path: str, extract_to: str) -> None:
-    """
-    Extracts a ZIP archive to the target directory.
-
-    Parameters
-    ----------
-    zip_path : str
-        Path to the ZIP archive.
-    extract_to : str
-        Directory to extract files to.
-
-    Returns
-    -------
-    None
-    """
+    """Extracts a ZIP archive to the target directory."""
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(extract_to)
 
 
 def _extract_tar_gz(tar_gz_path: str, extract_to: str) -> None:
-    """
-    Extracts a TAR.GZ archive to the target directory.
-
-    Parameters
-    ----------
-    tar_gz_path : str
-        Path to the TAR.GZ archive.
-    extract_to : str
-        Directory to extract files to.
-
-    Returns
-    -------
-    None
-    """
+    """Extracts a TAR.GZ archive to the target directory."""
     with tarfile.open(tar_gz_path, "r:gz") as tar_ref:
         tar_ref.extractall(extract_to)
 
 
 def _find_experiment_dirs(root_dir: str) -> list[str]:
     """
-    Recursively search for experiment directories matching the pattern: <digits>.<digits>-<digits>
-
-    Parameters
-    ----------
-    root_dir : str
-        Root directory to search.
-
-    Returns
-    -------
-    list[str]
-        List of absolute paths to matching directories.
+    Recursively search for experiment directories matching the pattern:
+    <digits>.<digits>-<digits>
     """
     exp_dir_pattern = re.compile(r"\d+\.\d+-\d+$")
     matches: list[str] = []
@@ -166,8 +159,7 @@ def _find_experiment_dirs(root_dir: str) -> list[str]:
 
 
 def _locate_files(exp_dir: str) -> ExpResults:  # noqa: C901
-    """
-    Locate required and optional files in the experiment directory.
+    """Locate required and optional files in the experiment directory.
 
     Parameters
     ----------
@@ -178,46 +170,62 @@ def _locate_files(exp_dir: str) -> ExpResults:  # noqa: C901
     -------
     ExpResults
         Dictionary with keys for each file type and absolute paths as values.
-    """
-    files: ExpResults = {
-        "e3sm_timing": None,
-        "readme_case": None,
-        "git_describe": None,
-        "case_status": None,
-        "case_docs_env_case": None,
-        "case_docs_env_build": None,
-    }
 
+    Raises
+    ------
+    FileNotFoundError
+        If any required file is not found in the experiment directory.
+    """
+    files: ExpResults = {key: None for key in FILE_SPECS}
+
+    # Root-level files
     for fname in os.listdir(exp_dir):
         fpath = os.path.join(exp_dir, fname)
-        if re.match(r"e3sm_timing\..*\..*", fname):
-            files["e3sm_timing"] = fpath
-        elif re.match(r"GIT_DESCRIBE\..*\.gz", fname):
-            files["git_describe"] = fpath
-        elif re.match(r"CaseStatus\..*\.gz", fname):
-            files["case_status"] = fpath
-        elif re.match(r"replay\.sh\..*\.gz", fname):
-            files["replay_sh"] = fpath
 
+        for key, spec in FILE_SPECS.items():
+            pattern = str(spec["pattern"])
+
+            if spec["location"] != "root":
+                continue
+
+            if re.match(pattern, fname):
+                files[key] = fpath
+
+    # CaseDocs files
     for subdir in os.listdir(exp_dir):
         subdir_path = os.path.join(exp_dir, subdir)
-        if os.path.isdir(subdir_path) and subdir.startswith("CaseDocs"):
-            for docfile in os.listdir(subdir_path):
-                docpath = os.path.join(subdir_path, docfile)
 
-                if re.match(r"README\.case\..*\.gz", docfile):
-                    files["readme_case"] = docpath
-                if re.match(r"env_case\.xml\..*\.gz", docfile):
-                    files["case_docs_env_case"] = docpath
-                elif re.match(r"env_build\.xml\..*\.gz", docfile):
-                    files["case_docs_env_build"] = docpath
+        if not (os.path.isdir(subdir_path) and subdir.startswith("CaseDocs")):
+            continue
+
+        for fname in os.listdir(subdir_path):
+            fpath = os.path.join(subdir_path, fname)
+
+            for key, spec in FILE_SPECS.items():
+                pattern = str(spec["pattern"])
+
+                if spec["location"] != "casedocs":
+                    continue
+
+                if re.match(pattern, fname):
+                    files[key] = fpath
+
+    missing_required = [
+        key
+        for key, spec in FILE_SPECS.items()
+        if spec.get("required", False) and not files.get(key)
+    ]
+
+    if missing_required:
+        raise FileNotFoundError(
+            f"Required files not found in experiment directory '{exp_dir}': {', '.join(missing_required)}"
+        )
 
     return files
 
 
 def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
-    """
-    Pass discovered files to their respective parser functions.
+    """Pass discovered files to their respective parser functions.
 
     Parameters
     ----------
@@ -229,21 +237,52 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
     ExpResults
         Dictionary with parsed results from each file type.
     """
-    results: ExpResults = {}
+    metadata: ExpResults = {}
 
-    if files["readme_case"]:
-        rc = parse_readme_case(files["readme_case"])
-        results.update({k: v for k, v in rc.items() if v is not None})
-    if files["e3sm_timing"]:
-        et = parse_e3sm_timing(files["e3sm_timing"])
-        results.update({k: v for k, v in et.items() if v is not None})
-    if files["case_status"]:
-        cs = parse_case_status(files["case_status"])
-        results.update({k: v for k, v in cs.items() if v is not None})
-    if files["case_docs_env_case"] and files["case_docs_env_build"]:
-        env_case_results = parse_env_files(
-            files["case_docs_env_case"], files["case_docs_env_case"]
-        )
-        results.update({k: v for k, v in env_case_results.items() if v is not None})
+    for key, spec in FILE_SPECS.items():
+        path = files.get(key)
+        if not path:
+            continue
 
-    return results
+        parser: Callable = spec["parser"]
+
+        # Parsers that return a dict
+        if "single_value" not in spec:
+            metadata.update(parser(path))
+        else:
+            metadata[spec["single_value"]] = parser(path)
+
+    # Compose result dictionary
+    result: ExpResults = {
+        "name": metadata.get("case_name"),
+        "case_name": metadata.get("case_name"),
+        "compset": metadata.get("compset"),
+        "compset_alias": metadata.get("compset_alias"),
+        "grid_name": metadata.get("grid_name"),  # TODO: How do we get this?
+        "grid_resolution": metadata.get("grid_resolution"),
+        "parent_simulation_id": None,
+        "simulation_type": None,
+        "status": None,
+        "campaign_id": None,  # Extract from parent directory if needed
+        "experiment_type_id": None,  # TODO: Do we need this?
+        "initialization_type": metadata.get("initialization_type"),
+        "group_name": metadata.get("group_name"),
+        "machine_id": metadata.get("machine_id"),
+        "simulation_start_date": metadata.get("simulation_start_date"),
+        "simulation_end_date": None,
+        "run_start_date": metadata.get("run_start_date"),
+        "run_end_date": metadata.get("run_end_date"),
+        "compiler": metadata.get("compiler"),
+        "git_repository_url": metadata.get("git_respository_url"),
+        "git_branch": metadata.get("git_branch"),
+        "git_tag": metadata.get("git_tag"),
+        "git_commit_hash": metadata.get("git_commit_hash"),
+        "created_by": metadata.get("user"),
+        "last_updated_by": metadata.get("user"),
+        "extra": None,
+        "artifacts": None,
+        "links": None,
+        "machine": metadata.get("machine"),
+    }
+
+    return result

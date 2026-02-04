@@ -47,7 +47,8 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
         "lid": r"LID\s*[:=]\s*(.+)",
         "simulation_start_date": r"Curr Date\s*[:=]\s*(.+)",
         "grid_resolution": r"grid\s*[:=]\s*(.+)",
-        "compset": r"compset\s*[:=]\s*(.+)",
+        "compset_alias": r"compset\s*[:=]\s*(.+)",
+        "initialization_type": r"run type\s*[:=]\s*([^,]+)",
         "run_length": r"run length\s*[:=]\s*(.+)",
     }
 
@@ -76,7 +77,8 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
         "lid": metadata["lid"],
         "simulation_start_date": date,
         "grid_resolution": metadata["grid_resolution"],
-        "compset": metadata["compset"],
+        "compset_alias": metadata["compset_alias"],
+        "initialization_type": metadata["initialization_type"],
         "run_config": {
             "stop_option": stop_option,
             "stop_n": stop_n,
