@@ -10,6 +10,7 @@ This document provides a quick reference for the automated CI/CD workflows in th
 |----------|------|---------|---------|
 | **Backend CI** | `backend-ci.yml` | PR/Push to `main` | Linting, tests, validation |
 | **Build Backend (Dev)** | `build-backend-dev.yml` | Push to `main` | Build & push dev backend image |
+| **Build Frontend (Dev)** | `build-frontend-dev.yml` | Push to `main` | Build & push dev frontend image |
 | **Build Backend (Prod)** | `build-backend-prod.yml` | Release/Tag | Build & push prod backend image |
 | **Build Frontend (Prod)** | `build-frontend-prod.yml` | Release/Tag | Build & push prod frontend image |
 
@@ -55,6 +56,36 @@ This document provides a quick reference for the automated CI/CD workflows in th
 **Tags produced:**
 - `backend:dev` (latest dev)
 - `backend:sha-a1b2c3d` (specific commit)
+
+**Time:** ~10-15 minutes
+
+**Deployment:** NERSC Spin dev namespace
+
+---
+
+### Build Frontend (Dev) (`build-frontend-dev.yml`)
+
+**Purpose:** Build development frontend container image
+
+**Triggers:**
+- Push to `main` (when `frontend/**` changes)
+- Manual dispatch (with optional API URL override)
+
+**What it does:**
+- Builds multi-arch Docker image (amd64, arm64)
+- Injects development API URL at build time
+- Tags with `:dev` and `:sha-<commit>`
+- Pushes to NERSC registry
+
+**Registry:** `registry.nersc.gov/e3sm/simboard/frontend`
+
+**Tags produced:**
+- `frontend:dev` (latest dev)
+- `frontend:sha-a1b2c3d` (specific commit)
+
+**Build args:**
+- `VITE_API_BASE_URL`: `https://simboard-dev-api.e3sm.org` (default)
+- `NODE_ENV`: `production`
 
 **Time:** ~10-15 minutes
 

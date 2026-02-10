@@ -41,10 +41,12 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 | Component | Hosting | Image Source | Namespace |
 |-----------|---------|--------------|-----------|
-| **Frontend** | Vercel | N/A (Vercel build) | N/A |
+| **Frontend** | NERSC Spin | `main` branch → `:dev` tag | `dev` |
 | **Backend** | NERSC Spin | `main` branch → `:dev` tag | `dev` |
 
-**Purpose:** Rapid iteration and testing. The dev frontend is hosted on Vercel for fast UX iteration, while the dev backend runs on NERSC Spin.
+**Purpose:** Rapid iteration and testing. Both dev frontend and backend run on NERSC Spin with automatic builds from `main`.
+
+**Note:** A Vercel-hosted dev frontend is also available for rapid UX prototyping, but the primary dev frontend deployment is on NERSC Spin.
 
 ### Production Environment
 
@@ -114,7 +116,31 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 ---
 
-### 3. Frontend Production Builds
+### 3. Frontend Development Builds
+
+**Workflow:** `.github/workflows/build-frontend-dev.yml`
+
+**Triggers:**
+- Push to `main` branch (only when `frontend/**` changes)
+- Manual dispatch with optional `VITE_API_BASE_URL` override
+
+**Actions:**
+1. Checkout code
+2. Set up Docker Buildx for multi-arch builds
+3. Authenticate to NERSC registry
+4. Build frontend image with development API URL
+5. Tag with `:dev` and `:sha-<commit>`
+6. Push to registry
+
+**Build Args:**
+- `VITE_API_BASE_URL`: Development API endpoint (default: `https://simboard-dev-api.e3sm.org`)
+- `NODE_ENV`: Set to `production`
+
+**Deployment:** Dev frontend on NERSC Spin automatically pulls `:dev` tag (or can be configured for specific SHA tags)
+
+---
+
+### 4. Frontend Production Builds
 
 **Workflow:** `.github/workflows/build-frontend-prod.yml`
 
@@ -147,6 +173,13 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 |-----|-------------|---------|
 | `:dev` | Latest development build from `main` | `backend:dev` |
 | `:sha-<commit>` | Specific commit SHA (short) | `backend:sha-a1b2c3d` |
+
+### Development Frontend
+
+| Tag | Description | Example |
+|-----|-------------|---------|
+| `:dev` | Latest development build from `main` | `frontend:dev` |
+| `:sha-<commit>` | Specific commit SHA (short) | `frontend:sha-a1b2c3d` |
 
 ### Production Backend
 
@@ -227,14 +260,41 @@ spec:
 kubectl rollout restart deployment/simboard-backend-dev -n simboard-dev
 ```
 
-### Frontend (Vercel)
+### Frontend (NERSC Spin)
 
-**Deployment:** Managed automatically by Vercel on push to `main`
+**Image:** `registry.nersc.gov/e3sm/simboard/frontend:dev`
 
-**Configuration:**
-- Connected to `main` branch
-- Auto-deployment enabled
-- Preview deployments for PRs
+**Update Strategy:**
+1. Push changes to `main` branch
+2. GitHub Actions automatically builds and pushes `:dev` image
+3. NERSC Spin deployment pulls latest `:dev` tag (manual or automated via CD tool)
+
+**Kubernetes Deployment Example:**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simboard-frontend-dev
+  namespace: simboard-dev
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: frontend
+        image: registry.nersc.gov/e3sm/simboard/frontend:dev
+        imagePullPolicy: Always  # Always pull latest :dev
+        ports:
+        - containerPort: 80
+```
+
+**Rolling Restart Command:**
+```bash
+kubectl rollout restart deployment/simboard-frontend-dev -n simboard-dev
+```
+
+**Note:** A Vercel-hosted dev frontend is also available for rapid prototyping. Vercel deployment is managed automatically on push to `main`.
 
 ---
 

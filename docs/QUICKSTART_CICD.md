@@ -49,23 +49,38 @@ Trigger a manual build:
 
 **Expected result:** ✅ Workflow completes successfully, image pushed to registry
 
-### Step 4: Verify Image (2 minutes)
+### Step 4: Test Dev Frontend Build (Optional, 5 minutes)
+
+Optionally trigger a frontend dev build:
+
+1. Go to: https://github.com/E3SM-Project/simboard/actions
+2. Select **"Build Frontend (Dev)"** workflow
+3. Click **"Run workflow"** dropdown
+4. Select branch: `main`
+5. Click **"Run workflow"** button
+6. Wait ~10-15 minutes for build to complete
+
+**Expected result:** ✅ Workflow completes successfully, image pushed to registry
+
+### Step 5: Verify Images (2 minutes)
 
 ```bash
 docker login registry.nersc.gov
 docker pull registry.nersc.gov/e3sm/simboard/backend:dev
+docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 docker inspect registry.nersc.gov/e3sm/simboard/backend:dev
+docker inspect registry.nersc.gov/e3sm/simboard/frontend:dev
 ```
 
-**Expected result:** ✅ Image downloads successfully
+**Expected result:** ✅ Images download successfully
 
 ---
 
 ## For DevOps Team
 
-### Step 5: Update NERSC Spin Dev Deployment (10 minutes)
+### Step 6: Update NERSC Spin Dev Deployments (15 minutes)
 
-Update your Kubernetes deployment to use the new image:
+Update your Kubernetes deployments to use the new images:
 
 ```yaml
 # dev-backend-deployment.yaml
@@ -83,16 +98,34 @@ spec:
         imagePullPolicy: Always  # Important: Always pull latest :dev
 ```
 
-Apply the deployment:
+```yaml
+# dev-frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simboard-frontend-dev
+  namespace: simboard-dev
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        image: registry.nersc.gov/e3sm/simboard/frontend:dev
+        imagePullPolicy: Always  # Important: Always pull latest :dev
+```
+
+Apply the deployments:
 
 ```bash
 kubectl apply -f dev-backend-deployment.yaml
+kubectl apply -f dev-frontend-deployment.yaml
 kubectl rollout status deployment/simboard-backend-dev -n simboard-dev
+kubectl rollout status deployment/simboard-frontend-dev -n simboard-dev
 ```
 
-**Expected result:** ✅ Pods restart with new image
+**Expected result:** ✅ Pods restart with new images
 
-### Step 6: Verify Dev Backend (2 minutes)
+### Step 7: Verify Dev Deployments (2 minutes)
 
 ```bash
 # Check pods are running
@@ -100,18 +133,20 @@ kubectl get pods -n simboard-dev
 
 # Check logs
 kubectl logs -l app=simboard-backend -n simboard-dev --tail=20
+kubectl logs -l app=simboard-frontend -n simboard-dev --tail=20
 
-# Test health endpoint (adjust URL to your setup)
+# Test health endpoints (adjust URLs to your setup)
 curl https://simboard-dev-api.e3sm.org/api/v1/health
+curl https://simboard-dev.e3sm.org/health
 ```
 
-**Expected result:** ✅ Backend is healthy and responding
+**Expected result:** ✅ Both backend and frontend are healthy and responding
 
 ---
 
 ## For Development Team
 
-### Step 7: Test Automated Dev Builds (5 minutes)
+### Step 8: Test Automated Dev Builds (5 minutes)
 
 Make a small change to trigger automatic build:
 
@@ -126,7 +161,20 @@ git push origin main
 
 **Expected result:** ✅ Workflow automatically triggers and completes
 
-### Step 8: Cut a Test Release (10 minutes)
+You can also test frontend builds:
+
+```bash
+# Make a trivial change to frontend
+cd frontend
+echo "# CI/CD test" >> README.md
+git add README.md
+git commit -m "test: trigger dev frontend build"
+git push origin main
+```
+
+**Expected result:** ✅ Frontend dev workflow automatically triggers and completes
+
+### Step 9: Cut a Test Release (10 minutes)
 
 Create a test release to verify production builds:
 
@@ -149,15 +197,17 @@ Create a test release to verify production builds:
    - Watch "Build Backend (Prod)" and "Build Frontend (Prod)"
    - Wait ~10-15 minutes for both to complete
 
+**Expected result:** ✅ Both workflows complete successfully
+
 4. **Verify images:**
    ```bash
    docker pull registry.nersc.gov/e3sm/simboard/backend:v0.1.0-test
    docker pull registry.nersc.gov/e3sm/simboard/frontend:v0.1.0-test
    ```
 
-**Expected result:** ✅ Both workflows complete, images are available
+**Expected result:** ✅ Both images are available
 
-### Step 9: Deploy to Production (Optional, 15 minutes)
+### Step 10: Deploy to Production (Optional, 15 minutes)
 
 If you're ready to test production deployment:
 
