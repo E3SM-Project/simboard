@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.health import router as health_router
 from app.api.meta import router as meta_router
@@ -21,11 +20,6 @@ def create_app() -> FastAPI:
     # Register custom exception handlers that map SQLAlchemy errors to HTTP
     # responses.
     register_exception_handlers(app)
-
-    # Trust X-Forwarded-Proto / X-Forwarded-For from ingress (e.g., nginx).
-    app.add_middleware(
-        ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts_normalized
-    )
 
     # CORS setup
     app.add_middleware(

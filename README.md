@@ -15,11 +15,8 @@ SimBoard helps researchers:
 
 - [Prerequisites](#prerequisites)
 - [Developer Quickstart (Bare-Metal)](#developer-quickstart-bare-metal)
-- [Developer Quickstart (Docker)](#developer-quickstart-docker)
-- [Environment System](#environment-system)
 - [Repository Structure](#repository-structure)
 - [Development Notes](#development-notes)
-- [Makefile Overview](#makefile-overview)
 - [Local HTTPS](#local-https)
 - [License](#license)
 
@@ -92,25 +89,17 @@ This is the **recommended daily workflow**:
 cd simboard
 
 # 1. Setup development assets (env files + certs + deps)
-make setup-dev env=dev
+make setup-local
 
 # 2. Start backend (terminal 1)
-make backend-reload env=dev
+make backend-run
 
 # 3. Start frontend (terminal 2)
-make frontend-dev env=dev
+make frontend-run
 
 # 4. Open API and UI
 open https://127.0.0.1:8000/docs
 open https://127.0.0.1:5173
-```
-
-Optional:
-
-```bash
-make lint
-make type-check
-make test
 ```
 
 ---
@@ -202,12 +191,10 @@ In CI, pre-commit is also executed from the repository root for this reason.
 ### What pre-commit checks
 
 - **Backend**
-
   - Ruff linting and formatting
   - Python style and correctness checks (mypy)
 
 - **Frontend**
-
   - ESLint (auto-fix on staged files)
   - Prettier formatting (staged files only)
 
@@ -283,14 +270,14 @@ Please only do this when absolutely necessary.
 
 ## Local HTTPS
 
-SimBoard uses **local HTTPS** with development certificates:
+For local development, SimBoard uses **local HTTPS** with development certificates:
 
 ```bash
 certs/local.crt
 certs/local.key
 ```
 
-Generated via:
+These files are generated automatically with `make install`. To re-generate, run:
 
 ```bash
 make gen-certs
