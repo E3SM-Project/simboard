@@ -305,6 +305,7 @@ SimBoard uses **automated CI/CD pipelines** to build and deploy containers to NE
 ### Automated Builds (GitHub Actions)
 
 - **Development Backend:** Automatically built and pushed to NERSC registry on every push to `main`
+- **Development Frontend:** Automatically built and pushed to NERSC registry on every push to `main`
 - **Production Backend & Frontend:** Automatically built and pushed on GitHub Releases or version tags (e.g., `v0.3.0`)
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/`

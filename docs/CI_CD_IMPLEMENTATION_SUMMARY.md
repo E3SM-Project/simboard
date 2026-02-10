@@ -4,13 +4,20 @@ This document summarizes the automated CI/CD pipeline implementation for SimBoar
 
 ## What Was Implemented
 
-### 1. GitHub Actions Workflows (3 new workflows)
+### 1. GitHub Actions Workflows (4 new workflows)
 
 #### `build-backend-dev.yml` - Development Backend Builds
 - **Trigger:** Push to `main` branch (backend changes)
 - **Image:** `registry.nersc.gov/e3sm/simboard/backend`
 - **Tags:** `:dev`, `:sha-<commit>`
 - **Purpose:** Continuous deployment to NERSC Spin dev environment
+
+#### `build-frontend-dev.yml` - Development Frontend Builds
+- **Trigger:** Push to `main` branch (frontend changes)
+- **Image:** `registry.nersc.gov/e3sm/simboard/frontend`
+- **Tags:** `:dev`, `:sha-<commit>`
+- **Purpose:** Continuous deployment to NERSC Spin dev environment
+- **Special:** Supports manual dispatch with custom API URL
 
 #### `build-backend-prod.yml` - Production Backend Builds
 - **Trigger:** GitHub Release or version tag (e.g., `v0.3.0`)
@@ -72,7 +79,7 @@ All workflows include:
 ### Environment Separation Strategy
 
 **Development:**
-- Frontend: Vercel (optimized for rapid iteration)
+- Frontend: NERSC Spin dev namespace (`:dev` tag from `main`)
 - Backend: NERSC Spin dev namespace (`:dev` tag from `main`)
 
 **Production:**
@@ -80,14 +87,18 @@ All workflows include:
 - Backend: NERSC Spin prod namespace (`:vX.Y.Z` tag from releases)
 
 **Rationale:**
-- Dev frontend on Vercel enables fast UX iteration without container rebuilds
-- Both dev and prod backends on NERSC Spin ensure environment parity
+- Both dev frontend and backend on NERSC Spin enable consistent deployment pipeline
+- Vercel-hosted dev frontend remains available for rapid UX prototyping
 - Explicit versioning for production ensures immutable, auditable deployments
 - Separation via image tags and K8s namespaces (not separate infrastructure)
 
 ### Image Tagging Strategy
 
 **Development Backend:**
+- `:dev` - Always points to latest `main` build (mutable, for CD)
+- `:sha-<commit>` - Specific commit (immutable, for debugging/rollback)
+
+**Development Frontend:**
 - `:dev` - Always points to latest `main` build (mutable, for CD)
 - `:sha-<commit>` - Specific commit (immutable, for debugging/rollback)
 
