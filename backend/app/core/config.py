@@ -33,28 +33,6 @@ def get_env_file(project_root: Path | None = None) -> str | None:
     return str(env_file)
 
 
-def _validate_and_clean_hosts(hosts: list[str]) -> list[str]:
-    """
-    Validate and clean a list of trusted proxy hosts.
-
-    Parameters
-    ----------
-    hosts : list[str]
-        List of host strings to validate and clean.
-
-    Returns
-    -------
-    list[str]
-        Cleaned list of host strings.
-    """
-    cleaned_hosts = _normalize_list(hosts)
-
-    if not cleaned_hosts:
-        raise ValueError("TRUSTED_PROXY_HOSTS must contain at least one host")
-
-    return cleaned_hosts
-
-
 def _normalize_list(items: list[str]) -> list[str]:
     """
     Normalize a list of strings by stripping whitespace and trailing slashes.
@@ -83,38 +61,6 @@ class Settings(BaseSettings):
     # ----------------------------------------
     env: str = "development"
     port: int = 8000
-
-    # Network Configuration
-    # ----------------------------------------
-    trusted_proxy_hosts: str | list[str] = Field(
-        validation_alias="TRUSTED_PROXY_HOSTS",
-        description=(
-            "Comma-separated list of trusted proxy hosts (for X-Forwarded-For "
-            "header). Use '*' to trust all proxies (not recommended in production)."
-        ),
-    )
-
-    @property
-    def trusted_proxy_hosts_normalized(self) -> str | list[str]:
-        if isinstance(self.trusted_proxy_hosts, str):
-            value = self.trusted_proxy_hosts.strip()
-
-            if not value:
-                raise ValueError("TRUSTED_PROXY_HOSTS cannot be empty")
-
-            if value == "*":
-                if self.env == "production":
-                    raise ValueError(
-                        "TRUSTED_PROXY_HOSTS='*' is not allowed in production"
-                    )
-                return "*"
-
-            return _validate_and_clean_hosts(value.split(","))
-
-        if isinstance(self.trusted_proxy_hosts, list):
-            return _validate_and_clean_hosts(self.trusted_proxy_hosts)
-
-        raise TypeError("TRUSTED_PROXY_HOSTS must be a string or a list of strings")
 
     # Frontend
     # ----------------------------------------
