@@ -2,7 +2,7 @@
 
 This document describes the CI/CD pipeline for building and deploying SimBoard containers to NERSC Spin.
 
-> **🚀 New to CI/CD setup?** Start with the [Quick Start Guide](QUICKSTART_CICD.md) for step-by-step instructions.
+> **🚀 New to CI/CD setup?** Start with the [Quick Start Guide](QUICKSTART.md) for step-by-step instructions.
 
 ---
 

@@ -258,7 +258,7 @@ docker inspect registry.nersc.gov/e3sm/simboard/backend:dev
 - `NERSC_REGISTRY_USERNAME`: NERSC registry username
 - `NERSC_REGISTRY_PASSWORD`: NERSC registry password/token
 
-**Setup:** See [docs/GITHUB_SECRETS.md](GITHUB_SECRETS.md)
+**Setup:** See [GITHUB_SECRETS.md](GITHUB_SECRETS.md)
 
 ### Repository Permissions
 
@@ -291,7 +291,7 @@ Workflows require:
 - NERSC credentials are valid
 - Repository has push access to registry namespace
 
-**Solutions:** See [docs/GITHUB_SECRETS.md](GITHUB_SECRETS.md) troubleshooting
+**Solutions:** See [GITHUB_SECRETS.md](GITHUB_SECRETS.md) troubleshooting
 
 ### Image Not Available in Registry
 
@@ -322,5 +322,5 @@ docker pull registry.nersc.gov/e3sm/simboard/backend:dev
 For workflow issues:
 1. Check workflow logs in GitHub Actions
 2. See troubleshooting sections in this doc
-3. Consult [docs/DEPLOYMENT.md](DEPLOYMENT.md)
+3. Consult [DEPLOYMENT.md](DEPLOYMENT.md)
 4. Open an issue: [GitHub Issues](https://github.com/E3SM-Project/simboard/issues)

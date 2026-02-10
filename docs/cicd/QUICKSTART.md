@@ -314,7 +314,7 @@ Now that CI/CD is set up:
    Delete release from GitHub UI
 
 2. **Plan first real release**:
-   - Review [docs/DEPLOYMENT.md](DEPLOYMENT.md) for full release process
+   - Review [DEPLOYMENT.md](DEPLOYMENT.md) for full release process
    - Coordinate with team on release schedule
 
 3. **Set up monitoring**:
@@ -330,7 +330,7 @@ Now that CI/CD is set up:
 
 ## Getting Help
 
-- **Full Documentation:** [docs/DEPLOYMENT.md](DEPLOYMENT.md)
-- **Secrets Setup:** [docs/GITHUB_SECRETS.md](GITHUB_SECRETS.md)
-- **Workflow Reference:** [docs/CI_CD_REFERENCE.md](CI_CD_REFERENCE.md)
+- **Full Documentation:** [DEPLOYMENT.md](DEPLOYMENT.md)
+- **Secrets Setup:** [GITHUB_SECRETS.md](GITHUB_SECRETS.md)
+- **Workflow Reference:** [REFERENCE.md](CI_CD_REFERENCE.md)
 - **Open an Issue:** https://github.com/E3SM-Project/simboard/issues

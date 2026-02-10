@@ -129,4 +129,4 @@ You should see:
 For issues with:
 - **GitHub Secrets:** Contact repository administrators
 - **NERSC Registry Access:** Contact NERSC support or E3SM DevOps team
-- **Workflow Errors:** Check workflow logs and see [docs/DEPLOYMENT.md](DEPLOYMENT.md) troubleshooting section
+- **Workflow Errors:** Check workflow logs and see [DEPLOYMENT.md](DEPLOYMENT.md) troubleshooting section
