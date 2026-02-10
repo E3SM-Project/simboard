@@ -12,8 +12,8 @@ import type { SimulationOut } from '@/types/index';
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
   // Scientific Goal
-  campaignId: string[];
-  experimentTypeId: string[];
+  campaign: string[];
+  experimentType: string[];
   simulationType: string[];
   initializationType: string[];
 
@@ -41,8 +41,8 @@ interface BrowsePageProps {
 // -------------------- Pure Helpers --------------------
 const createEmptyFilters = (): FilterState => ({
   // Scientific Goal
-  campaignId: [],
-  experimentTypeId: [],
+  campaign: [],
+  experimentType: [],
   simulationType: [],
   initializationType: [],
 
@@ -154,8 +154,8 @@ export const BrowsePage = ({
       (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
     > = {
       machineId: (rec) => simMachineId(rec) ?? '',
-      campaignId: (rec) => rec.campaignId ?? [],
-      experimentTypeId: (rec) => rec.experimentTypeId ?? [],
+      campaign: (rec) => rec.campaign ?? [],
+      experimentType: (rec) => rec.experimentType ?? [],
       compset: (rec) => rec.compset ?? [],
       gridName: (rec) => rec.gridName ?? [],
       gridResolution: (rec) => rec.gridResolution ?? [],
@@ -187,8 +187,8 @@ export const BrowsePage = ({
     const params = new URLSearchParams(location.search);
     const next: Partial<FilterState> = {};
     const arrayKeys: (keyof FilterState)[] = [
-      'campaignId',
-      'experimentTypeId',
+      'campaign',
+      'experimentType',
       'machineId',
       'compset',
       'gridName',

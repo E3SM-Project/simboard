@@ -147,11 +147,21 @@ class SimulationCreate(CamelInBaseModel):
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
-    campaign_id: Annotated[
-        str | None, Field(None, description="Optional ID of the associated campaign")
+    campaign: Annotated[
+        str | None,
+        Field(
+            None, description="Campaign or run grouping (e.g. historical, amip, tuning)"
+        ),
     ]
-    experiment_type_id: Annotated[
-        str | None, Field(None, description="Optional ID of the experiment type")
+    experiment_type: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "High-level experiment category (e.g. historical, amip, piControl). "
+                "Often aligned with CMIP experiment identifiers."
+            ),
+        ),
     ]
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
@@ -298,10 +308,10 @@ class SimulationOut(CamelOutBaseModel):
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
     status: Annotated[str, Field(..., description="Current status of the simulation")]
-    campaign_id: Annotated[
+    campaign: Annotated[
         str | None, Field(None, description="Optional ID of the associated campaign")
     ]
-    experiment_type_id: Annotated[
+    experiment_type: Annotated[
         str | None, Field(None, description="Optional ID of the experiment type")
     ]
     initialization_type: Annotated[

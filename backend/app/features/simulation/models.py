@@ -61,8 +61,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(50), ForeignKey("status_lookup.code"), index=True
     )
-    campaign_id: Mapped[str | None] = mapped_column(String(100))
-    experiment_type_id: Mapped[str | None] = mapped_column(String(100))
+    campaign: Mapped[str | None] = mapped_column(String(100))
+    experiment_type: Mapped[str | None] = mapped_column(String(100))
     initialization_type: Mapped[str] = mapped_column(String(50))
     group_name: Mapped[str | None] = mapped_column(String(120))
 

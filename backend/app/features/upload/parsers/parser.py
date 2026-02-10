@@ -263,8 +263,8 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
         "parent_simulation_id": None,
         "simulation_type": None,
         "status": None,
-        "campaign_id": None,  # Extract from parent directory if needed
-        "experiment_type_id": None,  # TODO: Do we need this?
+        "campaign": metadata.get("campaign"),
+        "experiment_type": metadata.get("experiment_type"),
         "initialization_type": metadata.get("initialization_type"),
         "group_name": metadata.get("group_name"),
         "machine_id": metadata.get("machine_id"),

@@ -113,8 +113,8 @@ export const ComparePage = ({
     modelSetup: [
       makeMetricRow('Simulation Type', 'simulationType', ''),
       makeMetricRow('Status', 'status', ''),
-      makeMetricRow('Campaign ID', 'campaignId', ''),
-      makeMetricRow('Experiment Type ID', 'experimentTypeId', ''),
+      makeMetricRow('Campaign ID', 'campaign', ''),
+      makeMetricRow('Experiment Type ID', 'experimentType', ''),
       {
         label: 'Machine Name',
         values: selectedSimulationIds.map((id) => {
