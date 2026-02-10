@@ -290,6 +290,8 @@ Used automatically by:
 
 ## Building Docker Containers for NERSC Spin (Manual)
 
+### Development Environment
+
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
 
@@ -319,6 +321,7 @@ docker buildx build \
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
+  --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
   -t registry.nersc.gov/e3sm/simboard/frontend . \
   --push
 ```

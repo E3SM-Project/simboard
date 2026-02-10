@@ -22,6 +22,14 @@ RUN --mount=type=cache,target=/root/.pnpm-store \
 # Copy source code
 COPY . .
 
+# --------------------------------------------------
+# Build-time env vars for Vite (must be provided via
+# `docker build --build-arg`)
+# --------------------------------------------------
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
+# Build the frontend (Vite reads env vars here)
 RUN pnpm run build
 
 ########################################
