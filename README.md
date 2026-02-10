@@ -288,53 +288,55 @@ Used automatically by:
 - FastAPI (Uvicorn SSL)
 - Vite (via `VITE_SSL_CERT`, `VITE_SSL_KEY`)
 
-## Building Docker Containers for NERSC Spin (Manual)
+## Deployment & CI/CD
 
-### Development Environment
+SimBoard uses **automated CI/CD pipelines** to build and deploy containers to NERSC Spin.
+
+### Automated Builds (GitHub Actions)
+
+- **Development Backend:** Automatically built and pushed to NERSC registry on every push to `main`
+- **Production Backend & Frontend:** Automatically built and pushed on GitHub Releases or version tags (e.g., `v0.3.0`)
+
+**Registry:** `registry.nersc.gov/e3sm/simboard/`
+
+### Quick Links
 
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
+- **Full Deployment Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
-To build and push multi-architecture Docker images for deployment on NERSC Spin, run the
-following commands from the repository root.
+### Manual Builds (for testing)
 
-**Login to registry.nersc.gov using your NERSC credentials:**
+If you need to manually build and push images:
 
+**Login to registry:**
 ```bash
-# Source: https://docs.nersc.gov/development/containers/registry/
 docker login registry.nersc.gov
 ```
 
 **Backend:**
-
 ```bash
 cd backend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
-  -t registry.nersc.gov/e3sm/simboard/backend . \
-  --push
+  --build-arg ENV=production \
+  -t registry.nersc.gov/e3sm/simboard/backend:manual \
+  --push \
+  .
 ```
 
 **Frontend:**
-
 ```bash
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
-  --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend . \
-  --push
+  --build-arg VITE_API_BASE_URL=https://simboard-api.e3sm.org \
+  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
+  --push \
+  .
 ```
 
----
-
-**Helpful Docker Commands:**
-
-```bash
-docker container ls      # List running containers
-docker image ls          # List local images
-docker tag <src> <dest>  # Tag an image
-```
+For complete deployment instructions, release process, and troubleshooting, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ---
 
