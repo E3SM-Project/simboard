@@ -304,7 +304,7 @@ SimBoard uses **automated CI/CD pipelines** to build and deploy containers to NE
 
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
-- **Full Deployment Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- **Full Deployment Guide:** [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ### Manual Builds (for testing)
 
@@ -337,7 +337,7 @@ docker buildx build \
   .
 ```
 
-For complete deployment instructions, release process, and troubleshooting, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+For complete deployment instructions, release process, and troubleshooting, see [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ---
 

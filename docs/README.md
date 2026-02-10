@@ -1,20 +1,37 @@
-# CI/CD Documentation Index
+# SimBoard Documentation
 
-This index provides an overview of all CI/CD and deployment documentation for SimBoard.
+This directory contains all documentation for the SimBoard project.
 
 ---
 
-## 📚 Documentation Overview
+## 📁 Directory Structure
+
+```
+docs/
+├── README.md          # This file - documentation index
+└── cicd/              # CI/CD and deployment documentation
+    ├── QUICKSTART.md
+    ├── DEPLOYMENT.md
+    ├── GITHUB_SECRETS.md
+    ├── REFERENCE.md
+    └── IMPLEMENTATION_SUMMARY.md
+```
+
+---
+
+## 📚 CI/CD Documentation
+
+All CI/CD and deployment documentation is located in the [`cicd/`](cicd/) directory.
 
 | Document | Purpose | Audience | Size |
 |----------|---------|----------|------|
-| [QUICKSTART_CICD.md](QUICKSTART_CICD.md) | Quick setup guide | Admins & DevOps | 7 KB |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Comprehensive deployment guide | Everyone | 13.8 KB |
-| [GITHUB_SECRETS.md](GITHUB_SECRETS.md) | GitHub Secrets configuration | Admins | 4.1 KB |
-| [CI_CD_REFERENCE.md](CI_CD_REFERENCE.md) | Workflow quick reference | Developers | 7 KB |
-| [CI_CD_IMPLEMENTATION_SUMMARY.md](CI_CD_IMPLEMENTATION_SUMMARY.md) | Implementation details | Maintainers | 9.2 KB |
+| [cicd/QUICKSTART.md](cicd/QUICKSTART.md) | Quick setup guide | Admins & DevOps | 8 KB |
+| [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) | Comprehensive deployment guide | Everyone | 15 KB |
+| [cicd/GITHUB_SECRETS.md](cicd/GITHUB_SECRETS.md) | GitHub Secrets configuration | Admins | 4 KB |
+| [cicd/REFERENCE.md](cicd/REFERENCE.md) | Workflow quick reference | Developers | 7 KB |
+| [cicd/IMPLEMENTATION_SUMMARY.md](cicd/IMPLEMENTATION_SUMMARY.md) | Implementation details | Maintainers | 9 KB |
 
-**Total Documentation:** 41 KB across 5 documents
+**Total Documentation:** 43 KB across 5 documents
 
 ---
 
@@ -23,42 +40,42 @@ This index provides an overview of all CI/CD and deployment documentation for Si
 ### I'm a Repository Administrator
 **Goal:** Set up GitHub Secrets and enable CI/CD
 
-👉 Start here: [QUICKSTART_CICD.md](QUICKSTART_CICD.md) (Steps 1-4)
+👉 Start here: [cicd/QUICKSTART.md](cicd/QUICKSTART.md) (Steps 1-4)
 
-Then: [GITHUB_SECRETS.md](GITHUB_SECRETS.md) for detailed setup
+Then: [cicd/GITHUB_SECRETS.md](cicd/GITHUB_SECRETS.md) for detailed setup
 
 ---
 
 ### I'm a DevOps Engineer
 **Goal:** Deploy containers to NERSC Spin
 
-👉 Start here: [QUICKSTART_CICD.md](QUICKSTART_CICD.md) (Steps 5-6)
+👉 Start here: [cicd/QUICKSTART.md](cicd/QUICKSTART.md) (Steps 5-6)
 
-Then: [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment guide
+Then: [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) for full deployment guide
 
 ---
 
 ### I'm a Developer
 **Goal:** Understand how to trigger builds and cut releases
 
-👉 Start here: [CI_CD_REFERENCE.md](CI_CD_REFERENCE.md) for workflow overview
+👉 Start here: [cicd/REFERENCE.md](cicd/REFERENCE.md) for workflow overview
 
-Then: [DEPLOYMENT.md](DEPLOYMENT.md) → [Production Release Process](#production-release-process)
+Then: [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) → [Production Release Process](#production-release-process)
 
 ---
 
 ### I'm a Maintainer
 **Goal:** Understand implementation details and architecture
 
-👉 Start here: [CI_CD_IMPLEMENTATION_SUMMARY.md](CI_CD_IMPLEMENTATION_SUMMARY.md)
+👉 Start here: [cicd/IMPLEMENTATION_SUMMARY.md](cicd/IMPLEMENTATION_SUMMARY.md)
 
-Then: [DEPLOYMENT.md](DEPLOYMENT.md) for complete reference
+Then: [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) for complete reference
 
 ---
 
 ## 📖 Document Descriptions
 
-### [QUICKSTART_CICD.md](QUICKSTART_CICD.md)
+### [cicd/QUICKSTART.md](cicd/QUICKSTART.md)
 **Quick Start: CI/CD Setup**
 
 Step-by-step guide to:
@@ -71,7 +88,7 @@ Step-by-step guide to:
 
 ---
 
-### [DEPLOYMENT.md](DEPLOYMENT.md)
+### [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md)
 **Comprehensive Deployment Guide**
 
 Complete reference covering:
@@ -89,7 +106,7 @@ Complete reference covering:
 
 ---
 
-### [GITHUB_SECRETS.md](GITHUB_SECRETS.md)
+### [cicd/GITHUB_SECRETS.md](cicd/GITHUB_SECRETS.md)
 **GitHub Secrets Configuration**
 
 Detailed guide for:
@@ -106,7 +123,7 @@ Detailed guide for:
 
 ---
 
-### [CI_CD_REFERENCE.md](CI_CD_REFERENCE.md)
+### [cicd/REFERENCE.md](cicd/REFERENCE.md)
 **Workflow Quick Reference**
 
 Quick reference for:
@@ -123,7 +140,7 @@ Quick reference for:
 
 ---
 
-### [CI_CD_IMPLEMENTATION_SUMMARY.md](CI_CD_IMPLEMENTATION_SUMMARY.md)
+### [cicd/IMPLEMENTATION_SUMMARY.md](cicd/IMPLEMENTATION_SUMMARY.md)
 **Implementation Details**
 
 Technical documentation covering:
@@ -144,31 +161,31 @@ Technical documentation covering:
 
 ### First-Time Setup
 ```
-1. QUICKSTART_CICD.md (Steps 1-4) → Configure secrets & test
-2. GITHUB_SECRETS.md → Verify configuration
-3. QUICKSTART_CICD.md (Steps 5-6) → Deploy to NERSC
-4. CI_CD_REFERENCE.md → Understand workflows
+1. cicd/QUICKSTART.md (Steps 1-4) → Configure secrets & test
+2. cicd/GITHUB_SECRETS.md → Verify configuration
+3. cicd/QUICKSTART.md (Steps 5-6) → Deploy to NERSC
+4. cicd/REFERENCE.md → Understand workflows
 ```
 
 ### Cutting a Release
 ```
-1. CI_CD_REFERENCE.md → Review workflow overview
-2. DEPLOYMENT.md → Production Release Process section
-3. QUICKSTART_CICD.md (Step 8) → Optional test release first
+1. cicd/REFERENCE.md → Review workflow overview
+2. cicd/DEPLOYMENT.md → Production Release Process section
+3. cicd/QUICKSTART.md (Step 9) → Optional test release first
 ```
 
 ### Troubleshooting
 ```
-1. CI_CD_REFERENCE.md → Troubleshooting section
-2. DEPLOYMENT.md → Troubleshooting section
-3. GITHUB_SECRETS.md → Auth troubleshooting
+1. cicd/REFERENCE.md → Troubleshooting section
+2. cicd/DEPLOYMENT.md → Troubleshooting section
+3. cicd/GITHUB_SECRETS.md → Auth troubleshooting
 ```
 
 ### Onboarding New Team Members
 ```
-1. CI_CD_IMPLEMENTATION_SUMMARY.md → Understand the system
-2. CI_CD_REFERENCE.md → Learn workflows
-3. QUICKSTART_CICD.md → Hands-on practice
+1. cicd/IMPLEMENTATION_SUMMARY.md → Understand the system
+2. cicd/REFERENCE.md → Learn workflows
+3. cicd/QUICKSTART.md → Hands-on practice
 ```
 
 ---

@@ -34,7 +34,7 @@ This document summarizes the automated CI/CD pipeline implementation for SimBoar
 
 ### 2. Documentation (4 new documents)
 
-#### `docs/DEPLOYMENT.md` (13.7 KB)
+#### `DEPLOYMENT.md` (13.7 KB)
 Comprehensive deployment guide covering:
 - Environment architecture
 - CI/CD workflow details
@@ -43,14 +43,14 @@ Comprehensive deployment guide covering:
 - Kubernetes deployment examples
 - Troubleshooting guide
 
-#### `docs/GITHUB_SECRETS.md` (4.1 KB)
+#### `GITHUB_SECRETS.md` (4.1 KB)
 GitHub Secrets configuration guide:
 - Required secrets list and descriptions
 - Step-by-step setup instructions
 - Testing and troubleshooting
 - Security best practices
 
-#### `docs/CI_CD_REFERENCE.md` (7.0 KB)
+#### `REFERENCE.md` (7.0 KB)
 Quick reference guide:
 - Workflow overview table
 - Trigger conditions
@@ -134,7 +134,7 @@ All workflows include:
 | `NERSC_REGISTRY_USERNAME` | NERSC registry username |
 | `NERSC_REGISTRY_PASSWORD` | NERSC registry password/token |
 
-**Setup:** See `docs/GITHUB_SECRETS.md`
+**Setup:** See `GITHUB_SECRETS.md`
 
 ### NERSC Registry Permissions
 
@@ -209,7 +209,7 @@ kubectl rollout undo deployment/simboard-backend-prod -n simboard-prod
    - Navigate to Settings → Secrets and variables → Actions
    - Add `NERSC_REGISTRY_USERNAME`
    - Add `NERSC_REGISTRY_PASSWORD`
-   - See `docs/GITHUB_SECRETS.md` for details
+   - See `GITHUB_SECRETS.md` for details
 
 2. **Verify NERSC Registry Access** (Required)
    - Ensure the account has push permissions to `e3sm/simboard/` namespace
@@ -242,7 +242,7 @@ kubectl rollout undo deployment/simboard-backend-prod -n simboard-prod
 7. **Follow Release Process** (When ready)
    - Cut first release using GitHub Releases
    - Verify workflows build and push images
-   - Deploy to production following `docs/DEPLOYMENT.md`
+   - Deploy to production following `DEPLOYMENT.md`
 
 ## Success Criteria
 
@@ -269,9 +269,9 @@ kubectl rollout undo deployment/simboard-backend-prod -n simboard-prod
 
 ## Documentation Links
 
-- **Full Deployment Guide:** [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)
-- **GitHub Secrets Setup:** [docs/GITHUB_SECRETS.md](../docs/GITHUB_SECRETS.md)
-- **Workflow Reference:** [docs/CI_CD_REFERENCE.md](../docs/CI_CD_REFERENCE.md)
+- **Full Deployment Guide:** [DEPLOYMENT.md](../DEPLOYMENT.md)
+- **GitHub Secrets Setup:** [GITHUB_SECRETS.md](../GITHUB_SECRETS.md)
+- **Workflow Reference:** [REFERENCE.md](../REFERENCE.md)
 - **Main README:** [README.md](../README.md)
 
 ## Support
