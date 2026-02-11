@@ -57,6 +57,9 @@ class ExperimentType(StrEnum):
     esm_piControl = "esm-piControl"
 
 
+KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
+
+
 class ExternalLinkCreate(CamelInBaseModel):
     """Schema for creating a new External Link."""
 
