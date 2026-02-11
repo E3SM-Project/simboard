@@ -34,10 +34,10 @@ def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     lines = text.splitlines()
 
     creation_date = _extract_timestamp(lines)
-    res = _extract_flag_value(lines, "--res")
+    grid_name = _extract_flag_value(lines, "--res")
     compset = _extract_flag_value(lines, "--compset")
 
-    return {"creation_date": creation_date, "res": res, "compset": compset}
+    return {"creation_date": creation_date, "grid_name": grid_name, "compset": compset}
 
 
 def _extract_timestamp(lines: list[str]) -> str | None:

@@ -30,14 +30,14 @@ class TestParseReadmeCase:
         result = parse_readme_case(sample_readme_case)
 
         assert result["creation_date"] == "2025-12-18 22:36:01"
-        assert result["res"] == "ne30pg2_r05_IcoswISC30E3r5"
+        assert result["grid_name"] == "ne30pg2_r05_IcoswISC30E3r5"
         assert result["compset"] == "WCYCL20TR"
 
     def test_parse_gz(self, sample_gz_readme_case):
         result = parse_readme_case(sample_gz_readme_case)
 
         assert result["creation_date"] == "2025-12-18 22:36:01"
-        assert result["res"] == "ne30pg2_r05_IcoswISC30E3r5"
+        assert result["grid_name"] == "ne30pg2_r05_IcoswISC30E3r5"
         assert result["compset"] == "WCYCL20TR"
 
     def test_missing_fields(self, tmp_path):
@@ -49,5 +49,5 @@ class TestParseReadmeCase:
         result = parse_readme_case(file_path)
 
         assert result["creation_date"] == "2025-12-18 22:36:01"
-        assert result["res"] is None
+        assert result["grid_name"] is None
         assert result["compset"] is None

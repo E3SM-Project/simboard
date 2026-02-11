@@ -110,6 +110,12 @@ def _extract_campaign_and_experiment_type(
         # Remove trailing instance suffix like _0121
         base = re.sub(r"_\d+$", "", case_name)
 
+        # Only infer campaign for dot-delimited case names.
+        # Timing files sometimes use short case names (e.g., e3sm_v1_ne30)
+        # that do not encode campaign/experiment type.
+        if "." not in base:
+            return None, None
+
         # Campaign = everything except the final instance suffix
         campaign = ".".join(base.split(".")[:])
 

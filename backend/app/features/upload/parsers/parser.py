@@ -258,7 +258,7 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
         "case_name": metadata.get("case_name"),
         "compset": metadata.get("compset"),
         "compset_alias": metadata.get("compset_alias"),
-        "grid_name": metadata.get("grid_name"),  # TODO: How do we get this?
+        "grid_name": metadata.get("grid_name"),
         "grid_resolution": metadata.get("grid_resolution"),
         "parent_simulation_id": None,
         "simulation_type": None,
