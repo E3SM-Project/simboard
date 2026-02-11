@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -11,7 +11,7 @@ from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
 
 
-class SimulationStatus(str, Enum):
+class SimulationStatus(StrEnum):
     CREATED = "created"
     QUEUED = "queued"
     RUNNING = "running"
@@ -19,7 +19,7 @@ class SimulationStatus(str, Enum):
     COMPLETED = "completed"
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     """Enumeration of possible artifact types."""
 
     OUTPUT = "output"
@@ -28,7 +28,7 @@ class ArtifactKind(str, Enum):
     POSTPROCESS_SCRIPT = "postprocessing_script"
 
 
-class ExternalLinkKind(str, Enum):
+class ExternalLinkKind(StrEnum):
     """Enumeration of possible external link types."""
 
     DIAGNOSTIC = "diagnostic"
@@ -38,16 +38,23 @@ class ExternalLinkKind(str, Enum):
 
 
 class ExperimentType(StrEnum):
-    """Enumeration of known experiment types, aligned with common CMIP categories."""
-
+    # --- DECK core experiments ---
+    piControl = "piControl"
     historical = "historical"
     amip = "amip"
-    piControl = "piControl"
     abrupt_4xCO2 = "abrupt-4xCO2"
-    pctCO2 = "1pctCO2"
+    one_pct_CO2 = "1pctCO2"
+
+    # --- ScenarioMIP (SSPs) ---
+    ssp119 = "ssp119"
+    ssp126 = "ssp126"
     ssp245 = "ssp245"
     ssp370 = "ssp370"
     ssp585 = "ssp585"
+
+    # --- ESM variants ---
+    esm_hist = "esm-hist"
+    esm_piControl = "esm-piControl"
 
 
 class ExternalLinkCreate(CamelInBaseModel):
