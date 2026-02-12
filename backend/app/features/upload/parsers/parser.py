@@ -18,8 +18,9 @@ from app.features.upload.parsers.git_info import (
 )
 from app.features.upload.parsers.readme_case import parse_readme_case
 
-ExpResults = dict[str, str | None]
-AllExpResults = dict[str, ExpResults]
+SimulationFiles = dict[str, str | None]
+SimulationMetadata = dict[str, str | None]
+AllSimulations = dict[str, SimulationMetadata]
 
 logger = _setup_custom_logger(__name__)
 
@@ -87,7 +88,7 @@ FILE_SPECS: dict[str, FileSpec] = {
 }
 
 
-def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResults:
+def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulations:
     """Main entrypoint for parser workflow.
 
     Parameters
@@ -99,15 +100,15 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResul
 
     Returns
     -------
-    AllExpResults
-        Dictionary mapping experiment directory paths to their parsed results.
+    AllSimulations
+        Dictionary mapping experiment directory paths to their parsed simulations.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
 
     _extract_archive(archive_path, output_dir)
 
-    results: AllExpResults = {}
+    results: AllSimulations = {}
 
     exp_dirs = _find_experiment_dirs(output_dir)
     logger.info(f"Found {len(exp_dirs)} experiment directories.")
@@ -117,6 +118,7 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllExpResul
         results[exp_dir] = _parse_experiment_files(files)
 
     logger.info("Completed parsing all experiment directories.")
+
     return results
 
 
@@ -158,9 +160,9 @@ def _find_experiment_dirs(root_dir: str) -> list[str]:
     return matches
 
 
-def _locate_files(exp_dir: str) -> ExpResults:
+def _locate_files(exp_dir: str) -> SimulationFiles:
     """Locate required and optional files in the experiment directory."""
-    files: ExpResults = {key: None for key in FILE_SPECS}
+    files: SimulationFiles = {key: None for key in FILE_SPECS}
 
     files = _find_root_files(exp_dir, files)
     files = _find_casedocs_files(exp_dir, files)
@@ -170,15 +172,24 @@ def _locate_files(exp_dir: str) -> ExpResults:
 
 
 def _find_file_in_dir(directory: str, pattern: str) -> str | None:
-    """Find a file matching the pattern in the specified directory."""
+    """Find a file matching the pattern in the specified directory.
+
+    Raises ValueError if multiple files match the pattern.
+    """
+    matches = []
     for fname in os.listdir(directory):
         if re.match(pattern, fname):
-            return os.path.join(directory, fname)
+            matches.append(os.path.join(directory, fname))
 
-    return None
+    if len(matches) > 1:
+        raise ValueError(
+            f"Multiple files matching pattern '{pattern}' found in {directory}: {matches}"
+        )
+
+    return matches[0] if matches else None
 
 
-def _find_root_files(exp_dir: str, files: ExpResults) -> ExpResults:
+def _find_root_files(exp_dir: str, files: SimulationFiles) -> SimulationFiles:
     """Find files located in the root of the experiment directory."""
     for key, spec in FILE_SPECS.items():
         if spec["location"] == "root":
@@ -188,7 +199,7 @@ def _find_root_files(exp_dir: str, files: ExpResults) -> ExpResults:
     return files
 
 
-def _find_casedocs_files(exp_dir: str, files: ExpResults) -> ExpResults:
+def _find_casedocs_files(exp_dir: str, files: SimulationFiles) -> SimulationFiles:
     for key, spec in FILE_SPECS.items():
         if spec["location"] == "casedocs":
             pattern = str(spec["pattern"])
@@ -202,7 +213,7 @@ def _find_casedocs_files(exp_dir: str, files: ExpResults) -> ExpResults:
     return files
 
 
-def _check_missing_files(files: ExpResults, exp_dir: str) -> None:
+def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
     missing_required = [
         key
         for key, spec in FILE_SPECS.items()
@@ -224,7 +235,7 @@ def _check_missing_files(files: ExpResults, exp_dir: str) -> None:
         )
 
 
-def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
+def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
     """Pass discovered files to their respective parser functions.
 
     Parameters
@@ -234,10 +245,10 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
 
     Returns
     -------
-    ExpResults
+    SimulationMetadata
         Dictionary with parsed results from each file type.
     """
-    metadata: ExpResults = {}
+    metadata: SimulationMetadata = {}
 
     for key, spec in FILE_SPECS.items():
         path = files.get(key)
@@ -246,30 +257,24 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
 
         parser: Callable = spec["parser"]
 
-        # Parsers that return a dict
         if "single_value" not in spec:
             metadata.update(parser(path))
         else:
             metadata[spec["single_value"]] = parser(path)
 
-    # Compose result dictionary
-    result: ExpResults = {
+    populated_fields: SimulationMetadata = {
         "name": metadata.get("case_name"),
         "case_name": metadata.get("case_name"),
         "compset": metadata.get("compset"),
         "compset_alias": metadata.get("compset_alias"),
         "grid_name": metadata.get("grid_name"),
         "grid_resolution": metadata.get("grid_resolution"),
-        "parent_simulation_id": None,
-        "simulation_type": None,
-        "status": None,
         "campaign": metadata.get("campaign"),
         "experiment_type": metadata.get("experiment_type"),
         "initialization_type": metadata.get("initialization_type"),
         "group_name": metadata.get("group_name"),
         "machine_id": metadata.get("machine_id"),
         "simulation_start_date": metadata.get("simulation_start_date"),
-        "simulation_end_date": None,
         "run_start_date": metadata.get("run_start_date"),
         "run_end_date": metadata.get("run_end_date"),
         "compiler": metadata.get("compiler"),
@@ -279,10 +284,19 @@ def _parse_experiment_files(files: dict[str, str | None]) -> ExpResults:
         "git_commit_hash": metadata.get("git_commit_hash"),
         "created_by": metadata.get("user"),
         "last_updated_by": metadata.get("user"),
-        "extra": None,
-        "artifacts": None,
-        "links": None,
         "machine": metadata.get("machine"),
     }
 
-    return result
+    placeholder_fields: SimulationMetadata = {
+        "parent_simulation_id": None,
+        "simulation_type": None,
+        "status": None,
+        "simulation_end_date": None,
+        "extra": None,
+        "artifacts": None,
+        "links": None,
+    }
+
+    simulation: SimulationMetadata = {**populated_fields, **placeholder_fields}
+
+    return simulation
