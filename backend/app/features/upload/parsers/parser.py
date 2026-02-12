@@ -5,7 +5,7 @@ import re
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import Callable, TypedDict
+from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
 from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
@@ -141,13 +141,50 @@ def _extract_archive(archive_path: str, output_dir: str) -> None:
 def _extract_zip(zip_path: str, extract_to: str) -> None:
     """Extracts a ZIP archive to the target directory."""
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(extract_to)
+        _safe_extract(
+            extract_to,
+            (info.filename for info in zip_ref.infolist()),
+            zip_ref.extractall,
+        )
 
 
 def _extract_tar_gz(tar_gz_path: str, extract_to: str) -> None:
     """Extracts a TAR.GZ archive to the target directory."""
     with tarfile.open(tar_gz_path, "r:gz") as tar_ref:
-        tar_ref.extractall(extract_to)
+        _safe_extract(
+            extract_to,
+            (member.name for member in tar_ref.getmembers()),
+            tar_ref.extractall,
+        )
+
+
+def _safe_extract(
+    extract_to: str,
+    member_names: Iterable[str],
+    extract_func: Callable[[str], None],
+) -> None:
+    """Validate archive members to prevent path traversal before extraction."""
+    base_dir = Path(extract_to).resolve()
+
+    for name in member_names:
+        target_path = (base_dir / name).resolve()
+        if not _is_within_directory(base_dir, target_path):
+            raise ValueError(
+                "Archive member path escapes extraction directory: "
+                f"{name} -> {target_path}"
+            )
+
+    extract_func(extract_to)
+
+
+def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
+    """Return True if target_path is within base_dir."""
+    try:
+        target_path.relative_to(base_dir)
+    except ValueError:
+        return False
+
+    return True
 
 
 def _find_experiment_dirs(root_dir: str) -> list[str]:

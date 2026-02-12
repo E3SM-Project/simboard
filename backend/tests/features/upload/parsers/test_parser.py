@@ -1,6 +1,7 @@
 """Integration tests for the parser module focusing on public API."""
 
 import gzip
+import io
 import os
 import tarfile
 import zipfile
@@ -56,7 +57,7 @@ class TestMainParser:
             Version string for file naming (e.g., "001").
         """
         version_base = version.split(".")[0] if "." in version else version
-        
+
         with gzip.open(exp_dir / f"GIT_CONFIG.{version_base}.gz", "wt") as f:
             f.write("https://github.com/test/repo")
         with gzip.open(exp_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
@@ -74,14 +75,14 @@ class TestMainParser:
             Path where ZIP archive will be created.
         """
         zip_file = zipfile.ZipFile(archive_path, "w")
-        
+
         for root, _dirs, files_list in os.walk(str(base_dir)):
             for file in files_list:
                 file_path = Path(root) / file
                 arcname = str(file_path.relative_to(str(base_dir)))
-                
+
                 zip_file.write(file_path, arcname)
-                
+
         zip_file.close()
 
     @staticmethod
@@ -96,14 +97,14 @@ class TestMainParser:
             Path where TAR.GZ archive will be created.
         """
         tar_file = tarfile.open(archive_path, "w:gz")
-        
+
         for root, _dirs, files_list in os.walk(str(base_dir)):
             for file in files_list:
                 file_path = Path(root) / file
                 arcname = str(file_path.relative_to(str(base_dir)))
-                
+
                 tar_file.add(file_path, arcname=arcname)
-                
+
         tar_file.close()
 
     @contextmanager
@@ -374,3 +375,30 @@ class TestMainParser:
         ):
             result = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+
+    def test_zip_path_traversal_rejected(self, tmp_path: Path) -> None:
+        """Test that ZIP extraction rejects path traversal entries."""
+        archive_path = tmp_path / "traversal.zip"
+        with zipfile.ZipFile(archive_path, "w") as zip_ref:
+            zip_ref.writestr("../evil.txt", "data")
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with pytest.raises(ValueError, match="escapes extraction directory"):
+            parser._extract_zip(str(archive_path), str(extract_dir))
+
+    def test_tar_path_traversal_rejected(self, tmp_path: Path) -> None:
+        """Test that TAR.GZ extraction rejects path traversal entries."""
+        archive_path = tmp_path / "traversal.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tar_ref:
+            payload = io.BytesIO(b"data")
+            tar_info = tarfile.TarInfo(name="../evil.txt")
+            tar_info.size = len(payload.getvalue())
+            tar_ref.addfile(tar_info, payload)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with pytest.raises(ValueError, match="escapes extraction directory"):
+            parser._extract_tar_gz(str(archive_path), str(extract_dir))

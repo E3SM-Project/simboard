@@ -19,7 +19,7 @@ def parse_git_describe(describe_path: str | Path) -> dict[str, str | None]:
     """
     describe_path = Path(describe_path)
     describe_lines = _open_text(describe_path).splitlines()
-    result: dict[str, str | None] = {"git_tag": None, "git_hash": None}
+    result: dict[str, str | None] = {"git_tag": None, "git_commit_hash": None}
 
     describe_pattern = re.compile(r"^(?P<tag>v[\w.\-]+)(?:-\d+)?-g(?P<hash>[0-9a-f]+)")
 
