@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
@@ -50,7 +51,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     compset_alias: Mapped[str] = mapped_column(String(120))
     grid_name: Mapped[str] = mapped_column(String(200))
     grid_resolution: Mapped[str] = mapped_column(String(50))
-    parent_simulation_id: Mapped[UUID | None] = mapped_column(
+    parent_simulation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("simulations.id")
     )
 
@@ -68,7 +69,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Model timeline
     # ~~~~~~~~~~~~~~
-    machine_id: Mapped[UUID] = mapped_column(
+    machine_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("machines.id"), index=True
     )
     simulation_start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -94,10 +95,10 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
-    created_by: Mapped[UUID] = mapped_column(
+    created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
-    last_updated_by: Mapped[UUID] = mapped_column(
+    last_updated_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
 
@@ -133,7 +134,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
 class Artifact(Base, IDMixin, TimestampMixin):
     __tablename__ = "artifacts"
 
-    simulation_id: Mapped[UUID] = mapped_column(
+    simulation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("simulations.id", ondelete="CASCADE"),
         index=True,
@@ -165,7 +166,7 @@ class Artifact(Base, IDMixin, TimestampMixin):
 class ExternalLink(Base, IDMixin, TimestampMixin):
     __tablename__ = "external_links"
 
-    simulation_id: Mapped[UUID] = mapped_column(
+    simulation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE")
     )
 

@@ -1,5 +1,6 @@
 import { api } from '@/api/api';
 import type { SimulationCreate, SimulationOut } from '@/types';
+import type { SimulationUpdate } from '@/types/simulation';
 
 export const SIMULATIONS_URL = '/simulations';
 
@@ -22,5 +23,13 @@ export const getSimulationById = async (id: string): Promise<SimulationOut> => {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
+  return res.data;
+};
+
+export const updateSimulation = async (
+  id: string,
+  data: SimulationUpdate
+): Promise<SimulationOut> => {
+  const res = await api.patch<SimulationOut>(`${SIMULATIONS_URL}/${id}`, data);
   return res.data;
 };

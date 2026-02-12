@@ -7,11 +7,41 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationOut
+from app.features.simulation.schemas import (
+    SimulationCreate,
+    SimulationOut,
+    SimulationUpdate,
+)
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
+
+
+@router.patch("/{sim_id}", response_model=SimulationOut)
+def update_simulation(
+    sim_id: UUID,
+    payload: SimulationUpdate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+):
+    """Update simulation details by ID."""
+    sim = db.query(Simulation).filter(Simulation.id == sim_id).first()
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(sim, field, value)
+
+    sim.last_updated_by = user.id
+    sim.updated_at = datetime.now(timezone.utc)
+
+    with transaction(db):
+        db.add(sim)
+        db.flush()
+
+    return SimulationOut.model_validate(sim, from_attributes=True)
 
 
 @router.post("", response_model=SimulationOut, status_code=status.HTTP_201_CREATED)
