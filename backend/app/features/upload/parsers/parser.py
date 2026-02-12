@@ -154,8 +154,13 @@ def _extract_tar_gz(tar_gz_path: str, extract_to: str) -> None:
         _safe_extract(
             extract_to,
             (member.name for member in tar_ref.getmembers()),
-            tar_ref.extractall,
+            lambda path: _extractall_with_filter(tar_ref, path),
         )
+
+
+def _extractall_with_filter(tar_ref, path: str) -> None:
+    """Extract tar members while filtering out unsafe types."""
+    tar_ref.extractall(path, filter=_tar_member_filter)
 
 
 def _safe_extract(
@@ -175,6 +180,14 @@ def _safe_extract(
             )
 
     extract_func(extract_to)
+
+
+def _tar_member_filter(member: tarfile.TarInfo, path: str) -> tarfile.TarInfo:
+    """Allow only regular files and directories during tar extraction."""
+    if member.isreg() or member.isdir():
+        return member
+
+    raise ValueError(f"Blocked unsafe tar member type: {member.name}")
 
 
 def _is_within_directory(base_dir: Path, target_path: Path) -> bool:

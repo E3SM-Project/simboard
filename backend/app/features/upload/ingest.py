@@ -324,9 +324,9 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
         # Ensure timezone-aware (UTC if not specified)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-            
+
         return dt
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
-        
+
         return None

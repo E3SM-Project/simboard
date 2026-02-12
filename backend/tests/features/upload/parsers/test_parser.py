@@ -402,3 +402,18 @@ class TestMainParser:
 
         with pytest.raises(ValueError, match="escapes extraction directory"):
             parser._extract_tar_gz(str(archive_path), str(extract_dir))
+
+    def test_tar_symlink_rejected(self, tmp_path: Path) -> None:
+        """Test that TAR.GZ extraction rejects symlink entries."""
+        archive_path = tmp_path / "symlink.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tar_ref:
+            tar_info = tarfile.TarInfo(name="link")
+            tar_info.type = tarfile.SYMTYPE
+            tar_info.linkname = "target"
+            tar_ref.addfile(tar_info)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with pytest.raises(ValueError, match="Blocked unsafe tar member type"):
+            parser._extract_tar_gz(str(archive_path), str(extract_dir))
