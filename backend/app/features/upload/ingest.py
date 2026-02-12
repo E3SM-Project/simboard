@@ -202,7 +202,8 @@ def _normalize_git_url(url: str | None) -> str | None:
     if url.startswith("git@"):
         try:
             # Extract host and path from git@host:path format
-            host_and_path = url[4:]  # Remove 'git@'
+			# Remove 'git@'.
+            host_and_path = url[4:]
             host, path = host_and_path.split(":", 1)
             return f"https://{host}/{path}"
         except ValueError:

@@ -14,6 +14,7 @@ class TestParseReadmeCase:
         )
         file_path = tmp_path / "README.case"
         file_path.write_text(content)
+        
         return file_path
 
     @pytest.fixture

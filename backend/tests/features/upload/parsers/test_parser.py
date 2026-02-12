@@ -56,6 +56,7 @@ class TestMainParser:
             Version string for file naming (e.g., "001").
         """
         version_base = version.split(".")[0] if "." in version else version
+        
         with gzip.open(exp_dir / f"GIT_CONFIG.{version_base}.gz", "wt") as f:
             f.write("https://github.com/test/repo")
         with gzip.open(exp_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
@@ -73,11 +74,14 @@ class TestMainParser:
             Path where ZIP archive will be created.
         """
         zip_file = zipfile.ZipFile(archive_path, "w")
+        
         for root, _dirs, files_list in os.walk(str(base_dir)):
             for file in files_list:
                 file_path = Path(root) / file
                 arcname = str(file_path.relative_to(str(base_dir)))
+                
                 zip_file.write(file_path, arcname)
+                
         zip_file.close()
 
     @staticmethod
@@ -92,11 +96,14 @@ class TestMainParser:
             Path where TAR.GZ archive will be created.
         """
         tar_file = tarfile.open(archive_path, "w:gz")
+        
         for root, _dirs, files_list in os.walk(str(base_dir)):
             for file in files_list:
                 file_path = Path(root) / file
                 arcname = str(file_path.relative_to(str(base_dir)))
+                
                 tar_file.add(file_path, arcname=arcname)
+                
         tar_file.close()
 
     @contextmanager

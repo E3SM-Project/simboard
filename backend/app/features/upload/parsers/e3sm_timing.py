@@ -99,8 +99,8 @@ def _extract_campaign_and_experiment_type(
         if "." not in base:
             return None, None
 
-        # Campaign = everything except the final instance suffix
-        campaign = ".".join(base.split(".")[:])
+        # Campaign is the base case name without the trailing instance suffix
+        campaign = base
 
         # Candidate experiment type = last dot token
         candidate = campaign.split(".")[-1]
