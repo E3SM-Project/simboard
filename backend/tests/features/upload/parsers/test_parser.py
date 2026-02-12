@@ -315,6 +315,36 @@ class TestMainParser:
         with pytest.raises(ValueError, match="Unsupported archive format"):
             parser.main_parser(str(archive_path), extract_dir)
 
+    def test_no_experiment_directories_raises_error(self, tmp_path: Path) -> None:
+        """Test error when no experiment directories are found.
+
+        Parameters
+        ----------
+        tmp_path : Path
+            Temporary directory provided by pytest.
+
+        Raises
+        ------
+        FileNotFoundError
+            Expected when no valid experiment directories are discovered.
+        """
+        # Create a ZIP archive with no experiment directories
+        archive_base = tmp_path / "archive_extract"
+        archive_base.mkdir()
+        (archive_base / "some_other_dir").mkdir()
+        (archive_base / "some_other_dir" / "file.txt").write_text("data")
+
+        # Create ZIP archive
+        archive_path = tmp_path / "empty_archive.zip"
+        self._create_zip_archive(archive_base, archive_path)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        # Should raise FileNotFoundError when no experiments found
+        with pytest.raises(FileNotFoundError, match="No experiment directories found"):
+            parser.main_parser(archive_path, extract_dir)
+
     def test_with_optional_files(self, tmp_path):
         """Test handling optional files properly."""
         # Create experiment with optional files

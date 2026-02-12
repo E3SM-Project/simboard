@@ -113,6 +113,12 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
     exp_dirs = _find_experiment_dirs(output_dir)
     logger.info(f"Found {len(exp_dirs)} experiment directories.")
 
+    if not exp_dirs:
+        raise FileNotFoundError(
+            f"No experiment directories found in extracted archive at '{output_dir}'. "
+            "Expected directory names matching pattern: <digits>.<digits>-<digits>"
+        )
+
     for exp_dir in exp_dirs:
         files = _locate_files(exp_dir)
         results[exp_dir] = _parse_experiment_files(files)
