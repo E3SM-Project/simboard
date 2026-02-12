@@ -192,8 +192,6 @@ class TestMainParser:
             assert len(result) > 0
             assert any("2.5-10" in key for key in result.keys())
 
-    # ========== Multiple & Nested Experiments Tests ==========
-
     def test_with_multiple_experiments(self, tmp_path: Path) -> None:
         """Test processing archive with multiple experiments."""
         archive_base = tmp_path / "archive_extract"
@@ -250,8 +248,6 @@ class TestMainParser:
             result = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
             assert any("1.0-0" in key for key in result.keys())
-
-    # ========== Error Handling & Validation Tests ==========
 
     def test_missing_required_files_raises_error(self, tmp_path: Path) -> None:
         """Test error when required files are missing."""
