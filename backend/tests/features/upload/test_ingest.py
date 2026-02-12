@@ -11,13 +11,21 @@ Test coverage includes:
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
+from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.ingest import _normalize_git_url, ingest_archive
+from app.features.upload.ingest import (
+    _normalize_git_url,
+    ingest_archive,
+    ingest_archive_summary,
+)
+from app.features.user.models import User
 
 
 class TestIngestArchive:
@@ -552,11 +560,6 @@ class TestIngestArchive:
         2. Attempting to ingest the same simulation
         3. Verifying it's skipped and not returned
         """
-        from uuid import uuid4
-
-        from app.features.simulation.models import Simulation
-        from app.features.user.models import User
-
         machine = self._create_machine(db, "test-machine")
 
         # Create a test user for created_by and last_updated_by fields
@@ -623,14 +626,117 @@ class TestIngestArchive:
             # Duplicate should be skipped, result should be empty
             assert len(result) == 0
 
+    def test_ingest_archive_summary_counts(self, db: Session) -> None:
+        """Test that summary counts reflect created and skipped simulations."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            id=uuid4(), email="test@example.com", is_active=True, is_superuser=False
+        )
+        db.add(user)
+        db.commit()
+
+        existing_sim = Simulation(
+            name="existing_sim",
+            case_name="existing_case",
+            compset="FHIST",
+            compset_alias="FHIST_f09_fe",
+            grid_name="grid",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            simulation_type="test",
+            status=SimulationStatus.CREATED,
+            created_by=user.id,
+            last_updated_by=user.id,
+        )
+        db.add(existing_sim)
+        db.commit()
+
+        mock_simulations = {
+            "exp_1": {
+                "name": "existing_sim",
+                "case_name": "existing_case",
+                "compset": "FHIST",
+                "compset_alias": None,
+                "grid_name": "grid",
+                "grid_resolution": None,
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "simulation_type": "test",
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "group_name": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": None,
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            },
+            "exp_2": {
+                "name": "new_sim",
+                "case_name": "new_case",
+                "compset": "FHIST",
+                "compset_alias": None,
+                "grid_name": "grid",
+                "grid_resolution": None,
+                "machine": machine.name,
+                "simulation_start_date": "2021-01-01",
+                "initialization_type": "test",
+                "simulation_type": "test",
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "group_name": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": None,
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            },
+        }
+
+        with patch(
+            "app.features.upload.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result, created_count, skipped_count = ingest_archive_summary(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert created_count == 1
+            assert skipped_count == 1
+            assert len(result) == 1
+            assert result[0].name == "new_sim"
+
+    def test_ingest_archive_summary_empty_archive(self, db: Session) -> None:
+        """Test summary counts when the archive contains no simulations."""
+        with patch("app.features.upload.ingest.main_parser", return_value={}):
+            result, created_count, skipped_count = ingest_archive_summary(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert created_count == 0
+            assert skipped_count == 0
+
     def test_handles_invalid_datetime_gracefully(self, db: Session) -> None:
         """Test that invalid datetimes are handled without raising.
 
         This test verifies the exception handling in _parse_datetime_field
         by testing with various invalid date formats that trigger the except block.
         """
-        from unittest.mock import patch as mock_patch
-
         machine = self._create_machine(db, "test-machine")
 
         # Create a simulation with an invalid run_start_date
@@ -663,7 +769,7 @@ class TestIngestArchive:
             }
         }
 
-        with mock_patch(
+        with patch(
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
@@ -680,8 +786,6 @@ class TestIngestArchive:
         This test ensures that exceptions raised during datetime parsing are logged
         and None is returned instead of propagating the error.
         """
-        from dateutil import parser as real_dateutil_parser
-
         machine = self._create_machine(db, "test-machine")
 
         # Mock dateutil_parser.parse to raise an exception for specific inputs
