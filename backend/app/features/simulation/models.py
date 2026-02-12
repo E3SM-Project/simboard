@@ -43,8 +43,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Configuration
     # ~~~~~~~~~~~~~~
-    name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
-    case_name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
+    name: Mapped[str] = mapped_column(String(200), index=True)
+    case_name: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(String(120))
@@ -126,7 +126,12 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Constraints
     # ~~~~~~~~~~~
     __table_args__ = (
-        UniqueConstraint("name", "git_tag", name="uq_simulation_name_tag"),
+        UniqueConstraint(
+            "case_name",
+            "machine_id",
+            "simulation_start_date",
+            name="uq_simulation_case_machine_date",
+        ),
     )
 
 
