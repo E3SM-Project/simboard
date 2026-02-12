@@ -3,9 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-import pytest
 from dateutil import parser as real_dateutil_parser
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
@@ -77,7 +75,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -146,7 +144,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -157,7 +155,7 @@ class TestIngestArchive:
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
         with patch("app.features.upload.ingest.main_parser", return_value={}):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -199,7 +197,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ) as mock_main_parser:
-            result, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
+            result, _, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
             # Verify main_parser was called with Path objects
             assert result is not None
@@ -209,7 +207,7 @@ class TestIngestArchive:
             assert isinstance(args[1], Path)
 
     def test_propagates_mapping_errors(self, db: Session) -> None:
-        """Test that mapping errors are propagated."""
+        """Test that mapping errors are collected and ingestion continues."""
         mock_simulations = {
             "exp_1": {
                 "name": "sim1",
@@ -242,8 +240,14 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            with pytest.raises(LookupError, match="nonexistent-machine"):
-                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _, errors = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert len(errors) == 1
+            assert errors[0]["error_type"] == "LookupError"
+            assert "nonexistent-machine" in errors[0]["error"]
 
     def test_parses_various_datetime_formats_through_public_api(
         self, db: Session
@@ -295,7 +299,7 @@ class TestIngestArchive:
             with patch(
                 "app.features.upload.ingest.main_parser", return_value=mock_simulations
             ):
-                result, _, _ = ingest_archive(
+                result, _, _, _ = ingest_archive(
                     Path("/tmp/archive.zip"), Path("/tmp/out"), db
                 )
 
@@ -304,7 +308,7 @@ class TestIngestArchive:
                 assert result[0].simulation_start_date.tzinfo is not None
 
     def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
-        """Test that missing required fields raise a validation error."""
+        """Test that missing required fields are captured as errors."""
         machine = self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -338,8 +342,13 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            with pytest.raises(ValidationError):
-                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _, errors = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert len(errors) == 1
+            assert errors[0]["error_type"] == "ValidationError"
 
     def test_machine_lookup_and_validation_through_public_api(
         self, db: Session
@@ -382,7 +391,7 @@ class TestIngestArchive:
         }
 
         with patch("app.features.upload.ingest.main_parser", return_value=valid_mock):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
             assert len(result) == 1
@@ -418,8 +427,14 @@ class TestIngestArchive:
         }
 
         with patch("app.features.upload.ingest.main_parser", return_value=invalid_mock):
-            with pytest.raises(LookupError, match="Machine 'nonexistent'"):
-                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _, errors = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert len(errors) == 1
+            assert errors[0]["error_type"] == "LookupError"
+            assert "Machine 'nonexistent'" in errors[0]["error"]
 
     def test_timezone_aware_datetime_parsing_through_public_api(
         self, db: Session
@@ -461,7 +476,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -512,7 +527,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -594,7 +609,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -685,7 +700,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, created_count, duplicate_count = ingest_archive(
+            result, created_count, duplicate_count, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -697,7 +712,7 @@ class TestIngestArchive:
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
         with patch("app.features.upload.ingest.main_parser", return_value={}):
-            result, created_count, duplicate_count = ingest_archive(
+            result, created_count, duplicate_count, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -746,7 +761,7 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -811,7 +826,7 @@ class TestIngestArchive:
                 side_effect=mock_parse_wrapper,
             ),
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -852,8 +867,14 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            with pytest.raises(ValueError, match="Machine name is required"):
-                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _, errors = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert len(errors) == 1
+            assert errors[0]["error_type"] == "ValueError"
+            assert "Machine name is required" in errors[0]["error"]
 
     def test_missing_simulation_start_date(self, db: Session) -> None:
         """Test error when simulation_start_date cannot be parsed."""
@@ -890,8 +911,14 @@ class TestIngestArchive:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            with pytest.raises(ValueError, match="simulation_start_date is required"):
-                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _, errors = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+            assert result == []
+            assert len(errors) == 1
+            assert errors[0]["error_type"] == "ValueError"
+            assert "simulation_start_date is required" in errors[0]["error"]
 
 
 class TestNormalizeGitUrl:
@@ -994,7 +1021,7 @@ class TestNormalizeGitUrl:
         with patch(
             "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
+            result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 

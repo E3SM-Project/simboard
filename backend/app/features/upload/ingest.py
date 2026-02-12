@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logger import _setup_custom_logger
@@ -20,7 +21,7 @@ def ingest_archive(
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
-) -> tuple[list[SimulationCreate], int, int]:
+) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
     """Ingest a simulation archive and return summary counts.
 
     Parameters
@@ -34,8 +35,10 @@ def ingest_archive(
 
     Returns
     -------
-    tuple[list[SimulationCreate], int, int]
-        Tuple containing (created_simulations, created_count, duplicate_count).
+    tuple[list[SimulationCreate], int, int, list[dict[str, str]]]
+        Tuple containing (created_simulations, created_count, duplicate_count,
+        errors). The errors list contains per-experiment failures with keys
+        'exp_dir', 'error_type', and 'error'.
 
     Raises
     ------
@@ -43,6 +46,8 @@ def ingest_archive(
         If required fields are missing or cannot be parsed.
     LookupError
         If a machine name from the archive cannot be found in the database.
+    ValidationError
+        If metadata fails schema validation.
     """
     archive_path_resolved = (
         Path(archive_path) if isinstance(archive_path, str) else archive_path
@@ -55,10 +60,13 @@ def ingest_archive(
 
     if not all_simulations:
         logger.warning(f"No simulations found in archive: {archive_path_resolved}")
-        return [], 0, 0
 
-    simulations = []
+        return [], 0, 0, []
+
+    simulations: list[SimulationCreate] = []
     duplicate_count = 0
+    errors: list[dict[str, str]] = []
+
     for exp_dir, metadata in all_simulations.items():
         try:
             case_name, machine_id, simulation_start_date = _extract_simulation_key(
@@ -81,11 +89,18 @@ def ingest_archive(
             sim_create = _map_metadata_to_schema(metadata, db, machine_id)
             simulations.append(sim_create)
             logger.info(f"Mapped new simulation from {exp_dir}: {metadata.get('name')}")
-        except (ValueError, LookupError) as e:
+        except (ValueError, LookupError, ValidationError) as e:
             logger.error(f"Failed to process simulation from {exp_dir}: {e}")
-            raise
+            errors.append(
+                {
+                    "exp_dir": str(exp_dir),
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                }
+            )
+            continue
 
-    return simulations, len(simulations), duplicate_count
+    return simulations, len(simulations), duplicate_count, errors
 
 
 def _extract_simulation_key(
@@ -202,7 +217,7 @@ def _normalize_git_url(url: str | None) -> str | None:
     if url.startswith("git@"):
         try:
             # Extract host and path from git@host:path format
-			# Remove 'git@'.
+            # Remove 'git@'.
             host_and_path = url[4:]
             host, path = host_and_path.split(":", 1)
             return f"https://{host}/{path}"
