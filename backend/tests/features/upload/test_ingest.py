@@ -20,11 +20,7 @@ from sqlalchemy.orm import Session
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.ingest import (
-    _normalize_git_url,
-    ingest_archive,
-    ingest_archive_summary,
-)
+from app.features.upload.ingest import _normalize_git_url, ingest_archive
 from app.features.user.models import User
 
 
@@ -91,7 +87,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert isinstance(result, list)
             assert len(result) == 1
@@ -159,7 +157,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert len(result) == 2
             assert result[0].name == "sim1"
@@ -168,7 +168,9 @@ class TestIngestArchive:
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
         with patch("app.features.upload.ingest.main_parser", return_value={}):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert isinstance(result, list)
             assert len(result) == 0
@@ -209,7 +211,7 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ) as mock_main_parser:
-            result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
+            result, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
             # Verify main_parser was called with Path objects
             assert result is not None
@@ -306,7 +308,9 @@ class TestIngestArchive:
                 "app.features.upload.ingest.main_parser",
                 return_value=mock_simulations,
             ):
-                result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+                result, _, _ = ingest_archive(
+                    Path("/tmp/archive.zip"), Path("/tmp/out"), db
+                )
 
                 assert len(result) == 1
                 assert isinstance(result[0].simulation_start_date, datetime)
@@ -354,7 +358,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert len(result) == 1
             # Check defaults are applied
@@ -409,7 +415,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=valid_mock,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
             assert len(result) == 1
             assert result[0].machine_id == machine.id
 
@@ -490,7 +498,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert len(result) == 1
             # All datetime fields should be timezone-aware
@@ -540,7 +550,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             assert len(result) == 1
             assert result[0].experiment_type == "historical"
@@ -621,12 +633,14 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             # Duplicate should be skipped, result should be empty
             assert len(result) == 0
 
-    def test_ingest_archive_summary_counts(self, db: Session) -> None:
+    def test_ingest_archive_counts(self, db: Session) -> None:
         """Test that summary counts reflect created and skipped simulations."""
         machine = self._create_machine(db, "test-machine")
 
@@ -711,7 +725,7 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result, created_count, skipped_count = ingest_archive_summary(
+            result, created_count, skipped_count = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -720,10 +734,10 @@ class TestIngestArchive:
             assert len(result) == 1
             assert result[0].name == "new_sim"
 
-    def test_ingest_archive_summary_empty_archive(self, db: Session) -> None:
+    def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
         with patch("app.features.upload.ingest.main_parser", return_value={}):
-            result, created_count, skipped_count = ingest_archive_summary(
+            result, created_count, skipped_count = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
@@ -773,7 +787,9 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             # Should succeed with optional dates as None
             assert len(result) == 1
@@ -836,7 +852,9 @@ class TestIngestArchive:
                 side_effect=mock_parse_wrapper,
             ),
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             # Should succeed with run_start_date as None (exception caught and logged)
             assert len(result) == 1
@@ -1020,7 +1038,9 @@ class TestNormalizeGitUrl:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+            result, _, _ = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
             # Verify SSH URL was converted to HTTPS
             assert len(result) == 1

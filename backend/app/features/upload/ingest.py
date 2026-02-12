@@ -20,94 +20,6 @@ def ingest_archive(
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
-) -> list[SimulationCreate]:
-    """
-    Ingest a simulation archive and map parsed metadata to SimulationCreate
-    schemas.
-
-    This function orchestrates the archive extraction and parsing, then maps the
-    extracted metadata to SimulationCreate schema objects with proper type
-    conversions and database lookups for machine IDs. It implements
-    deduplication by checking if a simulation with the same (case_name,
-    machine_id, simulation_start_date) already exists in the database.
-    Duplicate simulations are skipped.
-
-    Parameters
-    ----------
-    archive_path : Path | str
-        Path to the archive file to ingest (.zip or .tar.gz).
-    output_dir : Path | str
-        Directory where extracted files will be stored.
-    db : Session
-        SQLAlchemy database session for machine and simulation lookups.
-
-    Returns
-    -------
-    list[SimulationCreate]
-        List of SimulationCreate schema objects ready for database insertion.
-        Duplicates are excluded and logged.
-
-    Raises
-    ------
-    ValueError
-        If archive format is unsupported or no experiment directories found.
-    LookupError
-        If a machine name from the archive cannot be found in the database.
-    """
-    simulations, _ = _ingest_archive_internal(archive_path, output_dir, db)
-    return simulations
-
-
-def _ingest_archive_internal(
-    archive_path: Path | str,
-    output_dir: Path | str,
-    db: Session,
-) -> tuple[list[SimulationCreate], int]:
-    """Ingest a simulation archive and return simulations with skipped count."""
-    archive_path = Path(archive_path) if isinstance(archive_path, str) else archive_path
-    output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
-
-    all_simulations = main_parser(archive_path, output_dir)
-
-    if not all_simulations:
-        logger.warning(f"No simulations found in archive: {archive_path}")
-        return [], 0
-
-    simulations = []
-    skipped_count = 0
-    for exp_dir, metadata in all_simulations.items():
-        try:
-            case_name, machine_id, simulation_start_date = _extract_simulation_key(
-                metadata, db
-            )
-
-            existing_sim = _find_existing_simulation(
-                db, case_name, machine_id, simulation_start_date
-            )
-            if existing_sim:
-                logger.info(
-                    f"Simulation already exists in database with "
-                    f"case_name='{case_name}', machine_id={machine_id}, "
-                    f"simulation_start_date={simulation_start_date}. "
-                    f"Skipping duplicate from {exp_dir}."
-                )
-                skipped_count += 1
-                continue
-
-            sim_create = _map_metadata_to_schema(metadata, db, machine_id)
-            simulations.append(sim_create)
-            logger.info(f"Mapped new simulation from {exp_dir}: {metadata.get('name')}")
-        except (ValueError, LookupError) as e:
-            logger.error(f"Failed to process simulation from {exp_dir}: {e}")
-            raise
-
-    return simulations, skipped_count
-
-
-def ingest_archive_summary(
-    archive_path: Path | str,
-    output_dir: Path | str,
-    db: Session,
 ) -> tuple[list[SimulationCreate], int, int]:
     """Ingest a simulation archive and return summary counts.
 
@@ -116,7 +28,55 @@ def ingest_archive_summary(
     tuple[list[SimulationCreate], int, int]
         (created_simulations, created_count, skipped_count).
     """
-    simulations, skipped_count = _ingest_archive_internal(archive_path, output_dir, db)
+
+    def _ingest_archive_internal() -> tuple[list[SimulationCreate], int]:
+        """Ingest a simulation archive and return simulations with skipped count."""
+        archive_path_resolved = (
+            Path(archive_path) if isinstance(archive_path, str) else archive_path
+        )
+        output_dir_resolved = (
+            Path(output_dir) if isinstance(output_dir, str) else output_dir
+        )
+
+        all_simulations = main_parser(archive_path_resolved, output_dir_resolved)
+
+        if not all_simulations:
+            logger.warning(f"No simulations found in archive: {archive_path_resolved}")
+            return [], 0
+
+        simulations = []
+        skipped_count = 0
+        for exp_dir, metadata in all_simulations.items():
+            try:
+                case_name, machine_id, simulation_start_date = _extract_simulation_key(
+                    metadata, db
+                )
+
+                existing_sim = _find_existing_simulation(
+                    db, case_name, machine_id, simulation_start_date
+                )
+                if existing_sim:
+                    logger.info(
+                        f"Simulation already exists in database with "
+                        f"case_name='{case_name}', machine_id={machine_id}, "
+                        f"simulation_start_date={simulation_start_date}. "
+                        f"Skipping duplicate from {exp_dir}."
+                    )
+                    skipped_count += 1
+                    continue
+
+                sim_create = _map_metadata_to_schema(metadata, db, machine_id)
+                simulations.append(sim_create)
+                logger.info(
+                    f"Mapped new simulation from {exp_dir}: {metadata.get('name')}"
+                )
+            except (ValueError, LookupError) as e:
+                logger.error(f"Failed to process simulation from {exp_dir}: {e}")
+                raise
+
+        return simulations, skipped_count
+
+    simulations, skipped_count = _ingest_archive_internal()
     return simulations, len(simulations), skipped_count
 
 

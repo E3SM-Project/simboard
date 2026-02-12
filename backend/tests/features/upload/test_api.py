@@ -83,7 +83,7 @@ class TestIngestArchiveEndpoint:
         ]
 
         with patch(
-            "app.features.upload.api.ingest_archive_summary",
+            "app.features.upload.api.ingest_archive",
             return_value=(mock_simulations, 1, 0),
         ):
             res = client.post(f"{API_BASE}/upload/ingest", json=payload)
@@ -101,7 +101,7 @@ class TestIngestArchiveEndpoint:
         }
 
         with patch(
-            "app.features.upload.api.ingest_archive_summary",
+            "app.features.upload.api.ingest_archive",
             side_effect=ValueError("Duplicate simulation"),
         ):
             res = client.post(f"{API_BASE}/upload/ingest", json=payload)

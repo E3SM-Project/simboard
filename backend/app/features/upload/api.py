@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
-from app.features.upload.ingest import ingest_archive_summary
+from app.features.upload.ingest import ingest_archive
 from app.features.upload.schemas import IngestArchiveRequest, IngestArchiveResponse
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
@@ -26,7 +26,7 @@ def ingest_archive_to_db(
 ):
     """Ingest an archive and persist simulations to the database."""
     try:
-        simulations, created_count, skipped_count = ingest_archive_summary(
+        simulations, created_count, skipped_count = ingest_archive(
             payload.archive_path,
             payload.output_dir,
             db,
