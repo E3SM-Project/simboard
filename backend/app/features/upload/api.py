@@ -26,7 +26,7 @@ def ingest_archive_to_db(
 ):
     """Ingest an archive and persist simulations to the database."""
     try:
-        simulations, created_count, skipped_count = ingest_archive(
+        simulations, created_count, duplicate_count = ingest_archive(
             payload.archive_path,
             payload.output_dir,
             db,
@@ -71,6 +71,6 @@ def ingest_archive_to_db(
 
     return IngestArchiveResponse(
         created_count=created_count,
-        skipped_count=skipped_count,
+        duplicate_count=duplicate_count,
         simulations=simulations,
     )

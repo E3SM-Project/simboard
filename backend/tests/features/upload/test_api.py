@@ -44,7 +44,7 @@ class TestIngestArchiveSchemas:
     def test_response_schema_serialization(self):
         payload = {
             "created_count": 1,
-            "skipped_count": 0,
+            "duplicate_count": 0,
             "simulations": [],
         }
 
@@ -91,7 +91,7 @@ class TestIngestArchiveEndpoint:
         assert res.status_code == 201
         data = res.json()
         assert data["created_count"] == 1
-        assert data["skipped_count"] == 0
+        assert data["duplicate_count"] == 0
         assert data["simulations"][0]["name"] == "Test Simulation"
 
     def test_endpoint_returns_409_on_conflict(self, client):

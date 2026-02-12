@@ -14,5 +14,5 @@ class IngestArchiveResponse(BaseModel):
     """Response payload for ingesting and persisting simulations."""
 
     created_count: int
-    skipped_count: int
+    duplicate_count: int
     simulations: list[SimulationCreate]

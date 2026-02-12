@@ -35,7 +35,7 @@ def ingest_archive(
     Returns
     -------
     tuple[list[SimulationCreate], int, int]
-        Tuple containing (created_simulations, created_count, skipped_count).
+        Tuple containing (created_simulations, created_count, duplicate_count).
 
     Raises
     ------
@@ -58,7 +58,7 @@ def ingest_archive(
         return [], 0, 0
 
     simulations = []
-    skipped_count = 0
+    duplicate_count = 0
     for exp_dir, metadata in all_simulations.items():
         try:
             case_name, machine_id, simulation_start_date = _extract_simulation_key(
@@ -75,7 +75,7 @@ def ingest_archive(
                     f"simulation_start_date={simulation_start_date}. "
                     f"Skipping duplicate from {exp_dir}."
                 )
-                skipped_count += 1
+                duplicate_count += 1
                 continue
 
             sim_create = _map_metadata_to_schema(metadata, db, machine_id)
@@ -85,7 +85,7 @@ def ingest_archive(
             logger.error(f"Failed to process simulation from {exp_dir}: {e}")
             raise
 
-    return simulations, len(simulations), skipped_count
+    return simulations, len(simulations), duplicate_count
 
 
 def _extract_simulation_key(

@@ -641,7 +641,7 @@ class TestIngestArchive:
             assert len(result) == 0
 
     def test_ingest_archive_counts(self, db: Session) -> None:
-        """Test that summary counts reflect created and skipped simulations."""
+        """Test that summary counts reflect created and duplicate simulations."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -725,25 +725,25 @@ class TestIngestArchive:
             "app.features.upload.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result, created_count, skipped_count = ingest_archive(
+            result, created_count, duplicate_count = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             assert created_count == 1
-            assert skipped_count == 1
+            assert duplicate_count == 1
             assert len(result) == 1
             assert result[0].name == "new_sim"
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
         with patch("app.features.upload.ingest.main_parser", return_value={}):
-            result, created_count, skipped_count = ingest_archive(
+            result, created_count, duplicate_count = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             assert result == []
             assert created_count == 0
-            assert skipped_count == 0
+            assert duplicate_count == 0
 
     def test_handles_invalid_datetime_gracefully(self, db: Session) -> None:
         """Test that invalid datetimes are handled without raising.
