@@ -11,6 +11,7 @@ class TestParseEnvCase:
         tmp_case = tmp_path / "env_case.xml"
         tmp_case.write_text(xml_case)
         result = parse_env_case(tmp_case)
+
         assert result["group_name"] == "groupX"
 
     def test_text(self, tmp_path):
@@ -22,6 +23,7 @@ class TestParseEnvCase:
         tmp_case = tmp_path / "env_case_text.xml"
         tmp_case.write_text(xml_case)
         result = parse_env_case(tmp_case)
+
         assert result["group_name"] == "groupY"
 
     def test_invalid_xml_returns_none(self, tmp_path):
@@ -58,6 +60,7 @@ class TestParseEnvBuild:
         tmp_build = tmp_path / "env_build.xml"
         tmp_build.write_text(xml_build)
         result = parse_env_build(tmp_build)
+
         assert result["compiler"] == "intel"
         assert result["mpilib"] == "mpt"
 
@@ -71,6 +74,7 @@ class TestParseEnvBuild:
         tmp_build = tmp_path / "env_build_text.xml"
         tmp_build.write_text(xml_build)
         result = parse_env_build(tmp_build)
+
         assert result["compiler"] == "gnu"
         assert result["mpilib"] == "openmpi"
 
