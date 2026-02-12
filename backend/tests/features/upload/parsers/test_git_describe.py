@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from app.features.upload.parsers.git_describe import parse_git_describe_file
 
 TEST_DIR = Path(__file__).parent
