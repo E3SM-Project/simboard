@@ -176,6 +176,52 @@ def _find_existing_simulation(
     )
 
 
+def _normalize_git_url(url: str | None) -> str | None:
+    """Convert SSH git URL to HTTPS format.
+
+    Parameters
+    ----------
+    url : str | None
+        Git URL (SSH or HTTPS format).
+
+    Returns
+    -------
+    str | None
+        Normalized HTTPS URL or None if input is None/empty.
+
+    Examples
+    --------
+    >>> _normalize_git_url("git@github.com:E3SM-Project/E3SM.git")
+    'https://github.com/E3SM-Project/E3SM.git'
+
+    >>> _normalize_git_url("https://github.com/E3SM-Project/E3SM.git")
+    'https://github.com/E3SM-Project/E3SM.git'
+
+    >>> _normalize_git_url(None)
+    None
+    """
+    if not url:
+        return None
+
+    # If already HTTPS, return as-is
+    if url.startswith("https://") or url.startswith("http://"):
+        return url
+
+    # Convert SSH format: git@github.com:owner/repo.git → https://github.com/owner/repo.git
+    if url.startswith("git@"):
+        try:
+            # Extract host and path from git@host:path format
+            host_and_path = url[4:]  # Remove 'git@'
+            host, path = host_and_path.split(":", 1)
+            return f"https://{host}/{path}"
+        except ValueError:
+            logger.warning(f"Could not normalize git URL: {url}")
+            return url
+
+    # For any other format, return as-is
+    return url
+
+
 def _map_metadata_to_schema(
     metadata: SimulationMetadata, db: Session, machine_id: UUID
 ) -> SimulationCreate:
@@ -236,7 +282,7 @@ def _map_metadata_to_schema(
             "runEndDate": run_end_date,
             # Optional software/environment fields
             "compiler": metadata.get("compiler"),
-            "gitRepositoryUrl": metadata.get("git_repository_url"),
+            "gitRepositoryUrl": _normalize_git_url(metadata.get("git_repository_url")),
             "gitBranch": metadata.get("git_branch"),
             "gitTag": metadata.get("git_tag"),
             "gitCommitHash": metadata.get("git_commit_hash"),

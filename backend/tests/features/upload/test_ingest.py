@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
 from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.ingest import ingest_archive
+from app.features.upload.ingest import _normalize_git_url, ingest_archive
 
 
 class TestIngestArchive:
@@ -813,3 +813,128 @@ class TestIngestArchive:
         ):
             with pytest.raises(ValueError, match="simulation_start_date is required"):
                 ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+
+class TestNormalizeGitUrl:
+    """Tests for the _normalize_git_url helper function.
+
+    Tests cover SSH to HTTPS URL conversion and various edge cases.
+    """
+
+    def test_converts_ssh_github_url_to_https(self) -> None:
+        """Test conversion of SSH GitHub URL to HTTPS."""
+        ssh_url = "git@github.com:E3SM-Project/E3SM.git"
+        expected = "https://github.com/E3SM-Project/E3SM.git"
+        assert _normalize_git_url(ssh_url) == expected
+
+    def test_converts_ssh_gitlab_url_to_https(self) -> None:
+        """Test conversion of SSH GitLab URL to HTTPS."""
+        ssh_url = "git@gitlab.com:owner/repo.git"
+        expected = "https://gitlab.com/owner/repo.git"
+        assert _normalize_git_url(ssh_url) == expected
+
+    def test_converts_ssh_url_with_nested_path(self) -> None:
+        """Test conversion of SSH URL with nested repository path."""
+        ssh_url = "git@github.com:organization/group/nested/repo.git"
+        expected = "https://github.com/organization/group/nested/repo.git"
+        assert _normalize_git_url(ssh_url) == expected
+
+    def test_preserves_https_url(self) -> None:
+        """Test that HTTPS URLs are preserved as-is."""
+        https_url = "https://github.com/E3SM-Project/E3SM.git"
+        assert _normalize_git_url(https_url) == https_url
+
+    def test_preserves_http_url(self) -> None:
+        """Test that HTTP URLs are preserved as-is."""
+        http_url = "http://github.com/E3SM-Project/E3SM.git"
+        assert _normalize_git_url(http_url) == http_url
+
+    def test_returns_none_for_none_input(self) -> None:
+        """Test that None input returns None."""
+        assert _normalize_git_url(None) is None
+
+    def test_returns_none_for_empty_string(self) -> None:
+        """Test that empty string returns None."""
+        assert _normalize_git_url("") is None
+
+    def test_handles_ssh_url_without_git_extension(self) -> None:
+        """Test SSH URL conversion without .git extension."""
+        ssh_url = "git@github.com:owner/repo"
+        expected = "https://github.com/owner/repo"
+        assert _normalize_git_url(ssh_url) == expected
+
+    def test_handles_malformed_ssh_url_gracefully(self) -> None:
+        """Test that malformed SSH URLs are returned as-is."""
+        # Malformed SSH URL (no colon separator)
+        malformed_url = "git@github.com"
+        # Should return original since it can't be split on colon
+        assert _normalize_git_url(malformed_url) == malformed_url
+
+    def test_handles_other_git_formats(self) -> None:
+        """Test that non-SSH non-HTTP URLs are returned as-is."""
+        file_url = "file:///path/to/repo.git"
+        assert _normalize_git_url(file_url) == file_url
+
+    def test_ssh_url_conversion_integrated_in_ingest(self, db: Session) -> None:
+        """Test SSH URL conversion through the full ingest pipeline.
+
+        This test verifies that _normalize_git_url is actually used when
+        processing metadata through ingest_archive.
+        """
+        machine = self._create_machine(db, "test-machine")
+
+        # SSH URL in metadata
+        mock_simulations = {
+            "exp_1": {
+                "name": "sim1",
+                "case_name": "case1",
+                "compset": "FHIST",
+                "compset_alias": None,
+                "grid_name": "grid",
+                "grid_resolution": None,
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "simulation_type": None,
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "group_name": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": "git@github.com:E3SM-Project/E3SM.git",
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            }
+        }
+
+        with patch(
+            "app.features.upload.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+            # Verify SSH URL was converted to HTTPS
+            assert len(result) == 1
+            assert str(result[0].git_repository_url) == (
+                "https://github.com/E3SM-Project/E3SM.git"
+            )
+
+    @staticmethod
+    def _create_machine(db: Session, name: str) -> Machine:
+        """Create a test machine in the database."""
+        machine = Machine(
+            name=name,
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+        db.commit()
+        db.refresh(machine)
+        return machine
