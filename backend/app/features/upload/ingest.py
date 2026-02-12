@@ -1,6 +1,6 @@
 """Module for ingesting simulation archives and mapping to database schemas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -307,7 +307,7 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
         dt = dateutil_parser.parse(value)
         # Ensure timezone-aware (UTC if not specified)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=__import__("datetime").timezone.utc)
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
