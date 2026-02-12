@@ -1,3 +1,5 @@
+import logging
+
 from app.features.upload.parsers.case_status import parse_case_status
 
 
@@ -59,3 +61,29 @@ class TestCaseStatusParser:
 
         assert result["run_start_date"] == "2015-01-01"
         assert result["run_end_date"] is None
+
+    def test_malformed_lines_log_warning_and_continue(self, tmp_path, caplog):
+        content = (
+            "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
+            "RUN_STARTDATE 2015-01-01  </command>\n"
+            "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
+            "STOP_OPTION=ndays,STOP_N=not-a-number  </command>\n"
+        )
+        file_path = tmp_path / "casestatus.txt"
+        file_path.write_text(content)
+
+        logger = logging.getLogger("app.features.upload.parsers.case_status")
+        logger.propagate = True
+        logger.disabled = False
+
+        with caplog.at_level(
+            logging.WARNING, logger="app.features.upload.parsers.case_status"
+        ):
+            result = parse_case_status(str(file_path))
+
+        assert result["run_start_date"] is None
+        assert result["run_end_date"] is None
+        assert any("Malformed RUN_STARTDATE" in message for message in caplog.messages)
+        assert any(
+            "Malformed STOP_OPTION/STOP_N" in message for message in caplog.messages
+        )

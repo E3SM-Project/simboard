@@ -1,13 +1,3 @@
-"""
-Git Info File Parser
-
-Parses GIT_STATUS.* and GIT_CONFIG.* files to extract:
-- Current branch (from GIT_STATUS)
-- Git remote URL (from GIT_CONFIG)
-
-Follows the style of e3sm_timing.py.
-"""
-
 import re
 from pathlib import Path
 
@@ -25,22 +15,29 @@ def parse_git_describe(describe_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict[str, str | None]
-        Dictionary with 'git_tag' and 'git_hash' keys.
+        Dictionary with 'git_tag' and 'git_commit_hash' keys.
     """
     describe_path = Path(describe_path)
     describe_lines = _open_text(describe_path).splitlines()
     result: dict[str, str | None] = {"git_tag": None, "git_hash": None}
 
+    describe_pattern = re.compile(r"^(?P<tag>v[\w.\-]+)(?:-\d+)?-g(?P<hash>[0-9a-f]+)")
+
     for line in describe_lines:
         line = line.strip()
         if line:
-            # Example: 3.0.2-55-gea457362f3
-            # Tag: up to first dash or end
+            # Example: v2.0.0-beta.3-3091-g3219b44fc
+            match = describe_pattern.match(line)
+            if match:
+                result["git_tag"] = match.group("tag")
+                result["git_commit_hash"] = match.group("hash")
+                continue
+
+            # Fallback for less structured describe outputs
             tag_match = re.match(r"^([^-]+)", line)
             if tag_match:
                 result["git_tag"] = tag_match.group(1)
 
-            # Hash: after '-g'
             hash_match = re.search(r"-g([0-9a-f]+)$", line)
             if hash_match:
                 result["git_commit_hash"] = hash_match.group(1)
@@ -90,6 +87,7 @@ def _extract_branch(lines: list[str]) -> str | None:
     """Extract the current branch from GIT_STATUS lines."""
     for line in lines:
         m = re.match(r"On branch (.+)", line.strip())
+
         if m:
             return m.group(1).strip()
 
@@ -99,15 +97,20 @@ def _extract_branch(lines: list[str]) -> str | None:
 def _extract_remote_url(lines: list[str]) -> str | None:
     """Extract the remote URL for 'origin' from GIT_CONFIG lines."""
     in_origin = False
+
     for line in lines:
         if re.match(r'\[remote "origin"\]', line.strip()):
             in_origin = True
+
             continue
+
         if in_origin:
             m = re.match(r"url\s*=\s*(.+)", line.strip())
             if m:
                 return m.group(1).strip()
+
             # End of section if another [ starts
             if line.strip().startswith("["):
                 break
+
     return None

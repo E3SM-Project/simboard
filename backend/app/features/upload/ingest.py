@@ -244,24 +244,24 @@ def _map_metadata_to_schema(
     run_start_date = _parse_datetime_field(metadata.get("run_start_date"))
     run_end_date = _parse_datetime_field(metadata.get("run_end_date"))
 
-    # Map metadata to schema, providing sensible defaults for required fields
+    git_repository_url = _normalize_git_url(metadata.get("git_repository_url"))
+
+    # Map metadata to schema; Pydantic will validate required fields
     # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
     return SimulationCreate.model_validate(
         {
             # Required identification fields
-            "name": metadata.get("name") or metadata.get("case_name") or "simulation",
-            "caseName": (
-                metadata.get("case_name") or metadata.get("name") or "unknown"
-            ),
+            "name": metadata.get("name"),
+            "caseName": metadata.get("case_name"),
             # Required configuration fields
-            "compset": metadata.get("compset") or "unknown",
-            "compsetAlias": metadata.get("compset_alias") or "unknown",
-            "gridName": metadata.get("grid_name") or "unknown",
-            "gridResolution": metadata.get("grid_resolution") or "unknown",
+            "compset": metadata.get("compset"),
+            "compsetAlias": metadata.get("compset_alias"),
+            "gridName": metadata.get("grid_name"),
+            "gridResolution": metadata.get("grid_resolution"),
             # Required status fields with sensible defaults
-            "simulationType": metadata.get("simulation_type") or "e3sm_simulation",
+            "simulationType": metadata.get("simulation_type"),
             "status": SimulationStatus.CREATED,
-            "initializationType": metadata.get("initialization_type") or "unknown",
+            "initializationType": metadata.get("initialization_type"),
             "machineId": machine_id,
             "simulationStartDate": simulation_start_date,
             # Optional experiment classification
@@ -273,7 +273,7 @@ def _map_metadata_to_schema(
             "runEndDate": run_end_date,
             # Optional software/environment fields
             "compiler": metadata.get("compiler"),
-            "gitRepositoryUrl": _normalize_git_url(metadata.get("git_repository_url")),
+            "gitRepositoryUrl": git_repository_url,
             "gitBranch": metadata.get("git_branch"),
             "gitTag": metadata.get("git_tag"),
             "gitCommitHash": metadata.get("git_commit_hash"),

@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Any
 
 from dateutil.relativedelta import relativedelta
 
 from app.features.upload.parsers.utils import _get_open_func
+
+logger = logging.getLogger(__name__)
 
 
 def parse_case_status(file_path: str) -> dict[str, Any]:
@@ -21,21 +24,36 @@ def parse_case_status(file_path: str) -> dict[str, Any]:
         A dictionary containing parsed information such as run start and
         end dates.
     """
-    result: dict[str, Any] = {
-        "run_start_date": None,
-        "run_end_date": None,
-    }
+    result: dict[str, Any] = {"run_start_date": None, "run_end_date": None}
 
     open_func = _get_open_func(file_path)
     with open_func(file_path, "rt") as file:
         for line in file:
             if "RUN_STARTDATE" in line:
-                result["run_start_date"] = line.split("RUN_STARTDATE=")[1]
-                result["run_start_date"] = result["run_start_date"].split()[0]
+                try:
+                    result["run_start_date"] = line.split("RUN_STARTDATE=")[1]
+                    result["run_start_date"] = result["run_start_date"].split()[0]
+                except (IndexError, ValueError) as exc:
+                    logger.warning(
+                        "Malformed RUN_STARTDATE line in %s: %s (%s)",
+                        file_path,
+                        line.strip(),
+                        exc,
+                    )
+                    continue
             elif "STOP_OPTION" in line and "STOP_N" in line:
-                stop_option = line.split("STOP_OPTION=")[1].split(",")[0]
-                stop_n_str = line.split("STOP_N=")[1].split(",")[0].split()[0]
-                stop_n = int(stop_n_str)
+                try:
+                    stop_option = line.split("STOP_OPTION=")[1].split(",")[0]
+                    stop_n_str = line.split("STOP_N=")[1].split(",")[0].split()[0]
+                    stop_n = int(stop_n_str)
+                except (IndexError, ValueError) as exc:
+                    logger.warning(
+                        "Malformed STOP_OPTION/STOP_N line in %s: %s (%s)",
+                        file_path,
+                        line.strip(),
+                        exc,
+                    )
+                    continue
 
                 result["run_end_date"] = _calculate_run_end_date(
                     result["run_start_date"], stop_option, stop_n

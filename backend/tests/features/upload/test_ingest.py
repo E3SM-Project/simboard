@@ -4,7 +4,7 @@ The ingest module is tested through its public API (ingest_archive).
 Test coverage includes:
 - Datetime parsing with various formats and timezone awareness
 - Simulation key extraction and deduplication
-- Metadata mapping with defaults and error handling
+- Metadata mapping validation and error handling
 - Archive parsing integration
 """
 
@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 from dateutil import parser as real_dateutil_parser
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
@@ -31,7 +32,7 @@ class TestIngestArchive:
     - Datetime parsing with various formats and timezone awareness
     - Machine lookup and validation
     - Simulation key extraction for deduplication
-    - Metadata schema mapping with defaults
+    - Metadata schema mapping validation
     - Archive parsing integration
     - Error handling and propagation
     """
@@ -60,13 +61,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid1",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -84,8 +85,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -105,13 +105,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid1",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -130,13 +130,13 @@ class TestIngestArchive:
                 "name": "sim2",
                 "case_name": "case2",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid2",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -154,8 +154,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -184,13 +183,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -208,8 +207,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ) as mock_main_parser:
             result, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
@@ -227,13 +225,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": "nonexistent-machine",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -281,13 +279,13 @@ class TestIngestArchive:
                     "name": "sim1",
                     "case_name": f"case1_{date_str}",
                     "compset": "test",
-                    "compset_alias": None,
+                    "compset_alias": "test_alias",
                     "grid_name": "grid",
-                    "grid_resolution": None,
+                    "grid_resolution": "0.9x1.25",
                     "machine": machine.name,
                     "simulation_start_date": date_str,
                     "initialization_type": "test",
-                    "simulation_type": None,
+                    "simulation_type": "test_type",
                     "status": None,
                     "experiment_type": None,
                     "campaign": None,
@@ -305,8 +303,7 @@ class TestIngestArchive:
             }
 
             with patch(
-                "app.features.upload.ingest.main_parser",
-                return_value=mock_simulations,
+                "app.features.upload.ingest.main_parser", return_value=mock_simulations
             ):
                 result, _, _ = ingest_archive(
                     Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -316,14 +313,8 @@ class TestIngestArchive:
                 assert isinstance(result[0].simulation_start_date, datetime)
                 assert result[0].simulation_start_date.tzinfo is not None
 
-    def test_applies_defaults_for_missing_fields_through_public_api(
-        self, db: Session
-    ) -> None:
-        """Test default field handling through public API.
-
-        This test verifies that sensible defaults are applied for missing
-        required fields when ingesting simulations.
-        """
+    def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
+        """Test that missing required fields raise a validation error."""
         machine = self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -331,13 +322,13 @@ class TestIngestArchive:
                 "name": None,
                 "case_name": None,
                 "compset": None,
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": None,
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": None,
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -355,21 +346,10 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _ = ingest_archive(
-                Path("/tmp/archive.zip"), Path("/tmp/out"), db
-            )
-
-            assert len(result) == 1
-            # Check defaults are applied
-            assert result[0].name == "simulation"
-            assert result[0].case_name == "unknown"
-            assert result[0].compset == "unknown"
-            assert result[0].grid_name == "unknown"
-            assert result[0].simulation_type == "e3sm_simulation"
-            assert result[0].initialization_type == "unknown"
+            with pytest.raises(ValidationError):
+                ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
 
     def test_machine_lookup_and_validation_through_public_api(
         self, db: Session
@@ -388,13 +368,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -411,10 +391,7 @@ class TestIngestArchive:
             }
         }
 
-        with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=valid_mock,
-        ):
+        with patch("app.features.upload.ingest.main_parser", return_value=valid_mock):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -427,13 +404,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": "nonexistent",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -450,10 +427,7 @@ class TestIngestArchive:
             }
         }
 
-        with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=invalid_mock,
-        ):
+        with patch("app.features.upload.ingest.main_parser", return_value=invalid_mock):
             with pytest.raises(LookupError, match="Machine 'nonexistent'"):
                 ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
 
@@ -471,13 +445,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -495,8 +469,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -547,8 +520,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -606,9 +578,9 @@ class TestIngestArchive:
                 "name": "existing_sim",
                 "case_name": "existing_case",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -630,8 +602,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -673,9 +644,9 @@ class TestIngestArchive:
                 "name": "existing_sim",
                 "case_name": "existing_case",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -698,9 +669,9 @@ class TestIngestArchive:
                 "name": "new_sim",
                 "case_name": "new_case",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2021-01-01",
                 "initialization_type": "test",
@@ -722,8 +693,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, created_count, duplicate_count = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -760,13 +730,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -784,8 +754,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -811,13 +780,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -867,13 +836,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": None,  # Missing machine
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -891,8 +860,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             with pytest.raises(ValueError, match="Machine name is required"):
                 ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
@@ -906,13 +874,13 @@ class TestIngestArchive:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": None,  # Missing or invalid
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -930,8 +898,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             with pytest.raises(ValueError, match="simulation_start_date is required"):
                 ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
@@ -1011,13 +978,13 @@ class TestNormalizeGitUrl:
                 "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
-                "compset_alias": None,
+                "compset_alias": "test_alias",
                 "grid_name": "grid",
-                "grid_resolution": None,
+                "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": None,
+                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1035,8 +1002,7 @@ class TestNormalizeGitUrl:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
-            return_value=mock_simulations,
+            "app.features.upload.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
