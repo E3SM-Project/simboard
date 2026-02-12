@@ -140,35 +140,43 @@ def _map_metadata_to_schema(
     run_end_date = parse_datetime_field(metadata.get("run_end_date"))
 
     # Map metadata to schema, providing sensible defaults for required fields
-    return SimulationCreate(
-        # Required identification fields
-        name=metadata.get("name") or metadata.get("case_name") or "simulation",
-        case_name=metadata.get("case_name") or metadata.get("name") or "unknown",
-        # Required configuration fields
-        compset=metadata.get("compset") or "unknown",
-        compset_alias=metadata.get("compset_alias"),
-        grid_name=metadata.get("grid_name") or "unknown",
-        grid_resolution=metadata.get("grid_resolution"),
-        # Required status fields with sensible defaults
-        simulation_type=metadata.get("simulation_type") or "e3sm_simulation",
-        status=SimulationStatus.CREATED,
-        initialization_type=metadata.get("initialization_type") or "unknown",
-        machine_id=machine_id,
-        simulation_start_date=simulation_start_date,
-        # Optional experiment classification
-        experiment_type=metadata.get("experiment_type"),
-        campaign=metadata.get("campaign"),
-        group_name=metadata.get("group_name"),
-        # Optional timing fields
-        run_start_date=run_start_date,
-        run_end_date=run_end_date,
-        # Optional software/environment fields
-        compiler=metadata.get("compiler"),
-        git_repository_url=metadata.get("git_repository_url"),
-        git_branch=metadata.get("git_branch"),
-        git_tag=metadata.get("git_tag"),
-        git_commit_hash=metadata.get("git_commit_hash"),
-        # Optional provenance fields
-        created_by=metadata.get("created_by"),
-        last_updated_by=metadata.get("last_updated_by"),
+    # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
+    return SimulationCreate.model_validate(
+        {
+            # Required identification fields
+            "name": metadata.get("name") or metadata.get("case_name") or "simulation",
+            "caseName": (
+                metadata.get("case_name") or metadata.get("name") or "unknown"
+            ),
+            # Required configuration fields
+            "compset": metadata.get("compset") or "unknown",
+            "compsetAlias": metadata.get("compset_alias") or "unknown",
+            "gridName": metadata.get("grid_name") or "unknown",
+            "gridResolution": metadata.get("grid_resolution") or "unknown",
+            # Required status fields with sensible defaults
+            "simulationType": metadata.get("simulation_type") or "e3sm_simulation",
+            "status": SimulationStatus.CREATED,
+            "initializationType": metadata.get("initialization_type") or "unknown",
+            "machineId": machine_id,
+            "simulationStartDate": simulation_start_date,
+            # Optional experiment classification
+            "experimentType": metadata.get("experiment_type"),
+            "campaign": metadata.get("campaign"),
+            "groupName": metadata.get("group_name"),
+            # Optional timing fields
+            "runStartDate": run_start_date,
+            "runEndDate": run_end_date,
+            # Optional software/environment fields
+            "compiler": metadata.get("compiler"),
+            "gitRepositoryUrl": metadata.get("git_repository_url"),
+            "gitBranch": metadata.get("git_branch"),
+            "gitTag": metadata.get("git_tag"),
+            "gitCommitHash": metadata.get("git_commit_hash"),
+            # Note: created_by and last_updated_by are set to None since archive
+            # metadata contains local usernames that cannot be reliably mapped to
+            # database user UUIDs. The API endpoint will set these values based on
+            # the authenticated user who uploaded the archive.
+            "createdBy": None,
+            "lastUpdatedBy": None,
+        }
     )
