@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -24,14 +24,14 @@ class Status(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     OUTPUT = "output"
     ARCHIVE = "archive"
     RUN_SCRIPT = "run_script"
     POSTPROCESSING_SCRIPT = "postprocessing_script"
 
 
-class ExternalLinkKind(str, Enum):
+class ExternalLinkKind(StrEnum):
     DIAGNOSTIC = "diagnostic"
     PERFORMANCE = "performance"
     DOCS = "docs"

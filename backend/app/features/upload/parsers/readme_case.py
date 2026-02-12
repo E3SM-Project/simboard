@@ -1,14 +1,3 @@
-"""E3SM README.case Parser
-
-Parses E3SM README.case files (plain or gzipped) and extracts case creation metadata including:
-- Creation date
-- Resolution
-- Compset
-
-Reference: https://github.com/tomvothecoder/pace/blob/master/portal/pace/e3sm/e3smParser/parseReadMe.py
-Analysis: https://github.com/tomvothecoder/pace/blob/copilot/analyze-e3sm-metadata-parsing/E3SM_PARSING_ANALYSIS.md#32-case-creation-metadata-from-readmecase
-"""
-
 import re
 from pathlib import Path
 

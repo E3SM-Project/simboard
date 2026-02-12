@@ -1,20 +1,3 @@
-"""
-E3SM Timing File Parser
-
-Parses E3SM timing files (plain or gzipped) and extracts core simulation metadata including:
-- Case name
-- Machine name
-- User
-- LID
-- Date
-- Grid resolution
-- Compset
-- Run configuration (stop option, stop_n, run length)
-
-Reference: https://github.com/tomvothecoder/pace/blob/master/portal/pace/e3sm/e3smParser/parseE3SMTiming.py
-Analysis: https://github.com/tomvothecoder/pace/blob/copilot/analyze-e3sm-metadata-parsing/E3SM_PARSING_ANALYSIS.md
-"""
-
 import re
 from datetime import datetime
 from pathlib import Path
@@ -147,7 +130,6 @@ def _parse_simulation_start_date(date_str: Optional[str]) -> Optional[str]:
     try:
         return datetime.strptime(date_str, "%a %b %d %H:%M:%S %Y").isoformat()
     except ValueError:
-        # fallback to raw string if format fails
         return date_str
 
 

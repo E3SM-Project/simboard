@@ -1,4 +1,4 @@
-"""Remove _id from campaign and experimen_type
+"""Remove _id from campaign and experiment_type
 
 Revision ID: 1759fb9a80cc
 Revises: 1134b6c8674f

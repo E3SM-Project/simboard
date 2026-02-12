@@ -1,9 +1,3 @@
-"""
-Parser for env_case.xml and env_build.xml to extract relevant information.
-Handles both plain and gzipped XML files.
-Follows SimBoard conventions and reuses _open_text utility.
-"""
-
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -46,10 +40,7 @@ def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
     compiler = _extract_value_from_file(env_build_path, "COMPILER")
     mpilib = _extract_value_from_file(env_build_path, "MPILIB")
 
-    return {
-        "compiler": compiler,
-        "mpilib": mpilib,
-    }
+    return {"compiler": compiler, "mpilib": mpilib}
 
 
 def _extract_value_from_file(path: Path, entry_id: str) -> str | None:
@@ -102,4 +93,5 @@ def _find_entry_value(root, entry_id: str) -> str | None:
             # Otherwise, use text content if present and non-empty
             if entry.text and entry.text.strip():
                 return entry.text.strip()
+
     return None
