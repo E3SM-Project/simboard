@@ -1,155 +1,174 @@
-import tarfile
-import zipfile
-from dataclasses import dataclass
+"""Module for ingesting simulation archives and mapping to database schemas."""
+
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING
 
-from app.features.upload.parsers import (
-    parse_e3sm_timing,
-    parse_env_build,
-    parse_env_case,
-    parse_git_describe,
-    parse_readme_case,
+from dateutil import parser as dateutil_parser
+from sqlalchemy.orm import Session
+
+from app.core.logger import _setup_custom_logger
+from app.features.machine.models import Machine
+from app.features.simulation.schemas import SimulationCreate, SimulationStatus
+from app.features.upload.parsers.parser import (
+    SimulationMetadata,
+    main_parser,
 )
 
+if TYPE_CHECKING:
+    pass
 
-class ParsedExperiment:
-    case_name: str
-    machine_name: str
-    simulation_start_date: datetime
-
-    compset: str
-    compset_alias: str
-    grid_name: str
-    grid_resolution: str
-
-    git_tag: str | None
-    git_commit_hash: str | None
-
-    compiler: str | None
-    group_name: str | None
-
-    extra: dict
+logger = _setup_custom_logger(__name__)
 
 
-@dataclass
-class ParsedExperimentResult:
-    experiments: List[ParsedExperiment]
-    warnings: List[str]
-    errors: List[str]
+def ingest_archive(
+    archive_path: Path | str,
+    output_dir: Path | str,
+    db: Session,
+) -> list[SimulationCreate]:
+    """
+    Ingest a simulation archive and map parsed metadata to SimulationCreate schemas.
 
+    This function orchestrates the archive extraction and parsing, then maps the
+    extracted metadata to SimulationCreate schema objects with proper type conversions
+    and database lookups for machine IDs.
 
-def ingest_archive(archive_path: Path) -> ParsedExperimentResult:
-    extract_dir = archive_path.parent / "extracted"
-    extract_dir.mkdir(exist_ok=True)
+    Parameters
+    ----------
+    archive_path : Path | str
+        Path to the archive file to ingest (.zip or .tar.gz).
+    output_dir : Path | str
+        Directory where extracted files will be stored.
+    db : Session
+        SQLAlchemy database session for looking up machines.
 
-    _extract_archive(archive_path, extract_dir)
+    Returns
+    -------
+    list[SimulationCreate]
+        List of SimulationCreate schema objects ready for database insertion.
 
-    exp_dirs = [
-        p for p in extract_dir.iterdir() if p.is_dir() and p.name.startswith("exp")
-    ]
+    Raises
+    ------
+    ValueError
+        If archive format is unsupported or no experiment directories found.
+    LookupError
+        If a machine name from the archive cannot be found in the database.
+    """
+    archive_path = Path(archive_path) if isinstance(archive_path, str) else archive_path
+    output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
 
-    if not exp_dirs:
-        return ParsedExperimentResult(
-            experiments=[],
-            warnings=[],
-            errors=["No experiment directories found"],
-        )
+    # Parse the archive to extract metadata
+    all_simulations = main_parser(archive_path, output_dir)
 
-    experiments = []
-    warnings: list[str] = []
-    errors: list[str] = []
+    if not all_simulations:
+        logger.warning(f"No simulations found in archive: {archive_path}")
+        return []
 
-    for exp in exp_dirs:
+    # Map each simulation metadata to SimulationCreate schema
+    simulations = []
+    for exp_dir, metadata in all_simulations.items():
         try:
-            experiments.append(_parse_experiment(exp, warnings))
-        except ValueError as e:
-            errors.append(str(e))
+            sim_create = _map_metadata_to_schema(metadata, db)
+            simulations.append(sim_create)
+            logger.info(f"Mapped simulation from {exp_dir}: {metadata.get('name')}")
+        except (ValueError, LookupError) as e:
+            logger.error(f"Failed to map simulation from {exp_dir}: {e}")
+            raise
 
-    return ParsedExperimentResult(
-        experiments=experiments,
-        warnings=warnings,
-        errors=errors,
-    )
-
-
-def _parse_experiment(exp_dir: Path, warnings: list[str]) -> ParsedExperiment:
-    timing_file = _find_required(exp_dir, "e3sm_timing")
-    readme_file = _find_required(exp_dir, "README.case")
-    git_file = _find_required(exp_dir, "GIT_DESCRIBE")
-
-    timing = parse_e3sm_timing(timing_file)
-    readme = parse_readme_case(readme_file)
-    version = parse_git_describe(git_file)
-
-    env_case = _find_optional(exp_dir, "env_case.xml")
-    env_build = _find_optional(exp_dir, "env_build.xml")
-
-    group_name = parse_env_case(env_case) if env_case else None
-    compiler = parse_env_build(env_build) if env_build else None
-
-    return ParsedExperiment(
-        case_name=timing["case"],
-        machine_name=timing["machine"],
-        simulation_start_date=timing["date"],
-        compset=readme["compset"],
-        compset_alias=timing["compset_long"],
-        grid_name=readme["res"],
-        grid_resolution=timing["grid_long"],
-        git_tag=version["tag"],
-        git_commit_hash=version["hash"],
-        compiler=compiler,
-        group_name=group_name,
-        extra={
-            "lid": timing["lid"],
-            "user": timing["user"],
-            "run_config": timing["run_config"],
-        },
-    )
+    return simulations
 
 
-def to_simulation_create(parsed, uploaded_by, machine_id):
-    from app.features.simulation.schemas import SimulationCreate
+def _map_metadata_to_schema(
+    metadata: SimulationMetadata,
+    db: Session,
+) -> SimulationCreate:
+    """
+    Map parser metadata to SimulationCreate schema with type conversions.
 
+    Parameters
+    ----------
+    metadata : SimulationMetadata
+        Dictionary of parsed simulation metadata with string values.
+    db : Session
+        SQLAlchemy database session for machine lookups.
+
+    Returns
+    -------
+    SimulationCreate
+        Schema object ready for database insertion.
+
+    Raises
+    ------
+    ValueError
+        If required field is missing or cannot be parsed.
+    LookupError
+        If machine name cannot be found in database.
+    """
+    # Extract machine_id from machine name using database lookup
+    machine_name = metadata.get("machine")
+    if not machine_name:
+        raise ValueError("Machine name is required but not found in metadata")
+
+    machine = db.query(Machine).filter(Machine.name == machine_name).first()
+    if not machine:
+        raise LookupError(
+            f"Machine '{machine_name}' not found in database. "
+            "Please ensure the machine exists before uploading."
+        )
+    machine_id = machine.id
+
+    # Parse datetime fields, handling various formats
+    def parse_datetime_field(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            # Try parsing with dateutil for flexibility
+            dt = dateutil_parser.parse(value)
+            # Ensure timezone-aware (UTC if not specified)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=__import__("datetime").timezone.utc)
+            return dt
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not parse date '{value}': {e}")
+            return None
+
+    simulation_start_date = parse_datetime_field(metadata.get("simulation_start_date"))
+    if not simulation_start_date:
+        raise ValueError("simulation_start_date is required but could not be parsed")
+
+    run_start_date = parse_datetime_field(metadata.get("run_start_date"))
+    run_end_date = parse_datetime_field(metadata.get("run_end_date"))
+
+    # Map metadata to schema, providing sensible defaults for required fields
     return SimulationCreate(
-        name=parsed.case_name,
-        case_name=parsed.case_name,
-        compset=parsed.compset,
-        compset_alias=parsed.compset_alias,
-        grid_name=parsed.grid_name,
-        grid_resolution=parsed.grid_resolution,
+        # Required identification fields
+        name=metadata.get("name") or metadata.get("case_name") or "simulation",
+        case_name=metadata.get("case_name") or metadata.get("name") or "unknown",
+        # Required configuration fields
+        compset=metadata.get("compset") or "unknown",
+        compset_alias=metadata.get("compset_alias"),
+        grid_name=metadata.get("grid_name") or "unknown",
+        grid_resolution=metadata.get("grid_resolution"),
+        # Required status fields with sensible defaults
+        simulation_type=metadata.get("simulation_type") or "e3sm_simulation",
+        status=SimulationStatus.CREATED,
+        initialization_type=metadata.get("initialization_type") or "unknown",
         machine_id=machine_id,
-        simulation_start_date=parsed.simulation_start_date,
-        compiler=parsed.compiler,
-        group_name=parsed.group_name,
-        git_tag=parsed.git_tag,
-        git_commit_hash=parsed.git_commit_hash,
-        extra=parsed.extra,
-        created_by=uploaded_by.id,
+        simulation_start_date=simulation_start_date,
+        # Optional experiment classification
+        experiment_type=metadata.get("experiment_type"),
+        campaign=metadata.get("campaign"),
+        group_name=metadata.get("group_name"),
+        # Optional timing fields
+        run_start_date=run_start_date,
+        run_end_date=run_end_date,
+        # Optional software/environment fields
+        compiler=metadata.get("compiler"),
+        git_repository_url=metadata.get("git_repository_url"),
+        git_branch=metadata.get("git_branch"),
+        git_tag=metadata.get("git_tag"),
+        git_commit_hash=metadata.get("git_commit_hash"),
+        # Optional provenance fields
+        created_by=metadata.get("created_by"),
+        last_updated_by=metadata.get("last_updated_by"),
     )
-
-
-def _extract_archive(src: Path, dest: Path):
-    if zipfile.is_zipfile(src):
-        with zipfile.ZipFile(src) as z:
-            z.extractall(dest)
-    elif tarfile.is_tarfile(src):
-        with tarfile.open(src) as t:
-            t.extractall(dest)
-    else:
-        raise ValueError("Unsupported archive format")
-
-
-def _find_required(base: Path, prefix: str) -> Path:
-    for p in base.rglob("*"):
-        if p.name.startswith(prefix):
-            return p
-    raise ValueError(f"Missing required file: {prefix}*")
-
-
-def _find_optional(base: Path, prefix: str) -> Path | None:
-    for p in base.rglob("*"):
-        if p.name.startswith(prefix):
-            return p
-    return None

@@ -30,4 +30,4 @@ repos:
     hooks:
       - id: mypy
         args: ["--config=backend/pyproject.toml"]
-        additional_dependencies: [types-requests, pydantic]
+        additional_dependencies: [types-requests, pydantic, types-python-dateutil]

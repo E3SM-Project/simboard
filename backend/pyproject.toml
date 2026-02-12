@@ -30,6 +30,7 @@ dependencies = [
   "pydantic>=2.12.3,<2.13.0",
   "pydantic-settings>=2.4.0",
   "python-dotenv>=1.0.1",
+  "python-dateutil>=2.8.2,<2.9.0",
 
   # --- Authentication / Authorization ---
   "fastapi-users[sqlalchemy,oauth]>=14.0.0,<15.0.0",
