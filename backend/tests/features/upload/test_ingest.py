@@ -1,13 +1,3 @@
-"""Tests for the ingest module.
-
-The ingest module is tested through its public API (ingest_archive).
-Test coverage includes:
-- Datetime parsing with various formats and timezone awareness
-- Simulation key extraction and deduplication
-- Metadata mapping validation and error handling
-- Archive parsing integration
-"""
-
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch

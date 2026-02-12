@@ -51,3 +51,15 @@ class TestParseReadmeCase:
         assert result["creation_date"] == "2025-12-18 22:36:01"
         assert result["grid_name"] is None
         assert result["compset"] is None
+
+    def test_parse_flag_equals_format(self, tmp_path):
+        content = (
+            "2025-12-18 22:36:01: /path/create_newcase --case v3.LR.historical_0121 "
+            "--res=ne30pg2_r05_IcoswISC30E3r5 --compset=WCYCL20TR\n"
+        )
+        file_path = tmp_path / "README.case"
+        file_path.write_text(content)
+        result = parse_readme_case(file_path)
+
+        assert result["grid_name"] == "ne30pg2_r05_IcoswISC30E3r5"
+        assert result["compset"] == "WCYCL20TR"

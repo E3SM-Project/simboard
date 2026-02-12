@@ -24,6 +24,28 @@ class TestParseEnvCase:
         result = parse_env_case(tmp_case)
         assert result["group_name"] == "groupY"
 
+    def test_invalid_xml_returns_none(self, tmp_path):
+        xml_case = "<config><entry id='CASE_GROUP'>group"
+        tmp_case = tmp_path / "env_case_invalid.xml"
+        tmp_case.write_text(xml_case)
+
+        result = parse_env_case(tmp_case)
+
+        assert result["group_name"] is None
+
+    def test_missing_entry_returns_none(self, tmp_path):
+        xml_case = """
+        <config>
+            <entry id="OTHER_GROUP" value="groupZ" />
+        </config>
+        """
+        tmp_case = tmp_path / "env_case_missing.xml"
+        tmp_case.write_text(xml_case)
+
+        result = parse_env_case(tmp_case)
+
+        assert result["group_name"] is None
+
 
 class TestParseEnvBuild:
     def test_value(self, tmp_path):
@@ -51,3 +73,17 @@ class TestParseEnvBuild:
         result = parse_env_build(tmp_build)
         assert result["compiler"] == "gnu"
         assert result["mpilib"] == "openmpi"
+
+    def test_missing_entry_returns_none(self, tmp_path):
+        xml_build = """
+        <config>
+            <entry id="COMPILER" value="intel" />
+        </config>
+        """
+        tmp_build = tmp_path / "env_build_missing.xml"
+        tmp_build.write_text(xml_build)
+
+        result = parse_env_build(tmp_build)
+
+        assert result["compiler"] == "intel"
+        assert result["mpilib"] is None

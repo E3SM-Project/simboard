@@ -87,3 +87,31 @@ class TestCaseStatusParser:
         assert any(
             "Malformed STOP_OPTION/STOP_N" in message for message in caplog.messages
         )
+
+    def test_stop_option_without_start_date_returns_none(self, tmp_path):
+        content = (
+            "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
+            "STOP_OPTION=ndays,STOP_N=10  </command>\n"
+        )
+        file_path = tmp_path / "casestatus_missing_start.txt"
+        file_path.write_text(content)
+
+        result = parse_case_status(str(file_path))
+
+        assert result["run_start_date"] is None
+        assert result["run_end_date"] is None
+
+    def test_unknown_stop_option_returns_none(self, tmp_path):
+        content = (
+            "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
+            "RUN_STARTDATE=2020-01-01  </command>\n"
+            "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
+            "STOP_OPTION=nhours,STOP_N=10  </command>\n"
+        )
+        file_path = tmp_path / "casestatus_unknown_stop.txt"
+        file_path.write_text(content)
+
+        result = parse_case_status(str(file_path))
+
+        assert result["run_start_date"] == "2020-01-01"
+        assert result["run_end_date"] is None

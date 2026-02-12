@@ -100,3 +100,27 @@ class TestE3SMTimingParser:
         assert data["campaign"] is None
         assert data["machine"] == "cori-knl"
         assert data["simulation_start_date"] == "Invalid Date Format"
+
+    def test_campaign_and_experiment_type_from_case_name(self, tmp_path):
+        content = (
+            "Case: v3.LR.historical_0121\n"
+            "Machine: cori-knl\n"
+            "Curr Date: Tue Jan 10 12:34:56 2023\n"
+        )
+        file_path = tmp_path / "e3sm_timing_campaign.txt"
+        file_path.write_text(content)
+        data = parse_e3sm_timing(file_path)
+
+        assert data["campaign"] == "v3.LR.historical"
+        assert data["experiment_type"] == "historical"
+
+    def test_stop_option_and_stop_n_same_line(self, tmp_path):
+        content = (
+            "Case: e3sm_v1_ne30\nMachine: cori-knl\nstop option: ndays, stop_n=7\n"
+        )
+        file_path = tmp_path / "e3sm_timing_stop_line.txt"
+        file_path.write_text(content)
+        data = parse_e3sm_timing(file_path)
+
+        assert data["run_config"]["stop_option"] == "ndays"
+        assert data["run_config"]["stop_n"] == "7"
