@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.features.simulation.schemas import SimulationCreate
 
@@ -47,6 +47,8 @@ class IngestionCreate(BaseModel):
 class IngestionRead(BaseModel):
     """Audit record representation for an ingestion event."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     sourceType: str
     sourceReference: str
@@ -57,6 +59,3 @@ class IngestionRead(BaseModel):
     duplicateCount: int
     errorCount: int
     archiveSha256: str | None = None
-
-    class Config:
-        from_attributes = True

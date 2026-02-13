@@ -73,13 +73,19 @@ class TestCaseStatusParser:
         file_path.write_text(content)
 
         logger = logging.getLogger("app.features.ingestion.parsers.case_status")
-        logger.propagate = True
+        old_propagate = logger.propagate
+        old_level = logger.level
+        logger.propagate = False
         logger.disabled = False
+        logger.setLevel(logging.WARNING)
 
-        with caplog.at_level(
-            logging.WARNING, logger="app.features.ingestion.parsers.case_status"
-        ):
+        logger.addHandler(caplog.handler)
+        try:
             result = parse_case_status(str(file_path))
+        finally:
+            logger.removeHandler(caplog.handler)
+            logger.propagate = old_propagate
+            logger.setLevel(old_level)
 
         assert result["run_start_date"] is None
         assert result["run_end_date"] is None
