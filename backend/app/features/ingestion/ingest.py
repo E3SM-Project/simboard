@@ -9,10 +9,10 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logger import _setup_custom_logger
+from app.features.ingestion.parsers.parser import SimulationMetadata, main_parser
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.parsers.parser import SimulationMetadata, main_parser
 
 logger = _setup_custom_logger(__name__)
 

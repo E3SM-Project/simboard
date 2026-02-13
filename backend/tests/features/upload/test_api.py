@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.features.ingestion.schemas import IngestArchiveRequest, IngestArchiveResponse
 from app.features.machine.models import Machine
 from app.features.simulation.schemas import SimulationCreate
-from app.features.upload.schemas import IngestArchiveRequest, IngestArchiveResponse
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -83,7 +83,7 @@ class TestIngestArchiveEndpoint:
         ]
 
         with patch(
-            "app.features.upload.api.ingest_archive",
+            "app.features.ingestion.api.ingest_archive",
             return_value=(mock_simulations, 1, 0),
         ):
             res = client.post(f"{API_BASE}/upload/ingest", json=payload)
@@ -101,7 +101,7 @@ class TestIngestArchiveEndpoint:
         }
 
         with patch(
-            "app.features.upload.api.ingest_archive",
+            "app.features.ingestion.api.ingest_archive",
             side_effect=ValueError("Duplicate simulation"),
         ):
             res = client.post(f"{API_BASE}/upload/ingest", json=payload)
@@ -157,7 +157,7 @@ class TestIngestArchiveEndpoint:
         mock_errors = [{"file": "sim2.json", "error": "Invalid format"}]
 
         with patch(
-            "app.features.upload.api.ingest_archive",
+            "app.features.ingestion.api.ingest_archive",
             return_value=(mock_simulations, 2, 0, mock_errors),
         ):
             res = client.post(f"{API_BASE}/upload/ingest", json=payload)
