@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.models import Ingestion
-from app.features.ingestion.schemas import IngestArchiveRequest, IngestArchiveResponse
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate
@@ -54,29 +53,7 @@ def override_auth_dependency(normal_user_sync):
     app.dependency_overrides.clear()
 
 
-class TestIngestArchiveSchemas:
-    def test_request_schema_serialization(self):
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
-
-        request = IngestArchiveRequest(**payload)
-        assert request.model_dump() == payload
-
-    def test_response_schema_serialization(self):
-        payload = {
-            "created_count": 1,
-            "duplicate_count": 0,
-            "simulations": [],
-            "errors": [],
-        }
-
-        response = IngestArchiveResponse(**payload)
-        assert response.model_dump() == payload
-
-
-class TestIngestArchiveEndpoint:
+class TestIngestFromPathEndpoint:
     def test_endpoint_returns_summary(self, client, db: Session):
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
@@ -251,7 +228,7 @@ class TestIngestArchiveEndpoint:
         assert ingestion.error_count == 0
 
 
-class TestUploadIngestionEndpoint:
+class TestIngestFromUploadEndpoint:
     def test_upload_valid_zip_file(self, client, db: Session):
         """Test uploading a valid .zip archive."""
         machine = db.query(Machine).first()
