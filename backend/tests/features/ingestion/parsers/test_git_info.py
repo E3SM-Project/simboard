@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.features.upload.parsers.git_info import (
+from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
     parse_git_status,

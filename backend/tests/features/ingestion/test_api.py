@@ -46,6 +46,7 @@ class TestIngestArchiveSchemas:
             "created_count": 1,
             "duplicate_count": 0,
             "simulations": [],
+            "errors": [],
         }
 
         response = IngestArchiveResponse(**payload)
@@ -84,9 +85,9 @@ class TestIngestArchiveEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0),
+            return_value=(mock_simulations, 1, 0, []),
         ):
-            res = client.post(f"{API_BASE}/upload/ingest", json=payload)
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 201
         data = res.json()
@@ -104,7 +105,7 @@ class TestIngestArchiveEndpoint:
             "app.features.ingestion.api.ingest_archive",
             side_effect=ValueError("Duplicate simulation"),
         ):
-            res = client.post(f"{API_BASE}/upload/ingest", json=payload)
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 409
         assert res.json()["detail"] == "Duplicate simulation"
@@ -160,7 +161,7 @@ class TestIngestArchiveEndpoint:
             "app.features.ingestion.api.ingest_archive",
             return_value=(mock_simulations, 2, 0, mock_errors),
         ):
-            res = client.post(f"{API_BASE}/upload/ingest", json=payload)
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 201
 

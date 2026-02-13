@@ -11,11 +11,11 @@ from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
-router = APIRouter(prefix="/upload", tags=["Upload"])
+router = APIRouter(prefix="/ingestions", tags=["Ingest"])
 
 
 @router.post(
-    "/ingest-from-pathI",
+    "/from-path",
     response_model=IngestArchiveResponse,
     status_code=status.HTTP_201_CREATED,
 )

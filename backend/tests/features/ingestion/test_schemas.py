@@ -1,14 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from app.features.upload.schemas import IngestArchiveRequest, IngestArchiveResponse
+from app.features.ingestion.schemas import IngestArchiveRequest, IngestArchiveResponse
 
 
-class TestUploadSchemas:
+class TestIngestionSchemas:
     def test_ingest_archive_request_valid(self) -> None:
         payload = IngestArchiveRequest(
-            archive_path="/tmp/archive.zip",
-            output_dir="/tmp/extracted",
+            archive_path="/tmp/archive.zip", output_dir="/tmp/extracted"
         )
 
         assert payload.archive_path == "/tmp/archive.zip"
@@ -20,11 +19,10 @@ class TestUploadSchemas:
 
     def test_ingest_archive_response_valid(self) -> None:
         payload = IngestArchiveResponse(
-            created_count=1,
-            duplicate_count=0,
-            simulations=[],
+            created_count=1, duplicate_count=0, simulations=[], errors=[]
         )
 
         assert payload.created_count == 1
         assert payload.duplicate_count == 0
+        assert payload.simulations == []
         assert payload.simulations == []

@@ -3,8 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from app.features.ingestion.parsers.utils import _open_text
 from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
-from app.features.upload.parsers.utils import _open_text
 
 
 def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:

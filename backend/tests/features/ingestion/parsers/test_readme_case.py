@@ -2,7 +2,7 @@ import gzip
 
 import pytest
 
-from app.features.upload.parsers.readme_case import parse_readme_case
+from app.features.ingestion.parsers.readme_case import parse_readme_case
 
 
 class TestParseReadmeCase:

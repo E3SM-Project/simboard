@@ -4,7 +4,7 @@ from typing import Any
 
 from dateutil.relativedelta import relativedelta
 
-from app.features.upload.parsers.utils import _get_open_func
+from app.features.ingestion.parsers.utils import _get_open_func
 
 logger = logging.getLogger(__name__)
 

@@ -8,15 +8,15 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
-from app.features.upload.parsers.case_status import parse_case_status
-from app.features.upload.parsers.e3sm_timing import parse_e3sm_timing
-from app.features.upload.parsers.git_info import (
+from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
+from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
+from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
     parse_git_status,
 )
-from app.features.upload.parsers.readme_case import parse_readme_case
+from app.features.ingestion.parsers.readme_case import parse_readme_case
 
 SimulationFiles = dict[str, str | None]
 SimulationMetadata = dict[str, str | None]

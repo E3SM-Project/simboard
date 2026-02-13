@@ -6,10 +6,10 @@ from uuid import uuid4
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
+from app.features.ingestion.ingest import _normalize_git_url, ingest_archive
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.ingest import _normalize_git_url, ingest_archive
 from app.features.user.models import User
 
 
@@ -73,7 +73,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -142,7 +142,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -154,7 +154,7 @@ class TestIngestArchive:
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
-        with patch("app.features.upload.ingest.main_parser", return_value={}):
+        with patch("app.features.ingestion.ingest.main_parser", return_value={}):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -195,7 +195,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ) as mock_main_parser:
             result, _, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
@@ -237,7 +237,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser",
+            "app.features.ingestion.ingest.main_parser",
             return_value=mock_simulations,
         ):
             result, _, _, errors = ingest_archive(
@@ -297,7 +297,8 @@ class TestIngestArchive:
             }
 
             with patch(
-                "app.features.upload.ingest.main_parser", return_value=mock_simulations
+                "app.features.ingestion.ingest.main_parser",
+                return_value=mock_simulations,
             ):
                 result, _, _, _ = ingest_archive(
                     Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -340,7 +341,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, errors = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -390,7 +391,9 @@ class TestIngestArchive:
             }
         }
 
-        with patch("app.features.upload.ingest.main_parser", return_value=valid_mock):
+        with patch(
+            "app.features.ingestion.ingest.main_parser", return_value=valid_mock
+        ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -426,7 +429,9 @@ class TestIngestArchive:
             }
         }
 
-        with patch("app.features.upload.ingest.main_parser", return_value=invalid_mock):
+        with patch(
+            "app.features.ingestion.ingest.main_parser", return_value=invalid_mock
+        ):
             result, _, _, errors = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -474,7 +479,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -525,7 +530,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -607,7 +612,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -698,7 +703,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, created_count, duplicate_count, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -711,7 +716,7 @@ class TestIngestArchive:
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
-        with patch("app.features.upload.ingest.main_parser", return_value={}):
+        with patch("app.features.ingestion.ingest.main_parser", return_value={}):
             result, created_count, duplicate_count, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -759,7 +764,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -818,11 +823,11 @@ class TestIngestArchive:
 
         with (
             patch(
-                "app.features.upload.ingest.main_parser",
+                "app.features.ingestion.ingest.main_parser",
                 return_value=mock_simulations,
             ),
             patch(
-                "app.features.upload.ingest.dateutil_parser.parse",
+                "app.features.ingestion.ingest.dateutil_parser.parse",
                 side_effect=mock_parse_wrapper,
             ),
         ):
@@ -865,7 +870,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, errors = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -909,7 +914,7 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, errors = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1019,7 +1024,7 @@ class TestNormalizeGitUrl:
         }
 
         with patch(
-            "app.features.upload.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
             result, _, _, _ = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db

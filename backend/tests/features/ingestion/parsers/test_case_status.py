@@ -1,6 +1,6 @@
 import logging
 
-from app.features.upload.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.case_status import parse_case_status
 
 
 class TestCaseStatusParser:
@@ -72,12 +72,12 @@ class TestCaseStatusParser:
         file_path = tmp_path / "casestatus.txt"
         file_path.write_text(content)
 
-        logger = logging.getLogger("app.features.upload.parsers.case_status")
+        logger = logging.getLogger("app.features.ingestion.parsers.case_status")
         logger.propagate = True
         logger.disabled = False
 
         with caplog.at_level(
-            logging.WARNING, logger="app.features.upload.parsers.case_status"
+            logging.WARNING, logger="app.features.ingestion.parsers.case_status"
         ):
             result = parse_case_status(str(file_path))
 
