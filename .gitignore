@@ -87,3 +87,7 @@ dmypy.json
 
 # Any QA related files.
 */qa/*
+
+# Ignore experiment directories
+exp_archive
+qa

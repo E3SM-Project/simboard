@@ -47,8 +47,8 @@ const initialState: SimulationCreateForm = {
   // --- Model Setup ---
   simulationType: '', // required
   status: 'created', // required
-  campaignId: null,
-  experimentTypeId: null,
+  campaign: null,
+  experimentType: null,
   machineId: '', // required
 
   // --- Version Control ---
@@ -202,14 +202,14 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       },
       {
         label: 'Campaign',
-        name: 'campaignId',
+        name: 'campaign',
         required: false,
         type: 'text',
         placeholder: 'e.g., v3.LR',
       },
       {
         label: 'Experiment Type',
-        name: 'experimentTypeId',
+        name: 'experimentType',
         required: false,
         type: 'text',
         placeholder: 'e.g., piControl',
@@ -684,8 +684,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       description: form.description?.trim() || null,
       compiler: form.compiler?.trim() || null,
       parentSimulationId: form.parentSimulationId || null,
-      campaignId: form.campaignId || null,
-      experimentTypeId: form.experimentTypeId || null,
+      campaign: form.campaign || null,
+      experimentType: form.experimentType || null,
       gitRepositoryUrl: form.gitRepositoryUrl?.trim() || null,
       gitBranch: form.gitBranch?.trim() || null,
       gitTag: form.gitTag?.trim() || null,

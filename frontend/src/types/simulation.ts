@@ -22,8 +22,8 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~~~~~~
   simulationType: string;
   status: string;
-  campaignId?: string | null;
-  experimentTypeId?: string | null;
+  campaign?: string | null;
+  experimentType?: string | null;
   initializationType: string;
   groupName?: string | null;
 

@@ -75,25 +75,25 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { sticky: true, width: 200, position: 'left' },
   },
   {
-    accessorKey: 'campaignId',
+    accessorKey: 'campaign',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
         Campaign
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('campaignId')}</div>,
+    cell: ({ row }) => <div>{row.getValue('campaign')}</div>,
     enableSorting: true,
   },
   {
-    accessorKey: 'experimentTypeId',
+    accessorKey: 'experimentType',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
         Experiment
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('experimentTypeId')}</div>,
+    cell: ({ row }) => <div>{row.getValue('experimentType')}</div>,
     enableSorting: true,
   },
   {

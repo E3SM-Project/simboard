@@ -73,7 +73,7 @@ export const SimulationResultCard = ({
                 <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
                   <Rocket className="w-4 h-4" /> Campaign:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">{simulation.campaignId}</dd>
+                <dd className="break-words font-normal text-gray-600">{simulation.campaign}</dd>
               </div>
 
               <div className="flex items-start gap-2">
@@ -81,7 +81,7 @@ export const SimulationResultCard = ({
                   <Lightbulb className="w-4 h-4" /> Experiment:
                 </dt>
                 <dd className="break-words font-normal text-gray-600">
-                  {simulation.experimentTypeId}
+                  {simulation.experimentType}
                 </dd>
               </div>
 

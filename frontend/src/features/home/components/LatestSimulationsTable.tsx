@@ -40,7 +40,7 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
       cell: (info) => info.getValue() || 'N/A',
     },
     {
-      accessorKey: 'campaignId',
+      accessorKey: 'campaign',
       header: 'Campaign',
       cell: (info) => info.getValue() || 'N/A',
     },

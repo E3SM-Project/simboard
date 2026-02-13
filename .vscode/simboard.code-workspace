@@ -21,7 +21,7 @@
         "type": "shell",
         "command": "pnpm",
         "args": ["dev"],
-        "options": { "cwd": "${workspaceFolder}/frontend" },
+        "options": { "cwd": "${workspaceFolder:Frontend}" },
         "isBackground": true,
         "problemMatcher": {
           "owner": "vite",
@@ -58,31 +58,15 @@
         "console": "integratedTerminal",
         "justMyCode": true,
         "env": {
-          "PYTHONPATH": "${workspaceFolder}/backend"
+          "PYTHONPATH": "${workspaceFolder:Backend}"
         }
-      },
-      {
-        "name": "backend: Attach (Docker)",
-        "type": "debugpy",
-        "request": "attach",
-        "connect": {
-          "host": "localhost",
-          "port": 5678
-        },
-        "pathMappings": [
-          {
-            "localRoot": "${workspaceFolder}/../backend",
-            "remoteRoot": "/app"
-          }
-        ],
-        "justMyCode": true
       },
       {
         "name": "frontend: Vite (Chrome)",
         "type": "chrome", // you can also use "pwa-chrome" if preferred
         "request": "launch",
         "url": "https://127.0.0.1:5173",
-        "webRoot": "${workspaceFolder}/frontend",
+        "webRoot": "${workspaceFolder:Frontend}",
         "preLaunchTask": "frontend: dev (vite)",
         "skipFiles": [
           "<node_internals>/**",
@@ -100,12 +84,12 @@
         "type": "firefox", // requires the "Debugger for Firefox" extension
         "request": "launch",
         "url": "https://127.0.0.1:5173",
-        "webRoot": "${workspaceFolder}/frontend",
+        "webRoot": "${workspaceFolder:Frontend}",
         "preLaunchTask": "frontend: dev (vite)",
         "pathMappings": [
           {
             "url": "https://127.0.0.1:5173/",
-            "path": "${workspaceFolder}/frontend"
+            "path": "${workspaceFolder:Frontend}"
           }
         ],
         "skipFiles": [

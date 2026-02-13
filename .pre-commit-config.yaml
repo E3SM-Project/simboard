@@ -42,6 +42,7 @@ repos:
           - fastapi
           - pydantic
           - sqlalchemy
+          - types-python-dateutil
 
   # ------------------------
   # Frontend (Node / TS)

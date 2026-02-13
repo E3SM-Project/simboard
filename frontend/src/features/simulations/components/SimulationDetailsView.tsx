@@ -158,10 +158,10 @@ export const SimulationDetailsView = ({
                   <ReadonlyInput value={simulation.status} />
                 </FieldRow>
                 <FieldRow label="Campaign ID">
-                  <ReadonlyInput value={simulation.campaignId} />
+                  <ReadonlyInput value={simulation.campaign} />
                 </FieldRow>
                 <FieldRow label="Experiment Type ID">
-                  <ReadonlyInput value={simulation.experimentTypeId} />
+                  <ReadonlyInput value={simulation.experimentType} />
                 </FieldRow>
                 <FieldRow label="Machine">
                   <ReadonlyInput value={simulation.machine.name} />

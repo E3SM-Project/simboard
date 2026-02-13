@@ -44,24 +44,24 @@ export const BrowseFiltersSidePanel = ({
       >
         <label className="block text-sm font-medium text-gray-700">Campaign</label>
         <MultiSelect
-          options={(availableFilters.campaignId || []).map((id) => ({
+          options={(availableFilters.campaign || []).map((id) => ({
             value: id,
             label: id,
           }))}
-          defaultValue={appliedFilters.campaignId || []}
-          onValueChange={(next) => handleChange('campaignId', next as string[])}
+          defaultValue={appliedFilters.campaign || []}
+          onValueChange={(next) => handleChange('campaign', next as string[])}
           placeholder="Select campaigns"
           resetOnDefaultValueChange={true}
         />
 
         <label className="block text-sm font-medium text-gray-700">Experiment Type</label>
         <MultiSelect
-          options={(availableFilters.experimentTypeId || []).map((id) => ({
+          options={(availableFilters.experimentType || []).map((id) => ({
             value: id,
             label: id,
           }))}
-          defaultValue={appliedFilters.experimentTypeId || []}
-          onValueChange={(next) => handleChange('experimentTypeId', next as string[])}
+          defaultValue={appliedFilters.experimentType || []}
+          onValueChange={(next) => handleChange('experimentType', next as string[])}
           placeholder="Select experiments"
           resetOnDefaultValueChange={true}
         />

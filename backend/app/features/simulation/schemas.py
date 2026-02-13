@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -11,7 +11,7 @@ from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
 
 
-class SimulationStatus(str, Enum):
+class SimulationStatus(StrEnum):
     CREATED = "created"
     QUEUED = "queued"
     RUNNING = "running"
@@ -19,7 +19,7 @@ class SimulationStatus(str, Enum):
     COMPLETED = "completed"
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     """Enumeration of possible artifact types."""
 
     OUTPUT = "output"
@@ -28,13 +28,36 @@ class ArtifactKind(str, Enum):
     POSTPROCESS_SCRIPT = "postprocessing_script"
 
 
-class ExternalLinkKind(str, Enum):
+class ExternalLinkKind(StrEnum):
     """Enumeration of possible external link types."""
 
     DIAGNOSTIC = "diagnostic"
     PERFORMANCE = "performance"
     DOCS = "docs"
     OTHER = "other"
+
+
+class ExperimentType(StrEnum):
+    # --- DECK core experiments ---
+    PI_CONTROL = "piControl"
+    HISTORICAL = "historical"
+    AMIP = "amip"
+    ABRUPT_4XCO2 = "abrupt-4xCO2"
+    ONE_PCT_CO2 = "1pctCO2"
+
+    # --- ScenarioMIP (SSPs) ---
+    SSP119 = "ssp119"
+    SSP126 = "ssp126"
+    SSP245 = "ssp245"
+    SSP370 = "ssp370"
+    SSP585 = "ssp585"
+
+    # --- ESM variants ---
+    ESM_HIST = "esm-hist"
+    ESM_PICONTROL = "esm-piControl"
+
+
+KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
 
 
 class ExternalLinkCreate(CamelInBaseModel):
@@ -147,11 +170,21 @@ class SimulationCreate(CamelInBaseModel):
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
-    campaign_id: Annotated[
-        str | None, Field(None, description="Optional ID of the associated campaign")
+    campaign: Annotated[
+        str | None,
+        Field(
+            None, description="Campaign or run grouping (e.g. historical, amip, tuning)"
+        ),
     ]
-    experiment_type_id: Annotated[
-        str | None, Field(None, description="Optional ID of the experiment type")
+    experiment_type: Annotated[
+        ExperimentType | str | None,
+        Field(
+            None,
+            description=(
+                "High-level experiment category (e.g. historical, amip, piControl). "
+                "Often aligned with CMIP experiment identifiers."
+            ),
+        ),
     ]
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
@@ -298,11 +331,21 @@ class SimulationOut(CamelOutBaseModel):
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
     status: Annotated[str, Field(..., description="Current status of the simulation")]
-    campaign_id: Annotated[
-        str | None, Field(None, description="Optional ID of the associated campaign")
+    campaign: Annotated[
+        str | None,
+        Field(
+            None, description="Campaign or run grouping (e.g. historical, amip, tuning)"
+        ),
     ]
-    experiment_type_id: Annotated[
-        str | None, Field(None, description="Optional ID of the experiment type")
+    experiment_type: Annotated[
+        ExperimentType | str | None,
+        Field(
+            None,
+            description=(
+                "High-level experiment category (e.g. historical, amip, piControl). "
+                "Often aligned with CMIP experiment identifiers."
+            ),
+        ),
     ]
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")

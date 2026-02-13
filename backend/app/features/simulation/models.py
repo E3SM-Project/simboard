@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -24,14 +24,14 @@ class Status(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     OUTPUT = "output"
     ARCHIVE = "archive"
     RUN_SCRIPT = "run_script"
     POSTPROCESSING_SCRIPT = "postprocessing_script"
 
 
-class ExternalLinkKind(str, Enum):
+class ExternalLinkKind(StrEnum):
     DIAGNOSTIC = "diagnostic"
     PERFORMANCE = "performance"
     DOCS = "docs"
@@ -43,8 +43,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Configuration
     # ~~~~~~~~~~~~~~
-    name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
-    case_name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
+    name: Mapped[str] = mapped_column(String(200), index=True)
+    case_name: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(String(120))
@@ -61,8 +61,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(50), ForeignKey("status_lookup.code"), index=True
     )
-    campaign_id: Mapped[str | None] = mapped_column(String(100))
-    experiment_type_id: Mapped[str | None] = mapped_column(String(100))
+    campaign: Mapped[str | None] = mapped_column(String(100))
+    experiment_type: Mapped[str | None] = mapped_column(String(100))
     initialization_type: Mapped[str] = mapped_column(String(50))
     group_name: Mapped[str | None] = mapped_column(String(120))
 
@@ -126,7 +126,12 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Constraints
     # ~~~~~~~~~~~
     __table_args__ = (
-        UniqueConstraint("name", "git_tag", name="uq_simulation_name_tag"),
+        UniqueConstraint(
+            "case_name",
+            "machine_id",
+            "simulation_start_date",
+            name="uq_simulation_case_machine_date",
+        ),
     )
 
 
