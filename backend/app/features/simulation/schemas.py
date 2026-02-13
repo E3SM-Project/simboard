@@ -39,22 +39,22 @@ class ExternalLinkKind(StrEnum):
 
 class ExperimentType(StrEnum):
     # --- DECK core experiments ---
-    piControl = "piControl"
-    historical = "historical"
-    amip = "amip"
-    abrupt_4xCO2 = "abrupt-4xCO2"
-    one_pct_CO2 = "1pctCO2"
+    PI_CONTROL = "piControl"
+    HISTORICAL = "historical"
+    AMIP = "amip"
+    ABRUPT_4XCO2 = "abrupt-4xCO2"
+    ONE_PCT_CO2 = "1pctCO2"
 
     # --- ScenarioMIP (SSPs) ---
-    ssp119 = "ssp119"
-    ssp126 = "ssp126"
-    ssp245 = "ssp245"
-    ssp370 = "ssp370"
-    ssp585 = "ssp585"
+    SSP119 = "ssp119"
+    SSP126 = "ssp126"
+    SSP245 = "ssp245"
+    SSP370 = "ssp370"
+    SSP585 = "ssp585"
 
     # --- ESM variants ---
-    esm_hist = "esm-hist"
-    esm_piControl = "esm-piControl"
+    ESM_HIST = "esm-hist"
+    ESM_PICONTROL = "esm-piControl"
 
 
 KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
