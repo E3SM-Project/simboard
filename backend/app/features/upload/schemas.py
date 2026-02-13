@@ -16,3 +16,4 @@ class IngestArchiveResponse(BaseModel):
     created_count: int
     duplicate_count: int
     simulations: list[SimulationCreate]
+    errors: list[dict[str, str]]

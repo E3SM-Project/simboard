@@ -9,6 +9,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logger import _setup_root_logger
 from app.features.machine.api import router as machine_router
 from app.features.simulation.api import router as simulations_router
+from app.features.upload.api import router as upload_router
 from app.features.user.api import auth_router, user_router
 
 
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(machine_router, prefix=API_BASE)
     app.include_router(user_router, prefix=API_BASE)
     app.include_router(auth_router, prefix=API_BASE)
+    app.include_router(upload_router, prefix=API_BASE)
     app.include_router(meta_router, prefix=API_BASE)
     app.include_router(health_router, prefix=API_BASE)
 
