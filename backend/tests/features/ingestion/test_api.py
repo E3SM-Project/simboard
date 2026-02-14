@@ -17,6 +17,7 @@ These uncovered lines represent edge cases that would require integration
 testing with real HTTP multipart uploads to fully exercise.
 """
 
+import hashlib
 import uuid
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -54,14 +55,21 @@ def override_auth_dependency(normal_user_sync):
 
 
 class TestIngestFromPathEndpoint:
-    def test_endpoint_returns_summary(self, client, db: Session):
+    @staticmethod
+    def _create_archive_file(
+        tmp_path, name: str = "archive.tar.gz", content: bytes = b"x"
+    ):
+        archive_path = tmp_path / name
+        archive_path.write_bytes(content)
+
+        return archive_path
+
+    def test_endpoint_returns_summary(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -95,11 +103,9 @@ class TestIngestFromPathEndpoint:
         assert data["duplicate_count"] == 0
         assert data["simulations"][0]["name"] == "Test Simulation"
 
-    def test_endpoint_returns_409_on_conflict(self, client):
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+    def test_endpoint_returns_409_on_conflict(self, client, tmp_path):
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -110,14 +116,12 @@ class TestIngestFromPathEndpoint:
         assert res.status_code == 409
         assert res.json()["detail"] == "Duplicate simulation"
 
-    def test_endpoint_includes_errors_in_response(self, client, db: Session):
+    def test_endpoint_includes_errors_in_response(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -175,15 +179,16 @@ class TestIngestFromPathEndpoint:
         assert data["simulations"][0]["name"] == "Sim1"
         assert data["simulations"][1]["name"] == "Sim2"
 
-    def test_endpoint_creates_audit_record(self, client, db: Session):
+    def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""
         machine = db.query(Machine).first()
         assert machine is not None
 
-        payload = {
-            "archive_path": "/tmp/test.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_content = b"audit-archive-content"
+        archive_path = self._create_archive_file(
+            tmp_path, "test.tar.gz", archive_content
+        )
+        payload = {"archive_path": str(archive_path)}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -216,7 +221,7 @@ class TestIngestFromPathEndpoint:
         # Verify audit record was created
         ingestion = (
             db.query(Ingestion)
-            .filter(Ingestion.source_reference == "/tmp/test.tar.gz")
+            .filter(Ingestion.source_reference == str(archive_path))
             .first()
         )
 
@@ -226,9 +231,44 @@ class TestIngestFromPathEndpoint:
         assert ingestion.created_count == 1
         assert ingestion.duplicate_count == 0
         assert ingestion.error_count == 0
+        assert ingestion.archive_sha256 == hashlib.sha256(archive_content).hexdigest()
+
+    def test_endpoint_returns_400_when_archive_path_missing(self, client, tmp_path):
+        missing_path = tmp_path / "missing.tar.gz"
+        payload = {"archive_path": str(missing_path)}
+
+        res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 400
+        assert (
+            res.json()["detail"]
+            == f"Archive path '{missing_path}' does not exist or is not a file."
+        )
+
+    def test_endpoint_returns_500_when_sha256_fails(self, client, tmp_path):
+        archive_path = self._create_archive_file(tmp_path, "unreadable.tar.gz")
+        payload = {"archive_path": str(archive_path)}
+
+        with patch(
+            "app.features.ingestion.api.Path.open",
+            side_effect=OSError("cannot read archive"),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 500
+        assert "Failed to compute SHA256" in res.json()["detail"]
 
 
 class TestIngestFromUploadEndpoint:
+    @staticmethod
+    def _create_archive_file(
+        tmp_path, name: str = "archive.tar.gz", content: bytes = b"x"
+    ):
+        archive_path = tmp_path / name
+        archive_path.write_bytes(content)
+
+        return archive_path
+
     def test_upload_valid_zip_file(self, client, db: Session):
         """Test uploading a valid .zip archive."""
         machine = db.query(Machine).first()
@@ -479,12 +519,10 @@ class TestIngestFromUploadEndpoint:
         # Should either reject or handle gracefully
         assert res.status_code in [400, 422]
 
-    def test_path_endpoint_handles_lookup_error(self, client):
+    def test_path_endpoint_handles_lookup_error(self, client, tmp_path):
         """Test that LookupError is handled with 400 response."""
-        payload = {
-            "archive_path": "/tmp/lookup_error.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "lookup_error.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -495,12 +533,10 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine not found"
 
-    def test_path_endpoint_handles_generic_exception(self, client):
+    def test_path_endpoint_handles_generic_exception(self, client, tmp_path):
         """Test that generic exceptions are handled with 500 response."""
-        payload = {
-            "archive_path": "/tmp/exception.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "exception.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -512,13 +548,11 @@ class TestIngestFromUploadEndpoint:
         assert res.json()["detail"] == "Unexpected error"
 
     def test_path_endpoint_failed_status_no_simulations_with_errors(
-        self, client, db: Session
+        self, client, db: Session, tmp_path
     ):
         """Test that failed status is set when no simulations are created but errors exist."""
-        payload = {
-            "archive_path": "/tmp/failed_status.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "failed_status.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         mock_errors = [
             {"file": "sim1.json", "error": "Invalid format"},
@@ -536,7 +570,7 @@ class TestIngestFromUploadEndpoint:
         # Verify failed status in audit record
         ingestion = (
             db.query(Ingestion)
-            .filter(Ingestion.source_reference == "/tmp/failed_status.tar.gz")
+            .filter(Ingestion.source_reference == str(archive_path))
             .first()
         )
 
@@ -601,15 +635,15 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 500
         assert res.json()["detail"] == "Unexpected upload error"
 
-    def test_persist_simulations_with_artifacts(self, client, db: Session):
+    def test_persist_simulations_with_artifacts(self, client, db: Session, tmp_path):
         """Test that simulations with artifacts are persisted correctly."""
         machine = db.query(Machine).first()
         assert machine is not None
 
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(
+            tmp_path, "archive_with_artifacts.tar.gz"
+        )
+        payload = {"archive_path": str(archive_path)}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -657,15 +691,13 @@ class TestIngestFromUploadEndpoint:
         assert simulation.artifacts[0].kind == "output"
         assert simulation.artifacts[0].uri == "https://example.com/output.tar.gz"
 
-    def test_persist_simulations_with_links(self, client, db: Session):
+    def test_persist_simulations_with_links(self, client, db: Session, tmp_path):
         """Test that simulations with external links are persisted correctly."""
         machine = db.query(Machine).first()
         assert machine is not None
 
-        payload = {
-            "archive_path": "/tmp/archive.tar.gz",
-            "output_dir": "/tmp/output",
-        }
+        archive_path = self._create_archive_file(tmp_path, "archive_with_links.tar.gz")
+        payload = {"archive_path": str(archive_path)}
 
         mock_simulations = [
             SimulationCreate.model_validate(

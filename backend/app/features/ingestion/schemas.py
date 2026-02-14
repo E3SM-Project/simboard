@@ -15,14 +15,16 @@ class IngestionStatus(str, Enum):
     FAILED = "failed"
 
 
-class IngestArchiveRequest(BaseModel):
-    """Request payload for ingesting an archive and persisting simulations."""
+class IngestFromPathRequest(BaseModel):
+    """
+    Request payload for ingesting an archive from a path and persisting
+    simulations
+    ."""
 
     archive_path: str = Field(..., description="Path to the archive file")
-    output_dir: str = Field(..., description="Directory for extracted files")
 
 
-class IngestArchiveResponse(BaseModel):
+class IngestionResponse(BaseModel):
     """Response payload for ingesting and persisting simulations."""
 
     created_count: int

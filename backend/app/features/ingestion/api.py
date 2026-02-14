@@ -12,9 +12,9 @@ from app.core.database import transaction
 from app.features.ingestion.ingest import ingest_archive
 from app.features.ingestion.models import Ingestion
 from app.features.ingestion.schemas import (
-    IngestArchiveRequest,
-    IngestArchiveResponse,
+    IngestFromPathRequest,
     IngestionCreate,
+    IngestionResponse,
     IngestionStatus,
 )
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
@@ -27,19 +27,183 @@ router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
 @router.post(
     "/from-path",
-    response_model=IngestArchiveResponse,
+    response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def ingest_from_path(
-    payload: IngestArchiveRequest,
+    payload: IngestFromPathRequest,
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ):
     """Ingest an archive from a file system path and persist simulations."""
-    try:
-        simulations, created_count, duplicate_count, errors = ingest_archive(
-            payload.archive_path, payload.output_dir, db
+    archive_path = Path(payload.archive_path)
+    _validate_archive_path(archive_path)
+    archive_sha256 = _compute_archive_sha256(archive_path)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        simulations, created_count, duplicate_count, errors = _run_ingest_archive(
+            archive_path=str(archive_path),
+            output_dir=tmpdir,
+            db=db,
         )
+
+    error_count = len(errors)
+    status_value = _resolve_ingestion_status(created_count, error_count)
+
+    with transaction(db):
+        _persist_simulations(simulations, db, user)
+
+        ingestion_create = IngestionCreate(
+            source_type="path",
+            source_reference=str(archive_path),
+            triggered_by=user.id,
+            status=status_value,
+            created_count=created_count,
+            duplicate_count=duplicate_count,
+            error_count=error_count,
+            archive_sha256=archive_sha256,
+        )
+        ingestion = Ingestion(
+            **ingestion_create.model_dump(),
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(ingestion)
+        db.flush()
+
+    response = IngestionResponse(
+        created_count=created_count,
+        duplicate_count=duplicate_count,
+        simulations=simulations,
+        errors=errors,
+    )
+
+    return response
+
+
+@router.post(
+    "/from-upload",
+    response_model=IngestionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def ingest_from_upload(  # noqa: C901
+    file: UploadFile = File(...),
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+):
+    """Ingest an archive via file upload and persist simulations."""
+    _validate_upload_file(file)
+    filename = file.filename
+    if filename is None:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / filename
+            sha256_hex = _save_uploaded_file_and_hash(file, archive_path)
+
+            simulations, created_count, duplicate_count, errors = _run_ingest_archive(
+                archive_path=str(archive_path),
+                output_dir=tmpdir,
+                db=db,
+            )
+
+            error_count = len(errors)
+            status_value = _resolve_ingestion_status(created_count, error_count)
+
+            with transaction(db):
+                _persist_simulations(simulations, db, user)
+
+                ingestion_create = IngestionCreate(
+                    source_type="upload",
+                    source_reference=filename,
+                    triggered_by=user.id,
+                    status=status_value,
+                    created_count=created_count,
+                    duplicate_count=duplicate_count,
+                    error_count=error_count,
+                    archive_sha256=sha256_hex,
+                )
+                ingestion = Ingestion(
+                    **ingestion_create.model_dump(),
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(ingestion)
+                db.flush()
+
+            response = IngestionResponse(
+                created_count=created_count,
+                duplicate_count=duplicate_count,
+                simulations=simulations,
+                errors=errors,
+            )
+
+            return response
+    finally:
+        file.file.close()
+
+
+def _validate_archive_path(archive_path: Path) -> None:
+    if not archive_path.exists() or not archive_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Archive path '{archive_path}' does not exist or is not a file.",
+        )
+
+
+def _compute_archive_sha256(archive_path: Path) -> str:
+    sha256_hash = hashlib.sha256()
+
+    try:
+        with archive_path.open("rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                sha256_hash.update(chunk)
+
+        return sha256_hash.hexdigest()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compute SHA256 for '{archive_path}': {exc}",
+        ) from exc
+
+
+def _validate_upload_file(file: UploadFile) -> None:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    filename = file.filename.lower()
+
+    if not (
+        filename.endswith(".zip")
+        or filename.endswith(".tar.gz")
+        or filename.endswith(".tgz")
+    ):
+        raise HTTPException(
+            status_code=400, detail="File must be a .zip, .tar.gz, or .tgz archive"
+        )
+
+    if hasattr(file, "size") and file.size and file.size > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large")
+
+
+def _save_uploaded_file_and_hash(
+    file: UploadFile,
+    archive_path: Path,
+) -> str:
+    sha256_hash = hashlib.sha256()
+
+    with archive_path.open("wb") as out_file:
+        for chunk in iter(lambda: file.file.read(8192), b""):
+            out_file.write(chunk)
+            sha256_hash.update(chunk)
+
+    return sha256_hash.hexdigest()
+
+
+def _run_ingest_archive(
+    archive_path: str, output_dir: str, db: Session
+) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
+    try:
+        return ingest_archive(archive_path=archive_path, output_dir=output_dir, db=db)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
@@ -57,27 +221,34 @@ def ingest_from_path(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
 
-    error_count = len(errors)
 
-    if error_count == 0 and created_count > 0:
-        status_value = IngestionStatus.SUCCESS.value
-    elif error_count > 0 and created_count > 0:
-        status_value = IngestionStatus.PARTIAL.value
-    else:
-        status_value = IngestionStatus.FAILED.value
+def _persist_ingestion_result(
+    *,
+    db: Session,
+    user: User,
+    source_type: str,
+    source_reference: str,
+    archive_sha256: str | None,
+    simulations: list[SimulationCreate],
+    created_count: int,
+    duplicate_count: int,
+    errors: list[dict[str, str]],
+) -> None:
+    error_count = len(errors)
+    status_value = _resolve_ingestion_status(created_count, error_count)
 
     with transaction(db):
         _persist_simulations(simulations, db, user)
 
         ingestion_create = IngestionCreate(
-            source_type="path",
-            source_reference=str(payload.archive_path),
+            source_type=source_type,
+            source_reference=source_reference,
             triggered_by=user.id,
             status=status_value,
             created_count=created_count,
             duplicate_count=duplicate_count,
             error_count=error_count,
-            archive_sha256=None,
+            archive_sha256=archive_sha256,
         )
         ingestion = Ingestion(
             **ingestion_create.model_dump(),
@@ -86,121 +257,19 @@ def ingest_from_path(
         db.add(ingestion)
         db.flush()
 
-    return IngestArchiveResponse(
-        created_count=created_count,
-        duplicate_count=duplicate_count,
-        simulations=simulations,
-        errors=errors,
-    )
 
+def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
+    if error_count == 0 and created_count > 0:
+        return IngestionStatus.SUCCESS.value
 
-@router.post(
-    "/from-upload",
-    response_model=IngestArchiveResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def ingest_from_upload(  # noqa: C901
-    file: UploadFile = File(...),
-    db: Session = Depends(get_database_session),
-    user: User = Depends(current_active_user),
-):
-    """Ingest an archive via file upload and persist simulations."""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
+    if error_count > 0 and created_count > 0:
+        return IngestionStatus.PARTIAL.value
 
-    filename = file.filename.lower()
-    if not (
-        filename.endswith(".zip")
-        or filename.endswith(".tar.gz")
-        or filename.endswith(".tgz")
-    ):
-        raise HTTPException(
-            status_code=400, detail="File must be a .zip, .tar.gz, or .tgz archive"
-        )
-
-    # Optional: file size safety (20MB max)
-    # TODO: Check to see what the max filesize should be based on expected use
-    # cases and adjust as needed
-    if hasattr(file, "size") and file.size and file.size > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large")
-
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            archive_path = Path(tmpdir) / file.filename
-            sha256_hash = hashlib.sha256()
-
-            # Save file and compute SHA256
-            with open(archive_path, "wb") as out_file:
-                while chunk := file.file.read(8192):
-                    sha256_hash.update(chunk)
-                    out_file.write(chunk)
-
-            sha256_hex = sha256_hash.hexdigest()
-
-            try:
-                simulations, created_count, duplicate_count, errors = ingest_archive(
-                    str(archive_path), tmpdir, db
-                )
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT, detail=str(exc)
-                ) from exc
-            except LookupError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-                ) from exc
-            except ValidationError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-                ) from exc
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-                ) from exc
-
-            error_count = len(errors)
-
-            if error_count == 0 and created_count > 0:
-                status_value = IngestionStatus.SUCCESS.value
-            elif error_count > 0 and created_count > 0:
-                status_value = IngestionStatus.PARTIAL.value
-            else:
-                status_value = IngestionStatus.FAILED.value
-
-            with transaction(db):
-                _persist_simulations(simulations, db, user)
-
-                ingestion_create = IngestionCreate(
-                    source_type="upload",
-                    source_reference=file.filename,
-                    triggered_by=user.id,
-                    status=status_value,
-                    created_count=created_count,
-                    duplicate_count=duplicate_count,
-                    error_count=error_count,
-                    archive_sha256=sha256_hex,
-                )
-                ingestion = Ingestion(
-                    **ingestion_create.model_dump(),
-                    created_at=datetime.now(timezone.utc),
-                )
-                db.add(ingestion)
-                db.flush()
-
-            return IngestArchiveResponse(
-                created_count=created_count,
-                duplicate_count=duplicate_count,
-                simulations=simulations,
-                errors=errors,
-            )
-    finally:
-        file.file.close()
+    return IngestionStatus.FAILED.value
 
 
 def _persist_simulations(
-    simulations: list[SimulationCreate],
-    db: Session,
-    user: User,
+    simulations: list[SimulationCreate], db: Session, user: User
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
     now = datetime.now(timezone.utc)
