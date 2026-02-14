@@ -256,6 +256,7 @@ def _map_metadata_to_schema(
     # Parse datetime fields using the shared utility function
     # Note: simulation_start_date is already validated in _extract_simulation_key()
     simulation_start_date = _parse_datetime_field(metadata.get("simulation_start_date"))
+    simulation_end_date = _parse_datetime_field(metadata.get("simulation_end_date"))
 
     run_start_date = _parse_datetime_field(metadata.get("run_start_date"))
     run_end_date = _parse_datetime_field(metadata.get("run_end_date"))
@@ -264,7 +265,7 @@ def _map_metadata_to_schema(
 
     # Map metadata to schema; Pydantic will validate required fields
     # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
-    return SimulationCreate.model_validate(
+    result = SimulationCreate.model_validate(
         {
             # Required identification fields
             "name": metadata.get("name"),
@@ -280,6 +281,7 @@ def _map_metadata_to_schema(
             "initializationType": metadata.get("initialization_type"),
             "machineId": machine_id,
             "simulationStartDate": simulation_start_date,
+            "simulationEndDate": simulation_end_date,
             # Optional experiment classification
             "experimentType": metadata.get("experiment_type"),
             "campaign": metadata.get("campaign"),
@@ -301,6 +303,8 @@ def _map_metadata_to_schema(
             "lastUpdatedBy": None,
         }
     )
+
+    return result
 
 
 def _parse_datetime_field(value: str | None) -> datetime | None:

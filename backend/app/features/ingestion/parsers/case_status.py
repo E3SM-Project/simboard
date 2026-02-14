@@ -21,18 +21,23 @@ def parse_case_status(file_path: str) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        A dictionary containing parsed information such as run start and
+        A dictionary containing parsed information such as simulation start and
         end dates.
     """
-    result: dict[str, Any] = {"run_start_date": None, "run_end_date": None}
+    result: dict[str, Any] = {
+        "simulation_start_date": None,
+        "simulation_end_date": None,
+    }
 
     open_func = _get_open_func(file_path)
     with open_func(file_path, "rt") as file:
         for line in file:
             if "RUN_STARTDATE" in line:
                 try:
-                    result["run_start_date"] = line.split("RUN_STARTDATE=")[1]
-                    result["run_start_date"] = result["run_start_date"].split()[0]
+                    result["simulation_start_date"] = line.split("RUN_STARTDATE=")[1]
+                    result["simulation_start_date"] = result[
+                        "simulation_start_date"
+                    ].split()[0]
                 except (IndexError, ValueError) as exc:
                     logger.warning(
                         "Malformed RUN_STARTDATE line in %s: %s (%s)",
@@ -55,28 +60,28 @@ def parse_case_status(file_path: str) -> dict[str, Any]:
                     )
                     continue
 
-                result["run_end_date"] = _calculate_run_end_date(
-                    result["run_start_date"], stop_option, stop_n
+                result["simulation_end_date"] = _calculate_simulation_end_date(
+                    result["simulation_start_date"], stop_option, stop_n
                 )
 
     return result
 
 
-def _calculate_run_end_date(
-    run_start_date: str | None, stop_option: str | None, stop_n: int | None
+def _calculate_simulation_end_date(
+    simulation_start_date: str | None, stop_option: str | None, stop_n: int | None
 ) -> str | None:
-    if not (run_start_date and stop_option and stop_n):
+    if not (simulation_start_date and stop_option and stop_n):
         return None
 
-    start = datetime.strptime(run_start_date, "%Y-%m-%d")
+    start = datetime.strptime(simulation_start_date, "%Y-%m-%d")
     option = stop_option.lower()
     n = stop_n
 
-    if option == "ndays":
+    if "days" in option:
         end = start + relativedelta(days=n)
-    elif option == "nmonths":
+    elif "months" in option:
         end = start + relativedelta(months=n)
-    elif option == "nyears":
+    elif "years" in option:
         end = start + relativedelta(years=n)
     else:
         return None
