@@ -330,7 +330,9 @@ class SimulationOut(CamelOutBaseModel):
     # -------------------
     # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
-    status: Annotated[str, Field(..., description="Current status of the simulation")]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
     campaign: Annotated[
         str | None,
         Field(

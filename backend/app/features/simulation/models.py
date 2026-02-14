@@ -47,9 +47,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
     case_name: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
-    compset_alias: Mapped[str] = mapped_column(String(120))
-    grid_name: Mapped[str] = mapped_column(String(200))
-    grid_resolution: Mapped[str] = mapped_column(String(50))
+    compset_alias: Mapped[str] = mapped_column(Text)
+    grid_name: Mapped[str] = mapped_column(Text)
+    grid_resolution: Mapped[str] = mapped_column(Text)
     parent_simulation_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("simulations.id")
     )
@@ -61,10 +61,10 @@ class Simulation(Base, IDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(50), ForeignKey("status_lookup.code"), index=True
     )
-    campaign: Mapped[str | None] = mapped_column(String(100))
-    experiment_type: Mapped[str | None] = mapped_column(String(100))
+    campaign: Mapped[str | None] = mapped_column(Text)
+    experiment_type: Mapped[str | None] = mapped_column(Text)
     initialization_type: Mapped[str] = mapped_column(String(50))
-    group_name: Mapped[str | None] = mapped_column(String(120))
+    group_name: Mapped[str | None] = mapped_column(Text)
 
     # Model timeline
     # ~~~~~~~~~~~~~~
@@ -87,7 +87,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: Mapped[str | None] = mapped_column(String(500))
+    git_repository_url: Mapped[str | None] = mapped_column(Text)
     git_branch: Mapped[str | None] = mapped_column(String(200))
     git_tag: Mapped[str | None] = mapped_column(String(100))
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), index=True)
