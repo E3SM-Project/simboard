@@ -222,42 +222,6 @@ def _run_ingest_archive(
         ) from exc
 
 
-def _persist_ingestion_result(
-    *,
-    db: Session,
-    user: User,
-    source_type: str,
-    source_reference: str,
-    archive_sha256: str | None,
-    simulations: list[SimulationCreate],
-    created_count: int,
-    duplicate_count: int,
-    errors: list[dict[str, str]],
-) -> None:
-    error_count = len(errors)
-    status_value = _resolve_ingestion_status(created_count, error_count)
-
-    with transaction(db):
-        _persist_simulations(simulations, db, user)
-
-        ingestion_create = IngestionCreate(
-            source_type=source_type,
-            source_reference=source_reference,
-            triggered_by=user.id,
-            status=status_value,
-            created_count=created_count,
-            duplicate_count=duplicate_count,
-            error_count=error_count,
-            archive_sha256=archive_sha256,
-        )
-        ingestion = Ingestion(
-            **ingestion_create.model_dump(),
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(ingestion)
-        db.flush()
-
-
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
     if error_count == 0 and created_count > 0:
         return IngestionStatus.SUCCESS.value
@@ -269,17 +233,27 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
 
 
 def _persist_simulations(
-    simulations: list[SimulationCreate], db: Session, user: User
+    simulations: list[SimulationCreate],
+    db: Session,
+    user: User,
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
+
     now = datetime.now(timezone.utc)
+
     for sim_create in simulations:
+        data = sim_create.model_dump(
+            by_alias=False,
+            exclude={"artifacts", "links", "created_by", "last_updated_by"},
+            exclude_unset=True,
+        )
+
+        # Normalize URL
+        if data.get("git_repository_url") is not None:
+            data["git_repository_url"] = str(data["git_repository_url"])
+
         sim = Simulation(
-            **sim_create.model_dump(
-                by_alias=False,
-                exclude={"artifacts", "links"},
-                exclude_unset=True,
-            ),
+            **data,
             created_by=user.id,
             last_updated_by=user.id,
             created_at=now,
@@ -288,13 +262,19 @@ def _persist_simulations(
 
         if sim_create.artifacts:
             for artifact in sim_create.artifacts:
-                artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
+                artifact_data = artifact.model_dump(
+                    by_alias=False,
+                    exclude_unset=True,
+                )
                 artifact_data["uri"] = str(artifact.uri)
                 sim.artifacts.append(Artifact(**artifact_data))
 
         if sim_create.links:
             for link in sim_create.links:
-                link_data = link.model_dump(by_alias=False, exclude_unset=True)
+                link_data = link.model_dump(
+                    by_alias=False,
+                    exclude_unset=True,
+                )
                 link_data["url"] = str(link.url)
                 sim.links.append(ExternalLink(**link_data))
 
