@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
-from app.features.upload.parsers.case_status import parse_case_status
-from app.features.upload.parsers.e3sm_timing import parse_e3sm_timing
-from app.features.upload.parsers.git_info import (
+from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
+from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
+from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
     parse_git_status,
 )
-from app.features.upload.parsers.readme_case import parse_readme_case
+from app.features.ingestion.parsers.readme_case import parse_readme_case
+from app.features.simulation.schemas import SimulationStatus
 
 SimulationFiles = dict[str, str | None]
 SimulationMetadata = dict[str, str | None]
@@ -330,6 +331,8 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
         "initialization_type": metadata.get("initialization_type"),
         "group_name": metadata.get("group_name"),
         "simulation_start_date": metadata.get("simulation_start_date"),
+        "simulation_end_date": metadata.get("simulation_end_date"),
+        # TODO: run_start_date and run_end_date are not captured yet
         "run_start_date": metadata.get("run_start_date"),
         "run_end_date": metadata.get("run_end_date"),
         "compiler": metadata.get("compiler"),
@@ -343,10 +346,18 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
     }
 
     placeholder_fields: SimulationMetadata = {
+        # FIXME: We need to determine how to handle parent_simulation_id.
         "parent_simulation_id": None,
-        "simulation_type": None,
-        "status": None,
-        "simulation_end_date": None,
+        # FIXME: This is a required field, but we don't have a way to populate it yet.
+        # We are also considering calling it "isProduction" boolean field.
+        # For now, we will set it the same as "initialization_type".
+        "simulation_type": metadata.get("initialization_type"),
+        # FIXME: We are parsing experiments that are already complete for now.
+        # We need to determine how to handle in-progress simulations that don't have an
+        # end date yet.
+        "status": SimulationStatus.COMPLETED.value,
+        # FIXME: We need to determine how to get the simulation end date and handle
+        # in-progress simulations that don't have an end date yet.
         "extra": None,
         "artifacts": None,
         "links": None,

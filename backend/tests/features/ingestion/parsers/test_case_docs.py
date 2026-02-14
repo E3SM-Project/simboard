@@ -1,4 +1,4 @@
-from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
+from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
 
 
 class TestParseEnvCase:

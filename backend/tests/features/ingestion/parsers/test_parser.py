@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.features.upload.parsers import parser
+from app.features.ingestion.parsers import parser
 
 
 class TestMainParser:
@@ -139,12 +139,12 @@ class TestMainParser:
         defaults.update(kwargs)
 
         with (
-            patch("app.features.upload.parsers.parser.parse_e3sm_timing") as m1,
-            patch("app.features.upload.parsers.parser.parse_readme_case") as m2,
-            patch("app.features.upload.parsers.parser.parse_case_status") as m3,
-            patch("app.features.upload.parsers.parser.parse_git_describe") as m4,
-            patch("app.features.upload.parsers.parser.parse_git_config") as m5,
-            patch("app.features.upload.parsers.parser.parse_git_status") as m6,
+            patch("app.features.ingestion.parsers.parser.parse_e3sm_timing") as m1,
+            patch("app.features.ingestion.parsers.parser.parse_readme_case") as m2,
+            patch("app.features.ingestion.parsers.parser.parse_case_status") as m3,
+            patch("app.features.ingestion.parsers.parser.parse_git_describe") as m4,
+            patch("app.features.ingestion.parsers.parser.parse_git_config") as m5,
+            patch("app.features.ingestion.parsers.parser.parse_git_status") as m6,
         ):
             m1.return_value = defaults["parse_e3sm_timing"]
             m2.return_value = defaults["parse_readme_case"]

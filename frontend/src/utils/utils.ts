@@ -1,5 +1,16 @@
 import { clsx } from 'clsx';
-import { format } from 'date-fns';
+import {
+  addDays,
+  addHours,
+  addMonths,
+  addYears,
+  differenceInDays,
+  differenceInHours,
+  differenceInMinutes,
+  differenceInMonths,
+  differenceInYears,
+  format,
+} from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 
 export const cn = (...inputs: unknown[]) => twMerge(clsx(inputs));
@@ -45,28 +56,37 @@ export const getSimulationDuration = (
 ): string => {
   const start = new Date(simulationStartDate);
   const end = new Date(simulationEndDate);
-  const ms = end.getTime() - start.getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+  const parts: string[] = [];
+  let remainder = start;
 
-  if (days >= 365) {
-    const years = Math.floor(days / 365);
-    return `${years} year${years !== 1 ? 's' : ''}`;
+  const years = differenceInYears(end, remainder);
+  if (years > 0) {
+    parts.push(`${years} year${years !== 1 ? 's' : ''}`);
+    remainder = addYears(remainder, years);
   }
 
-  if (days >= 30) {
-    const months = Math.floor(days / 30);
-    return `${months} month${months !== 1 ? 's' : ''}`;
+  const months = differenceInMonths(end, remainder);
+  if (months > 0) {
+    parts.push(`${months} month${months !== 1 ? 's' : ''}`);
+    remainder = addMonths(remainder, months);
   }
 
-  if (days >= 1) {
-    return `${days} day${days !== 1 ? 's' : ''}`;
+  const days = differenceInDays(end, remainder);
+  if (days > 0) {
+    parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+    remainder = addDays(remainder, days);
   }
 
-  const hours = Math.floor(ms / (1000 * 60 * 60));
-  if (hours >= 1) {
-    return `${hours} hour${hours !== 1 ? 's' : ''}`;
+  const hours = differenceInHours(end, remainder);
+  if (hours > 0) {
+    parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+    remainder = addHours(remainder, hours);
   }
 
-  const minutes = Math.floor(ms / (1000 * 60));
-  return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  const minutes = differenceInMinutes(end, remainder);
+  if (minutes > 0 || parts.length === 0) {
+    parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
+  }
+
+  return parts.slice(0, 2).join(', ');
 };
