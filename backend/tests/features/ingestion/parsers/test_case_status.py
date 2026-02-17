@@ -4,7 +4,7 @@ from app.features.ingestion.parsers.case_status import parse_case_status
 
 
 class TestCaseStatusParser:
-    def test_extracts_run_start_and_end_date_nmonths(self, tmp_path):
+    def test_extracts_simulation_start_and_end_date_nmonths(self, tmp_path):
         content = (
             "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
             "RUN_STARTDATE=2015-01-01  </command>\n"
@@ -16,10 +16,10 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] == "2015-01-01"
-        assert result["run_end_date"] == "2018-06-01"  # 41 months after Jan 2015
+        assert result["simulation_start_date"] == "2015-01-01"
+        assert result["simulation_end_date"] == "2018-06-01"  # 41 months after Jan 2015
 
-    def test_extracts_run_start_and_end_date_ndays(self, tmp_path):
+    def test_extracts_simulation_start_and_end_date_ndays(self, tmp_path):
         content = (
             "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
             "RUN_STARTDATE=2020-01-01  </command>\n"
@@ -31,10 +31,10 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] == "2020-01-01"
-        assert result["run_end_date"] == "2020-01-11"
+        assert result["simulation_start_date"] == "2020-01-01"
+        assert result["simulation_end_date"] == "2020-01-11"
 
-    def test_extracts_run_start_and_end_date_nyears(self, tmp_path):
+    def test_extracts_simulation_start_and_end_date_nyears(self, tmp_path):
         content = (
             "2025-12-18 22:36:24: xmlchange success <command> ./xmlchange "
             "RUN_STARTDATE=2000-01-01  </command>\n"
@@ -46,8 +46,8 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] == "2000-01-01"
-        assert result["run_end_date"] == "2002-01-01"
+        assert result["simulation_start_date"] == "2000-01-01"
+        assert result["simulation_end_date"] == "2002-01-01"
 
     def test_missing_fields(self, tmp_path):
         content = (
@@ -59,8 +59,8 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] == "2015-01-01"
-        assert result["run_end_date"] is None
+        assert result["simulation_start_date"] == "2015-01-01"
+        assert result["simulation_end_date"] is None
 
     def test_malformed_lines_log_warning_and_continue(self, tmp_path, caplog):
         content = (
@@ -87,8 +87,8 @@ class TestCaseStatusParser:
             logger.propagate = old_propagate
             logger.setLevel(old_level)
 
-        assert result["run_start_date"] is None
-        assert result["run_end_date"] is None
+        assert result["simulation_start_date"] is None
+        assert result["simulation_end_date"] is None
         assert any("Malformed RUN_STARTDATE" in message for message in caplog.messages)
         assert any(
             "Malformed STOP_OPTION/STOP_N" in message for message in caplog.messages
@@ -104,8 +104,8 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] is None
-        assert result["run_end_date"] is None
+        assert result["simulation_start_date"] is None
+        assert result["simulation_end_date"] is None
 
     def test_unknown_stop_option_returns_none(self, tmp_path):
         content = (
@@ -119,5 +119,5 @@ class TestCaseStatusParser:
 
         result = parse_case_status(str(file_path))
 
-        assert result["run_start_date"] == "2020-01-01"
-        assert result["run_end_date"] is None
+        assert result["simulation_start_date"] == "2020-01-01"
+        assert result["simulation_end_date"] is None
