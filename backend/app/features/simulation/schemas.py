@@ -12,11 +12,19 @@ from app.features.user.schemas import UserPreview
 
 
 class SimulationStatus(StrEnum):
+    UNKNOWN = "unknown"
     CREATED = "created"
     QUEUED = "queued"
     RUNNING = "running"
     FAILED = "failed"
     COMPLETED = "completed"
+
+
+class SimulationType(StrEnum):
+    UNKNOWN = "unknown"
+    PRODUCTION = "production"
+    EXPERIMENTAL = "experimental"
+    TEST = "test"
 
 
 class ArtifactKind(StrEnum):
@@ -165,8 +173,9 @@ class SimulationCreate(CamelInBaseModel):
 
     # Model setup/context
     # -------------------
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
+    simulation_type: Annotated[
+        SimulationType, Field(..., description="Type of the simulation")
+    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -328,8 +337,9 @@ class SimulationOut(CamelOutBaseModel):
 
     # Model setup/context
     # -------------------
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
+    simulation_type: Annotated[
+        SimulationType, Field(..., description="Type of the simulation")
+    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]

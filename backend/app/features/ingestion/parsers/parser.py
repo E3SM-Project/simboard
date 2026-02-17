@@ -17,7 +17,7 @@ from app.features.ingestion.parsers.git_info import (
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
-from app.features.simulation.schemas import SimulationStatus
+from app.features.simulation.schemas import SimulationStatus, SimulationType
 
 SimulationFiles = dict[str, str | None]
 SimulationMetadata = dict[str, str | None]
@@ -107,16 +107,28 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
     archive_path = str(archive_path)
     output_dir = str(output_dir)
 
-    _extract_archive(archive_path, output_dir)
+    search_root = output_dir
+
+    if _is_supported_archive(archive_path):
+        _extract_archive(archive_path, output_dir)
+    else:
+        if not os.path.isdir(archive_path):
+            raise ValueError(f"Unsupported archive format: {archive_path}")
+
+        logger.info(
+            "Input path is not a supported archive extension; "
+            "treating it as an already-extracted directory."
+        )
+        search_root = archive_path
 
     results: AllSimulations = {}
 
-    exp_dirs = _find_experiment_dirs(output_dir)
+    exp_dirs = _find_experiment_dirs(search_root)
     logger.info(f"Found {len(exp_dirs)} experiment directories.")
 
     if not exp_dirs:
         raise FileNotFoundError(
-            f"No experiment directories found in extracted archive at '{output_dir}'. "
+            f"No experiment directories found under '{search_root}'. "
             "Expected directory names matching pattern: <digits>.<digits>-<digits>"
         )
 
@@ -137,6 +149,11 @@ def _extract_archive(archive_path: str, output_dir: str) -> None:
         _extract_tar_gz(archive_path, output_dir)
     else:
         raise ValueError(f"Unsupported archive format: {archive_path}")
+
+
+def _is_supported_archive(path: str) -> bool:
+    """Return True if path has a supported archive extension."""
+    return path.endswith((".zip", ".tar.gz", ".tgz"))
 
 
 def _extract_zip(zip_path: str, extract_to: str) -> None:
@@ -348,14 +365,14 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
     placeholder_fields: SimulationMetadata = {
         # FIXME: We need to determine how to handle parent_simulation_id.
         "parent_simulation_id": None,
-        # FIXME: This is a required field, but we don't have a way to populate it yet.
-        # We are also considering calling it "isProduction" boolean field.
-        # For now, we will set it the same as "initialization_type".
-        "simulation_type": metadata.get("initialization_type"),
+        # FIXME: This is a required field, but we don't have a way to determine
+        # the simulation type from the parsed files yet. Default to UNKNOWN
+        # for now and manually update on the UI if needed.
+        "simulation_type": SimulationType.UNKNOWN.value,
         # FIXME: We are parsing experiments that are already complete for now.
         # We need to determine how to handle in-progress simulations that don't have an
         # end date yet.
-        "status": SimulationStatus.COMPLETED.value,
+        "status": SimulationStatus.UNKNOWN.value,
         # FIXME: We need to determine how to get the simulation end date and handle
         # in-progress simulations that don't have an end date yet.
         "extra": None,
