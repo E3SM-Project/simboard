@@ -417,3 +417,43 @@ class TestMainParser:
 
         with pytest.raises(ValueError, match="Blocked unsafe tar member type"):
             parser._extract_tar_gz(str(archive_path), str(extract_dir))
+
+    def test_main_parser_treats_directory_as_already_extracted(
+        self, tmp_path: Path
+    ) -> None:
+        """Test non-archive directory input path branch in main_parser."""
+        exp_dir = tmp_path / "1.0-0"
+        exp_dir.mkdir(parents=True)
+        self._create_experiment_files(exp_dir, "001.001")
+
+        with self._mock_all_parsers():
+            result = parser.main_parser(tmp_path, tmp_path / "unused_output")
+
+        assert len(result) == 1
+        assert any("1.0-0" in key for key in result)
+
+    def test_extract_archive_unsupported_format_raises_error(self) -> None:
+        """Test _extract_archive direct unsupported-extension branch."""
+        with pytest.raises(ValueError, match="Unsupported archive format"):
+            parser._extract_archive("/tmp/archive.7z", "/tmp/output")
+
+    def test_parse_experiment_files_supports_single_value_spec(self) -> None:
+        """Test single_value parser path in _parse_experiment_files."""
+        original_specs = parser.FILE_SPECS.copy()
+        try:
+            parser.FILE_SPECS["single_value_test"] = {
+                "pattern": r"dummy",
+                "location": "root",
+                "parser": lambda _path: "single-output",
+                "required": False,
+                "single_value": "campaign",
+            }
+            files: dict[str, str | None] = {key: None for key in parser.FILE_SPECS}
+            files["single_value_test"] = "/tmp/dummy"
+
+            result = parser._parse_experiment_files(files)
+
+            assert result["campaign"] == "single-output"
+        finally:
+            parser.FILE_SPECS.clear()
+            parser.FILE_SPECS.update(original_specs)

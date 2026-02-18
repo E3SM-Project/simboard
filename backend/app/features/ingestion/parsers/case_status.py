@@ -73,9 +73,7 @@ def _extract_simulation_dates(
         run_startdate_match = RUN_STARTDATE_PATTERN.search(line)
         if "RUN_STARTDATE" in line and not run_startdate_match:
             logger.warning(
-                "Malformed RUN_STARTDATE line in %s: %s",
-                file_path,
-                line.strip(),
+                f"Malformed RUN_STARTDATE line in {file_path}: {line.strip()}"
             )
         elif run_startdate_match:
             result["simulation_start_date"] = run_startdate_match.group("start_date")
@@ -83,9 +81,7 @@ def _extract_simulation_dates(
         stop_match = STOP_OPTION_STOP_N_PATTERN.search(line)
         if "STOP_OPTION" in line and "STOP_N" in line and not stop_match:
             logger.warning(
-                "Malformed STOP_OPTION/STOP_N line in %s: %s",
-                file_path,
-                line.strip(),
+                f"Malformed STOP_OPTION/STOP_N line in {file_path}: {line.strip()}"
             )
         elif stop_match:
             _update_simulation_end_date(file_path, line, stop_match, result)
@@ -108,17 +104,12 @@ def _update_simulation_end_date(
         stop_n = int(stop_n_str)
     except ValueError as exc:
         logger.warning(
-            "Malformed STOP_OPTION/STOP_N line in %s: %s (%s)",
-            file_path,
-            line.strip(),
-            exc,
+            f"Malformed STOP_OPTION/STOP_N line in {file_path}: {line.strip()} ({exc})"
         )
         return
 
     result["simulation_end_date"] = _calculate_simulation_end_date(
-        result["simulation_start_date"],
-        stop_option,
-        stop_n,
+        result["simulation_start_date"], stop_option, stop_n
     )
 
 

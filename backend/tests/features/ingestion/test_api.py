@@ -11,10 +11,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
-from app.features.ingestion.api import _validate_upload_file
+from app.features.ingestion.api import (
+    _run_ingest_archive,
+    _validate_upload_file,
+    ingest_from_upload,
+)
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
@@ -260,6 +265,18 @@ class TestIngestFromPathEndpoint:
         assert res.status_code == 500
         assert "Failed to compute SHA256" in res.json()["detail"]
 
+    def test_endpoint_returns_404_when_machine_not_found(self, client, tmp_path):
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {
+            "archive_path": str(archive_path),
+            "machine_name": "does-not-exist-machine",
+        }
+
+        res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 404
+        assert res.json()["detail"] == "Machine 'does-not-exist-machine' not found."
+
 
 class TestIngestFromUploadEndpoint:
     @staticmethod
@@ -371,6 +388,19 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 400
         assert "File must be a .zip, .tar.gz, or .tgz archive" in res.json()["detail"]
+
+    def test_upload_returns_404_when_machine_not_found(self, client):
+        file_content = b"PK\x03\x04"
+        file = BytesIO(file_content)
+
+        res = client.post(
+            f"{API_BASE}/ingestions/from-upload",
+            data={"machine_name": "does-not-exist-machine"},
+            files={"file": ("test.zip", file, "application/zip")},
+        )
+
+        assert res.status_code == 404
+        assert res.json()["detail"] == "Machine 'does-not-exist-machine' not found."
 
     def test_upload_creates_audit_record_with_sha256(self, client, db: Session):
         """Test that upload creates audit record with SHA256 hash."""
@@ -852,3 +882,53 @@ class TestIngestFromUploadEndpoint:
         assert (
             simulation.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         )
+
+
+class TestIngestionApiCoverage:
+    def test_run_ingest_archive_handles_validation_error(self, db: Session):
+        """Covers ValidationError branch in _run_ingest_archive."""
+
+        class _InvalidSchema(BaseModel):
+            value: int
+
+        with pytest.raises(ValidationError) as validation_exc:
+            _InvalidSchema.model_validate({"value": "not-an-int"})
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            side_effect=validation_exc.value,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                _run_ingest_archive("/tmp/archive.tar.gz", "/tmp", db)
+
+        assert exc_info.value.status_code == 400
+
+    def test_ingest_from_upload_defensive_filename_none_branch(
+        self, db: Session, normal_user_sync: dict
+    ):
+        """Covers defensive filename None branch in ingest_from_upload."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        user = User(
+            id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+        upload_file = UploadFile(file=BytesIO(b"archive-bytes"), filename=None)
+
+        with patch(
+            "app.features.ingestion.api._validate_upload_file", return_value=None
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                ingest_from_upload(
+                    file=upload_file,
+                    machine_name=machine.name,
+                    db=db,
+                    user=user,
+                )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Filename is required"

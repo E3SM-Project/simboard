@@ -6,9 +6,14 @@ from uuid import uuid4
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
-from app.features.ingestion.ingest import _normalize_git_url, ingest_archive
+from app.features.ingestion.ingest import (
+    _normalize_git_url,
+    _normalize_simulation_status,
+    _normalize_simulation_type,
+    ingest_archive,
+)
 from app.features.machine.models import Machine
-from app.features.simulation.enums import SimulationStatus
+from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import User
@@ -441,6 +446,26 @@ class TestIngestArchive:
             assert len(errors) == 1
             assert errors[0]["error_type"] == "LookupError"
             assert "Machine 'nonexistent'" in errors[0]["error"]
+
+
+class TestIngestArchiveContinued(TestIngestArchive):
+    def test_normalize_simulation_type_handles_none_and_blank(self) -> None:
+        assert _normalize_simulation_type(None) == SimulationType.UNKNOWN
+        assert _normalize_simulation_type("   ") == SimulationType.UNKNOWN
+
+    def test_normalize_simulation_type_handles_valid_and_unknown_values(self) -> None:
+        assert _normalize_simulation_type("production") == SimulationType.PRODUCTION
+        assert _normalize_simulation_type("TEST") == SimulationType.TEST
+        assert _normalize_simulation_type("not-a-type") == SimulationType.UNKNOWN
+
+    def test_normalize_simulation_status_handles_none_and_blank(self) -> None:
+        assert _normalize_simulation_status(None) == SimulationStatus.CREATED
+        assert _normalize_simulation_status("   ") == SimulationStatus.CREATED
+
+    def test_normalize_simulation_status_handles_valid_and_unknown_values(self) -> None:
+        assert _normalize_simulation_status("running") == SimulationStatus.RUNNING
+        assert _normalize_simulation_status("COMPLETED") == SimulationStatus.COMPLETED
+        assert _normalize_simulation_status("not-a-status") == SimulationStatus.CREATED
 
     def test_timezone_aware_datetime_parsing_through_public_api(
         self, db: Session

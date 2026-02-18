@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.features.ingestion.parsers.git_info import (
+    _extract_remote_url,
     parse_git_config,
     parse_git_describe,
     parse_git_status,
@@ -61,3 +62,30 @@ class TestGitInfoParser:
         result = parse_git_config(str(file_path))
 
         assert result == {"git_repository_url": None}
+
+    def test_extract_remote_url_returns_origin_url(self) -> None:
+        lines = [
+            '[remote "origin"]',
+            "fetch = +refs/heads/*:refs/remotes/origin/*",
+            "url = https://github.com/example/repo.git",
+        ]
+
+        assert _extract_remote_url(lines) == "https://github.com/example/repo.git"
+
+    def test_extract_remote_url_stops_at_next_section(self) -> None:
+        lines = [
+            '[remote "origin"]',
+            "fetch = +refs/heads/*:refs/remotes/origin/*",
+            '[branch "main"]',
+            "url = https://github.com/example/should-not-be-used.git",
+        ]
+
+        assert _extract_remote_url(lines) is None
+
+    def test_extract_remote_url_returns_none_without_origin_section(self) -> None:
+        lines = [
+            '[remote "upstream"]',
+            "url = https://github.com/example/upstream.git",
+        ]
+
+        assert _extract_remote_url(lines) is None

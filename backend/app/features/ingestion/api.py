@@ -41,8 +41,7 @@ def ingest_from_path(
 
     if not machine:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine '{payload.machine_name}' not found.",
+            status_code=404, detail=f"Machine '{payload.machine_name}' not found."
         )
 
     archive_path = Path(payload.archive_path)
@@ -106,8 +105,7 @@ def ingest_from_upload(  # noqa: C901
 
     if not machine:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine '{machine_name}' not found.",
+            status_code=404, detail=f"Machine '{machine_name}' not found."
         )
 
     _validate_upload_file(file)
@@ -224,15 +222,15 @@ def _run_ingest_archive(
 ) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
     try:
         return ingest_archive(archive_path=archive_path, output_dir=output_dir, db=db)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
     except LookupError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
-    except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
