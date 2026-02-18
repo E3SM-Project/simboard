@@ -4,17 +4,21 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.features.ingestion.models import Ingestion
+from app.features.ingestion.models import Ingestion, IngestionSourceType
+from app.features.machine.models import Machine
 
 
 class TestIngestionModel:
     def test_create_ingestion_record(self, db: Session, normal_user_sync: dict) -> None:
         """Test creating a basic ingestion audit record."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         ingestion = Ingestion(
-            source_type="upload",
+            source_type=IngestionSourceType.HPC_UPLOAD.value,
             source_reference="test_archive.tar.gz",
+            machine_id=machine.id,
             triggered_by=user_id,
             created_at=datetime.now(timezone.utc),
             status="success",
@@ -29,7 +33,7 @@ class TestIngestionModel:
         db.refresh(ingestion)
 
         assert ingestion.id is not None
-        assert ingestion.source_type == "upload"
+        assert str(ingestion.source_type) == "hpc_upload"
         assert ingestion.source_reference == "test_archive.tar.gz"
         assert ingestion.triggered_by == user_id
         assert ingestion.status == "success"
@@ -43,10 +47,13 @@ class TestIngestionModel:
     ) -> None:
         """Test creating ingestion record without SHA256 hash (path-based)."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         ingestion = Ingestion(
-            source_type="path",
+            source_type=IngestionSourceType.HPC_PATH.value,
             source_reference="/tmp/test_archive.zip",
+            machine_id=machine.id,
             triggered_by=user_id,
             created_at=datetime.now(timezone.utc),
             status="partial",
@@ -61,7 +68,7 @@ class TestIngestionModel:
         db.refresh(ingestion)
 
         assert ingestion.id is not None
-        assert ingestion.source_type == "path"
+        assert str(ingestion.source_type) == "hpc_path"
         assert ingestion.archive_sha256 is None
 
     def test_ingestion_user_relationship(
@@ -69,10 +76,13 @@ class TestIngestionModel:
     ) -> None:
         """Test the relationship between Ingestion and User."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         ingestion = Ingestion(
-            source_type="upload",
+            source_type=IngestionSourceType.HPC_UPLOAD.value,
             source_reference="test.tar.gz",
+            machine_id=machine.id,
             triggered_by=user_id,
             created_at=datetime.now(timezone.utc),
             status="success",
@@ -95,10 +105,13 @@ class TestIngestionModel:
     ) -> None:
         """Test that count fields have proper defaults."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         ingestion = Ingestion(
-            source_type="upload",
+            source_type=IngestionSourceType.HPC_UPLOAD.value,
             source_reference="test.tar.gz",
+            machine_id=machine.id,
             triggered_by=user_id,
             created_at=datetime.now(timezone.utc),
             status="failed",
@@ -116,10 +129,13 @@ class TestIngestionModel:
     def test_ingestion_repr(self, db: Session, normal_user_sync: dict) -> None:
         """Test the __repr__ method."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         ingestion = Ingestion(
-            source_type="upload",
+            source_type=IngestionSourceType.HPC_UPLOAD.value,
             source_reference="test.tar.gz",
+            machine_id=machine.id,
             triggered_by=user_id,
             created_at=datetime.now(timezone.utc),
             status="success",
@@ -134,7 +150,7 @@ class TestIngestionModel:
 
         repr_str = repr(ingestion)
         assert "Ingestion id=" in repr_str
-        assert "source_type='upload'" in repr_str
+        assert "source_type=<IngestionSourceType.HPC_UPLOAD: 'hpc_upload'>" in repr_str
         assert "status='success'" in repr_str
 
     def test_query_ingestions_by_user(
@@ -142,12 +158,15 @@ class TestIngestionModel:
     ) -> None:
         """Test querying ingestions by user."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         # Create multiple ingestion records
         for i in range(3):
             ingestion = Ingestion(
-                source_type="upload",
+                source_type=IngestionSourceType.HPC_UPLOAD.value,
                 source_reference=f"test{i}.tar.gz",
+                machine_id=machine.id,
                 triggered_by=user_id,
                 created_at=datetime.now(timezone.utc),
                 status="success",
@@ -170,12 +189,15 @@ class TestIngestionModel:
     ) -> None:
         """Test querying ingestions by status."""
         user_id = normal_user_sync["id"]
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         statuses = ["success", "partial", "failed"]
         for status in statuses:
             ingestion = Ingestion(
-                source_type="upload",
+                source_type=IngestionSourceType.HPC_UPLOAD.value,
                 source_reference=f"test_{status}.tar.gz",
+                machine_id=machine.id,
                 triggered_by=user_id,
                 created_at=datetime.now(timezone.utc),
                 status=status,

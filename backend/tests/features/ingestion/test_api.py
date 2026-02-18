@@ -58,7 +58,7 @@ class TestIngestFromPathEndpoint:
         assert machine is not None, "No machine found in the database"
 
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -92,9 +92,12 @@ class TestIngestFromPathEndpoint:
         assert data["duplicate_count"] == 0
         assert data["simulations"][0]["name"] == "Test Simulation"
 
-    def test_endpoint_returns_409_on_conflict(self, client, tmp_path):
+    def test_endpoint_returns_409_on_conflict(self, client, db: Session, tmp_path):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -110,7 +113,7 @@ class TestIngestFromPathEndpoint:
         assert machine is not None, "No machine found in the database"
 
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -177,7 +180,7 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(
             tmp_path, "test.tar.gz", archive_content
         )
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -215,16 +218,21 @@ class TestIngestFromPathEndpoint:
         )
 
         assert ingestion is not None
-        assert ingestion.source_type == "path"
+        assert str(ingestion.source_type) == "hpc_path"
         assert ingestion.status == "success"
         assert ingestion.created_count == 1
         assert ingestion.duplicate_count == 0
         assert ingestion.error_count == 0
         assert ingestion.archive_sha256 == hashlib.sha256(archive_content).hexdigest()
 
-    def test_endpoint_returns_400_when_archive_path_missing(self, client, tmp_path):
+    def test_endpoint_returns_400_when_archive_path_missing(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         missing_path = tmp_path / "missing.tar.gz"
-        payload = {"archive_path": str(missing_path)}
+        payload = {"archive_path": str(missing_path), "machine_name": machine.name}
 
         res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -234,9 +242,14 @@ class TestIngestFromPathEndpoint:
             == f"Archive path '{missing_path}' does not exist or is not a file."
         )
 
-    def test_endpoint_returns_500_when_sha256_fails(self, client, tmp_path):
+    def test_endpoint_returns_500_when_sha256_fails(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         archive_path = self._create_archive_file(tmp_path, "unreadable.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         with patch(
             "app.features.ingestion.api.Path.open",
@@ -293,6 +306,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": ("test.zip", file, "application/zip")},
             )
 
@@ -335,18 +349,23 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": ("test.tar.gz", file, "application/gzip")},
             )
 
         assert res.status_code == 201
 
-    def test_upload_invalid_file_extension(self, client):
+    def test_upload_invalid_file_extension(self, client, db: Session):
         """Test that invalid file extensions are rejected."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         file_content = b"some content"
         file = BytesIO(file_content)
 
         res = client.post(
             f"{API_BASE}/ingestions/from-upload",
+            data={"machine_name": machine.name},
             files={"file": ("test.txt", file, "text/plain")},
         )
 
@@ -387,6 +406,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": ("test_upload.zip", file, "application/zip")},
             )
 
@@ -400,7 +420,7 @@ class TestIngestFromUploadEndpoint:
         )
 
         assert ingestion is not None
-        assert ingestion.source_type == "upload"
+        assert str(ingestion.source_type) == "hpc_upload"
         assert ingestion.status == "success"
         assert ingestion.archive_sha256 is not None
         assert len(ingestion.archive_sha256) == 64  # SHA256 hex length
@@ -440,6 +460,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": ("test_partial.zip", file, "application/zip")},
             )
 
@@ -459,6 +480,9 @@ class TestIngestFromUploadEndpoint:
 
     def test_upload_failed_status(self, client, db: Session):
         """Test that failed ingestion is recorded correctly."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
 
@@ -473,6 +497,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": ("test_failed.zip", file, "application/zip")},
             )
 
@@ -490,8 +515,11 @@ class TestIngestFromUploadEndpoint:
         assert ingestion.created_count == 0
         assert ingestion.error_count == 2
 
-    def test_upload_without_filename(self, client):
+    def test_upload_without_filename(self, client, db: Session):
         """Test that upload without filename is rejected."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
 
@@ -502,16 +530,20 @@ class TestIngestFromUploadEndpoint:
 
         res = client.post(
             f"{API_BASE}/ingestions/from-upload",
+            data={"machine_name": machine.name},
             files={"file": ("", file, "application/zip")},
         )
 
         # Should either reject or handle gracefully
         assert res.status_code in [400, 422]
 
-    def test_path_endpoint_handles_lookup_error(self, client, tmp_path):
+    def test_path_endpoint_handles_lookup_error(self, client, db: Session, tmp_path):
         """Test that LookupError is handled with 400 response."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         archive_path = self._create_archive_file(tmp_path, "lookup_error.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -522,10 +554,15 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine not found"
 
-    def test_path_endpoint_handles_generic_exception(self, client, tmp_path):
+    def test_path_endpoint_handles_generic_exception(
+        self, client, db: Session, tmp_path
+    ):
         """Test that generic exceptions are handled with 500 response."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         archive_path = self._create_archive_file(tmp_path, "exception.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
@@ -540,8 +577,11 @@ class TestIngestFromUploadEndpoint:
         self, client, db: Session, tmp_path
     ):
         """Test that failed status is set when no simulations are created but errors exist."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         archive_path = self._create_archive_file(tmp_path, "failed_status.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_errors = [
             {"file": "sim1.json", "error": "Invalid format"},
@@ -568,8 +608,11 @@ class TestIngestFromUploadEndpoint:
         assert ingestion.created_count == 0
         assert ingestion.error_count == 2
 
-    def test_upload_file_size_too_large(self, client):
+    def test_upload_file_size_too_large(self, client, db: Session):
         """Test that files exceeding size limit are rejected."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
         # Create a large file to test the size limit
         file_content = b"x" * (21 * 1024 * 1024)  # 21MB
         file = BytesIO(file_content)
@@ -579,6 +622,7 @@ class TestIngestFromUploadEndpoint:
         # The size check would need to be tested with real HTTP multipart uploads.
         res = client.post(
             f"{API_BASE}/ingestions/from-upload",
+            data={"machine_name": machine.name},
             files={"file": ("large_file.zip", file, "application/zip")},
         )
 
@@ -586,8 +630,11 @@ class TestIngestFromUploadEndpoint:
         # In production with real uploads, this would return 413
         assert res.status_code in [201, 413]
 
-    def test_upload_handles_lookup_error(self, client):
+    def test_upload_handles_lookup_error(self, client, db: Session):
         """Test that LookupError in upload is handled with 400 response."""
+
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
@@ -599,14 +646,18 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": (unique_filename, file, "application/zip")},
             )
 
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine not found in upload"
 
-    def test_upload_handles_generic_exception(self, client):
+    def test_upload_handles_generic_exception(self, client, db: Session):
         """Test that generic exceptions in upload are handled with 500 response."""
+
+        machine = db.query(Machine).first()
+        assert machine is not None
 
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
@@ -618,6 +669,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
                 files={"file": (unique_filename, file, "application/zip")},
             )
 
@@ -632,7 +684,7 @@ class TestIngestFromUploadEndpoint:
         archive_path = self._create_archive_file(
             tmp_path, "archive_with_artifacts.tar.gz"
         )
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -686,7 +738,7 @@ class TestIngestFromUploadEndpoint:
         assert machine is not None
 
         archive_path = self._create_archive_file(tmp_path, "archive_with_links.tar.gz")
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -759,7 +811,7 @@ class TestIngestFromUploadEndpoint:
         archive_path = self._create_archive_file(
             tmp_path, "archive_with_git_url.tar.gz"
         )
-        payload = {"archive_path": str(archive_path)}
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_simulations = [
             SimulationCreate.model_validate(

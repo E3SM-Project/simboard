@@ -3,20 +3,21 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.ingest import ingest_archive
-from app.features.ingestion.models import Ingestion
+from app.features.ingestion.models import Ingestion, IngestionSourceType
 from app.features.ingestion.schemas import (
     IngestFromPathRequest,
     IngestionCreate,
     IngestionResponse,
     IngestionStatus,
 )
+from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
@@ -36,6 +37,14 @@ def ingest_from_path(
     user: User = Depends(current_active_user),
 ):
     """Ingest an archive from a file system path and persist simulations."""
+    machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()
+
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine '{payload.machine_name}' not found.",
+        )
+
     archive_path = Path(payload.archive_path)
     _validate_archive_path(archive_path)
     archive_sha256 = _compute_archive_sha256(archive_path)
@@ -54,8 +63,9 @@ def ingest_from_path(
         _persist_simulations(simulations, db, user)
 
         ingestion_create = IngestionCreate(
-            source_type="path",
+            source_type=IngestionSourceType.HPC_PATH.value,
             source_reference=str(archive_path),
+            machine_id=machine.id,
             triggered_by=user.id,
             status=status_value,
             created_count=created_count,
@@ -87,10 +97,19 @@ def ingest_from_path(
 )
 def ingest_from_upload(  # noqa: C901
     file: UploadFile = File(...),
+    machine_name: str = Form(...),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ):
     """Ingest an archive via file upload and persist simulations."""
+    machine = db.query(Machine).filter(Machine.name == machine_name).first()
+
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine '{machine_name}' not found.",
+        )
+
     _validate_upload_file(file)
     filename = file.filename
     if filename is None:
@@ -114,8 +133,9 @@ def ingest_from_upload(  # noqa: C901
                 _persist_simulations(simulations, db, user)
 
                 ingestion_create = IngestionCreate(
-                    source_type="upload",
+                    source_type=IngestionSourceType.HPC_UPLOAD.value,
                     source_reference=filename,
+                    machine_id=machine.id,
                     triggered_by=user.id,
                     status=status_value,
                     created_count=created_count,

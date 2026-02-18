@@ -1,13 +1,21 @@
 """SQLAlchemy ORM models for ingestion audit records."""
 
 from datetime import datetime, timezone
+from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
+
+
+class IngestionSourceType(StrEnum):
+    HPC_PATH = "hpc_path"
+    HPC_UPLOAD = "hpc_upload"
+    BROWSER_UPLOAD = "browser_upload"
 
 
 class Ingestion(Base):
@@ -18,8 +26,22 @@ class Ingestion(Base):
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid4, index=True
     )
-    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    source_type: Mapped[IngestionSourceType] = mapped_column(
+        SAEnum(
+            IngestionSourceType,
+            name="ingestion_source_type_enum",
+            native_enum=True,
+        ),
+        nullable=False,
+    )
     source_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    machine_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("machines.id"),
+        nullable=False,
+        index=True,
+    )
     triggered_by: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )

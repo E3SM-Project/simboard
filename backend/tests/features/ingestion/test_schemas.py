@@ -14,9 +14,12 @@ from app.features.ingestion.schemas import (
 
 class TestIngestionSchemas:
     def test_ingest_archive_request_valid(self) -> None:
-        payload = IngestFromPathRequest(archive_path="/tmp/archive.zip")
+        payload = IngestFromPathRequest(
+            archive_path="/tmp/archive.zip", machine_name="chrysalis"
+        )
 
         assert payload.archive_path == "/tmp/archive.zip"
+        assert payload.machine_name == "chrysalis"
 
     def test_ingest_archive_request_missing_fields(self) -> None:
         with pytest.raises(ValidationError):
@@ -49,12 +52,14 @@ class TestIngestionRead:
     def test_ingestion_read_valid(self) -> None:
         ingestion_id = uuid4()
         user_id = uuid4()
+        machine_id = uuid4()
         now = datetime.now(timezone.utc)
 
         payload = IngestionRead(
             id=ingestion_id,
             sourceType="upload",
             sourceReference="test.tar.gz",
+            machine_id=machine_id,
             triggeredBy=user_id,
             createdAt=now,
             status="success",
@@ -67,6 +72,7 @@ class TestIngestionRead:
         assert payload.id == ingestion_id
         assert payload.sourceType == "upload"
         assert payload.sourceReference == "test.tar.gz"
+        assert payload.machine_id == machine_id
         assert payload.triggeredBy == user_id
         assert payload.createdAt == now
         assert payload.status == "success"
@@ -78,12 +84,14 @@ class TestIngestionRead:
     def test_ingestion_read_optional_sha256(self) -> None:
         ingestion_id = uuid4()
         user_id = uuid4()
+        machine_id = uuid4()
         now = datetime.now(timezone.utc)
 
         payload = IngestionRead(
             id=ingestion_id,
             sourceType="path",
             sourceReference="/tmp/archive.zip",
+            machine_id=machine_id,
             triggeredBy=user_id,
             createdAt=now,
             status="partial",
