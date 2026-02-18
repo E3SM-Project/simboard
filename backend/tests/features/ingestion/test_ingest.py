@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import _normalize_git_url, ingest_archive
 from app.features.machine.models import Machine
+from app.features.simulation.enums import SimulationStatus
 from app.features.simulation.models import Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationStatus
+from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import User
 
 

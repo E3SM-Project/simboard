@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import SimulationMetadata, main_parser
 from app.features.machine.models import Machine
+from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationStatus
+from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
 
@@ -262,6 +263,7 @@ def _map_metadata_to_schema(
     run_end_date = _parse_datetime_field(metadata.get("run_end_date"))
 
     git_repository_url = _normalize_git_url(metadata.get("git_repository_url"))
+    simulation_type = _normalize_simulation_type(metadata.get("simulation_type"))
 
     # Map metadata to schema; Pydantic will validate required fields
     # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
@@ -276,7 +278,7 @@ def _map_metadata_to_schema(
             "gridName": metadata.get("grid_name"),
             "gridResolution": metadata.get("grid_resolution"),
             # Required status fields with sensible defaults
-            "simulationType": metadata.get("simulation_type"),
+            "simulationType": simulation_type,
             "status": SimulationStatus.CREATED,
             "initializationType": metadata.get("initialization_type"),
             "machineId": machine_id,
@@ -305,6 +307,29 @@ def _map_metadata_to_schema(
     )
 
     return result
+
+
+def _normalize_simulation_type(value: str | None) -> SimulationType:
+    """Return a valid SimulationType enum value with UNKNOWN fallback."""
+    if not value:
+        return SimulationType.UNKNOWN
+
+    normalized = value.strip()
+    if not normalized:
+        return SimulationType.UNKNOWN
+
+    try:
+        return SimulationType(normalized)
+    except ValueError:
+        try:
+            return SimulationType[normalized.upper()]
+        except KeyError:
+            logger.warning(
+                "Unknown simulation_type '%s'; defaulting to '%s'.",
+                value,
+                SimulationType.UNKNOWN.value,
+            )
+            return SimulationType.UNKNOWN
 
 
 def _parse_datetime_field(value: str | None) -> datetime | None:
