@@ -14,7 +14,18 @@ from app.features.user.models import User
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
 
-@router.post("", response_model=SimulationOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SimulationOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Simulation created successfully."},
+        400: {"description": "Invalid input."},
+        401: {"description": "Unauthorized."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
 def create_simulation(
     payload: SimulationCreate,
     db: Session = Depends(get_database_session),
@@ -58,7 +69,15 @@ def create_simulation(
     return SimulationOut.model_validate(sim, from_attributes=True)
 
 
-@router.get("", response_model=list[SimulationOut])
+@router.get(
+    "",
+    response_model=list[SimulationOut],
+    responses={
+        200: {"description": "List all simulations."},
+        401: {"description": "Unauthorized."},
+        500: {"description": "Internal server error."},
+    },
+)
 def list_simulations(db: Session = Depends(get_database_session)):
     """
     Retrieve a list of simulations from the database, ordered by creation date
@@ -89,7 +108,16 @@ def list_simulations(db: Session = Depends(get_database_session)):
     return sims
 
 
-@router.get("/{sim_id}", response_model=SimulationOut)
+@router.get(
+    "/{sim_id}",
+    response_model=SimulationOut,
+    responses={
+        200: {"description": "Simulation found."},
+        401: {"description": "Unauthorized."},
+        404: {"description": "Simulation not found."},
+        500: {"description": "Internal server error."},
+    },
+)
 def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     """Retrieve a simulation by its unique identifier.
 
