@@ -151,7 +151,7 @@ class TestIngestionModel:
         repr_str = repr(ingestion)
         assert "Ingestion id=" in repr_str
         assert "source_type=<IngestionSourceType.HPC_UPLOAD: 'hpc_upload'>" in repr_str
-        assert "status='success'" in repr_str
+        assert "status=<IngestionStatus.SUCCESS: 'success'>" in repr_str
 
     def test_query_ingestions_by_user(
         self, db: Session, normal_user_sync: dict

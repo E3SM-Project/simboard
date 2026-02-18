@@ -1,7 +1,6 @@
 """SQLAlchemy ORM models for ingestion audit records."""
 
 from datetime import datetime, timezone
-from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -10,12 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
-
-
-class IngestionSourceType(StrEnum):
-    HPC_PATH = "hpc_path"
-    HPC_UPLOAD = "hpc_upload"
-    BROWSER_UPLOAD = "browser_upload"
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 
 
 class Ingestion(Base):
@@ -31,7 +25,9 @@ class Ingestion(Base):
         SAEnum(
             IngestionSourceType,
             name="ingestion_source_type_enum",
-            native_enum=True,
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
         ),
         nullable=False,
     )
@@ -50,7 +46,16 @@ class Ingestion(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[IngestionStatus] = mapped_column(
+        SAEnum(
+            IngestionStatus,
+            name="ingestion_status_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
     created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

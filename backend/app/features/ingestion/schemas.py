@@ -1,19 +1,11 @@
 from datetime import datetime
-from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.simulation.schemas import SimulationCreate
-
-
-class IngestionStatus(str, Enum):
-    """Status values for ingestion audit records."""
-
-    SUCCESS = "success"
-    PARTIAL = "partial"
-    FAILED = "failed"
 
 
 class IngestFromPathRequest(BaseModel):
@@ -52,7 +44,8 @@ class IngestionCreate(BaseModel):
     """Schema for creating an ingestion audit record."""
 
     source_type: Annotated[
-        str, Field(..., description="Type of the ingestion source (e.g., file, API)")
+        IngestionSourceType,
+        Field(..., description="Type of the ingestion source (e.g., file, API)"),
     ]
     source_reference: Annotated[
         str,
@@ -66,7 +59,9 @@ class IngestionCreate(BaseModel):
     triggered_by: Annotated[
         UUID, Field(..., description="User ID or process that triggered the ingestion")
     ]
-    status: Annotated[str, Field(..., description="Status of the ingestion event")]
+    status: Annotated[
+        IngestionStatus, Field(..., description="Status of the ingestion event")
+    ]
     created_count: Annotated[
         int, Field(..., description="Number of new simulations created")
     ]
@@ -94,7 +89,8 @@ class IngestionRead(BaseModel):
         UUID, Field(..., description="Unique identifier for the ingestion record")
     ]
     sourceType: Annotated[
-        str, Field(..., description="Type of the ingestion source (e.g., file, API)")
+        IngestionSourceType,
+        Field(..., description="Type of the ingestion source (e.g., file, API)"),
     ]
     sourceReference: Annotated[
         str,
@@ -111,7 +107,9 @@ class IngestionRead(BaseModel):
     createdAt: Annotated[
         datetime, Field(..., description="Timestamp when the ingestion was created")
     ]
-    status: Annotated[str, Field(..., description="Status of the ingestion event")]
+    status: Annotated[
+        IngestionStatus, Field(..., description="Status of the ingestion event")
+    ]
     createdCount: Annotated[
         int, Field(..., description="Number of new simulations created")
     ]

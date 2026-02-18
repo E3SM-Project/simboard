@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.features.ingestion.enums import IngestionSourceType
 from app.features.ingestion.schemas import (
     IngestFromPathRequest,
     IngestionRead,
@@ -57,12 +58,12 @@ class TestIngestionRead:
 
         payload = IngestionRead(
             id=ingestion_id,
-            sourceType="upload",
+            sourceType=IngestionSourceType.HPC_UPLOAD.value,
             sourceReference="test.tar.gz",
             machine_id=machine_id,
             triggeredBy=user_id,
             createdAt=now,
-            status="success",
+            status=IngestionStatus.SUCCESS.value,
             createdCount=5,
             duplicateCount=2,
             errorCount=0,
@@ -70,7 +71,7 @@ class TestIngestionRead:
         )
 
         assert payload.id == ingestion_id
-        assert payload.sourceType == "upload"
+        assert payload.sourceType == "hpc_upload"
         assert payload.sourceReference == "test.tar.gz"
         assert payload.machine_id == machine_id
         assert payload.triggeredBy == user_id
@@ -89,12 +90,12 @@ class TestIngestionRead:
 
         payload = IngestionRead(
             id=ingestion_id,
-            sourceType="path",
+            sourceType=IngestionSourceType.HPC_PATH.value,
             sourceReference="/tmp/archive.zip",
             machine_id=machine_id,
             triggeredBy=user_id,
             createdAt=now,
-            status="partial",
+            status=IngestionStatus.PARTIAL.value,
             createdCount=3,
             duplicateCount=1,
             errorCount=2,
@@ -106,6 +107,6 @@ class TestIngestionRead:
     def test_ingestion_read_missing_required_fields(self) -> None:
         with pytest.raises(ValidationError):
             IngestionRead(  # type: ignore[call-arg]
-                sourceType="upload",
+                sourceType=IngestionSourceType.HPC_UPLOAD.value,
                 sourceReference="test.tar.gz",
             )
