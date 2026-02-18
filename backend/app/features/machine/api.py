@@ -11,7 +11,18 @@ from app.features.machine.schemas import MachineCreate, MachineOut
 router = APIRouter(prefix="/machines", tags=["Machines"])
 
 
-@router.post("", response_model=MachineOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=MachineOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Machine created successfully."},
+        400: {"description": "Machine with this name already exists or invalid input."},
+        401: {"description": "Unauthorized."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
 def create_machine(payload: MachineCreate, db: Session = Depends(get_database_session)):
     """Create a new machine.
 
@@ -52,7 +63,15 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_database_se
     return new_machine
 
 
-@router.get("", response_model=list[MachineOut])
+@router.get(
+    "",
+    response_model=list[MachineOut],
+    responses={
+        200: {"description": "List all machines."},
+        401: {"description": "Unauthorized."},
+        500: {"description": "Internal server error."},
+    },
+)
 def list_machines(db: Session = Depends(get_database_session)):
     """
     Retrieve a list of machines from the database, ordered by name in ascending
@@ -73,7 +92,16 @@ def list_machines(db: Session = Depends(get_database_session)):
     return machines
 
 
-@router.get("/{machine_id}", response_model=MachineOut)
+@router.get(
+    "/{machine_id}",
+    response_model=MachineOut,
+    responses={
+        200: {"description": "Machine found."},
+        401: {"description": "Unauthorized."},
+        404: {"description": "Machine not found."},
+        500: {"description": "Internal server error."},
+    },
+)
 def get_machine(machine_id: UUID, db: Session = Depends(get_database_session)):
     """Retrieve a machine by its ID.
 
