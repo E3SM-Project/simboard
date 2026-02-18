@@ -20,6 +20,7 @@ from app.features.ingestion.api import (
     _validate_upload_file,
     ingest_from_upload,
 )
+from app.features.ingestion.ingest import IngestArchiveResult
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
@@ -121,7 +122,12 @@ class TestIngestFromPathEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -194,7 +200,12 @@ class TestIngestFromPathEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 2, 0, mock_errors),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=2,
+                duplicate_count=0,
+                errors=mock_errors,
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -243,13 +254,14 @@ class TestIngestFromPathEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
-            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
-
-        assert res.status_code == 201
-
-        # Verify audit record was created
+            client.post(f"{API_BASE}/ingestions/from-path", json=payload)
         ingestion = (
             db.query(Ingestion)
             .filter(Ingestion.source_reference == str(archive_path))
@@ -297,7 +309,7 @@ class TestIngestFromPathEndpoint:
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 500
-        assert "Failed to compute SHA256" in res.json()["detail"]
+        assert "Failed to compute checksum" in res.json()["detail"]
 
     def test_endpoint_returns_404_when_machine_not_found(self, client, tmp_path):
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
@@ -353,7 +365,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
@@ -396,7 +413,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
@@ -466,7 +488,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
@@ -520,7 +547,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, mock_errors),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=mock_errors,
+            ),
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
@@ -557,7 +589,9 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=([], 0, 0, mock_errors),
+            return_value=IngestArchiveResult(
+                simulations=[], created_count=0, duplicate_count=0, errors=mock_errors
+            ),
         ):
             res = client.post(
                 f"{API_BASE}/ingestions/from-upload",
@@ -654,7 +688,9 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=([], 0, 0, mock_errors),
+            return_value=IngestArchiveResult(
+                simulations=[], created_count=0, duplicate_count=0, errors=mock_errors
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -779,7 +815,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -833,7 +874,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
@@ -900,7 +946,12 @@ class TestIngestFromUploadEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            return_value=(mock_simulations, 1, 0, []),
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 

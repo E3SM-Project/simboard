@@ -81,14 +81,14 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert isinstance(result, list)
-            assert len(result) == 1
-            assert isinstance(result[0], SimulationCreate)
-            assert result[0].name == "sim1"
+            assert isinstance(ingest_result.simulations, list)
+            assert len(ingest_result.simulations) == 1
+            assert isinstance(ingest_result.simulations[0], SimulationCreate)
+            assert ingest_result.simulations[0].name == "sim1"
 
     def test_handles_multiple_simulations(self, db: Session) -> None:
         """Test ingesting archive with multiple simulations."""
@@ -150,23 +150,23 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(result) == 2
-            assert result[0].name == "sim1"
-            assert result[1].name == "sim2"
+            assert len(ingest_result.simulations) == 2
+            assert ingest_result.simulations[0].name == "sim1"
+            assert ingest_result.simulations[1].name == "sim2"
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
         with patch("app.features.ingestion.ingest.main_parser", return_value={}):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert isinstance(result, list)
-            assert len(result) == 0
+            assert isinstance(ingest_result.simulations, list)
+            assert len(ingest_result.simulations) == 0
 
     def test_accepts_string_paths(self, db: Session) -> None:
         """Test that archive_path and output_dir accept strings."""
@@ -203,10 +203,10 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ) as mock_main_parser:
-            result, _, _, _ = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
+            ingest_result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
             # Verify main_parser was called with Path objects
-            assert result is not None
+            assert ingest_result.simulations is not None
             mock_main_parser.assert_called_once()
             args = mock_main_parser.call_args[0]
             assert isinstance(args[0], Path)
@@ -246,14 +246,14 @@ class TestIngestArchive:
             "app.features.ingestion.ingest.main_parser",
             return_value=mock_simulations,
         ):
-            result, _, _, errors = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert len(errors) == 1
-            assert errors[0]["error_type"] == "LookupError"
-            assert "nonexistent-machine" in errors[0]["error"]
+            assert ingest_result.simulations == []
+            assert len(ingest_result.errors) == 1
+            assert ingest_result.errors[0]["error_type"] == "LookupError"
+            assert "nonexistent-machine" in ingest_result.errors[0]["error"]
 
     def test_parses_various_datetime_formats_through_public_api(
         self, db: Session
@@ -306,13 +306,18 @@ class TestIngestArchive:
                 "app.features.ingestion.ingest.main_parser",
                 return_value=mock_simulations,
             ):
-                result, _, _, _ = ingest_archive(
+                ingest_result = ingest_archive(
                     Path("/tmp/archive.zip"), Path("/tmp/out"), db
                 )
 
-                assert len(result) == 1
-                assert isinstance(result[0].simulation_start_date, datetime)
-                assert result[0].simulation_start_date.tzinfo is not None
+                assert len(ingest_result.simulations) == 1
+                assert isinstance(
+                    ingest_result.simulations[0].simulation_start_date, datetime
+                )
+                assert (
+                    ingest_result.simulations[0].simulation_start_date.tzinfo
+                    is not None
+                )
 
     def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
         """Test that missing required fields are captured as errors."""
@@ -349,13 +354,13 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, errors = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert len(errors) == 1
-            assert errors[0]["error_type"] == "ValidationError"
+            assert ingest_result.simulations == []
+            assert len(ingest_result.errors) == 1
+            assert ingest_result.errors[0]["error_type"] == "ValidationError"
 
     def test_machine_lookup_and_validation_through_public_api(
         self, db: Session
@@ -400,11 +405,11 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=valid_mock
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
-            assert len(result) == 1
-            assert result[0].machine_id == machine.id
+            assert len(ingest_result.simulations) == 1
+            assert ingest_result.simulations[0].machine_id == machine.id
 
         # Test with missing machine
         invalid_mock = {
@@ -438,14 +443,14 @@ class TestIngestArchive:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=invalid_mock
         ):
-            result, _, _, errors = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert len(errors) == 1
-            assert errors[0]["error_type"] == "LookupError"
-            assert "Machine 'nonexistent'" in errors[0]["error"]
+            assert ingest_result.simulations == []
+            assert len(ingest_result.errors) == 1
+            assert ingest_result.errors[0]["error_type"] == "LookupError"
+            assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
 
 
 class TestIngestArchiveContinued(TestIngestArchive):
@@ -507,17 +512,17 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(result) == 1
+            assert len(ingest_result.simulations) == 1
             # All datetime fields should be timezone-aware
-            assert result[0].simulation_start_date.tzinfo is not None
-            if result[0].run_start_date:
-                assert result[0].run_start_date.tzinfo is not None
-            if result[0].run_end_date:
-                assert result[0].run_end_date.tzinfo is not None
+            assert ingest_result.simulations[0].simulation_start_date.tzinfo is not None
+            if ingest_result.simulations[0].run_start_date:
+                assert ingest_result.simulations[0].run_start_date.tzinfo is not None
+            if ingest_result.simulations[0].run_end_date:
+                assert ingest_result.simulations[0].run_end_date.tzinfo is not None
 
     def test_handles_optional_fields_through_public_api(self, db: Session) -> None:
         """Test optional field handling through public API.
@@ -558,19 +563,22 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(result) == 1
-            assert result[0].experiment_type == "historical"
-            assert result[0].campaign == "CMIP6"
-            assert result[0].group_name == "test_group"
-            assert result[0].compiler == "gcc"
-            assert str(result[0].git_repository_url) == "https://github.com/test/repo"
-            assert result[0].git_branch == "main"
-            assert result[0].git_tag == "v1.0.0"
-            assert result[0].git_commit_hash == "abc123"
+            assert len(ingest_result.simulations) == 1
+            assert ingest_result.simulations[0].experiment_type == "historical"
+            assert ingest_result.simulations[0].campaign == "CMIP6"
+            assert ingest_result.simulations[0].group_name == "test_group"
+            assert ingest_result.simulations[0].compiler == "gcc"
+            assert (
+                str(ingest_result.simulations[0].git_repository_url)
+                == "https://github.com/test/repo"
+            )
+            assert ingest_result.simulations[0].git_branch == "main"
+            assert ingest_result.simulations[0].git_tag == "v1.0.0"
+            assert ingest_result.simulations[0].git_commit_hash == "abc123"
 
     def test_skips_duplicate_simulations(self, db: Session) -> None:
         """Test that duplicate simulations are skipped during ingestion.
@@ -640,12 +648,12 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Duplicate should be skipped, result should be empty
-            assert len(result) == 0
+            assert len(ingest_result.simulations) == 0
 
     def test_ingest_archive_counts(self, db: Session) -> None:
         """Test that summary counts reflect created and duplicate simulations."""
@@ -731,25 +739,25 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, created_count, duplicate_count, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert created_count == 1
-            assert duplicate_count == 1
-            assert len(result) == 1
-            assert result[0].name == "new_sim"
+            assert ingest_result.created_count == 1
+            assert ingest_result.duplicate_count == 1
+            assert len(ingest_result.simulations) == 1
+            assert ingest_result.simulations[0].name == "new_sim"
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
         with patch("app.features.ingestion.ingest.main_parser", return_value={}):
-            result, created_count, duplicate_count, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert created_count == 0
-            assert duplicate_count == 0
+            assert ingest_result.simulations == []
+            assert ingest_result.created_count == 0
+            assert ingest_result.duplicate_count == 0
 
     def test_handles_invalid_datetime_gracefully(self, db: Session) -> None:
         """Test that invalid datetimes are handled without raising.
@@ -792,14 +800,14 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Should succeed with optional dates as None
-            assert len(result) == 1
-            assert result[0].run_start_date is None
-            assert result[0].run_end_date is None
+            assert len(ingest_result.simulations) == 1
+            assert ingest_result.simulations[0].run_start_date is None
+            assert ingest_result.simulations[0].run_end_date is None
 
     def test_parse_datetime_field_exception_handling(self, db: Session) -> None:
         """Test exception handling in _parse_datetime_field.
@@ -857,13 +865,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 side_effect=mock_parse_wrapper,
             ),
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Should succeed with run_start_date as None (exception caught and logged)
-            assert len(result) == 1
-            assert result[0].run_start_date is None
+            assert len(ingest_result.simulations) == 1
+            assert ingest_result.simulations[0].run_start_date is None
 
     def test_missing_machine_name_in_metadata(self, db: Session) -> None:
         """Test error handling when machine name is missing from metadata."""
@@ -898,14 +906,14 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, errors = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert len(errors) == 1
-            assert errors[0]["error_type"] == "ValueError"
-            assert "Machine name is required" in errors[0]["error"]
+            assert ingest_result.simulations == []
+            assert len(ingest_result.errors) == 1
+            assert ingest_result.errors[0]["error_type"] == "ValueError"
+            assert "Machine name is required" in ingest_result.errors[0]["error"]
 
     def test_missing_simulation_start_date(self, db: Session) -> None:
         """Test error when simulation_start_date cannot be parsed."""
@@ -942,14 +950,16 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, errors = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert result == []
-            assert len(errors) == 1
-            assert errors[0]["error_type"] == "ValueError"
-            assert "simulation_start_date is required" in errors[0]["error"]
+            assert ingest_result.simulations == []
+            assert len(ingest_result.errors) == 1
+            assert ingest_result.errors[0]["error_type"] == "ValueError"
+            assert (
+                "simulation_start_date is required" in ingest_result.errors[0]["error"]
+            )
 
 
 class TestNormalizeGitUrl:
@@ -1052,13 +1062,13 @@ class TestNormalizeGitUrl:
         with patch(
             "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
         ):
-            result, _, _, _ = ingest_archive(
+            ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Verify SSH URL was converted to HTTPS
-            assert len(result) == 1
-            assert str(result[0].git_repository_url) == (
+            assert len(ingest_result.simulations) == 1
+            assert str(ingest_result.simulations[0].git_repository_url) == (
                 "https://github.com/E3SM-Project/E3SM.git"
             )
 

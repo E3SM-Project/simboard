@@ -1,5 +1,6 @@
 import hashlib
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
-from app.features.ingestion.ingest import ingest_archive
+from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
 from app.features.ingestion.models import Ingestion, IngestionSourceType
 from app.features.ingestion.schemas import (
     IngestFromPathRequest,
@@ -75,17 +76,12 @@ def ingest_from_path(
     archive_sha256 = _compute_archive_sha256(archive_path)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        simulations, created_count, duplicate_count, errors = _run_ingest_archive(
-            archive_path=str(archive_path),
-            output_dir=tmpdir,
-            db=db,
+        ingest_result = _run_ingest_archive(
+            archive_path=str(archive_path), output_dir=tmpdir, db=db
         )
 
-    return _persist_and_respond_to_ingestion(
-        simulations=simulations,
-        created_count=created_count,
-        duplicate_count=duplicate_count,
-        errors=errors,
+    response = _process_ingestion(
+        ingest_result=ingest_result,
         source_type=IngestionSourceType.HPC_PATH,
         source_reference=str(archive_path),
         machine_id=machine.id,
@@ -93,6 +89,8 @@ def ingest_from_path(
         archive_sha256=archive_sha256,
         db=db,
     )
+
+    return response
 
 
 @router.post(
@@ -132,24 +130,21 @@ def ingest_from_upload(  # noqa: C901
             archive_path = Path(tmpdir) / filename
             sha256_hex = _save_uploaded_file_and_hash(file, archive_path)
 
-            simulations, created_count, duplicate_count, errors = _run_ingest_archive(
-                archive_path=str(archive_path),
-                output_dir=tmpdir,
-                db=db,
+            ingest_result = _run_ingest_archive(
+                archive_path=str(archive_path), output_dir=tmpdir, db=db
             )
 
-            return _persist_and_respond_to_ingestion(
-                simulations=simulations,
-                created_count=created_count,
-                duplicate_count=duplicate_count,
-                errors=errors,
-                source_type=IngestionSourceType.HPC_UPLOAD,
-                source_reference=filename,
-                machine_id=machine.id,
-                user=user,
-                archive_sha256=sha256_hex,
-                db=db,
-            )
+        response = _process_ingestion(
+            ingest_result=ingest_result,
+            source_type=IngestionSourceType.HPC_UPLOAD,
+            source_reference=filename,
+            machine_id=machine.id,
+            user=user,
+            archive_sha256=sha256_hex,
+            db=db,
+        )
+
+        return response
     finally:
         file.file.close()
 
@@ -174,7 +169,7 @@ def _compute_archive_sha256(archive_path: Path) -> str:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to compute SHA256 for '{archive_path}': {exc}",
+            detail="Failed to compute checksum",
         ) from exc
 
 
@@ -213,7 +208,7 @@ def _save_uploaded_file_and_hash(
 
 def _run_ingest_archive(
     archive_path: str, output_dir: str, db: Session
-) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
+) -> IngestArchiveResult:
     try:
         return ingest_archive(archive_path=archive_path, output_dir=output_dir, db=db)
     except ValidationError as exc:
@@ -232,6 +227,54 @@ def _run_ingest_archive(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
+
+
+def _process_ingestion(
+    ingest_result: IngestArchiveResult,
+    source_type: IngestionSourceType,
+    source_reference: str,
+    machine_id: uuid.UUID,
+    user: User,
+    archive_sha256: str,
+    db: Session,
+) -> IngestionResponse:
+    """Persist ingestion metadata and simulations, then return a response.
+
+    This is a shared helper function used by both the path-based and upload-based
+    ingestion endpoints.
+    """
+    error_count = len(ingest_result.errors)
+    status_value = _resolve_ingestion_status(ingest_result.created_count, error_count)
+
+    with transaction(db):
+        _persist_simulations(ingest_result.simulations, db, user)
+
+        ingestion_create = IngestionCreate(
+            source_type=source_type.value,
+            source_reference=source_reference,
+            machine_id=machine_id,
+            triggered_by=user.id,
+            status=status_value,
+            created_count=ingest_result.created_count,
+            duplicate_count=ingest_result.duplicate_count,
+            error_count=error_count,
+            archive_sha256=archive_sha256,
+        )
+        ingestion = Ingestion(
+            **ingestion_create.model_dump(),
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(ingestion)
+        db.flush()
+
+    response = IngestionResponse(
+        created_count=ingest_result.created_count,
+        duplicate_count=ingest_result.duplicate_count,
+        simulations=ingest_result.simulations,
+        errors=ingest_result.errors,
+    )
+
+    return response
 
 
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
@@ -292,52 +335,3 @@ def _persist_simulations(
 
         db.add(sim)
         db.flush()
-
-
-def _persist_and_respond_to_ingestion(
-    simulations: list[SimulationCreate],
-    created_count: int,
-    duplicate_count: int,
-    errors: list[dict[str, str]],
-    source_type: IngestionSourceType,
-    source_reference: str,
-    machine_id,
-    user: User,
-    archive_sha256: str,
-    db: Session,
-) -> IngestionResponse:
-    """Persist ingestion metadata and simulations, then return a response.
-
-    This is a shared helper function used by both the path-based and upload-based
-    ingestion endpoints.
-    """
-    error_count = len(errors)
-    status_value = _resolve_ingestion_status(created_count, error_count)
-
-    with transaction(db):
-        _persist_simulations(simulations, db, user)
-
-        ingestion_create = IngestionCreate(
-            source_type=source_type.value,
-            source_reference=source_reference,
-            machine_id=machine_id,
-            triggered_by=user.id,
-            status=status_value,
-            created_count=created_count,
-            duplicate_count=duplicate_count,
-            error_count=error_count,
-            archive_sha256=archive_sha256,
-        )
-        ingestion = Ingestion(
-            **ingestion_create.model_dump(),
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(ingestion)
-        db.flush()
-
-    return IngestionResponse(
-        created_count=created_count,
-        duplicate_count=duplicate_count,
-        simulations=simulations,
-        errors=errors,
-    )

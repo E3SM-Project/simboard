@@ -1,5 +1,6 @@
 """Module for ingesting simulation archives and mapping to database schemas."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -18,11 +19,41 @@ from app.features.simulation.schemas import SimulationCreate
 logger = _setup_custom_logger(__name__)
 
 
+@dataclass
+class IngestArchiveResult:
+    """
+    Structured result of an archive ingestion operation.
+
+    This object encapsulates the outcome of parsing and validating a
+    simulation archive prior to persistence. It includes successfully
+    mapped simulations, duplicate counts, and per-experiment errors.
+
+    Attributes
+    ----------
+    simulations : list[SimulationCreate]
+        Collection of simulation schema objects successfully parsed and
+        validated from the archive.
+    created_count : int
+        Number of new simulations eligible for creation.
+    duplicate_count : int
+        Number of simulations skipped due to existing records in the database.
+    errors : list[dict[str, str]]
+        List of ingestion errors encountered during processing. Each entry
+        contains keys such as ``exp_dir``, ``error_type``, and ``error``,
+        describing the failed experiment and associated exception details.
+    """
+
+    simulations: list[SimulationCreate]
+    created_count: int
+    duplicate_count: int
+    errors: list[dict[str, str]]
+
+
 def ingest_archive(
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
-) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
+) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
     Parameters
@@ -36,10 +67,9 @@ def ingest_archive(
 
     Returns
     -------
-    tuple[list[SimulationCreate], int, int, list[dict[str, str]]]
-        Tuple containing (created_simulations, created_count, duplicate_count,
-        errors). The errors list contains per-experiment failures with keys
-        'exp_dir', 'error_type', and 'error'.
+    IngestArchiveResult
+        Dataclass containing list of SimulationCreate objects, counts of created
+        and duplicate simulations, and any errors encountered during processing.
 
     Raises
     ------
@@ -62,7 +92,9 @@ def ingest_archive(
     if not all_simulations:
         logger.warning(f"No simulations found in archive: {archive_path_resolved}")
 
-        return [], 0, 0, []
+        return IngestArchiveResult(
+            simulations=[], created_count=0, duplicate_count=0, errors=[]
+        )
 
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
@@ -101,7 +133,13 @@ def ingest_archive(
             )
             continue
 
-    return simulations, len(simulations), duplicate_count, errors
+    result = IngestArchiveResult(
+        simulations=simulations,
+        created_count=len(simulations),
+        duplicate_count=duplicate_count,
+        errors=errors,
+    )
+    return result
 
 
 def _extract_simulation_key(
