@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationOut
 from app.features.user.manager import current_active_user
@@ -46,6 +48,21 @@ def create_simulation(
         updated_at=now,
     )
 
+    ingestion = Ingestion(
+        source_type=IngestionSourceType.BROWSER_UPLOAD,
+        source_reference="manual_simulation_create",
+        machine_id=payload.machine_id,
+        triggered_by=user.id,
+        status=IngestionStatus.SUCCESS,
+        created_count=1,
+        duplicate_count=0,
+        error_count=0,
+        created_at=now,
+        archive_sha256=None,
+    )
+
+    sim.ingestion = ingestion
+
     if payload.artifacts:
         for artifact in payload.artifacts:
             artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
@@ -58,12 +75,8 @@ def create_simulation(
             link_data["url"] = str(link.url)
             sim.links.append(ExternalLink(**link_data))
 
-    # Start a database transaction to ensure atomicity of the operation
     with transaction(db):
-        # Add the simulation object to the database session.
         db.add(sim)
-        # Flush the session to persist the simulation object, generate its ID
-        # and fully populate relationships before returning.
         db.flush()
 
     return SimulationOut.model_validate(sim, from_attributes=True)

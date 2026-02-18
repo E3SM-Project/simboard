@@ -4,6 +4,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.models import Simulation
 from app.features.user.manager import current_active_user
@@ -89,6 +91,19 @@ class TestListSimulations:
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_simulation_list",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
         sim = Simulation(
             name="Test Simulation",
             case_name="test_case",
@@ -105,6 +120,7 @@ class TestListSimulations:
             git_commit_hash="abc123",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
         )
         db.add(sim)
         db.commit()
@@ -124,6 +140,19 @@ class TestGetSimulation:
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_simulation_get",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
         sim = Simulation(
             name="Test Simulation",
             case_name="test_case",
@@ -140,6 +169,7 @@ class TestGetSimulation:
             git_commit_hash="abc123",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
         )
         db.add(sim)
         db.commit()

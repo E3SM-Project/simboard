@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.database import SessionLocal
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import (
@@ -135,6 +137,7 @@ def seed_from_json(db: Session, json_path: str):
     db.query(ExternalLink).delete()
     db.query(Artifact).delete()
     db.query(Simulation).delete()
+    db.query(Ingestion).delete()
 
     for entry in data:
         machine_name = entry.get("machine", {}).get("name")
@@ -187,6 +190,22 @@ def seed_from_json(db: Session, json_path: str):
                 else sim_in.git_repository_url,
             }
         )
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference=f"seed:{entry.get('name', 'unknown')}",
+            machine_id=machine.id,
+            triggered_by=first_user_id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+            archive_sha256=None,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim.ingestion_id = ingestion.id
         db.add(sim)
         db.flush()
 
