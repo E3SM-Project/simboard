@@ -81,38 +81,18 @@ def ingest_from_path(
             db=db,
         )
 
-    error_count = len(errors)
-    status_value = _resolve_ingestion_status(created_count, error_count)
-
-    with transaction(db):
-        _persist_simulations(simulations, db, user)
-
-        ingestion_create = IngestionCreate(
-            source_type=IngestionSourceType.HPC_PATH.value,
-            source_reference=str(archive_path),
-            machine_id=machine.id,
-            triggered_by=user.id,
-            status=status_value,
-            created_count=created_count,
-            duplicate_count=duplicate_count,
-            error_count=error_count,
-            archive_sha256=archive_sha256,
-        )
-        ingestion = Ingestion(
-            **ingestion_create.model_dump(),
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(ingestion)
-        db.flush()
-
-    response = IngestionResponse(
+    return _persist_and_respond_to_ingestion(
+        simulations=simulations,
         created_count=created_count,
         duplicate_count=duplicate_count,
-        simulations=simulations,
         errors=errors,
+        source_type=IngestionSourceType.HPC_PATH,
+        source_reference=str(archive_path),
+        machine_id=machine.id,
+        user=user,
+        archive_sha256=archive_sha256,
+        db=db,
     )
-
-    return response
 
 
 @router.post(
@@ -158,38 +138,18 @@ def ingest_from_upload(  # noqa: C901
                 db=db,
             )
 
-            error_count = len(errors)
-            status_value = _resolve_ingestion_status(created_count, error_count)
-
-            with transaction(db):
-                _persist_simulations(simulations, db, user)
-
-                ingestion_create = IngestionCreate(
-                    source_type=IngestionSourceType.HPC_UPLOAD.value,
-                    source_reference=filename,
-                    machine_id=machine.id,
-                    triggered_by=user.id,
-                    status=status_value,
-                    created_count=created_count,
-                    duplicate_count=duplicate_count,
-                    error_count=error_count,
-                    archive_sha256=sha256_hex,
-                )
-                ingestion = Ingestion(
-                    **ingestion_create.model_dump(),
-                    created_at=datetime.now(timezone.utc),
-                )
-                db.add(ingestion)
-                db.flush()
-
-            response = IngestionResponse(
+            return _persist_and_respond_to_ingestion(
+                simulations=simulations,
                 created_count=created_count,
                 duplicate_count=duplicate_count,
-                simulations=simulations,
                 errors=errors,
+                source_type=IngestionSourceType.HPC_UPLOAD,
+                source_reference=filename,
+                machine_id=machine.id,
+                user=user,
+                archive_sha256=sha256_hex,
+                db=db,
             )
-
-            return response
     finally:
         file.file.close()
 
@@ -332,3 +292,52 @@ def _persist_simulations(
 
         db.add(sim)
         db.flush()
+
+
+def _persist_and_respond_to_ingestion(
+    simulations: list[SimulationCreate],
+    created_count: int,
+    duplicate_count: int,
+    errors: list[dict[str, str]],
+    source_type: IngestionSourceType,
+    source_reference: str,
+    machine_id,
+    user: User,
+    archive_sha256: str,
+    db: Session,
+) -> IngestionResponse:
+    """Persist ingestion metadata and simulations, then return a response.
+
+    This is a shared helper function used by both the path-based and upload-based
+    ingestion endpoints.
+    """
+    error_count = len(errors)
+    status_value = _resolve_ingestion_status(created_count, error_count)
+
+    with transaction(db):
+        _persist_simulations(simulations, db, user)
+
+        ingestion_create = IngestionCreate(
+            source_type=source_type.value,
+            source_reference=source_reference,
+            machine_id=machine_id,
+            triggered_by=user.id,
+            status=status_value,
+            created_count=created_count,
+            duplicate_count=duplicate_count,
+            error_count=error_count,
+            archive_sha256=archive_sha256,
+        )
+        ingestion = Ingestion(
+            **ingestion_create.model_dump(),
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(ingestion)
+        db.flush()
+
+    return IngestionResponse(
+        created_count=created_count,
+        duplicate_count=duplicate_count,
+        simulations=simulations,
+        errors=errors,
+    )
