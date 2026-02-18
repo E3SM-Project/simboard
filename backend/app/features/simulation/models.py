@@ -23,12 +23,6 @@ if TYPE_CHECKING:
     from app.features.machine.models import Machine
 
 
-class Status(Base):
-    __tablename__ = "status_lookup"
-    code: Mapped[str] = mapped_column(String(50), primary_key=True)
-    label: Mapped[str] = mapped_column(String(100), nullable=False)
-
-
 class Simulation(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
 
@@ -50,7 +44,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     simulation_type: Mapped[SimulationType] = mapped_column(
         SAEnum(
             SimulationType,
-            name="simulation_type",
+            name="simulation_type_enum",
             native_enum=False,
             values_callable=lambda obj: [e.value for e in obj],
             validate_strings=True,
@@ -59,11 +53,13 @@ class Simulation(Base, IDMixin, TimestampMixin):
     status: Mapped[SimulationStatus] = mapped_column(
         SAEnum(
             SimulationStatus,
+            name="simulation_status_enum",
+            native_enum=False,
             values_callable=lambda obj: [e.value for e in obj],
             validate_strings=True,
         ),
-        ForeignKey("status_lookup.code"),
         index=True,
+        nullable=False,
     )
     campaign: Mapped[str | None] = mapped_column(Text)
     experiment_type: Mapped[str | None] = mapped_column(Text)
