@@ -33,6 +33,7 @@ router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
     responses={
         201: {"description": "Ingestion successful, simulations created."},
         400: {"description": "Invalid input or archive file."},
+        403: {"description": "Forbidden: only administrators can ingest from paths."},
         404: {"description": "Machine not found."},
         409: {"description": "Conflict: ingestion error."},
         500: {"description": "Internal server error."},
@@ -43,7 +44,25 @@ def ingest_from_path(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ):
-    """Ingest an archive from a file system path and persist simulations."""
+    """
+    Ingest an archive from a filesystem path and persist simulations.
+
+    NOTE:
+    Arbitrary filesystem paths are currently permitted to support HPC
+    ingestion workflows (e.g., NERSC). This endpoint is restricted to
+    administrators.
+
+    TODO:
+    Consider enforcing that archive_path must reside within a configured
+    base directory (e.g., a designated HPC storage or ingestion directory)
+    before exposing this endpoint beyond a trusted environment.
+    """
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators may ingest from filesystem paths.",
+        )
+
     machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()
 
     if not machine:

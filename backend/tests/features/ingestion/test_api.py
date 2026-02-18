@@ -39,13 +39,24 @@ def override_auth_dependency(normal_user_sync):
             email=normal_user_sync["email"],
             is_active=True,
             is_verified=True,
-            role=UserRole.USER,
+            role=UserRole.ADMIN,
         )
 
     app.dependency_overrides[current_active_user] = fake_current_user
 
     yield
     app.dependency_overrides.clear()
+
+
+# Override dependency to simulate a non-admin user
+def fake_non_admin_user():
+    return User(
+        id=1,
+        email="user@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.USER,
+    )
 
 
 class TestIngestFromPathEndpoint:
@@ -57,6 +68,29 @@ class TestIngestFromPathEndpoint:
         archive_path.write_bytes(content)
 
         return archive_path
+
+    def test_endpoint_returns_403_for_non_admin_user(
+        self, client, db: Session, tmp_path
+    ):
+        """Test that non-admin users receive a 403 Forbidden response."""
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
+
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        # Restore dependency overrides
+        app.dependency_overrides.clear()
+
+        assert res.status_code == 403
+        assert (
+            res.json()["detail"]
+            == "Only administrators may ingest from filesystem paths."
+        )
 
     def test_endpoint_returns_summary(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
