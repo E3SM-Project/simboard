@@ -12,6 +12,11 @@ from app.features.ingestion.ingest import (
     _normalize_simulation_type,
     ingest_archive,
 )
+from app.features.ingestion.models import (
+    Ingestion,
+    IngestionSourceType,
+    IngestionStatus,
+)
 from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
@@ -597,6 +602,19 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(user)
         db.commit()
 
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="test_skips_duplicate_simulations",
+            machine_id=machine.id,
+            triggered_by=user.id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
         # Create a simulation directly in the database
         existing_sim = Simulation(
             name="existing_sim",
@@ -612,6 +630,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             status=SimulationStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
+            ingestion_id=ingestion.id,
         )
         db.add(existing_sim)
         db.commit()
@@ -665,6 +684,19 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(user)
         db.commit()
 
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="test_ingest_archive_counts",
+            machine_id=machine.id,
+            triggered_by=user.id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
         existing_sim = Simulation(
             name="existing_sim",
             case_name="existing_case",
@@ -679,6 +711,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             status=SimulationStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
+            ingestion_id=ingestion.id,
         )
         db.add(existing_sim)
         db.commit()

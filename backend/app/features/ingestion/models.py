@@ -1,6 +1,9 @@
 """SQLAlchemy ORM models for ingestion audit records."""
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -10,6 +13,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+
+if TYPE_CHECKING:
+    from app.features.simulation.models import Simulation
 
 
 class Ingestion(Base):
@@ -62,6 +68,9 @@ class Ingestion(Base):
     archive_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     user = relationship("User")
+    simulations: Mapped[list[Simulation]] = relationship(
+        "Simulation", back_populates="ingestion"
+    )
 
     def __repr__(self) -> str:
         return f"<Ingestion id={self.id} source_type={self.source_type!r} status={self.status!r}>"

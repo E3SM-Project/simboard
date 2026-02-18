@@ -3,6 +3,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
@@ -276,8 +277,6 @@ def _process_ingestion(
     status_value = _resolve_ingestion_status(ingest_result.created_count, error_count)
 
     with transaction(db):
-        _persist_simulations(ingest_result.simulations, db, user)
-
         ingestion_create = IngestionCreate(
             source_type=source_type.value,
             source_reference=source_reference,
@@ -295,6 +294,10 @@ def _process_ingestion(
         )
         db.add(ingestion)
         db.flush()
+
+        _persist_simulations(
+            cast(uuid.UUID, ingestion.id), ingest_result.simulations, db, user
+        )
 
     return IngestionResponse(
         created_count=ingest_result.created_count,
@@ -315,7 +318,10 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
 
 
 def _persist_simulations(
-    simulations: list[SimulationCreate], db: Session, user: User
+    ingestion_id: uuid.UUID,
+    simulations: list[SimulationCreate],
+    db: Session,
+    user: User,
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
 
@@ -334,6 +340,7 @@ def _persist_simulations(
 
         sim = Simulation(
             **data,
+            ingestion_id=ingestion_id,
             created_by=user.id,
             last_updated_by=user.id,
             created_at=now,
@@ -359,4 +366,5 @@ def _persist_simulations(
                 sim.links.append(ExternalLink(**link_data))
 
         db.add(sim)
-        db.flush()
+
+    db.flush()

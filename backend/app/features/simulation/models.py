@@ -20,6 +20,7 @@ from app.features.simulation.enums import (
 )
 
 if TYPE_CHECKING:
+    from app.features.ingestion.models import Ingestion
     from app.features.machine.models import Machine
 
 
@@ -100,6 +101,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
     last_updated_by: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
+    ingestion_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingestions.id"), index=True, nullable=False
+    )
 
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
@@ -111,7 +115,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
     last_updated_by_user = relationship(
         "User", foreign_keys=[last_updated_by], lazy="joined"
     )
-
+    ingestion: Mapped[Ingestion] = relationship(
+        "Ingestion", back_populates="simulations"
+    )
     machine: Mapped[Machine] = relationship(
         back_populates="simulations", foreign_keys=[machine_id]
     )
@@ -149,9 +155,9 @@ class Artifact(Base, IDMixin, TimestampMixin):
         SAEnum(
             ArtifactKind,
             name="artifact_kind_enum",
-            native_enum=False,  # creates CHECK constraint instead of DB enum
-            values_callable=lambda obj: [e.value for e in obj],  # use values not names
-            validate_strings=True,  # ensures Python-side validation
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
         ),
         comment=f"Must be one of: {', '.join([e.value for e in ArtifactKind])}",
     )
@@ -178,9 +184,9 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
         SAEnum(
             ExternalLinkKind,
             name="external_link_kind_enum",
-            native_enum=False,  # creates CHECK constraint instead of DB enum
-            values_callable=lambda obj: [e.value for e in obj],  # use values not names
-            validate_strings=True,  # ensures Python-side validation
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
         ),
         comment=f"Must be one of: {', '.join([e.value for e in ExternalLinkKind])}",
     )
