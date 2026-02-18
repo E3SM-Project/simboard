@@ -1,6 +1,9 @@
 """SQLAlchemy ORM models for ingestion audit records."""
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -10,7 +13,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
-from app.features.simulation.models import Simulation
+
+if TYPE_CHECKING:
+    from app.features.simulation.models import Simulation
 
 
 class Ingestion(Base):
