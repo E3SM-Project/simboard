@@ -12,9 +12,14 @@ from app.features.simulation.enums import SimulationStatus
 
 class TestCaseStatusParser:
     def test_returns_default_result_on_read_error(self):
-        with patch(
-            "app.features.ingestion.parsers.case_status._get_open_func",
-            return_value=Mock(side_effect=OSError("boom")),
+        with (
+            patch(
+                "app.features.ingestion.parsers.case_status._get_open_func",
+                return_value=Mock(side_effect=OSError("boom")),
+            ),
+            patch(
+                "app.features.ingestion.parsers.case_status.logger.warning"
+            ) as mock_warning,
         ):
             result = parse_case_status("/tmp/missing/casestatus.txt")
 
@@ -25,6 +30,8 @@ class TestCaseStatusParser:
             "run_end_date": None,
             "status": None,
         }
+        mock_warning.assert_called_once()
+        assert "Failed to read case status file" in mock_warning.call_args.args[0]
 
     def test_extracts_simulation_start_and_end_date_nmonths(self, tmp_path):
         content = (
@@ -220,14 +227,20 @@ class TestCaseStatusParser:
         }[key]
         result = {"simulation_start_date": "2020-01-01", "simulation_end_date": None}
 
-        _update_simulation_end_date(
-            "/tmp/casestatus.txt",
-            "STOP_OPTION=ndays,STOP_N=not-an-int",
-            stop_match,
-            result,
-        )
+        with patch(
+            "app.features.ingestion.parsers.case_status.logger.warning"
+        ) as mock_warning:
+            _update_simulation_end_date(
+                "/tmp/casestatus.txt",
+                "STOP_OPTION=ndays,STOP_N=not-an-int",
+                stop_match,
+                result,
+            )
 
         assert result["simulation_end_date"] is None
+        mock_warning.assert_called_once()
+        warning_message = mock_warning.call_args.args[0]
+        assert "Malformed STOP_OPTION/STOP_N line" in warning_message
 
     def test_calculate_simulation_end_date_invalid_start_date_returns_none(self):
         assert _calculate_simulation_end_date("invalid-date", "ndays", 3) is None
