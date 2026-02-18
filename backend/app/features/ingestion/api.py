@@ -3,7 +3,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
@@ -295,7 +295,9 @@ def _process_ingestion(
         db.add(ingestion)
         db.flush()
 
-        _persist_simulations(ingestion.id, ingest_result.simulations, db, user)
+        _persist_simulations(
+            cast(uuid.UUID, ingestion.id), ingest_result.simulations, db, user
+        )
 
     return IngestionResponse(
         created_count=ingest_result.created_count,
@@ -316,7 +318,7 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
 
 
 def _persist_simulations(
-    ingestion_id: Any,
+    ingestion_id: uuid.UUID,
     simulations: list[SimulationCreate],
     db: Session,
     user: User,
