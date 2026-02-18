@@ -264,6 +264,7 @@ def _map_metadata_to_schema(
 
     git_repository_url = _normalize_git_url(metadata.get("git_repository_url"))
     simulation_type = _normalize_simulation_type(metadata.get("simulation_type"))
+    status = _normalize_simulation_status(metadata.get("status"))
 
     # Map metadata to schema; Pydantic will validate required fields
     # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
@@ -279,7 +280,7 @@ def _map_metadata_to_schema(
             "gridResolution": metadata.get("grid_resolution"),
             # Required status fields with sensible defaults
             "simulationType": simulation_type,
-            "status": SimulationStatus.CREATED,
+            "status": status,
             "initializationType": metadata.get("initialization_type"),
             "machineId": machine_id,
             "simulationStartDate": simulation_start_date,
@@ -330,6 +331,29 @@ def _normalize_simulation_type(value: str | None) -> SimulationType:
                 SimulationType.UNKNOWN.value,
             )
             return SimulationType.UNKNOWN
+
+
+def _normalize_simulation_status(value: str | None) -> SimulationStatus:
+    """Return a valid SimulationStatus enum value with CREATED fallback."""
+    if not value:
+        return SimulationStatus.CREATED
+
+    normalized = value.strip()
+    if not normalized:
+        return SimulationStatus.CREATED
+
+    try:
+        return SimulationStatus(normalized)
+    except ValueError:
+        try:
+            return SimulationStatus[normalized.upper()]
+        except KeyError:
+            logger.warning(
+                "Unknown status '%s'; defaulting to '%s'.",
+                value,
+                SimulationStatus.CREATED.value,
+            )
+            return SimulationStatus.CREATED
 
 
 def _parse_datetime_field(value: str | None) -> datetime | None:
