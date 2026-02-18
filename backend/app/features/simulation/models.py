@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -13,29 +12,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
+from app.features.simulation.enums import (
+    ArtifactKind,
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
 
 if TYPE_CHECKING:
     from app.features.machine.models import Machine
-
-
-class Status(Base):
-    __tablename__ = "status_lookup"
-    code: Mapped[str] = mapped_column(String(50), primary_key=True)
-    label: Mapped[str] = mapped_column(String(100), nullable=False)
-
-
-class ArtifactKind(StrEnum):
-    OUTPUT = "output"
-    ARCHIVE = "archive"
-    RUN_SCRIPT = "run_script"
-    POSTPROCESSING_SCRIPT = "postprocessing_script"
-
-
-class ExternalLinkKind(StrEnum):
-    DIAGNOSTIC = "diagnostic"
-    PERFORMANCE = "performance"
-    DOCS = "docs"
-    OTHER = "other"
 
 
 class Simulation(Base, IDMixin, TimestampMixin):
@@ -47,24 +32,39 @@ class Simulation(Base, IDMixin, TimestampMixin):
     case_name: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
-    compset_alias: Mapped[str] = mapped_column(String(120))
-    grid_name: Mapped[str] = mapped_column(String(200))
-    grid_resolution: Mapped[str] = mapped_column(String(50))
+    compset_alias: Mapped[str] = mapped_column(Text)
+    grid_name: Mapped[str] = mapped_column(Text)
+    grid_resolution: Mapped[str] = mapped_column(Text)
     parent_simulation_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("simulations.id")
     )
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Mapped[str] = mapped_column(String(50))
-    status: Mapped[str] = mapped_column(
-        String(50), ForeignKey("status_lookup.code"), index=True
+    simulation_type: Mapped[SimulationType] = mapped_column(
+        SAEnum(
+            SimulationType,
+            name="simulation_type_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        )
     )
-    campaign: Mapped[str | None] = mapped_column(String(100))
-    experiment_type: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[SimulationStatus] = mapped_column(
+        SAEnum(
+            SimulationStatus,
+            name="simulation_status_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        ),
+        index=True,
+        nullable=False,
+    )
+    campaign: Mapped[str | None] = mapped_column(Text)
+    experiment_type: Mapped[str | None] = mapped_column(Text)
     initialization_type: Mapped[str] = mapped_column(String(50))
-    group_name: Mapped[str | None] = mapped_column(String(120))
+    group_name: Mapped[str | None] = mapped_column(Text)
 
     # Model timeline
     # ~~~~~~~~~~~~~~
@@ -87,7 +87,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: Mapped[str | None] = mapped_column(String(500))
+    git_repository_url: Mapped[str | None] = mapped_column(Text)
     git_branch: Mapped[str | None] = mapped_column(String(200))
     git_tag: Mapped[str | None] = mapped_column(String(100))
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), index=True)

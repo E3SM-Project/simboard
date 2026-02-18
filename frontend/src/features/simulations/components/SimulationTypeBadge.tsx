@@ -1,9 +1,9 @@
-import { BadgeCheck, FlaskConical, GitBranch } from 'lucide-react';
+import { BadgeCheck, FlaskConical, FlaskRound, GitBranch, HelpCircle } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 
 interface SimulationTypeBadgeProps {
-  simulationType: 'production' | 'master' | string;
+  simulationType: 'unknown' | 'production' | 'experimental' | 'test' | string;
 }
 
 const styles: Record<
@@ -33,12 +33,23 @@ const styles: Record<
     label: 'Experimental Run',
     Icon: FlaskConical,
   },
+  test: {
+    className: 'text-xs px-2 py-1 bg-purple-500 text-white',
+    style: { backgroundColor: '#9333ea', color: '#fff' },
+    label: 'Test Run',
+    Icon: FlaskRound,
+  },
+  unknown: {
+    className: 'text-xs px-2 py-1 bg-gray-400 text-white',
+    style: { backgroundColor: '#9ca3af', color: '#fff' },
+    label: 'Unknown Type',
+    Icon: HelpCircle,
+  },
 };
 
 const getStyleProps = (simulationType: string) => {
-  if (simulationType === 'production') return styles.production;
-  if (simulationType === 'master') return styles.master;
-  return styles.experimental;
+  if (styles[simulationType]) return styles[simulationType];
+  return styles.unknown;
 };
 
 export const SimulationTypeBadge = ({ simulationType }: SimulationTypeBadgeProps) => {

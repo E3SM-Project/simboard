@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.upload.parsers.case_docs import parse_env_build, parse_env_case
-from app.features.upload.parsers.case_status import parse_case_status
-from app.features.upload.parsers.e3sm_timing import parse_e3sm_timing
-from app.features.upload.parsers.git_info import (
+from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
+from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
+from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
     parse_git_status,
 )
-from app.features.upload.parsers.readme_case import parse_readme_case
+from app.features.ingestion.parsers.readme_case import parse_readme_case
+from app.features.simulation.enums import SimulationStatus, SimulationType
 
 SimulationFiles = dict[str, str | None]
 SimulationMetadata = dict[str, str | None]
@@ -75,14 +76,12 @@ FILE_SPECS: dict[str, FileSpec] = {
         "pattern": r"GIT_CONFIG\..*\.gz",
         "location": "root",
         "parser": parse_git_config,
-        "single_value": "git_repository_url",
         "required": False,
     },
     "git_status": {
         "pattern": r"GIT_STATUS\..*\.gz",
         "location": "root",
         "parser": parse_git_status,
-        "single_value": "git_branch",
         "required": False,
     },
 }
@@ -106,22 +105,42 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
     archive_path = str(archive_path)
     output_dir = str(output_dir)
 
-    _extract_archive(archive_path, output_dir)
+    search_root = output_dir
+
+    if _is_supported_archive(archive_path):
+        _extract_archive(archive_path, output_dir)
+    else:
+        if not os.path.isdir(archive_path):
+            raise ValueError(f"Unsupported archive format: {archive_path}")
+
+        logger.info(
+            "Input path is not a supported archive extension; "
+            "treating it as an already-extracted directory."
+        )
+        search_root = archive_path
 
     results: AllSimulations = {}
 
-    exp_dirs = _find_experiment_dirs(output_dir)
-    logger.info(f"Found {len(exp_dirs)} experiment directories.")
+    exp_dirs = _find_experiment_dirs(search_root)
+    logger.info(
+        f"Found {sum(len(dirs) for dirs in exp_dirs.values())} experiment "
+        f"directories across {len(exp_dirs)} base directories."
+    )
 
     if not exp_dirs:
         raise FileNotFoundError(
-            f"No experiment directories found in extracted archive at '{output_dir}'. "
+            f"No experiment directories found under '{search_root}'. "
             "Expected directory names matching pattern: <digits>.<digits>-<digits>"
         )
 
-    for exp_dir in exp_dirs:
-        files = _locate_files(exp_dir)
-        results[exp_dir] = _parse_experiment_files(files)
+    for base_dir, subdirs in exp_dirs.items():
+        logger.info(
+            f"Processing base directory: {base_dir} with {len(subdirs)} experiment "
+            "subdirectories."
+        )
+        for exp_dir in subdirs:
+            files = _locate_files(exp_dir)
+            results[exp_dir] = _parse_experiment_files(files)
 
     logger.info("Completed parsing all experiment directories.")
 
@@ -136,6 +155,11 @@ def _extract_archive(archive_path: str, output_dir: str) -> None:
         _extract_tar_gz(archive_path, output_dir)
     else:
         raise ValueError(f"Unsupported archive format: {archive_path}")
+
+
+def _is_supported_archive(path: str) -> bool:
+    """Return True if path has a supported archive extension."""
+    return path.endswith((".zip", ".tar.gz", ".tgz"))
 
 
 def _extract_zip(zip_path: str, extract_to: str) -> None:
@@ -200,20 +224,22 @@ def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
     return True
 
 
-def _find_experiment_dirs(root_dir: str) -> list[str]:
+def _find_experiment_dirs(root_dir: str) -> dict[str, list[str]]:
     """
     Recursively search for experiment directories matching the pattern:
-    <digits>.<digits>-<digits>
+    <digits>.<digits>-<digits>, grouped by their immediate parent directory.
     """
     exp_dir_pattern = re.compile(r"\d+\.\d+-\d+$")
-    matches: list[str] = []
+    grouped_matches: dict[str, list[str]] = {}
 
     for dirpath, dirnames, _ in os.walk(root_dir):
         for dirname in dirnames:
             if exp_dir_pattern.match(dirname):
-                matches.append(os.path.join(dirpath, dirname))
+                parent_dir = os.path.basename(dirpath)  # Immediate parent directory
+                full_path = os.path.join(dirpath, dirname)
+                grouped_matches.setdefault(parent_dir, []).append(full_path)
 
-    return matches
+    return grouped_matches
 
 
 def _locate_files(exp_dir: str) -> SimulationFiles:
@@ -330,6 +356,7 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
         "initialization_type": metadata.get("initialization_type"),
         "group_name": metadata.get("group_name"),
         "simulation_start_date": metadata.get("simulation_start_date"),
+        "simulation_end_date": metadata.get("simulation_end_date"),
         "run_start_date": metadata.get("run_start_date"),
         "run_end_date": metadata.get("run_end_date"),
         "compiler": metadata.get("compiler"),
@@ -337,16 +364,19 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
         "git_branch": metadata.get("git_branch"),
         "git_tag": metadata.get("git_tag"),
         "git_commit_hash": metadata.get("git_commit_hash"),
-        "created_by": metadata.get("user"),
-        "last_updated_by": metadata.get("user"),
         "machine": metadata.get("machine"),
+        "hpc_username": metadata.get("user"),
+        "status": metadata.get("status", SimulationStatus.UNKNOWN.value),
     }
 
     placeholder_fields: SimulationMetadata = {
+        # TODO: Skip this for MVP, not required. We can add it later if we find
+        # a way to determine it from the parsed files.
         "parent_simulation_id": None,
-        "simulation_type": None,
-        "status": None,
-        "simulation_end_date": None,
+        # TODO: This is a required field, but we don't have a way to determine
+        # the simulation type from the parsed files yet. Default to UNKNOWN
+        # for now and manually update on the UI if needed.
+        "simulation_type": SimulationType.UNKNOWN.value,
         "extra": None,
         "artifacts": None,
         "links": None,

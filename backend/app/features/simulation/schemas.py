@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -8,54 +7,14 @@ from pydantic import Field, HttpUrl, computed_field
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
+from app.features.simulation.enums import (
+    ArtifactKind,
+    ExperimentType,
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
 from app.features.user.schemas import UserPreview
-
-
-class SimulationStatus(StrEnum):
-    CREATED = "created"
-    QUEUED = "queued"
-    RUNNING = "running"
-    FAILED = "failed"
-    COMPLETED = "completed"
-
-
-class ArtifactKind(StrEnum):
-    """Enumeration of possible artifact types."""
-
-    OUTPUT = "output"
-    ARCHIVE = "archive"
-    RUN_SCRIPT = "run_script"
-    POSTPROCESS_SCRIPT = "postprocessing_script"
-
-
-class ExternalLinkKind(StrEnum):
-    """Enumeration of possible external link types."""
-
-    DIAGNOSTIC = "diagnostic"
-    PERFORMANCE = "performance"
-    DOCS = "docs"
-    OTHER = "other"
-
-
-class ExperimentType(StrEnum):
-    # --- DECK core experiments ---
-    PI_CONTROL = "piControl"
-    HISTORICAL = "historical"
-    AMIP = "amip"
-    ABRUPT_4XCO2 = "abrupt-4xCO2"
-    ONE_PCT_CO2 = "1pctCO2"
-
-    # --- ScenarioMIP (SSPs) ---
-    SSP119 = "ssp119"
-    SSP126 = "ssp126"
-    SSP245 = "ssp245"
-    SSP370 = "ssp370"
-    SSP585 = "ssp585"
-
-    # --- ESM variants ---
-    ESM_HIST = "esm-hist"
-    ESM_PICONTROL = "esm-piControl"
-
 
 KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
 
@@ -165,8 +124,9 @@ class SimulationCreate(CamelInBaseModel):
 
     # Model setup/context
     # -------------------
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
+    simulation_type: Annotated[
+        SimulationType, Field(..., description="Type of the simulation")
+    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -328,9 +288,12 @@ class SimulationOut(CamelOutBaseModel):
 
     # Model setup/context
     # -------------------
-    # TODO: Make simulation_type an Enum once we have a fixed set of types.
-    simulation_type: Annotated[str, Field(..., description="Type of the simulation")]
-    status: Annotated[str, Field(..., description="Current status of the simulation")]
+    simulation_type: Annotated[
+        SimulationType, Field(..., description="Type of the simulation")
+    ]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
     campaign: Annotated[
         str | None,
         Field(

@@ -1,5 +1,6 @@
 """Module for ingesting simulation archives and mapping to database schemas."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -9,19 +10,50 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logger import _setup_custom_logger
+from app.features.ingestion.parsers.parser import SimulationMetadata, main_parser
 from app.features.machine.models import Machine
+from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationStatus
-from app.features.upload.parsers.parser import SimulationMetadata, main_parser
+from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
+
+
+@dataclass
+class IngestArchiveResult:
+    """
+    Structured result of an archive ingestion operation.
+
+    This object encapsulates the outcome of parsing and validating a
+    simulation archive prior to persistence. It includes successfully
+    mapped simulations, duplicate counts, and per-experiment errors.
+
+    Attributes
+    ----------
+    simulations : list[SimulationCreate]
+        Collection of simulation schema objects successfully parsed and
+        validated from the archive.
+    created_count : int
+        Number of new simulations eligible for creation.
+    duplicate_count : int
+        Number of simulations skipped due to existing records in the database.
+    errors : list[dict[str, str]]
+        List of ingestion errors encountered during processing. Each entry
+        contains keys such as ``exp_dir``, ``error_type``, and ``error``,
+        describing the failed experiment and associated exception details.
+    """
+
+    simulations: list[SimulationCreate]
+    created_count: int
+    duplicate_count: int
+    errors: list[dict[str, str]]
 
 
 def ingest_archive(
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
-) -> tuple[list[SimulationCreate], int, int, list[dict[str, str]]]:
+) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
     Parameters
@@ -35,10 +67,9 @@ def ingest_archive(
 
     Returns
     -------
-    tuple[list[SimulationCreate], int, int, list[dict[str, str]]]
-        Tuple containing (created_simulations, created_count, duplicate_count,
-        errors). The errors list contains per-experiment failures with keys
-        'exp_dir', 'error_type', and 'error'.
+    IngestArchiveResult
+        Dataclass containing list of SimulationCreate objects, counts of created
+        and duplicate simulations, and any errors encountered during processing.
 
     Raises
     ------
@@ -61,7 +92,9 @@ def ingest_archive(
     if not all_simulations:
         logger.warning(f"No simulations found in archive: {archive_path_resolved}")
 
-        return [], 0, 0, []
+        return IngestArchiveResult(
+            simulations=[], created_count=0, duplicate_count=0, errors=[]
+        )
 
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
@@ -100,7 +133,13 @@ def ingest_archive(
             )
             continue
 
-    return simulations, len(simulations), duplicate_count, errors
+    result = IngestArchiveResult(
+        simulations=simulations,
+        created_count=len(simulations),
+        duplicate_count=duplicate_count,
+        errors=errors,
+    )
+    return result
 
 
 def _extract_simulation_key(
@@ -256,15 +295,18 @@ def _map_metadata_to_schema(
     # Parse datetime fields using the shared utility function
     # Note: simulation_start_date is already validated in _extract_simulation_key()
     simulation_start_date = _parse_datetime_field(metadata.get("simulation_start_date"))
+    simulation_end_date = _parse_datetime_field(metadata.get("simulation_end_date"))
 
     run_start_date = _parse_datetime_field(metadata.get("run_start_date"))
     run_end_date = _parse_datetime_field(metadata.get("run_end_date"))
 
     git_repository_url = _normalize_git_url(metadata.get("git_repository_url"))
+    simulation_type = _normalize_simulation_type(metadata.get("simulation_type"))
+    status = _normalize_simulation_status(metadata.get("status"))
 
     # Map metadata to schema; Pydantic will validate required fields
     # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
-    return SimulationCreate.model_validate(
+    result = SimulationCreate.model_validate(
         {
             # Required identification fields
             "name": metadata.get("name"),
@@ -275,11 +317,12 @@ def _map_metadata_to_schema(
             "gridName": metadata.get("grid_name"),
             "gridResolution": metadata.get("grid_resolution"),
             # Required status fields with sensible defaults
-            "simulationType": metadata.get("simulation_type"),
-            "status": SimulationStatus.CREATED,
+            "simulationType": simulation_type,
+            "status": status,
             "initializationType": metadata.get("initialization_type"),
             "machineId": machine_id,
             "simulationStartDate": simulation_start_date,
+            "simulationEndDate": simulation_end_date,
             # Optional experiment classification
             "experimentType": metadata.get("experiment_type"),
             "campaign": metadata.get("campaign"),
@@ -301,6 +344,54 @@ def _map_metadata_to_schema(
             "lastUpdatedBy": None,
         }
     )
+
+    return result
+
+
+def _normalize_simulation_type(value: str | None) -> SimulationType:
+    """Return a valid SimulationType enum value with UNKNOWN fallback."""
+    if not value:
+        return SimulationType.UNKNOWN
+
+    normalized = value.strip()
+    if not normalized:
+        return SimulationType.UNKNOWN
+
+    try:
+        return SimulationType(normalized)
+    except ValueError:
+        try:
+            return SimulationType[normalized.upper()]
+        except KeyError:
+            logger.warning(
+                "Unknown simulation_type '%s'; defaulting to '%s'.",
+                value,
+                SimulationType.UNKNOWN.value,
+            )
+            return SimulationType.UNKNOWN
+
+
+def _normalize_simulation_status(value: str | None) -> SimulationStatus:
+    """Return a valid SimulationStatus enum value with CREATED fallback."""
+    if not value:
+        return SimulationStatus.CREATED
+
+    normalized = value.strip()
+    if not normalized:
+        return SimulationStatus.CREATED
+
+    try:
+        return SimulationStatus(normalized)
+    except ValueError:
+        try:
+            return SimulationStatus[normalized.upper()]
+        except KeyError:
+            logger.warning(
+                "Unknown status '%s'; defaulting to '%s'.",
+                value,
+                SimulationStatus.CREATED.value,
+            )
+            return SimulationStatus.CREATED
 
 
 def _parse_datetime_field(value: str | None) -> datetime | None:

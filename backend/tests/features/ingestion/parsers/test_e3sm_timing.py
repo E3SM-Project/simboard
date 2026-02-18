@@ -2,7 +2,7 @@ import gzip
 
 import pytest
 
-from app.features.upload.parsers.e3sm_timing import parse_e3sm_timing
+from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 
 CONTENT_FIXTURE = (
     "Case: e3sm_v1_ne30\n"

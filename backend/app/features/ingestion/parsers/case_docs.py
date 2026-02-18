@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from app.features.upload.parsers.utils import _open_text
+from app.features.ingestion.parsers.utils import _open_text
 
 
 def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:

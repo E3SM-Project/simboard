@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from app.features.upload.parsers.git_info import (
+from app.features.ingestion.parsers.git_info import (
+    _extract_remote_url,
     parse_git_config,
     parse_git_describe,
     parse_git_status,
@@ -37,7 +38,7 @@ class TestGitInfoParser:
 
         result = parse_git_status(str(file_path))
 
-        assert result == "feature/59-automate-ingestion"
+        assert result == {"git_branch": "feature/59-automate-ingestion"}
 
     def test_parse_git_config_origin_url(self, tmp_path: Path) -> None:
         content = '[remote "origin"]\n    url = https://github.com/example/repo.git\n'
@@ -46,7 +47,7 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == "https://github.com/example/repo.git"
+        assert result == {"git_repository_url": "https://github.com/example/repo.git"}
 
     def test_parse_git_config_missing_origin_url(self, tmp_path: Path) -> None:
         content = (
@@ -60,4 +61,31 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result is None
+        assert result == {"git_repository_url": None}
+
+    def test_extract_remote_url_returns_origin_url(self) -> None:
+        lines = [
+            '[remote "origin"]',
+            "fetch = +refs/heads/*:refs/remotes/origin/*",
+            "url = https://github.com/example/repo.git",
+        ]
+
+        assert _extract_remote_url(lines) == "https://github.com/example/repo.git"
+
+    def test_extract_remote_url_stops_at_next_section(self) -> None:
+        lines = [
+            '[remote "origin"]',
+            "fetch = +refs/heads/*:refs/remotes/origin/*",
+            '[branch "main"]',
+            "url = https://github.com/example/should-not-be-used.git",
+        ]
+
+        assert _extract_remote_url(lines) is None
+
+    def test_extract_remote_url_returns_none_without_origin_section(self) -> None:
+        lines = [
+            '[remote "upstream"]',
+            "url = https://github.com/example/upstream.git",
+        ]
+
+        assert _extract_remote_url(lines) is None
