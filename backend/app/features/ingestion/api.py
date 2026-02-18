@@ -30,6 +30,13 @@ router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
     "/from-path",
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Ingestion successful, simulations created."},
+        400: {"description": "Invalid input or archive file."},
+        404: {"description": "Machine not found."},
+        409: {"description": "Conflict: ingestion error."},
+        500: {"description": "Internal server error."},
+    },
 )
 def ingest_from_path(
     payload: IngestFromPathRequest,
@@ -93,6 +100,14 @@ def ingest_from_path(
     "/from-upload",
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Ingestion successful, simulations created."},
+        400: {"description": "Invalid input or upload file."},
+        404: {"description": "Machine not found."},
+        409: {"description": "Conflict: ingestion error."},
+        413: {"description": "File too large."},
+        500: {"description": "Internal server error."},
+    },
 )
 def ingest_from_upload(  # noqa: C901
     file: UploadFile = File(...),
