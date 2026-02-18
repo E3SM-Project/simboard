@@ -238,10 +238,39 @@ def _process_ingestion(
     archive_sha256: str,
     db: Session,
 ) -> IngestionResponse:
-    """Persist ingestion metadata and simulations, then return a response.
+    """
+    Finalize and persist an ingestion operation.
 
-    This is a shared helper function used by both the path-based and upload-based
-    ingestion endpoints.
+    This function completes the ingestion workflow after archive parsing
+    has succeeded. It determines ingestion status, persists simulation
+    records and ingestion metadata within a transactional boundary, and
+    returns a structured response model.
+
+    Parameters
+    ----------
+    ingest_result : IngestArchiveResult
+        Structured result produced by the archive ingestion step, including
+        parsed simulations, duplicate counts, and per-experiment errors.
+    source_type : IngestionSourceType
+        Enumeration indicating the ingestion source (e.g., HPC_PATH,
+        HPC_UPLOAD).
+    source_reference : str
+        Identifier for the ingestion source, such as a filesystem path
+        or uploaded filename.
+    machine_id : uuid.UUID
+        Identifier of the machine associated with this ingestion.
+    user : User
+        Authenticated user who initiated the ingestion.
+    archive_sha256 : str
+        SHA256 checksum of the processed archive.
+    db : Session
+        Active SQLAlchemy database session used for persistence.
+
+    Returns
+    -------
+    IngestionResponse
+        Response model summarizing ingestion results, including counts,
+        created simulations, and any recorded errors.
     """
     error_count = len(ingest_result.errors)
     status_value = _resolve_ingestion_status(ingest_result.created_count, error_count)
@@ -267,14 +296,12 @@ def _process_ingestion(
         db.add(ingestion)
         db.flush()
 
-    response = IngestionResponse(
+    return IngestionResponse(
         created_count=ingest_result.created_count,
         duplicate_count=ingest_result.duplicate_count,
         simulations=ingest_result.simulations,
         errors=ingest_result.errors,
     )
-
-    return response
 
 
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
@@ -288,9 +315,7 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
 
 
 def _persist_simulations(
-    simulations: list[SimulationCreate],
-    db: Session,
-    user: User,
+    simulations: list[SimulationCreate], db: Session, user: User
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
 
