@@ -45,7 +45,7 @@ def parse_git_describe(describe_path: str | Path) -> dict[str, str | None]:
     return result
 
 
-def parse_git_status(status_path: str | Path) -> str | None:
+def parse_git_status(status_path: str | Path) -> dict[str, str | None]:
     """Parse GIT_STATUS file for current branch.
 
     Parameters
@@ -55,17 +55,17 @@ def parse_git_status(status_path: str | Path) -> str | None:
 
     Returns
     -------
-    str or None
-        Current branch name, or None if not found.
+    dict[str, str | None]
+        Dictionary containing the current branch name, or None if not found.
     """
     status_path = Path(status_path)
     status_lines = _open_text(status_path).splitlines()
 
-    return _extract_branch(status_lines)
+    return {"git_branch": _extract_branch(status_lines)}
 
 
-def parse_git_config(config_path: str | Path) -> str | None:
-    """Parse GIT_CONFIG file for remote URL.
+def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
+    """Parse GIT_CONFIG file for repository URL.
 
     Parameters
     ----------
@@ -74,13 +74,19 @@ def parse_git_config(config_path: str | Path) -> str | None:
 
     Returns
     -------
-    str or None
-        Remote URL, or None if not found.
+    dict[str, str | None]
+        Dictionary containing the repository URL, or None if not found.
     """
     config_path = Path(config_path)
     config_lines = _open_text(config_path).splitlines()
 
-    return _extract_remote_url(config_lines)
+    url = None
+    for line in config_lines:
+        if line.strip().startswith("url ="):
+            url = line.split("=", 1)[1].strip()
+            break
+
+    return {"git_repository_url": url}
 
 
 def _extract_branch(lines: list[str]) -> str | None:

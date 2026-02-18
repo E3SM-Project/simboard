@@ -76,14 +76,12 @@ FILE_SPECS: dict[str, FileSpec] = {
         "pattern": r"GIT_CONFIG\..*\.gz",
         "location": "root",
         "parser": parse_git_config,
-        "single_value": "git_repository_url",
         "required": False,
     },
     "git_status": {
         "pattern": r"GIT_STATUS\..*\.gz",
         "location": "root",
         "parser": parse_git_status,
-        "single_value": "git_branch",
         "required": False,
     },
 }

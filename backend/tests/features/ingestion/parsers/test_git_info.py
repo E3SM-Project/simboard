@@ -37,7 +37,7 @@ class TestGitInfoParser:
 
         result = parse_git_status(str(file_path))
 
-        assert result == "feature/59-automate-ingestion"
+        assert result == {"git_branch": "feature/59-automate-ingestion"}
 
     def test_parse_git_config_origin_url(self, tmp_path: Path) -> None:
         content = '[remote "origin"]\n    url = https://github.com/example/repo.git\n'
@@ -46,7 +46,7 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == "https://github.com/example/repo.git"
+        assert result == {"git_repository_url": "https://github.com/example/repo.git"}
 
     def test_parse_git_config_missing_origin_url(self, tmp_path: Path) -> None:
         content = (
@@ -60,4 +60,4 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result is None
+        assert result == {"git_repository_url": None}
