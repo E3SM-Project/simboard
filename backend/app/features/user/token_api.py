@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from app.common.dependencies import get_database_session
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
-from app.features.user.schemas import ApiTokenCreate, ApiTokenCreated, ApiTokenRead
+from app.features.user.schemas import (
+    ApiTokenCreate,
+    ApiTokenCreated,
+    ApiTokenRead,
+    ServiceAccountCreate,
+    ServiceAccountResponse,
+)
 from app.features.user.token_auth import generate_token
 
 router = APIRouter(prefix="/tokens", tags=["API Tokens"])
@@ -183,3 +189,76 @@ def revoke_api_token(
     db.commit()
 
     return None
+
+
+@router.post(
+    "/service-accounts",
+    response_model=ServiceAccountResponse,
+    responses={
+        200: {"description": "Service account already exists"},
+        201: {"description": "Service account created"},
+        403: {"description": "Forbidden: only administrators can create service accounts"},
+    },
+)
+def create_service_account(
+    payload: ServiceAccountCreate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+):
+    """
+    Create a SERVICE_ACCOUNT user (idempotent).
+
+    Returns the existing user if one with the derived email already exists.
+    Only administrators can create service accounts.
+
+    Parameters
+    ----------
+    payload : ServiceAccountCreate
+        Service account creation parameters
+    db : Session
+        Database session
+    user : User
+        Current authenticated user
+
+    Returns
+    -------
+    ServiceAccountResponse
+        Created or existing service account user
+    """
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create service accounts",
+        )
+
+    email = f"{payload.service_name}@service.local"
+
+    # Check if user already exists
+    existing = db.query(User).filter(User.email == email).first()
+    if existing is not None:
+        return ServiceAccountResponse(
+            id=existing.id,
+            email=existing.email,
+            role=existing.role.value,
+            created=False,
+        )
+
+    # Create new SERVICE_ACCOUNT user
+    new_user = User(
+        email=email,
+        role=UserRole.SERVICE_ACCOUNT,
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+        hashed_password=None,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return ServiceAccountResponse(
+        id=new_user.id,
+        email=new_user.email,
+        role=new_user.role.value,
+        created=True,
+    )

@@ -95,8 +95,35 @@ curl -X DELETE https://api.simboard.org/api/v1/tokens/{token_id} \
 
 Service accounts are users with `role=SERVICE_ACCOUNT`, modeled through the existing `UserRole` enum. No separate boolean or identity flag is used.
 
-1. Create a user via the admin panel or database with `role=SERVICE_ACCOUNT`
-2. Create API tokens associated with this user
+**Via CLI script (recommended):**
+```bash
+uv run python -m scripts.create_service_account \
+  --base-url https://api.simboard.org \
+  --admin-token <ADMIN_TOKEN> \
+  --service-name hpc-ingestion-bot
+
+# With expiration:
+uv run python -m scripts.create_service_account \
+  --base-url https://api.simboard.org \
+  --admin-token <ADMIN_TOKEN> \
+  --service-name hpc-ingestion-bot \
+  --expires-in-days 365
+```
+
+**Via REST API:**
+```bash
+# Step 1: Create service account user
+curl -X POST https://api.simboard.org/api/v1/tokens/service-accounts \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"service_name": "hpc-ingestion-bot"}'
+
+# Step 2: Create API token (use user_id from step 1)
+curl -X POST https://api.simboard.org/api/v1/tokens \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "hpc-ingestion-bot-token", "user_id": "<USER_ID>"}'
+```
 
 **Constraints:**
 - `SERVICE_ACCOUNT` users authenticate via API tokens only.
@@ -105,9 +132,9 @@ Service accounts are users with `role=SERVICE_ACCOUNT`, modeled through the exis
 
 ### Recommended Service Accounts
 
-- `hpc-ingestion-bot@simboard.org` - For HPC ingestion jobs
-- `ci-integration-bot@simboard.org` - For CI/CD pipelines
-- `monitoring-bot@simboard.org` - For monitoring and health checks
+- `hpc-ingestion-bot@service.local` - For HPC ingestion jobs
+- `ci-integration-bot@service.local` - For CI/CD pipelines
+- `monitoring-bot@service.local` - For monitoring and health checks
 
 ## HPC Username Provenance
 

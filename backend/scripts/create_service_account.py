@@ -1,99 +1,151 @@
-"""Create a SERVICE_ACCOUNT user and generate an API token.
+"""Provision a SERVICE_ACCOUNT user and API token via the SimBoard REST API.
 
 Usage:
-    uv run python -m scripts.create_service_account <email> [--expires-in-days N]
+    uv run python -m scripts.create_service_account \\
+        --base-url https://api.simboard.org \\
+        --admin-token <ADMIN_TOKEN> \\
+        --service-name hpc-ingestion-bot
 
-Examples:
-    uv run python -m scripts.create_service_account hpc-bot@service.simboard.local
-    uv run python -m scripts.create_service_account hpc-bot@service.simboard.local --expires-in-days 365
+    uv run python -m scripts.create_service_account \\
+        --base-url https://api.simboard.org \\
+        --admin-token <ADMIN_TOKEN> \\
+        --service-name hpc-ingestion-bot \\
+        --expires-in-days 365
 """
 
 import argparse
-import asyncio
-import hashlib
-import secrets
+import json
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
 
-from app.core.database_async import AsyncSessionLocal
-from app.features.user.models import ApiToken, User, UserRole
-
-
-async def create_service_account(
-    email: str, expires_in_days: int | None = None
-) -> None:
-    """Create a SERVICE_ACCOUNT user and associated API token.
+def _api_request(
+    url: str,
+    *,
+    method: str = "POST",
+    token: str,
+    data: dict | None = None,
+) -> dict:
+    """Make an authenticated API request and return parsed JSON response.
 
     Parameters
     ----------
-    email : str
-        Email address for the service account (unique identifier).
+    url : str
+        Full API URL.
+    method : str
+        HTTP method.
+    token : str
+        Bearer token for authentication.
+    data : dict | None
+        JSON payload.
+
+    Returns
+    -------
+    dict
+        Parsed JSON response.
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    body = json.dumps(data).encode() if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+def create_service_account(
+    base_url: str,
+    admin_token: str,
+    service_name: str,
+    expires_in_days: int | None = None,
+) -> None:
+    """Provision a SERVICE_ACCOUNT user and generate an API token.
+
+    Parameters
+    ----------
+    base_url : str
+        Base URL of the SimBoard API (e.g. https://api.simboard.org).
+    admin_token : str
+        Admin Bearer token for authentication.
+    service_name : str
+        Service name (used to derive email as {name}@service.local).
     expires_in_days : int | None
         Optional token expiration in days from now.
     """
-    async with AsyncSessionLocal() as session:
-        # Check if user already exists by email (unique field)
-        result = await session.execute(select(User).where(User.email == email))
-        existing = result.scalar_one_or_none()
+    api_base = f"{base_url.rstrip('/')}/api/v1"
 
-        if existing is not None:
-            print(f"User '{email}' already exists (id={existing.id}). Exiting.")
-            sys.exit(0)
-
-        # Create the SERVICE_ACCOUNT user
-        user = User(
-            email=email,
-            role=UserRole.SERVICE_ACCOUNT,
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-            hashed_password=None,
+    # Step 1: Create or retrieve SERVICE_ACCOUNT user
+    try:
+        user_data = _api_request(
+            f"{api_base}/tokens/service-accounts",
+            token=admin_token,
+            data={"service_name": service_name},
         )
-        session.add(user)
-        await session.flush()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"Failed to create service account: {e.code} {body}", file=sys.stderr)
+        sys.exit(1)
 
-        # Derive token name from the email local part
-        token_name = email.split("@")[0]
+    user_id = user_data["id"]
+    email = user_data["email"]
 
-        # Generate API token
-        raw_token = f"sbk_{secrets.token_urlsafe(32)}"
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    if user_data.get("created"):
+        print(f"Created SERVICE_ACCOUNT user: {email} (id={user_id})")
+    else:
+        print(f"User '{email}' already exists (id={user_id}). Continuing.")
 
-        now = datetime.now(timezone.utc)
-        expires_at = (
-            now + timedelta(days=expires_in_days) if expires_in_days else None
+    # Step 2: Generate API token
+    token_payload: dict = {
+        "name": f"{service_name}-token",
+        "user_id": user_id,
+    }
+    if expires_in_days is not None:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+        token_payload["expires_at"] = expires_at.isoformat()
+
+    try:
+        token_data = _api_request(
+            f"{api_base}/tokens",
+            token=admin_token,
+            data=token_payload,
         )
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"Failed to create API token: {e.code} {body}", file=sys.stderr)
+        sys.exit(1)
 
-        api_token = ApiToken(
-            name=f"{token_name}-token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=now,
-            expires_at=expires_at,
-            revoked=False,
-        )
-        session.add(api_token)
-
-        # Commit atomically
-        await session.commit()
-
-        print(f"Created SERVICE_ACCOUNT user: {email} (id={user.id})")
-        print(f"Created API token: {api_token.name} (id={api_token.id})")
-        if expires_at:
-            print(f"Token expires at: {expires_at.isoformat()}")
-        print()
-        print(f"API Token: {raw_token}")
-        print()
-        print("WARNING: Store securely. This token will not be shown again.")
+    print(f"Created API token: {token_data['name']} (id={token_data['id']})")
+    if token_data.get("expires_at"):
+        print(f"Token expires at: {token_data['expires_at']}")
+    print()
+    print(f"API Token: {token_data['token']}")
+    print()
+    print("WARNING: Store securely. This token will not be shown again.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create a SERVICE_ACCOUNT user and generate an API token."
+        description="Provision a SERVICE_ACCOUNT user and API token via REST API."
     )
-    parser.add_argument("email", help="Email address for the service account")
+    parser.add_argument(
+        "--base-url",
+        required=True,
+        help="Base URL of the SimBoard API (e.g. https://api.simboard.org)",
+    )
+    parser.add_argument(
+        "--admin-token",
+        required=True,
+        help="Admin Bearer token for authentication",
+    )
+    parser.add_argument(
+        "--service-name",
+        required=True,
+        help="Service name (email derived as {name}@service.local)",
+    )
     parser.add_argument(
         "--expires-in-days",
         type=int,
@@ -102,7 +154,12 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    asyncio.run(create_service_account(args.email, args.expires_in_days))
+    create_service_account(
+        args.base_url,
+        args.admin_token,
+        args.service_name,
+        args.expires_in_days,
+    )
 
 
 if __name__ == "__main__":

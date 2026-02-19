@@ -80,3 +80,24 @@ class ApiTokenRead(BaseModel):
     revoked: bool
 
     model_config = {"from_attributes": True}
+
+
+# Service Account Schemas
+# ~~~~~~~~~~~~~~~~~~~~~~~
+
+
+class ServiceAccountCreate(BaseModel):
+    """Schema for creating a SERVICE_ACCOUNT user via REST."""
+
+    service_name: Annotated[str, "Name used to derive email as {name}@service.local"]
+
+
+class ServiceAccountResponse(BaseModel):
+    """Response from the service account creation endpoint."""
+
+    id: UUID
+    email: str
+    role: str
+    created: Annotated[bool, "True if newly created, False if already existed"]
+
+    model_config = {"from_attributes": True}
