@@ -1,11 +1,11 @@
 """Create a SERVICE_ACCOUNT user and generate an API token.
 
 Usage:
-    uv run python -m scripts.create_service_account <username> [--expires-in-days N]
+    uv run python -m scripts.create_service_account <email> [--expires-in-days N]
 
 Examples:
-    uv run python -m scripts.create_service_account hpc-ingestion-bot
-    uv run python -m scripts.create_service_account hpc-ingestion-bot --expires-in-days 365
+    uv run python -m scripts.create_service_account hpc-bot@service.simboard.local
+    uv run python -m scripts.create_service_account hpc-bot@service.simboard.local --expires-in-days 365
 """
 
 import argparse
@@ -22,21 +22,19 @@ from app.features.user.models import ApiToken, User, UserRole
 
 
 async def create_service_account(
-    username: str, expires_in_days: int | None = None
+    email: str, expires_in_days: int | None = None
 ) -> None:
     """Create a SERVICE_ACCOUNT user and associated API token.
 
     Parameters
     ----------
-    username : str
-        Username (used as email prefix and token name).
+    email : str
+        Email address for the service account (unique identifier).
     expires_in_days : int | None
         Optional token expiration in days from now.
     """
-    email = f"{username}@service.simboard.local"
-
     async with AsyncSessionLocal() as session:
-        # Check if user already exists
+        # Check if user already exists by email (unique field)
         result = await session.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
 
@@ -56,6 +54,9 @@ async def create_service_account(
         session.add(user)
         await session.flush()
 
+        # Derive token name from the email local part
+        token_name = email.split("@")[0]
+
         # Generate API token
         raw_token = f"sbk_{secrets.token_urlsafe(32)}"
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -66,7 +67,7 @@ async def create_service_account(
         )
 
         api_token = ApiToken(
-            name=f"{username}-token",
+            name=f"{token_name}-token",
             token_hash=token_hash,
             user_id=user.id,
             created_at=now,
@@ -92,7 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a SERVICE_ACCOUNT user and generate an API token."
     )
-    parser.add_argument("username", help="Username for the service account")
+    parser.add_argument("email", help="Email address for the service account")
     parser.add_argument(
         "--expires-in-days",
         type=int,
@@ -101,7 +102,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    asyncio.run(create_service_account(args.username, args.expires_in_days))
+    asyncio.run(create_service_account(args.email, args.expires_in_days))
 
 
 if __name__ == "__main__":
