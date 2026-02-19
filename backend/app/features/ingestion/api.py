@@ -88,6 +88,7 @@ def ingest_from_path(
         machine_id=machine.id,
         user=user,
         archive_sha256=archive_sha256,
+        hpc_username=payload.hpc_username,
         db=db,
     )
 
@@ -110,6 +111,7 @@ def ingest_from_path(
 def ingest_from_upload(  # noqa: C901
     file: UploadFile = File(...),
     machine_name: str = Form(...),
+    hpc_username: str | None = Form(None),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ):
@@ -142,6 +144,7 @@ def ingest_from_upload(  # noqa: C901
             machine_id=machine.id,
             user=user,
             archive_sha256=sha256_hex,
+            hpc_username=hpc_username,
             db=db,
         )
 
@@ -238,6 +241,7 @@ def _process_ingestion(
     user: User,
     archive_sha256: str,
     db: Session,
+    hpc_username: str | None = None,
 ) -> IngestionResponse:
     """
     Finalize and persist an ingestion operation.
@@ -266,6 +270,8 @@ def _process_ingestion(
         SHA256 checksum of the processed archive.
     db : Session
         Active SQLAlchemy database session used for persistence.
+    hpc_username : str | None, optional
+        HPC username for provenance (trusted, informational only)
 
     Returns
     -------
@@ -296,7 +302,11 @@ def _process_ingestion(
         db.flush()
 
         _persist_simulations(
-            cast(uuid.UUID, ingestion.id), ingest_result.simulations, db, user
+            cast(uuid.UUID, ingestion.id),
+            ingest_result.simulations,
+            db,
+            user,
+            hpc_username,
         )
 
     return IngestionResponse(
@@ -322,6 +332,7 @@ def _persist_simulations(
     simulations: list[SimulationCreate],
     db: Session,
     user: User,
+    hpc_username: str | None = None,
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
 
@@ -337,6 +348,10 @@ def _persist_simulations(
         # Normalize URL
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
+
+        # Set hpc_username if provided
+        if hpc_username is not None:
+            data["hpc_username"] = hpc_username
 
         sim = Simulation(
             **data,

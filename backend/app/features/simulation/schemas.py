@@ -227,6 +227,13 @@ class SimulationCreate(CamelInBaseModel):
             description="User ID who last updated the simulation, defined at update time.",
         ),
     ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ]
 
     # Miscellaneous
     # -----------------

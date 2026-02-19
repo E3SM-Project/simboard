@@ -11,6 +11,7 @@ from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.simulation.api import router as simulations_router
 from app.features.user.api import auth_router, user_router
+from app.features.user.token_api import router as token_router
 
 
 def create_app() -> FastAPI:
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(machine_router, prefix=API_BASE)
     app.include_router(user_router, prefix=API_BASE)
     app.include_router(auth_router, prefix=API_BASE)
+    app.include_router(token_router, prefix=API_BASE)
     app.include_router(ingestion_router, prefix=API_BASE)
     app.include_router(meta_router, prefix=API_BASE)
     app.include_router(health_router, prefix=API_BASE)
