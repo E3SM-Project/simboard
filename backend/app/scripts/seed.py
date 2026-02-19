@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
@@ -40,13 +41,17 @@ if env == "production":
     sys.exit(1)
 
 
+DEV_EMAIL = f"simboard-dev@{settings.domain}"
+DEV_OAUTH_PROVIDER = "github"
+
+
 # --------------------------------------------------------------------
 # 🧑‍💻 Create a dummy OAuth user (GitHub-style)
 # --------------------------------------------------------------------
 def create_dev_oauth_user(db: Session):
     """Ensure a dummy OAuth user + OAuthAccount exist for development."""
-    dev_email = "simboard-dev@example.com"
-    provider = "github"
+    dev_email = DEV_EMAIL
+    provider = DEV_OAUTH_PROVIDER
 
     # 1. Check if the user already exists
     stmt = select(User).where(User.email == dev_email)
@@ -89,10 +94,10 @@ def create_dev_oauth_user(db: Session):
     # 2. Create the user (no password needed for OAuth users)
     user = User(
         email=dev_email,
-        role="admin",
+        role="user",
         hashed_password="",  # OAuth users don’t have local passwords
         is_active=True,
-        is_superuser=True,
+        is_superuser=False,
         is_verified=True,
     )
     db.add(user)

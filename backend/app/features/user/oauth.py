@@ -2,6 +2,7 @@ from fastapi import Response
 from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import (
     AuthenticationBackend,
+    BearerTransport,
     CookieTransport,
     JWTStrategy,
 )
@@ -59,4 +60,12 @@ def get_jwt_strategy() -> JWTStrategy:
 # For OAuth, the backend mainly defines the transport (cookie) and name.
 github_oauth_backend: AuthenticationBackend = AuthenticationBackend(
     name="github", transport=cookie_transport, get_strategy=get_jwt_strategy
+)
+
+# Bearer transport for JWT login (returns token as JSON).
+bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
+
+# JWT auth backend for username/password login via Bearer token.
+jwt_bearer_backend: AuthenticationBackend = AuthenticationBackend(
+    name="jwt", transport=bearer_transport, get_strategy=get_jwt_strategy
 )

@@ -7,7 +7,7 @@ from app.features.user.manager import (
     current_active_user,
     fastapi_users,
 )
-from app.features.user.oauth import github_oauth_backend, github_oauth_client
+from app.features.user.oauth import github_oauth_backend, github_oauth_client, jwt_bearer_backend
 from app.features.user.schemas import UserRead, UserUpdate
 
 user_router = APIRouter(prefix="/users", tags=["users"])
@@ -24,6 +24,12 @@ auth_router.include_router(
         is_verified_by_default=True,
     ),
     prefix="/github",
+)
+
+# --- JWT Login Routes ---
+auth_router.include_router(
+    fastapi_users.get_auth_router(jwt_bearer_backend),
+    prefix="/jwt",
 )
 
 

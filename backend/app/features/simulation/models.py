@@ -104,6 +104,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     ingestion_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("ingestions.id"), index=True, nullable=False
     )
+    hpc_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
