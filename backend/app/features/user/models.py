@@ -6,8 +6,8 @@ from fastapi_users.db import (
     SQLAlchemyBaseOAuthAccountTableUUID,
     SQLAlchemyBaseUserTableUUID,
 )
-from sqlalchemy import Boolean, DateTime, Enum as SQLEnum
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

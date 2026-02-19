@@ -1,6 +1,6 @@
 """Integration tests for API token management endpoints."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import status
@@ -14,8 +14,11 @@ from app.features.user.token_auth import generate_token
 class TestTokenManagementAPI:
     """Integration tests for token management endpoints."""
 
-    async def test_create_token_as_admin(self, client, admin_user_sync, normal_user_sync, db):
+    async def test_create_token_as_admin(
+        self, client, admin_user_sync, normal_user_sync, db
+    ):
         """Test that an admin can create an API token."""
+
         # Mock admin authentication
         def override_current_active_user():
             return db.query(User).filter(User.id == admin_user_sync["id"]).first()
@@ -65,7 +68,9 @@ class TestTokenManagementAPI:
         finally:
             app.dependency_overrides.clear()
 
-    async def test_list_tokens_as_admin(self, client, admin_user_sync, normal_user_sync, db):
+    async def test_list_tokens_as_admin(
+        self, client, admin_user_sync, normal_user_sync, db
+    ):
         """Test that an admin can list all API tokens."""
         # Create a token first
         raw_token, token_hash = generate_token()
@@ -116,7 +121,9 @@ class TestTokenManagementAPI:
         finally:
             app.dependency_overrides.clear()
 
-    async def test_revoke_token_as_admin(self, client, admin_user_sync, normal_user_sync, db):
+    async def test_revoke_token_as_admin(
+        self, client, admin_user_sync, normal_user_sync, db
+    ):
         """Test that an admin can revoke an API token."""
         # Create a token first
         raw_token, token_hash = generate_token()

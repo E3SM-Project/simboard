@@ -1,10 +1,8 @@
 """Integration tests for ingestion with API token authentication."""
 
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi import status
 
 from app.api.version import API_BASE
@@ -47,12 +45,8 @@ class TestIngestionWithAPIToken:
 
         # Mock the necessary functions to avoid filesystem/parsing dependencies
         with (
-            patch(
-                "app.features.ingestion.api._validate_archive_path"
-            ) as mock_validate,
-            patch(
-                "app.features.ingestion.api._compute_archive_sha256"
-            ) as mock_compute,
+            patch("app.features.ingestion.api._validate_archive_path") as mock_validate,
+            patch("app.features.ingestion.api._compute_archive_sha256") as mock_compute,
             patch("app.features.ingestion.api._run_ingest_archive") as mock_ingest,
         ):
             mock_validate.return_value = None
@@ -226,20 +220,16 @@ class TestIngestionWithAPIToken:
 
         # Mock the necessary functions
         with (
-            patch(
-                "app.features.ingestion.api._validate_archive_path"
-            ) as mock_validate,
-            patch(
-                "app.features.ingestion.api._compute_archive_sha256"
-            ) as mock_compute,
+            patch("app.features.ingestion.api._validate_archive_path") as mock_validate,
+            patch("app.features.ingestion.api._compute_archive_sha256") as mock_compute,
             patch("app.features.ingestion.api._run_ingest_archive") as mock_ingest,
         ):
             mock_validate.return_value = None
             mock_compute.return_value = "a" * 64
 
             # Create a minimal mock simulation
+            from app.features.simulation.enums import SimulationStatus, SimulationType
             from app.features.simulation.schemas import SimulationCreate
-            from app.features.simulation.enums import SimulationType, SimulationStatus
 
             mock_sim = SimulationCreate(
                 name="test_sim",
@@ -279,6 +269,8 @@ class TestIngestionWithAPIToken:
             # Verify hpc_username was stored
             from app.features.simulation.models import Simulation
 
-            simulation = db.query(Simulation).filter(Simulation.name == "test_sim").first()
+            simulation = (
+                db.query(Simulation).filter(Simulation.name == "test_sim").first()
+            )
             assert simulation is not None
             assert simulation.hpc_username == "hpc_user_test"

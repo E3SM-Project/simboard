@@ -65,7 +65,6 @@ class TestHashToken:
 
 def _create_service_account(db):
     """Helper to create a SERVICE_ACCOUNT user for token tests."""
-    from app.features.user.models import OAuthAccount
 
     user = User(
         email="service@example.com",
