@@ -93,12 +93,15 @@ curl -X DELETE https://api.simboard.org/api/v1/tokens/{token_id} \
 
 ### Creating a Service Account User
 
-Service accounts are regular users with `is_service_account=True`. They should be created with descriptive emails like `hpc-ingestion-bot@simboard.org`.
+Service accounts are users with `role=SERVICE_ACCOUNT`, modeled through the existing `UserRole` enum. No separate boolean or identity flag is used.
 
-1. Create a user via the admin panel or database
-2. Set `is_service_account=True`
-3. Set `role=ADMIN` if the service account needs to perform ingestion
-4. Create API tokens associated with this user
+1. Create a user via the admin panel or database with `role=SERVICE_ACCOUNT`
+2. Create API tokens associated with this user
+
+**Constraints:**
+- `SERVICE_ACCOUNT` users authenticate via API tokens only.
+- They cannot log in via GitHub OAuth.
+- Only `SERVICE_ACCOUNT` users may use Bearer token authentication.
 
 ### Recommended Service Accounts
 
@@ -182,7 +185,8 @@ class ApiToken(Base):
 
 ### User Model Updates
 
-- Added `is_service_account: bool` field
+- `UserRole` enum extended with `SERVICE_ACCOUNT`
+- API tokens are associated only with users whose role is `SERVICE_ACCOUNT`
 
 ### Simulation Model Updates
 
@@ -197,7 +201,7 @@ make backend-upgrade
 ```
 
 This will:
-1. Add `is_service_account` column to `users` table
+1. Add `SERVICE_ACCOUNT` enum value to `user_role` type
 2. Add `hpc_username` column to `simulations` table
 3. Create `api_tokens` table with proper indexes and constraints
 
@@ -218,7 +222,7 @@ cd backend && uv run pytest tests/features/ingestion/test_token_ingestion.py -v
 2. Check if token is expired
 3. Verify token format: Must start with `sbk_`
 4. Ensure Bearer scheme: `Authorization: Bearer sbk_xxx`
-5. Check that associated user is active
+5. Check that associated user is active and has `role=SERVICE_ACCOUNT`
 
 ### 403 Forbidden
 
@@ -229,6 +233,7 @@ cd backend && uv run pytest tests/features/ingestion/test_token_ingestion.py -v
 
 - Token may be invalid, revoked, or expired
 - Check Authorization header format
+- Verify the token is associated with a `SERVICE_ACCOUNT` user
 - Verify OAuth is not interfering (OAuth takes precedence)
 
 ## References

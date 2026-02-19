@@ -12,17 +12,33 @@ from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.token_auth import generate_token
 
 
+def _create_service_account(db):
+    """Helper to create a SERVICE_ACCOUNT user for integration tests."""
+    user = User(
+        email="hpc-bot@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.flush()
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 class TestIngestionWithAPIToken:
     """Integration tests for ingestion using API token authentication."""
 
-    def test_ingest_from_path_with_api_token(self, client, admin_user_sync, db):
+    def test_ingest_from_path_with_api_token(self, client, db):
         """Test ingestion from path using API token authentication."""
-        # Create API token for admin user
+        # Create SERVICE_ACCOUNT user and API token
+        svc_user = _create_service_account(db)
         raw_token, token_hash = generate_token()
         api_token = ApiToken(
             name="HPC Ingestion Token",
             token_hash=token_hash,
-            user_id=admin_user_sync["id"],
+            user_id=svc_user.id,
             created_at=datetime.now(timezone.utc),
             revoked=False,
         )
@@ -97,14 +113,15 @@ class TestIngestionWithAPIToken:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_ingest_from_path_with_revoked_token(self, client, admin_user_sync, db):
+    def test_ingest_from_path_with_revoked_token(self, client, db):
         """Test that ingestion with revoked token returns 401."""
-        # Create revoked API token
+        # Create SERVICE_ACCOUNT user and revoked API token
+        svc_user = _create_service_account(db)
         raw_token, token_hash = generate_token()
         api_token = ApiToken(
             name="Revoked Token",
             token_hash=token_hash,
-            user_id=admin_user_sync["id"],
+            user_id=svc_user.id,
             created_at=datetime.now(timezone.utc),
             revoked=True,
         )
@@ -151,14 +168,49 @@ class TestIngestionWithAPIToken:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_hpc_username_stored_with_simulation(self, client, admin_user_sync, db):
+    def test_ingest_with_non_service_account_token_rejected(
+        self, client, admin_user_sync, db
+    ):
+        """Test that tokens for non-SERVICE_ACCOUNT users are rejected."""
+        raw_token, token_hash = generate_token()
+        api_token = ApiToken(
+            name="Admin Token",
+            token_hash=token_hash,
+            user_id=admin_user_sync["id"],
+            created_at=datetime.now(timezone.utc),
+            revoked=False,
+        )
+        db.add(api_token)
+        db.commit()
+
+        from app.features.machine.models import Machine
+
+        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        db.add(machine)
+        db.commit()
+
+        payload = {
+            "archive_path": "/fake/path/archive.tar.gz",
+            "machine_name": "test-hpc",
+        }
+
+        response = client.post(
+            f"{API_BASE}/ingestions/from-path",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_hpc_username_stored_with_simulation(self, client, db):
         """Test that hpc_username is stored with simulation when provided."""
-        # Create API token for admin user
+        # Create SERVICE_ACCOUNT user and API token
+        svc_user = _create_service_account(db)
         raw_token, token_hash = generate_token()
         api_token = ApiToken(
             name="HPC Ingestion Token",
             token_hash=token_hash,
-            user_id=admin_user_sync["id"],
+            user_id=svc_user.id,
             created_at=datetime.now(timezone.utc),
             revoked=False,
         )

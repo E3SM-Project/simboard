@@ -8,7 +8,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.features.user.models import ApiToken, User
+from app.features.user.models import ApiToken, User, UserRole
 
 
 def generate_token() -> tuple[str, str]:
@@ -27,7 +27,6 @@ def generate_token() -> tuple[str, str]:
         A tuple containing (raw_token, token_hash)
     """
     # Generate at least 32 bytes of entropy
-    raw_bytes = secrets.token_bytes(32)
     raw_token_b64 = secrets.token_urlsafe(32)
     raw_token = f"sbk_{raw_token_b64}"
 
@@ -97,6 +96,10 @@ def validate_token(
     user = db.query(User).filter(User.id == token.user_id).first()
 
     if not user or not user.is_active:
+        return None
+
+    # Only SERVICE_ACCOUNT users may authenticate via API tokens
+    if user.role != UserRole.SERVICE_ACCOUNT:
         return None
 
     return user

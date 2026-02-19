@@ -17,6 +17,7 @@ from app.common.models.base import Base
 class UserRole(str, Enum):
     ADMIN = "admin"
     USER = "user"
+    SERVICE_ACCOUNT = "service_account"
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
@@ -33,10 +34,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         SQLEnum(UserRole, name="user_role"),
         nullable=False,
         default=UserRole.USER,
-    )
-
-    is_service_account: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="false"
     )
 
     # Relationship to linked OAuth accounts

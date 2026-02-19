@@ -63,16 +63,32 @@ class TestHashToken:
         assert hash1 == hash2
 
 
+def _create_service_account(db):
+    """Helper to create a SERVICE_ACCOUNT user for token tests."""
+    from app.features.user.models import OAuthAccount
+
+    user = User(
+        email="service@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.flush()
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @pytest.mark.usefixtures("db")
 class TestValidateToken:
     """Tests for token validation (requires database)."""
 
-    def test_validate_token_valid(self, db, normal_user_sync):
+    def test_validate_token_valid(self, db):
         """Test that a valid token returns the associated user."""
-        # Create a test token
+        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
         api_token = ApiToken(
             name="Test Token",
             token_hash=token_hash,
@@ -83,7 +99,6 @@ class TestValidateToken:
         db.add(api_token)
         db.commit()
 
-        # Validate token
         result = validate_token(raw_token, db)
 
         assert result is not None
@@ -98,11 +113,11 @@ class TestValidateToken:
 
         assert result is None
 
-    def test_validate_token_revoked(self, db, normal_user_sync):
+    def test_validate_token_revoked(self, db):
         """Test that a revoked token returns None."""
+        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
         api_token = ApiToken(
             name="Revoked Token",
             token_hash=token_hash,
@@ -117,11 +132,11 @@ class TestValidateToken:
 
         assert result is None
 
-    def test_validate_token_expired(self, db, normal_user_sync):
+    def test_validate_token_expired(self, db):
         """Test that an expired token returns None."""
+        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
         api_token = ApiToken(
             name="Expired Token",
             token_hash=token_hash,
@@ -137,11 +152,11 @@ class TestValidateToken:
 
         assert result is None
 
-    def test_validate_token_not_expired(self, db, normal_user_sync):
+    def test_validate_token_not_expired(self, db):
         """Test that a non-expired token returns the user."""
+        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
         api_token = ApiToken(
             name="Not Expired Token",
             token_hash=token_hash,
@@ -158,12 +173,12 @@ class TestValidateToken:
         assert result is not None
         assert result.id == user.id
 
-    def test_validate_token_inactive_user(self, db, normal_user_sync):
+    def test_validate_token_inactive_user(self, db):
         """Test that a token for an inactive user returns None."""
+        user = _create_service_account(db)
+        user.is_active = False
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
-        user.is_active = False
         api_token = ApiToken(
             name="Inactive User Token",
             token_hash=token_hash,
@@ -178,11 +193,29 @@ class TestValidateToken:
 
         assert result is None
 
-    def test_validate_token_skip_expiration_check(self, db, normal_user_sync):
-        """Test that expiration check can be skipped."""
+    def test_validate_token_non_service_account_rejected(self, db, normal_user_sync):
+        """Test that tokens for non-SERVICE_ACCOUNT users are rejected."""
         raw_token, token_hash = generate_token()
 
-        user = db.query(User).filter(User.id == normal_user_sync["id"]).first()
+        api_token = ApiToken(
+            name="Non-Service Token",
+            token_hash=token_hash,
+            user_id=normal_user_sync["id"],
+            created_at=datetime.now(timezone.utc),
+            revoked=False,
+        )
+        db.add(api_token)
+        db.commit()
+
+        result = validate_token(raw_token, db)
+
+        assert result is None
+
+    def test_validate_token_skip_expiration_check(self, db):
+        """Test that expiration check can be skipped."""
+        user = _create_service_account(db)
+        raw_token, token_hash = generate_token()
+
         api_token = ApiToken(
             name="Expired Token",
             token_hash=token_hash,

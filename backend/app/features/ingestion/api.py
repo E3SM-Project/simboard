@@ -59,10 +59,10 @@ def ingest_from_path(
     base directory (e.g., a designated HPC storage or ingestion directory)
     before exposing this endpoint beyond a trusted environment.
     """
-    if user.role != "admin":
+    if user.role not in ("admin", "service_account"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators may ingest from filesystem paths.",
+            detail="Only administrators and service accounts may ingest from filesystem paths.",
         )
 
     machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()

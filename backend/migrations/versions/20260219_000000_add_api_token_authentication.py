@@ -21,16 +21,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Add is_service_account column to users table
-    op.add_column(
-        "users",
-        sa.Column(
-            "is_service_account",
-            sa.Boolean(),
-            nullable=False,
-            server_default="false",
-        ),
-    )
+    # Add SERVICE_ACCOUNT to user_role enum
+    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'SERVICE_ACCOUNT'")
 
     # Add hpc_username column to simulations table
     op.add_column(
@@ -75,5 +67,5 @@ def downgrade() -> None:
     # Drop hpc_username column from simulations
     op.drop_column("simulations", "hpc_username")
 
-    # Drop is_service_account column from users
-    op.drop_column("users", "is_service_account")
+    # Note: PostgreSQL does not support removing enum values.
+    # The SERVICE_ACCOUNT enum value will remain after downgrade.
