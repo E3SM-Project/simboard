@@ -19,7 +19,12 @@ from tests.conftest import engine
 
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_tables():
-    """Recreate tables if they were dropped by async_db fixtures."""
+    """Recreate tables if they were dropped by async_db fixtures.
+
+    The async_db fixture (conftest.py) calls Base.metadata.drop_all after
+    each async test.  create_all is idempotent — it only creates tables
+    that are missing.
+    """
     Base.metadata.create_all(bind=engine)
     yield
 
