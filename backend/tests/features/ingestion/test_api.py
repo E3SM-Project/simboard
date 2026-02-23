@@ -90,7 +90,7 @@ class TestIngestFromPathEndpoint:
         assert res.status_code == 403
         assert (
             res.json()["detail"]
-            == "Only administrators may ingest from filesystem paths."
+            == "Only administrators and service accounts may ingest from filesystem paths."
         )
 
     def test_endpoint_returns_summary(self, client, db: Session, tmp_path):

@@ -6,6 +6,10 @@ from unittest.mock import MagicMock, patch
 from fastapi import status
 
 from app.api.version import API_BASE
+from app.features.machine.models import Machine
+from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.simulation.models import Simulation
+from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.token_auth import generate_token
 
@@ -60,10 +64,13 @@ class TestIngestionWithAPIToken:
             mock_result.simulations = []
             mock_ingest.return_value = mock_result
 
-            # Create a machine for the test
-            from app.features.machine.models import Machine
-
-            machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+            machine = Machine(
+                name="test-hpc",
+                site="Test Site",
+                architecture="x86_64",
+                scheduler="slurm",
+                gpu=False,
+            )
             db.add(machine)
             db.commit()
 
@@ -86,10 +93,13 @@ class TestIngestionWithAPIToken:
 
     def test_ingest_from_path_with_invalid_token(self, client, db):
         """Test that ingestion with invalid token returns 401."""
-        # Create a machine for the test
-        from app.features.machine.models import Machine
-
-        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
         db.add(machine)
         db.commit()
 
@@ -122,10 +132,13 @@ class TestIngestionWithAPIToken:
         db.add(api_token)
         db.commit()
 
-        # Create a machine for the test
-        from app.features.machine.models import Machine
-
-        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
         db.add(machine)
         db.commit()
 
@@ -145,10 +158,13 @@ class TestIngestionWithAPIToken:
 
     def test_ingest_without_authentication(self, client, db):
         """Test that ingestion without authentication returns 401."""
-        # Create a machine for the test
-        from app.features.machine.models import Machine
-
-        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
         db.add(machine)
         db.commit()
 
@@ -177,9 +193,13 @@ class TestIngestionWithAPIToken:
         db.add(api_token)
         db.commit()
 
-        from app.features.machine.models import Machine
-
-        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
         db.add(machine)
         db.commit()
 
@@ -211,10 +231,13 @@ class TestIngestionWithAPIToken:
         db.add(api_token)
         db.commit()
 
-        # Create a machine for the test
-        from app.features.machine.models import Machine
-
-        machine = Machine(name="test-hpc", hostname="test-hpc.example.com")
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
         db.add(machine)
         db.commit()
 
@@ -227,22 +250,18 @@ class TestIngestionWithAPIToken:
             mock_validate.return_value = None
             mock_compute.return_value = "a" * 64
 
-            # Create a minimal mock simulation
-            from app.features.simulation.enums import SimulationStatus, SimulationType
-            from app.features.simulation.schemas import SimulationCreate
-
             mock_sim = SimulationCreate(
                 name="test_sim",
-                case_name="test_case",
+                caseName="test_case",
                 compset="test_compset",
-                compset_alias="test_alias",
-                grid_name="test_grid",
-                grid_resolution="1x1",
-                simulation_type=SimulationType.PRODUCTION,
+                compsetAlias="test_alias",
+                gridName="test_grid",
+                gridResolution="1x1",
+                simulationType=SimulationType.PRODUCTION,
                 status=SimulationStatus.RUNNING,
-                initialization_type="cold",
-                machine_id=machine.id,
-                simulation_start_date=datetime.now(timezone.utc),
+                initializationType="cold",
+                machineId=machine.id,
+                simulationStartDate=datetime.now(timezone.utc),
             )
 
             mock_result = MagicMock()
@@ -267,7 +286,6 @@ class TestIngestionWithAPIToken:
             assert response.status_code == status.HTTP_201_CREATED
 
             # Verify hpc_username was stored
-            from app.features.simulation.models import Simulation
 
             simulation = (
                 db.query(Simulation).filter(Simulation.name == "test_sim").first()
