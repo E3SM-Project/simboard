@@ -88,16 +88,21 @@ This is the **recommended daily workflow**:
 ```bash
 cd simboard
 
-# 1. Setup development assets (env files + certs + deps)
+# 1. Setup development assets (env files + certs + DB + deps)
 make setup-local
 
-# 2. Start backend (terminal 1)
+# 2. (First time only) Create an admin account
+make backend-create-admin email=admin@example.com password=yourpassword
+# or, if interactive:
+# make backend-create-admin
+
+# 3. Start backend (terminal 1)
 make backend-run
 
-# 3. Start frontend (terminal 2)
+# 4. Start frontend (terminal 2)
 make frontend-run
 
-# 4. Open API and UI
+# 5. Open API and UI
 open https://127.0.0.1:8000/docs
 open https://127.0.0.1:5173
 ```

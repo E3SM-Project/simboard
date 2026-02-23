@@ -52,6 +52,10 @@ help:
 	@echo "  make backend-upgrade                       # Apply DB migrations"
 	@echo "  make backend-downgrade rev=<rev>           # Downgrade DB"
 	@echo "  make backend-test                          # Run pytest"
+	@echo "  make backend-seed                          # Run DB seed script"
+	@echo "  make backend-rollback-seed                 # Rollback seeded data"
+	@echo "  make backend-create-admin email=... password=...  # Create admin user"
+	@echo "  make backend-provision-service             # Provision service account"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -192,7 +196,7 @@ clean:
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -219,6 +223,17 @@ backend-downgrade:
 backend-test:
 	cd $(BACKEND_DIR) && uv run pytest -q
 
+backend-seed:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.db.seed
+
+backend-rollback-seed:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.db.rollback_seed
+
+backend-create-admin:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.users.create_admin_account --email $(email) --password $(password)
+
+backend-provision-service:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.users.provision_service_account
 
 # ============================================================
 # 🧑‍💻 FRONTEND COMMANDS
