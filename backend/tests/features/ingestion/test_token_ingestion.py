@@ -3,15 +3,25 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import status
 
 from app.api.version import API_BASE
+from app.common.models.base import Base
 from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.token_auth import generate_token
+from tests.conftest import engine
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _ensure_tables():
+    """Recreate tables if they were dropped by async_db fixtures."""
+    Base.metadata.create_all(bind=engine)
+    yield
 
 
 def _create_service_account(db):

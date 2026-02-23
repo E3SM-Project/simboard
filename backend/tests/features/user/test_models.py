@@ -1,6 +1,6 @@
 import uuid
 
-from app.features.user.models import User, UserRole
+from app.features.user.models import ApiToken, User, UserRole
 
 
 class TestUser:
@@ -13,3 +13,19 @@ class TestUser:
         )
 
         assert repr(user) == expected_repr
+
+
+class TestApiToken:
+    def test_api_token_repr(self):
+        """Test the __repr__ method of the ApiToken model."""
+        token_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        api_token = ApiToken(
+            id=token_id,
+            name="test-token",
+            token_hash="abc123",
+            user_id=user_id,
+        )
+        expected_repr = f"<ApiToken id={token_id} name='test-token' user_id={user_id}>"
+
+        assert repr(api_token) == expected_repr
