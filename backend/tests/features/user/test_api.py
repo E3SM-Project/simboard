@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from app.api.version import API_BASE
 from app.core.config import settings
 from app.features.user import oauth
+from app.features.user.manager import current_active_user
 from app.features.user.models import UserRole
 from app.main import app
 
@@ -143,6 +144,7 @@ class TestUserRoutes:
             }
 
         override_dependency(f"{API_BASE}/users/me", "current_user", override_user)
+        app.dependency_overrides[current_active_user] = override_user
 
         response = await async_client.get(f"{API_BASE}/users/me")
         assert response.status_code == 200, response.text

@@ -197,7 +197,9 @@ def revoke_api_token(
     responses={
         200: {"description": "Service account already exists"},
         201: {"description": "Service account created"},
-        403: {"description": "Forbidden: only administrators can create service accounts"},
+        403: {
+            "description": "Forbidden: only administrators can create service accounts"
+        },
     },
 )
 def create_service_account(

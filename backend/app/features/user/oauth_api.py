@@ -7,7 +7,11 @@ from app.features.user.manager import (
     current_active_user,
     fastapi_users,
 )
-from app.features.user.oauth import github_oauth_backend, github_oauth_client, jwt_bearer_backend
+from app.features.user.oauth import (
+    github_oauth_backend,
+    github_oauth_client,
+    jwt_bearer_backend,
+)
 from app.features.user.schemas import UserRead, UserUpdate
 
 user_router = APIRouter(prefix="/users", tags=["users"])

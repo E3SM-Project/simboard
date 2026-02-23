@@ -39,9 +39,7 @@ def upgrade() -> None:
         sa.Column("user_id", UUID(as_uuid=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "revoked", sa.Boolean(), nullable=False, server_default="false"
-        ),
+        sa.Column("revoked", sa.Boolean(), nullable=False, server_default="false"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_api_tokens")),
         sa.ForeignKeyConstraint(
             ["user_id"],

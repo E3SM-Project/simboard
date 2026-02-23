@@ -1,9 +1,9 @@
 """Tests for token authentication utilities."""
 
 import hashlib
+import uuid
 from datetime import datetime, timedelta, timezone
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.token_auth import generate_token, hash_token, validate_token
@@ -63,169 +63,154 @@ class TestHashToken:
         assert hash1 == hash2
 
 
-def _create_service_account(db):
-    """Helper to create a SERVICE_ACCOUNT user for token tests."""
+def _mock_db(token=None, user=None):
+    """Create a mock DB session that returns the given token and user."""
+    db = MagicMock()
 
+    def query_side_effect(model):
+        mock_query = MagicMock()
+        mock_filter = MagicMock()
+        if model is ApiToken:
+            mock_filter.first.return_value = token
+        elif model is User:
+            mock_filter.first.return_value = user
+        else:
+            mock_filter.first.return_value = None
+        mock_query.filter.return_value = mock_filter
+        return mock_query
+
+    db.query.side_effect = query_side_effect
+    return db
+
+
+def _make_service_user(is_active=True, role=UserRole.SERVICE_ACCOUNT):
+    """Create a User model instance for tests."""
     user = User(
+        id=uuid.uuid4(),
         email="service@example.com",
-        is_active=True,
+        is_active=is_active,
         is_verified=True,
-        role=UserRole.SERVICE_ACCOUNT,
+        role=role,
     )
-    db.add(user)
-    db.flush()
-    db.commit()
-    db.refresh(user)
     return user
 
 
-@pytest.mark.usefixtures("db")
 class TestValidateToken:
-    """Tests for token validation (requires database)."""
+    """Tests for token validation using mocked database."""
 
-    def test_validate_token_valid(self, db):
+    def test_validate_token_valid(self):
         """Test that a valid token returns the associated user."""
-        user = _create_service_account(db)
+        user = _make_service_user()
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Test Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.user_id = user.id
+        token.revoked = False
+        token.expires_at = None
 
+        db = _mock_db(token=token, user=user)
         result = validate_token(raw_token, db)
 
         assert result is not None
         assert result.id == user.id
         assert result.email == user.email
 
-    def test_validate_token_invalid(self, db):
+    def test_validate_token_invalid(self):
         """Test that an invalid token returns None."""
-        raw_token = "sbk_invalid_token_12345"
-
-        result = validate_token(raw_token, db)
+        db = _mock_db(token=None)
+        result = validate_token("sbk_invalid_token_12345", db)
 
         assert result is None
 
-    def test_validate_token_revoked(self, db):
+    def test_validate_token_revoked(self):
         """Test that a revoked token returns None."""
-        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Revoked Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc),
-            revoked=True,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.revoked = True
 
+        db = _mock_db(token=token)
         result = validate_token(raw_token, db)
 
         assert result is None
 
-    def test_validate_token_expired(self, db):
+    def test_validate_token_expired(self):
         """Test that an expired token returns None."""
-        user = _create_service_account(db)
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Expired Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc) - timedelta(days=2),
-            expires_at=datetime.now(timezone.utc) - timedelta(days=1),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.revoked = False
+        token.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
 
+        db = _mock_db(token=token)
         result = validate_token(raw_token, db)
 
         assert result is None
 
-    def test_validate_token_not_expired(self, db):
+    def test_validate_token_not_expired(self):
         """Test that a non-expired token returns the user."""
-        user = _create_service_account(db)
+        user = _make_service_user()
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Not Expired Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.user_id = user.id
+        token.revoked = False
+        token.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
+        db = _mock_db(token=token, user=user)
         result = validate_token(raw_token, db)
 
         assert result is not None
         assert result.id == user.id
 
-    def test_validate_token_inactive_user(self, db):
+    def test_validate_token_inactive_user(self):
         """Test that a token for an inactive user returns None."""
-        user = _create_service_account(db)
-        user.is_active = False
+        user = _make_service_user(is_active=False)
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Inactive User Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.user_id = user.id
+        token.revoked = False
+        token.expires_at = None
 
+        db = _mock_db(token=token, user=user)
         result = validate_token(raw_token, db)
 
         assert result is None
 
-    def test_validate_token_non_service_account_rejected(self, db, normal_user_sync):
+    def test_validate_token_non_service_account_rejected(self):
         """Test that tokens for non-SERVICE_ACCOUNT users are rejected."""
+        user = _make_service_user(role=UserRole.USER)
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Non-Service Token",
-            token_hash=token_hash,
-            user_id=normal_user_sync["id"],
-            created_at=datetime.now(timezone.utc),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.user_id = user.id
+        token.revoked = False
+        token.expires_at = None
 
+        db = _mock_db(token=token, user=user)
         result = validate_token(raw_token, db)
 
         assert result is None
 
-    def test_validate_token_skip_expiration_check(self, db):
+    def test_validate_token_skip_expiration_check(self):
         """Test that expiration check can be skipped."""
-        user = _create_service_account(db)
+        user = _make_service_user()
         raw_token, token_hash = generate_token()
 
-        api_token = ApiToken(
-            name="Expired Token",
-            token_hash=token_hash,
-            user_id=user.id,
-            created_at=datetime.now(timezone.utc) - timedelta(days=2),
-            expires_at=datetime.now(timezone.utc) - timedelta(days=1),
-            revoked=False,
-        )
-        db.add(api_token)
-        db.commit()
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = token_hash
+        token.user_id = user.id
+        token.revoked = False
+        token.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
 
+        db = _mock_db(token=token, user=user)
         result = validate_token(raw_token, db, check_expiration=False)
 
         assert result is not None
