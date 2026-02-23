@@ -7,6 +7,7 @@ from fastapi import status
 
 from app.api.version import API_BASE
 from app.common.models.base import Base
+from app.core.config import settings
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.token_auth import generate_token
@@ -189,7 +190,7 @@ class TestTokenManagementAPI:
                 status.HTTP_201_CREATED,
             )
             data = response.json()
-            assert data["email"] == "test-bot@service.local"
+            assert data["email"] == f"test-bot@{settings.domain}"
             assert data["role"] == UserRole.SERVICE_ACCOUNT.value
             assert data["created"] is True
         finally:
