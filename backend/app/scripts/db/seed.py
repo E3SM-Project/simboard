@@ -31,6 +31,7 @@ from app.features.simulation.schemas import (
     SimulationCreate,
 )
 from app.features.user.models import OAuthAccount, User
+from app.scripts.db.rollback_seed import rollback_seed
 
 # --------------------------------------------------------------------
 # 🧱 Safety check
@@ -138,11 +139,8 @@ def seed_from_json(db: Session, json_path: str):
     print(f"🌱 Seeding database from {json_path}...")
     data = load_json(json_path)
 
-    # Clear dev data
-    db.query(ExternalLink).delete()
-    db.query(Artifact).delete()
-    db.query(Simulation).delete()
-    db.query(Ingestion).delete()
+    # Clear dev data using rollback_seed
+    rollback_seed(db)
 
     for entry in data:
         machine_name = entry.get("machine", {}).get("name")
