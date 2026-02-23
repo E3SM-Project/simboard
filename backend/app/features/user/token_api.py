@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
+from app.core.config import settings
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.schemas import (
@@ -233,7 +234,7 @@ def create_service_account(
             detail="Only administrators can create service accounts",
         )
 
-    email = f"{payload.service_name}@service.local"
+    email = f"{payload.service_name}@{settings.domain}"
 
     # Check if user already exists
     existing = db.query(User).filter(User.email == email).first()
