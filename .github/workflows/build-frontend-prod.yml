@@ -1,12 +1,10 @@
 name: Build Frontend (Prod)
 
-# Trigger on GitHub release or version tag push (production frontend)
+# Trigger on component-scoped frontend release tag
 on:
-  release:
-    types: [published]
   push:
     tags:
-      - 'v*.*.*'
+      - "frontend-v*"
   workflow_dispatch:
     inputs:
       vite_api_base_url:
@@ -39,15 +37,21 @@ jobs:
           username: ${{ secrets.NERSC_REGISTRY_USERNAME }}
           password: ${{ secrets.NERSC_REGISTRY_PASSWORD }}
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#frontend-v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
       - name: Determine API URL
@@ -89,4 +93,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "This image is ready for deployment to **NERSC Spin (prod namespace)**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY

@@ -36,12 +36,12 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 
 ## 📋 Workflows
 
-| Workflow                  | Trigger                           | Image Tags              |
-| ------------------------- | --------------------------------- | ----------------------- |
-| `build-backend-dev.yml`   | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>` |
-| `build-frontend-dev.yml`  | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>` |
-| `build-backend-prod.yml`  | Release or tag `v*.*.*`           | `:vX.Y.Z`, `:latest`    |
-| `build-frontend-prod.yml` | Release or tag `v*.*.*`           | `:vX.Y.Z`, `:latest`    |
+| Workflow                  | Trigger                           | Image Tags                          |
+| ------------------------- | --------------------------------- | ----------------------------------- |
+| `build-backend-dev.yml`   | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>`            |
+| `build-frontend-dev.yml`  | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>`            |
+| `build-backend-prod.yml`  | Tag `backend-v*`                  | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+| `build-frontend-prod.yml` | Tag `frontend-v*`                 | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/{backend,frontend}`
 
@@ -61,7 +61,8 @@ Development:
   main branch → :dev tag → NERSC Spin dev namespace
 
 Production:
-  GitHub Release → :vX.Y.Z tag → NERSC Spin prod namespace
+  GitHub Release (backend-vX.Y.Z) → :X.Y.Z tag → NERSC Spin prod namespace
+  GitHub Release (frontend-vX.Y.Z) → :X.Y.Z tag → NERSC Spin prod namespace
 ```
 
 **Dev Environment:**
@@ -72,13 +73,15 @@ Production:
 
 **Prod Environment:**
 
-- Backend: `registry.nersc.gov/e3sm/simboard/backend:v0.3.0`
-- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:v0.3.0`
-- Explicitly versioned via GitHub Releases
+- Backend: `registry.nersc.gov/e3sm/simboard/backend:1.0.0`
+- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:2.1.0`
+- Independently versioned via component-scoped GitHub Releases
 
 ---
 
 ## 📦 Creating a Release
+
+Frontend and backend are released independently using component-scoped tags.
 
 1. **Prepare:**
 
@@ -89,18 +92,21 @@ Production:
 
 2. **Create release on GitHub:**
    - Go to [Releases](https://github.com/E3SM-Project/simboard/releases/new)
-   - Create tag: `v0.3.0`
+   - Create tag using component convention:
+     - Frontend: `frontend-v1.2.0`
+     - Backend: `backend-v1.0.0`
+   - Target: `main`
    - Write release notes
    - Publish release
 
 3. **Monitor builds:**
    - Check [Actions](https://github.com/E3SM-Project/simboard/actions) tab
-   - Both backend and frontend prod workflows will trigger
+   - Only the matching component workflow will trigger
 
 4. **Deploy to NERSC Spin:**
    - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
    - Navigate to **Workloads → Deployments** in the prod namespace
-   - Edit each deployment's image tag to the new version (e.g., `v0.3.0`)
+   - Edit the deployment's image tag to the new version (e.g., `1.0.0`)
    - Set **Pull Policy** to `IfNotPresent`
    - Save to trigger the rollout
 
@@ -123,7 +129,7 @@ To redeploy with the latest image, use the [Rancher UI](https://rancher2.spin.ne
 
 ```yaml
 # Prod deployments use explicit versions with IfNotPresent
-image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
+image: registry.nersc.gov/e3sm/simboard/backend:1.0.0
 imagePullPolicy: IfNotPresent
 ```
 
