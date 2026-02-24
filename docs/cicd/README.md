@@ -6,6 +6,9 @@ Automated multi-arch container builds to NERSC Registry with dev/prod separation
 
 ## 🚀 Quick Start
 
+> Note: A NERSC E3SM project robot account is provided to SimBoard administrators for automated
+> deployment on NERSC registry.
+
 ### 1. Configure GitHub Secrets (Required)
 
 Add these secrets in [repository settings](https://github.com/E3SM-Project/simboard/settings/secrets/actions):
@@ -16,6 +19,7 @@ Add these secrets in [repository settings](https://github.com/E3SM-Project/simbo
 ### 2. Test the Setup
 
 Trigger a manual build:
+
 1. Go to [Actions](https://github.com/E3SM-Project/simboard/actions)
 2. Select "Build Backend (Dev)" or "Build Frontend (Dev)"
 3. Click "Run workflow" → Select `main` → Run
@@ -32,16 +36,17 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 
 ## 📋 Workflows
 
-| Workflow | Trigger | Image Tags |
-|----------|---------|------------|
-| `build-backend-dev.yml` | Push to `main` (backend changes) | `:dev`, `:sha-<commit>` |
-| `build-frontend-dev.yml` | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>` |
-| `build-backend-prod.yml` | Release or tag `v*.*.*` | `:vX.Y.Z`, `:latest` |
-| `build-frontend-prod.yml` | Release or tag `v*.*.*` | `:vX.Y.Z`, `:latest` |
+| Workflow                  | Trigger                           | Image Tags              |
+| ------------------------- | --------------------------------- | ----------------------- |
+| `build-backend-dev.yml`   | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>` |
+| `build-frontend-dev.yml`  | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>` |
+| `build-backend-prod.yml`  | Release or tag `v*.*.*`           | `:vX.Y.Z`, `:latest`    |
+| `build-frontend-prod.yml` | Release or tag `v*.*.*`           | `:vX.Y.Z`, `:latest`    |
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/{backend,frontend}`
 
 **Features:**
+
 - Multi-arch builds (linux/amd64, linux/arm64)
 - Docker Buildx with layer caching
 - Automatic tagging with semantic versioning
@@ -54,17 +59,19 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 ```
 Development:
   main branch → :dev tag → NERSC Spin dev namespace
-  
+
 Production:
   GitHub Release → :vX.Y.Z tag → NERSC Spin prod namespace
 ```
 
 **Dev Environment:**
+
 - Backend: `registry.nersc.gov/e3sm/simboard/backend:dev`
 - Frontend: `registry.nersc.gov/e3sm/simboard/frontend:dev`
 - Updates automatically on push to `main`
 
 **Prod Environment:**
+
 - Backend: `registry.nersc.gov/e3sm/simboard/backend:v0.3.0`
 - Frontend: `registry.nersc.gov/e3sm/simboard/frontend:v0.3.0`
 - Explicitly versioned via GitHub Releases
@@ -74,6 +81,7 @@ Production:
 ## 📦 Creating a Release
 
 1. **Prepare:**
+
    ```bash
    git checkout main && git pull
    make backend-test && make frontend-lint
@@ -90,11 +98,12 @@ Production:
    - Both backend and frontend prod workflows will trigger
 
 4. **Deploy to NERSC Spin:**
+
    ```bash
    kubectl set image deployment/simboard-backend-prod \
      backend=registry.nersc.gov/e3sm/simboard/backend:v0.3.0 \
      -n simboard-prod
-   
+
    kubectl set image deployment/simboard-frontend-prod \
      frontend=registry.nersc.gov/e3sm/simboard/frontend:v0.3.0 \
      -n simboard-prod
@@ -113,6 +122,7 @@ imagePullPolicy: Always
 ```
 
 Restart to pull latest:
+
 ```bash
 kubectl rollout restart deployment/simboard-backend-dev -n simboard-dev
 kubectl rollout restart deployment/simboard-frontend-dev -n simboard-dev
@@ -131,14 +141,17 @@ imagePullPolicy: IfNotPresent
 ## 🐛 Troubleshooting
 
 **Build fails with "authentication required":**
+
 - Verify GitHub Secrets are configured correctly
 - Test: `docker login registry.nersc.gov` locally
 
 **Image not updating in dev:**
+
 - Force restart: `kubectl rollout restart deployment/... -n simboard-dev`
 - Check imagePullPolicy is `Always` for `:dev` tags
 
 **Workflow not triggering:**
+
 - Verify file changes match workflow paths (e.g., `backend/**`)
 - Check Actions are enabled in repository settings
 

@@ -2,8 +2,6 @@
 
 Complete reference for CI/CD pipelines and NERSC Spin deployments.
 
----
-
 ## Table of Contents
 
 - [Overview](#overview)
@@ -17,13 +15,12 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 - [Manual Builds](#manual-builds)
 - [Troubleshooting](#troubleshooting)
 
----
-
 ## Overview
 
 SimBoard uses **GitHub Actions** to automatically build and publish container images to the **NERSC container registry** (`registry.nersc.gov/e3sm/simboard/`).
 
 **Key Features:**
+
 - ✅ Automated dev builds from `main` branch
 - ✅ Production builds from GitHub Releases only
 - ✅ Multi-architecture support (linux/amd64, linux/arm64)
@@ -31,29 +28,25 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 - ✅ Docker Buildx with layer caching
 - ✅ Separation via image tags and K8s namespaces
 
----
-
 ## Environment Architecture
 
 ### Development
 
-| Component | Hosting | Image | Pull Policy |
-|-----------|---------|-------|-------------|
-| Backend | NERSC Spin (dev) | `backend:dev` | Always |
-| Frontend | NERSC Spin (dev) | `frontend:dev` | Always |
+| Component | Hosting          | Image          | Pull Policy |
+| --------- | ---------------- | -------------- | ----------- |
+| Backend   | NERSC Spin (dev) | `backend:dev`  | Always      |
+| Frontend  | NERSC Spin (dev) | `frontend:dev` | Always      |
 
 **Trigger:** Automatic on push to `main`
 
 ### Production
 
-| Component | Hosting | Image | Pull Policy |
-|-----------|---------|-------|-------------|
-| Backend | NERSC Spin (prod) | `backend:v0.3.0` | IfNotPresent |
-| Frontend | NERSC Spin (prod) | `frontend:v0.3.0` | IfNotPresent |
+| Component | Hosting           | Image             | Pull Policy  |
+| --------- | ----------------- | ----------------- | ------------ |
+| Backend   | NERSC Spin (prod) | `backend:v0.3.0`  | IfNotPresent |
+| Frontend  | NERSC Spin (prod) | `frontend:v0.3.0` | IfNotPresent |
 
 **Trigger:** Manual via GitHub Release
-
----
 
 ## CI/CD Workflows
 
@@ -65,8 +58,6 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/backend`
 
----
-
 ### Frontend Dev (`build-frontend-dev.yml`)
 
 **Triggers:** Push to `main` (frontend changes) or manual dispatch
@@ -74,11 +65,10 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 **Tags:** `:dev`, `:sha-<commit>`
 
 **Build args:**
+
 - `VITE_API_BASE_URL`: `https://simboard-dev-api.e3sm.org` (default)
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/frontend`
-
----
 
 ### Backend Prod (`build-backend-prod.yml`)
 
@@ -88,8 +78,6 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/backend`
 
----
-
 ### Frontend Prod (`build-frontend-prod.yml`)
 
 **Triggers:** GitHub Release or tag `v*.*.*`
@@ -97,11 +85,10 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 **Tags:** `:vX.Y.Z`, `:vX.Y`, `:vX`, `:latest`
 
 **Build args:**
+
 - `VITE_API_BASE_URL`: `https://simboard-api.e3sm.org` (default, override in manual dispatch)
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/frontend`
-
----
 
 ## GitHub Secrets Setup
 
@@ -116,39 +103,37 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
    - Used for `docker login registry.nersc.gov`
 
 **Test locally:**
+
 ```bash
 docker login registry.nersc.gov
 # Use the same credentials
 ```
 
 **Security:**
+
 - Use service account tokens when available
 - Rotate credentials every 90 days
 - Never commit credentials to source code
-
----
 
 ## Image Tagging Strategy
 
 ### Development Images
 
-| Tag | Description | Use Case |
-|-----|-------------|----------|
-| `:dev` | Latest from `main` | Primary dev deployment |
-| `:sha-a1b2c3d` | Specific commit | Debugging, rollback |
+| Tag            | Description        | Use Case               |
+| -------------- | ------------------ | ---------------------- |
+| `:dev`         | Latest from `main` | Primary dev deployment |
+| `:sha-a1b2c3d` | Specific commit    | Debugging, rollback    |
 
 ### Production Images
 
-| Tag | Description | Use Case |
-|-----|-------------|----------|
-| `:v0.3.0` | Full version | Production (recommended) |
-| `:v0.3` | Minor version | Auto-update patches |
-| `:v0` | Major version | Auto-update minors |
-| `:latest` | Latest release | Reference only |
+| Tag       | Description    | Use Case                 |
+| --------- | -------------- | ------------------------ |
+| `:v0.3.0` | Full version   | Production (recommended) |
+| `:v0.3`   | Minor version  | Auto-update patches      |
+| `:v0`     | Major version  | Auto-update minors       |
+| `:latest` | Latest release | Reference only           |
 
 **Best practice:** Use full semantic versions (`:vX.Y.Z`) in production for reproducibility.
-
----
 
 ## Development Deployment
 
@@ -178,9 +163,9 @@ spec:
   template:
     spec:
       containers:
-      - name: backend
-        image: registry.nersc.gov/e3sm/simboard/backend:dev
-        imagePullPolicy: Always
+        - name: backend
+          image: registry.nersc.gov/e3sm/simboard/backend:dev
+          imagePullPolicy: Always
 ```
 
 ```yaml
@@ -193,12 +178,10 @@ spec:
   template:
     spec:
       containers:
-      - name: frontend
-        image: registry.nersc.gov/e3sm/simboard/frontend:dev
-        imagePullPolicy: Always
+        - name: frontend
+          image: registry.nersc.gov/e3sm/simboard/frontend:dev
+          imagePullPolicy: Always
 ```
-
----
 
 ## Production Release Process
 
@@ -232,6 +215,7 @@ Check [Actions tab](https://github.com/E3SM-Project/simboard/actions) - both wor
 **Option A: Update manifests (GitOps)**
 
 Update your Kubernetes manifests:
+
 ```yaml
 image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
 image: registry.nersc.gov/e3sm/simboard/frontend:v0.3.0
@@ -274,8 +258,6 @@ kubectl rollout undo deployment/simboard-backend-prod -n simboard-prod
 kubectl rollout undo deployment/simboard-frontend-prod -n simboard-prod
 ```
 
----
-
 ## Kubernetes Configuration
 
 ### Development Deployment Example
@@ -297,19 +279,19 @@ spec:
         app: simboard-backend
     spec:
       containers:
-      - name: backend
-        image: registry.nersc.gov/e3sm/simboard/backend:dev
-        imagePullPolicy: Always  # Always pull latest :dev
-        ports:
-        - containerPort: 8000
-        env:
-        - name: ENV
-          value: "production"
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: simboard-secrets
-              key: database-url
+        - name: backend
+          image: registry.nersc.gov/e3sm/simboard/backend:dev
+          imagePullPolicy: Always # Always pull latest :dev
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENV
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: simboard-secrets
+                  key: database-url
 ```
 
 ### Production Deployment Example
@@ -331,22 +313,20 @@ spec:
         app: simboard-backend
     spec:
       containers:
-      - name: backend
-        image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
-        imagePullPolicy: IfNotPresent  # Use immutable version
-        ports:
-        - containerPort: 8000
-        env:
-        - name: ENV
-          value: "production"
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: simboard-secrets
-              key: database-url
+        - name: backend
+          image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
+          imagePullPolicy: IfNotPresent # Use immutable version
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENV
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: simboard-secrets
+                  key: database-url
 ```
-
----
 
 ## Manual Builds
 
@@ -375,8 +355,6 @@ docker buildx build \
   .
 ```
 
----
-
 ## Troubleshooting
 
 ### Authentication Failures
@@ -384,17 +362,17 @@ docker buildx build \
 **Issue:** `denied: requested access to the resource is denied`
 
 **Solutions:**
+
 1. Verify GitHub Secrets are configured
 2. Test credentials: `docker login registry.nersc.gov`
 3. Check NERSC account has push permissions to `e3sm/simboard/` namespace
-
----
 
 ### Build Failures
 
 **Issue:** Workflow fails during build
 
 **Solutions:**
+
 1. Check workflow logs in Actions tab
 2. Test Dockerfile locally:
    ```bash
@@ -403,44 +381,39 @@ docker buildx build \
    ```
 3. Verify all dependencies are pinned
 
----
-
 ### Dev Image Not Updating
 
 **Issue:** NERSC Spin not pulling latest `:dev`
 
 **Solutions:**
+
 1. Verify image was built (check GitHub Actions)
 2. Force restart: `kubectl rollout restart deployment/... -n simboard-dev`
 3. Check `imagePullPolicy: Always` is set for `:dev` tags
-
----
 
 ### Wrong API URL in Frontend
 
 **Issue:** Frontend connecting to wrong backend
 
 **Solutions:**
+
 1. Check `VITE_API_BASE_URL` in workflow file
 2. Rebuild with manual dispatch and correct URL
 3. Verify environment-specific URLs:
    - Dev: `https://simboard-dev-api.e3sm.org`
    - Prod: `https://simboard-api.e3sm.org`
 
----
-
 ### Workflow Not Triggering
 
 **Issue:** Push to main doesn't trigger build
 
 **Solutions:**
+
 1. Verify changes are in watched paths:
    - Backend: `backend/**`
    - Frontend: `frontend/**`
 2. Check workflow files exist and are on `main` branch
 3. Verify Actions are enabled in repository settings
-
----
 
 ## Additional Resources
 
@@ -450,10 +423,7 @@ docker buildx build \
 - [Docker Buildx Docs](https://docs.docker.com/buildx/working-with-buildx/)
 - [Semantic Versioning](https://semver.org/)
 
----
-
 ## Support
 
 - **GitHub Issues:** [Open an issue](https://github.com/E3SM-Project/simboard/issues)
 - **Workflow Logs:** [Actions tab](https://github.com/E3SM-Project/simboard/actions)
-- **Contact:** E3SM DevOps Team
