@@ -63,6 +63,10 @@ def create_api_token(
     ------
     HTTPException
         403 if user is not an administrator
+    HTTPException
+        404 if target user not found
+    HTTPException
+        400 if target user is not a service account
     """
     if user.role != UserRole.ADMIN:
         raise HTTPException(
@@ -86,10 +90,7 @@ def create_api_token(
             detail="API tokens can only be created for SERVICE_ACCOUNT users",
         )
 
-    # Generate token
     raw_token, token_hash = generate_token()
-
-    # Create token record
     api_token = ApiToken(
         name=payload.name,
         token_hash=token_hash,
@@ -103,14 +104,16 @@ def create_api_token(
     db.commit()
     db.refresh(api_token)
 
-    # Return created token with raw token (only time it's returned)
-    return ApiTokenCreated(
+    # Return created token with raw token (only time it's returned).
+    resp = ApiTokenCreated(
         id=api_token.id,
         name=api_token.name,
-        token=raw_token,  # Raw token returned only once
+        token=raw_token,
         created_at=api_token.created_at,
         expires_at=api_token.expires_at,
     )
+
+    return resp
 
 
 @router.get(
@@ -154,6 +157,7 @@ def list_api_tokens(
         )
 
     tokens = db.query(ApiToken).all()
+
     return tokens
 
 
@@ -255,7 +259,6 @@ def create_service_account(
 
     email = f"{payload.service_name}@{settings.domain}"
 
-    # Check if user already exists
     existing = db.query(User).filter(User.email == email).first()
     if existing is not None:
         return ServiceAccountResponse(
@@ -265,7 +268,6 @@ def create_service_account(
             created=False,
         )
 
-    # Create new SERVICE_ACCOUNT user
     new_user = User(
         email=email,
         role=UserRole.SERVICE_ACCOUNT,
@@ -278,9 +280,11 @@ def create_service_account(
     db.commit()
     db.refresh(new_user)
 
-    return ServiceAccountResponse(
+    resp = ServiceAccountResponse(
         id=new_user.id,
         email=new_user.email,
         role=new_user.role.value,
         created=True,
     )
+
+    return resp
