@@ -199,21 +199,6 @@ class TestValidateToken:
 
         assert result is None
 
-    def test_validate_token_hash_mismatch(self):
-        """Test that a token with mismatched hash is rejected (constant-time check)."""
-        raw_token, _ = generate_token()
-
-        # Return a token from DB whose stored hash doesn't match the computed hash
-        token = MagicMock(spec=ApiToken)
-        token.token_hash = "a" * 64  # wrong hash
-        token.revoked = False
-        token.expires_at = None
-
-        db = _mock_db(token=token)
-        result = validate_token(raw_token, db)
-
-        assert result is None
-
     def test_validate_token_skip_expiration_check(self):
         """Test that expiration check can be skipped."""
         user = _make_service_user()

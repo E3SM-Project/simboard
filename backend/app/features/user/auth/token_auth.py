@@ -1,7 +1,6 @@
 """Token authentication utilities for API token management."""
 
 import hashlib
-import hmac
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -54,7 +53,7 @@ def validate_token(
 
     This function:
     1. Computes SHA256 hash of the provided token
-    2. Looks up the token in the database using constant-time comparison
+    2. Looks up the token in the database by hash (indexed)
     3. Checks if token is revoked
     4. Optionally checks if token is expired
     5. Returns the associated user if valid, None otherwise
@@ -75,14 +74,19 @@ def validate_token(
 
     Security Notes
     --------------
-    - Uses constant-time comparison to prevent timing attacks
-    - Never logs raw tokens
-    - Validates token before loading user
+    - Tokens are stored as SHA256 hashes, never in plaintext.
+    - The DB lookup uses an indexed hash column, so query time is
+      consistent regardless of whether the token exists (no
+      timing side-channel for token discovery).
+    - Subsequent checks (revoked, expired) only execute after a
+      matching hash is found, so they reveal status of an already-
+      known token — not useful for discovering valid tokens.
+    - Never logs raw tokens.
     """
     # Compute hash of provided token
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
 
-    # Query for token by hash
+    # Look up token by hash (indexed column — consistent query time).
     token = db.query(ApiToken).filter(ApiToken.token_hash == token_hash).first()
 
     if not token:
@@ -96,11 +100,6 @@ def validate_token(
     if check_expiration and token.expires_at:
         if datetime.now(timezone.utc) > token.expires_at:
             return None
-
-    # Verify token hash using constant-time comparison
-    # This prevents timing attacks
-    if not hmac.compare_digest(token.token_hash, token_hash):
-        return None
 
     # Load and return associated user
     user = db.query(User).filter(User.id == token.user_id).first()
