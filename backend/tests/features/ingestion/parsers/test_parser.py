@@ -257,8 +257,8 @@ class TestMainParser:
             assert len(result) > 0
             assert any("1.0-0" in key for key in result.keys())
 
-    def test_missing_required_files_raises_error(self, tmp_path: Path) -> None:
-        """Test error when required files are missing."""
+    def test_missing_required_files_skips_incomplete_run(self, tmp_path: Path) -> None:
+        """Test that incomplete runs (missing required files) are skipped."""
         # Create experiment directory WITHOUT required files
         archive_base = tmp_path / "archive_extract"
         exp_dir = archive_base / "1.0-0"
@@ -272,9 +272,9 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Should raise FileNotFoundError for missing required files
-        with pytest.raises(FileNotFoundError, match="Required files not found"):
-            parser.main_parser(archive_path, extract_dir)
+        # Incomplete runs are skipped; result is empty rather than an error
+        result = parser.main_parser(archive_path, extract_dir)
+        assert result == {}
 
     def test_multiple_matching_files_raises_error(self, tmp_path: Path) -> None:
         """Test error when multiple files match a pattern."""
