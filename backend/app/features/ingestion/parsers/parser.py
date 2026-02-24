@@ -113,10 +113,6 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
         if not os.path.isdir(archive_path):
             raise ValueError(f"Unsupported archive format: {archive_path}")
 
-        logger.info(
-            "Input path is not a supported archive extension; "
-            "treating it as an already-extracted directory."
-        )
         search_root = archive_path
 
     results: AllSimulations = {}

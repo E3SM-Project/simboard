@@ -4,9 +4,9 @@ This test module provides comprehensive coverage for the ingestion API,
 including path-based and upload-based ingestion endpoints.
 """
 
-import hashlib
 import uuid
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
+    _compute_archive_sha256,
     _run_ingest_archive,
+    _validate_archive_path,
     _validate_upload_file,
     ingest_from_upload,
 )
@@ -90,7 +92,7 @@ class TestIngestFromPathEndpoint:
         assert res.status_code == 403
         assert (
             res.json()["detail"]
-            == "Only administrators may ingest from filesystem paths."
+            == "Only administrators and service accounts may ingest from filesystem paths."
         )
 
     def test_endpoint_returns_summary(self, client, db: Session, tmp_path):
@@ -274,7 +276,7 @@ class TestIngestFromPathEndpoint:
         assert ingestion.created_count == 1
         assert ingestion.duplicate_count == 0
         assert ingestion.error_count == 0
-        assert ingestion.archive_sha256 == hashlib.sha256(archive_content).hexdigest()
+        assert ingestion.archive_sha256 is None
 
     def test_endpoint_returns_400_when_archive_path_missing(
         self, client, db: Session, tmp_path
@@ -288,28 +290,26 @@ class TestIngestFromPathEndpoint:
         res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 400
-        assert (
-            res.json()["detail"]
-            == f"Archive path '{missing_path}' does not exist or is not a file."
-        )
+        assert res.json()["detail"] == f"Archive path '{missing_path}' does not exist."
 
-    def test_endpoint_returns_500_when_sha256_fails(
+    def test_endpoint_returns_500_when_ingest_fails(
         self, client, db: Session, tmp_path
     ):
+        """Test that a 500 is returned when archive processing fails."""
         machine = db.query(Machine).first()
         assert machine is not None
 
-        archive_path = self._create_archive_file(tmp_path, "unreadable.tar.gz")
+        archive_path = self._create_archive_file(tmp_path, "bad.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         with patch(
-            "app.features.ingestion.api.Path.open",
-            side_effect=OSError("cannot read archive"),
+            "app.features.ingestion.api.ingest_archive",
+            side_effect=RuntimeError("processing failed"),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 500
-        assert "Failed to compute checksum" in res.json()["detail"]
+        assert "processing failed" in res.json()["detail"]
 
     def test_endpoint_returns_404_when_machine_not_found(self, client, tmp_path):
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
@@ -1017,3 +1017,42 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Filename is required"
+
+    def test_validate_archive_path_not_file_or_dir(self, tmp_path):
+        """Covers the branch where path exists but is neither file nor dir."""
+        archive_path = tmp_path / "special"
+        archive_path.touch()
+
+        with (
+            patch.object(Path, "is_file", return_value=False),
+            patch.object(Path, "is_dir", return_value=False),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                _validate_archive_path(archive_path)
+
+        assert exc_info.value.status_code == 400
+        assert "must be a file or directory" in exc_info.value.detail
+
+    def test_compute_archive_sha256_success(self, tmp_path):
+        """Covers the happy path of _compute_archive_sha256."""
+        import hashlib
+
+        archive = tmp_path / "test.tar.gz"
+        archive.write_bytes(b"test content")
+
+        result = _compute_archive_sha256(archive)
+
+        expected = hashlib.sha256(b"test content").hexdigest()
+        assert result == expected
+
+    def test_compute_archive_sha256_failure(self, tmp_path):
+        """Covers the exception path of _compute_archive_sha256."""
+        archive = tmp_path / "unreadable.tar.gz"
+        archive.touch()
+
+        with patch.object(Path, "open", side_effect=OSError("cannot read")):
+            with pytest.raises(HTTPException) as exc_info:
+                _compute_archive_sha256(archive)
+
+        assert exc_info.value.status_code == 500
+        assert "Failed to compute checksum" in exc_info.value.detail

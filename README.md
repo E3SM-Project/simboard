@@ -9,71 +9,79 @@ SimBoard helps researchers:
 - Compare runs side-by-side
 - Surface diagnostics and metadata-driven insights
 
+AI-assisted capabilities are being explored to supplement these features, including automated metadata summarization, simulation comparison analysis, and intelligent discovery of patterns across runs.
+
 ---
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [Developer Quickstart (Bare-Metal)](#developer-quickstart-bare-metal)
+- [Developer Quickstart](#developer-quickstart)
+  - [Commands](#1-commands)
+  - [Setup GitHub OAuth Authentication](#2-setup-github-oauth-authentication)
+  - [Local HTTPS](#3-local-https)
 - [Repository Structure](#repository-structure)
 - [Development Notes](#development-notes)
-- [Local HTTPS](#local-https)
+  - [Pre-commit Hooks](#pre-commit-hooks)
+- [Staging and Production Environments](#staging-and-production-environments)
+  - [Building and Deploying Docker Containers for NERSC Spin (Manual)](#building-and-deploying-docker-containers-for-nersc-spin-manual)
+  - [Provisioning a Service Account for HPC (NERSC Spin)](#provisioning-a-service-account-for-hpc-nersc-spin)
+  - [Helpful Docker Commands](#helpful-docker-commands)
 - [License](#license)
 
 ---
 
 ## Prerequisites
 
-### 1. Install Docker Desktop
+1. **Install Docker Desktop**
+   - Download and install: [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+   - Ensure Docker Desktop is running before using any Docker-based commands.
 
-[https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
-Ensure it is running before any Docker-based commands.
+2. **Install uv (Python dependency manager)**
+   - macOS/Linux:
 
----
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
 
-### 2. Install uv (Python dependency manager)
+   - Windows:
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS/Linux
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-```
+     ```bash
+     powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+     ```
 
-Verify:
+   - Verify installation:
 
-```bash
-uv --version
-```
+     ```bash
+     uv --version
+     ```
 
----
+3. **Install Node.js, npm, and pnpm**
+   - Install Node.js (LTS recommended): [https://nodejs.org](https://nodejs.org)
+   - Verify Node and npm:
 
-### 3. Install Node.js, npm, and pnpm
+     ```bash
+     node --version
+     npm --version
+     ```
 
-Install Node (LTS recommended): [https://nodejs.org](https://nodejs.org)
+   - Install pnpm:
 
-```bash
-node --version
-npm --version
-```
+     ```bash
+     npm install -g pnpm
+     pnpm --version
+     ```
 
-Install pnpm:
+4. **Clone the repository**
 
-```bash
-npm install -g pnpm
-pnpm --version
-```
+   ```bash
+   git clone https://github.com/E3SM-Project/simboard.git
+   cd simboard
+   ```
 
----
+## Developer Quickstart
 
-### 4. Clone the repository
-
-```bash
-git clone https://github.com/E3SM-Project/simboard.git
-cd simboard
-```
-
----
-
-## Developer Quickstart (Bare-Metal)
+> ⚠️ This is a bare-metal development environment and is _not production-accurate_ — it is optimized for speed.
 
 This is the **recommended daily workflow**:
 
@@ -81,44 +89,69 @@ This is the **recommended daily workflow**:
 - Best debugging experience
 - No Docker overhead
 
-> ⚠️ Bare-metal dev is _not production-accurate_ — it is optimized for speed.
-
-### Commands
+### 1. Commands
 
 ```bash
 cd simboard
 
-# 1. Setup development assets (env files + certs + deps)
+# 1. Setup development assets (env files + certs + DB + deps)
 make setup-local
 
-# 2. Start backend (terminal 1)
+# 2. (First time only) Create an admin account (interactive)
+make backend-create-admin
+
+# 3. Start backend (terminal 1)
 make backend-run
 
-# 3. Start frontend (terminal 2)
+# 4. Start frontend (terminal 2)
 make frontend-run
 
-# 4. Open API and UI
+# 5. Open API and UI
 open https://127.0.0.1:8000/docs
 open https://127.0.0.1:5173
 ```
 
----
+For a list of all `make` commands, run:
 
-## GitHub OAuth Configuration
+```bash
+make help
+```
 
-Environment variables must be placed in the appropriate folder, e.g.:
+### 2. Setup GitHub OAuth Authentication
+
+#### 1. Create a GitHub OAuth App
+
+1. Go to: https://github.com/settings/developers
+2. Click **“New OAuth App”**.
+3. Fill in:
+   - **Application name:** SimBoard (local)
+   - **Homepage URL:** https://127.0.0.1:5173
+   - **Authorization callback URL:**
+
+     ```bash
+     https://127.0.0.1:8000/api/v1/auth/github/callback
+     ```
+
+4. Click **Register application**.
+5. Copy the generated:
+   - **Client ID**
+   - **Client Secret**
+
+#### 2. Configure local environment variables
+
+Add the credentials to:
 
 ```bash
 .envs/local/backend.env
 ```
 
-Example config:
+Example:
 
 ```env
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 
-# Must match GitHub OAuth config
+# Must match GitHub OAuth callback URL exactly
 GITHUB_REDIRECT_URL=https://127.0.0.1:8000/auth/github/callback
 
 # Generate securely:
@@ -126,149 +159,9 @@ GITHUB_REDIRECT_URL=https://127.0.0.1:8000/auth/github/callback
 GITHUB_STATE_SECRET_KEY=your_secret
 ```
 
----
+Restart the backend after updating environment variables.
 
-## Repository Structure
-
-```bash
-simboard/
-├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
-├── frontend/       # Vite + React + Tailwind + shadcn
-├── .envs/          # Env configs: example/ (templates, committed) + local/ (developer values, ignored)
-├── docker-compose.local.yml
-├── docker-compose.yml
-├── Makefile        # unified monorepo automation
-└── certs/          # dev HTTPS certificates
-```
-
----
-
-## Development Notes
-
-- Backend dependencies managed using **uv**
-- Frontend dependencies managed using **pnpm**
-
-Use [GitHub Issues](https://github.com/E3SM-Project/simboard/issues/new/choose) to report bugs or propose features.
-Pull requests should include tests + documentation updates.
-
----
-
-## 🪝 Pre-commit Hooks
-
-This repository uses **[pre-commit](https://pre-commit.com/)** to enforce consistent code quality checks for both the **backend (Python)** and **frontend (TypeScript)**.
-
-Pre-commit runs automatically on `git commit` and will block commits if checks fail.
-
----
-
-### ⚠️ Important: Where to run pre-commit
-
-**Pre-commit must always be run from the repository root.**
-
-Some hooks (notably `mypy`) reference configuration files using paths relative to the repo root (for example, `backend/pyproject.toml`). Running pre-commit from a subdirectory such as `backend/` can cause those configurations to be missed, leading to inconsistent or misleading results.
-
-✅ Correct:
-
-```bash
-pre-commit run --all-files
-```
-
-❌ Incorrect:
-
-```bash
-cd backend
-pre-commit run --all-files
-```
-
-In CI, pre-commit is also executed from the repository root for this reason.
-
-> **Note:** When using `uv`, CI runs pre-commit via
-> `uv run --project backend pre-commit run --all-files`.
-> The `--project` flag selects the backend virtual environment, but **does not change the working directory**. Pre-commit itself must still be invoked from the repo root so configuration paths resolve correctly.
-
----
-
-### What pre-commit checks
-
-- **Backend**
-  - Ruff linting and formatting
-  - Python style and correctness checks (mypy)
-
-- **Frontend**
-  - ESLint (auto-fix on staged files)
-  - Prettier formatting (staged files only)
-
-All hooks are configured in the root `.pre-commit-config.yaml`.
-
-> **Note:** Git hooks run in a non-interactive shell.
-> Make sure that Node.js tools (such as `pnpm`) are available in your system `PATH` so frontend hooks can execute successfully.
-
----
-
-### Installing pre-commit (recommended)
-
-Pre-commit is installed **inside the backend uv environment** and wired up via the Makefile.
-
-After cloning the repo, run:
-
-```bash
-make install
-```
-
-This will:
-
-- Create the backend `uv` virtual environment (if missing)
-- Install Python and frontend dependencies
-- Install the git pre-commit hooks
-
-If you only want to (re)install the hooks:
-
-```bash
-make pre-commit-install
-```
-
----
-
-### Running pre-commit manually
-
-To run all hooks against all files (from the repo root):
-
-```bash
-make pre-commit-run
-```
-
-Or directly:
-
-```bash
-uv run pre-commit run --all-files
-```
-
----
-
-### Notes & expectations
-
-- Pre-commit uses the **existing project environments**:
-  - Python hooks run via `uv`
-  - Frontend hooks run via `pnpm`
-- The tools themselves (`uv`, `pnpm`, `node`) are expected to already be installed on your system
-- Hooks are **fast** and only run on staged files by default
-- Formatting issues are usually auto-fixed; re-stage files and retry the commit if needed
-
----
-
-### Skipping hooks (not recommended)
-
-If you must bypass pre-commit temporarily:
-
-```bash
-git commit --no-verify
-```
-
-Please only do this when absolutely necessary.
-
----
-
-## Local HTTPS
+#### 3. Local HTTPS
 
 For local development, SimBoard uses **local HTTPS** with development certificates:
 
@@ -288,9 +181,120 @@ Used automatically by:
 - FastAPI (Uvicorn SSL)
 - Vite (via `VITE_SSL_CERT`, `VITE_SSL_KEY`)
 
-## Building Docker Containers for NERSC Spin (Manual)
+## Development Notes
 
-### Development Environment
+- Backend dependencies managed using **uv**
+- Frontend dependencies managed using **pnpm**
+
+Use [GitHub Issues](https://github.com/E3SM-Project/simboard/issues/new/choose) to report bugs or propose features.
+Pull requests should include tests + documentation updates.
+
+### Repository Structure
+
+```bash
+simboard/
+├── backend/        # FastAPI, SQLAlchemy, Alembic, OAuth, metadata ingestion
+├── frontend/       # Vite + React + Tailwind + shadcn
+├── .envs/          # Env configs: example/ (templates, committed) + local/ (developer values, ignored)
+├── docker-compose.local.yml
+├── docker-compose.yml
+├── Makefile        # unified monorepo automation
+└── certs/          # dev HTTPS certificates
+```
+
+### Pre-commit Hooks
+
+This repository uses **pre-commit** to enforce consistent checks for both the backend (Python) and frontend (TypeScript).
+
+Pre-commit runs automatically on `git commit` and will block commits if checks fail.
+
+#### 1. Where to Run It
+
+Always run pre-commit from the **repository root**.
+
+Some hooks (e.g., `mypy`) rely on config paths like `backend/pyproject.toml`. Running from a subdirectory can cause incorrect or inconsistent results.
+
+✅ Correct:
+
+```bash
+pre-commit run --all-files
+```
+
+❌ Incorrect:
+
+```bash
+cd backend
+pre-commit run --all-files
+```
+
+CI also runs pre-commit from the repo root.
+
+#### 2. What It Checks
+
+**Backend**
+
+- Ruff (lint + format)
+- mypy (type checking)
+
+**Frontend**
+
+- ESLint
+- Prettier
+
+All hooks are configured in the root `.pre-commit-config.yaml`.
+
+#### 3. Installation
+
+After cloning:
+
+```bash
+make install
+```
+
+This will:
+
+- Create the backend `uv` environment (if missing)
+- Install dependencies
+- Install git hooks
+
+To reinstall hooks only:
+
+```bash
+make pre-commit-install
+```
+
+#### 4. Run Manually
+
+```bash
+make pre-commit-run
+```
+
+Or:
+
+```bash
+uv run pre-commit run --all-files
+```
+
+#### 5. Notes
+
+- Python hooks run via `uv`
+- Frontend hooks run via `pnpm`
+- Required tools (`uv`, `pnpm`, `node`) must be available in your system `PATH`
+- Hooks auto-fix most formatting issues; re-stage files and re-commit if needed
+
+#### 6. Skipping Hooks (Not Recommended)
+
+```bash
+git commit --no-verify
+```
+
+Use only when absolutely necessary.
+
+## Staging and Production Environments
+
+### Building and Deploying Docker Containers for NERSC Spin (Manual)
+
+Links:
 
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
@@ -326,9 +330,86 @@ docker buildx build \
   --push
 ```
 
----
+Note, automation of this process is being explored using GitHub Actions CI/CD.
 
-**Helpful Docker Commands:**
+### Provisioning a Service Account for HPC (NERSC Spin)
+
+Service accounts are required when non-interactive systems (e.g., HPC ingestion jobs or automation) need to authenticate to the SimBoard API.
+
+#### Steps
+
+1. Ensure the backend is deployed and reachable (e.g., `https://simboard-dev-api.e3sm.org`).
+2. Run the provisioning script from your local machine:
+
+   ```bash
+   cd backend
+
+   uv run python -m app.scripts.users.provision_service_account \
+     --service-name perlmutter-ingestion \
+     --base-url https://simboard-dev-api.e3sm.org \
+     --admin-email admin@simboard.org \
+     --expires-in-days 365
+   ```
+
+3. Enter the admin password when prompted.
+4. Copy the generated API token and store it securely (e.g., Kubernetes Secret).
+
+#### Store as Kubernetes Secret
+
+```bash
+kubectl -n <namespace> create secret generic simboard-perlmutter-ingestion \
+  --from-literal=api_token='<TOKEN>'
+```
+
+Use this secret in your HPC job or service configuration.
+
+```bash
+> The token is shown only once. Store it securely and rotate as needed.
+```
+
+#### Example: Ingest Using Service Account Token
+
+Export the token:
+
+```bash
+export SIMBOARD_API_TOKEN=<TOKEN>
+```
+
+Submit an ingestion request:
+
+```bash
+curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestions/from-path \
+  -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+        "machine_name": "perlmutter",
+        "hpc_username": "<your_hpc_username>"
+      }'
+```
+
+Python example:
+
+```python
+import requests
+
+API_BASE = "https://simboard-dev-api.e3sm.org/api/v1"
+TOKEN = "<TOKEN>"
+
+resp = requests.post(
+  f"{API_BASE}/ingestions/from-path",
+  json={
+    "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+    "machine_name": "perlmutter",
+    "hpc_username": "<your_hpc_username>"
+  },
+  headers={"Authorization": f"Bearer {TOKEN}"},
+)
+
+print(resp.json())
+```
+
+### Helpful Docker Commands
 
 ```bash
 docker container ls      # List running containers

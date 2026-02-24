@@ -23,7 +23,7 @@ from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
-from app.features.user.models import User
+from app.features.user.models import User, UserRole
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
@@ -52,17 +52,17 @@ def ingest_from_path(
     NOTE:
     Arbitrary filesystem paths are currently permitted to support HPC
     ingestion workflows (e.g., NERSC). This endpoint is restricted to
-    administrators.
+    users with the ADMIN or SERVICE_ACCOUNT role.
 
     TODO:
     Consider enforcing that archive_path must reside within a configured
     base directory (e.g., a designated HPC storage or ingestion directory)
     before exposing this endpoint beyond a trusted environment.
     """
-    if user.role != "admin":
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators may ingest from filesystem paths.",
+            detail="Only administrators and service accounts may ingest from filesystem paths.",
         )
 
     machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()
@@ -74,7 +74,6 @@ def ingest_from_path(
 
     archive_path = Path(payload.archive_path)
     _validate_archive_path(archive_path)
-    archive_sha256 = _compute_archive_sha256(archive_path)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ingest_result = _run_ingest_archive(
@@ -87,7 +86,8 @@ def ingest_from_path(
         source_reference=str(archive_path),
         machine_id=machine.id,
         user=user,
-        archive_sha256=archive_sha256,
+        archive_sha256=None,
+        hpc_username=payload.hpc_username,
         db=db,
     )
 
@@ -110,6 +110,7 @@ def ingest_from_path(
 def ingest_from_upload(  # noqa: C901
     file: UploadFile = File(...),
     machine_name: str = Form(...),
+    hpc_username: str | None = Form(None),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ):
@@ -142,6 +143,7 @@ def ingest_from_upload(  # noqa: C901
             machine_id=machine.id,
             user=user,
             archive_sha256=sha256_hex,
+            hpc_username=hpc_username,
             db=db,
         )
 
@@ -151,10 +153,16 @@ def ingest_from_upload(  # noqa: C901
 
 
 def _validate_archive_path(archive_path: Path) -> None:
-    if not archive_path.exists() or not archive_path.is_file():
+    if not archive_path.exists():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Archive path '{archive_path}' does not exist or is not a file.",
+            detail=f"Archive path '{archive_path}' does not exist.",
+        )
+
+    if not (archive_path.is_file() or archive_path.is_dir()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(f"Archive path '{archive_path}' must be a file or directory."),
         )
 
 
@@ -236,8 +244,9 @@ def _process_ingestion(
     source_reference: str,
     machine_id: uuid.UUID,
     user: User,
-    archive_sha256: str,
+    archive_sha256: str | None,
     db: Session,
+    hpc_username: str | None = None,
 ) -> IngestionResponse:
     """
     Finalize and persist an ingestion operation.
@@ -266,6 +275,8 @@ def _process_ingestion(
         SHA256 checksum of the processed archive.
     db : Session
         Active SQLAlchemy database session used for persistence.
+    hpc_username : str | None, optional
+        HPC username for provenance (trusted, informational only)
 
     Returns
     -------
@@ -296,7 +307,11 @@ def _process_ingestion(
         db.flush()
 
         _persist_simulations(
-            cast(uuid.UUID, ingestion.id), ingest_result.simulations, db, user
+            cast(uuid.UUID, ingestion.id),
+            ingest_result.simulations,
+            db,
+            user,
+            hpc_username,
         )
 
     return IngestionResponse(
@@ -322,6 +337,7 @@ def _persist_simulations(
     simulations: list[SimulationCreate],
     db: Session,
     user: User,
+    hpc_username: str | None = None,
 ) -> None:
     """Persist simulation records with artifacts and links to the database."""
 
@@ -337,6 +353,10 @@ def _persist_simulations(
         # Normalize URL
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
+
+        # Set hpc_username if provided
+        if hpc_username is not None:
+            data["hpc_username"] = hpc_username
 
         sim = Simulation(
             **data,

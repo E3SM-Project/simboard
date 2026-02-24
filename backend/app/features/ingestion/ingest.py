@@ -342,6 +342,7 @@ def _map_metadata_to_schema(
             # the authenticated user who uploaded the archive.
             "createdBy": None,
             "lastUpdatedBy": None,
+            "hpcUsername": metadata.get("hpc_username"),
         }
     )
 

@@ -19,6 +19,13 @@ class IngestFromPathRequest(BaseModel):
         str,
         Field(..., description="Name of the machine associated with the simulations"),
     ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ] = None
 
 
 class IngestionResponse(BaseModel):
