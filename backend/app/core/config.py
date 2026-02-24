@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # ----------------------------------------
     env: str = "development"
     port: int = 8000
-    domain: str = "127.0.0.1"
+    domain: str = "example.com"
 
     # Frontend
     # ----------------------------------------
