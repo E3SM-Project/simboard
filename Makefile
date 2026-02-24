@@ -54,8 +54,8 @@ help:
 	@echo "  make backend-test                          # Run pytest"
 	@echo "  make backend-seed                          # Run DB seed script"
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
-	@echo "  make backend-create-admin email=... password=...  # Create admin user"
-	@echo "  make backend-provision-service             # Provision service account"
+	@echo "  make backend-create-admin 					# Create admin user (interactive)"
+	@echo "  make backend-provision-service             # Provision service account (interactive)"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"

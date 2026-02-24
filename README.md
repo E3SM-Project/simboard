@@ -100,10 +100,8 @@ cd simboard
 # 1. Setup development assets (env files + certs + DB + deps)
 make setup-local
 
-# 2. (First time only) Create an admin account
-make backend-create-admin email=admin@example.com password=yourpassword
-# or, if interactive:
-# make backend-create-admin
+# 2. (First time only) Create an admin account (interactive)
+make backend-create-admin
 
 # 3. Start backend (terminal 1)
 make backend-run
