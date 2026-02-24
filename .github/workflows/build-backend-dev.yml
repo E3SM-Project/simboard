@@ -49,7 +49,6 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          # Dev builds target amd64 only for faster CI; prod builds include arm64
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
