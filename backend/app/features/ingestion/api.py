@@ -23,7 +23,7 @@ from app.features.machine.models import Machine
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
-from app.features.user.models import User
+from app.features.user.models import User, UserRole
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
@@ -52,14 +52,14 @@ def ingest_from_path(
     NOTE:
     Arbitrary filesystem paths are currently permitted to support HPC
     ingestion workflows (e.g., NERSC). This endpoint is restricted to
-    administrators.
+    users with the ADMIN or SERVICE_ACCOUNT role.
 
     TODO:
     Consider enforcing that archive_path must reside within a configured
     base directory (e.g., a designated HPC storage or ingestion directory)
     before exposing this endpoint beyond a trusted environment.
     """
-    if user.role not in ("admin", "service_account"):
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators and service accounts may ingest from filesystem paths.",
