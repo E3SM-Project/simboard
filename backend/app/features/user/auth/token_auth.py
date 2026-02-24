@@ -39,7 +39,6 @@ def generate_token() -> tuple[str, str]:
     raw_token_b64 = secrets.token_urlsafe(32)
     raw_token = f"sbk_{raw_token_b64}"
 
-    # SHA256 hash the token for storage
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
 
     return raw_token, token_hash
@@ -83,7 +82,6 @@ def validate_token(
       known token — not useful for discovering valid tokens.
     - Never logs raw tokens.
     """
-    # Compute hash of provided token
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
 
     # Look up token by hash (indexed column — consistent query time).
@@ -92,22 +90,18 @@ def validate_token(
     if not token:
         return None
 
-    # Check if token is revoked
     if token.revoked:
         return None
 
-    # Check expiration if requested
     if check_expiration and token.expires_at:
         if datetime.now(timezone.utc) > token.expires_at:
             return None
 
-    # Load and return associated user
     user = db.query(User).filter(User.id == token.user_id).first()
 
     if not user or not user.is_active:
         return None
 
-    # Only SERVICE_ACCOUNT users may authenticate via API tokens
     if user.role != UserRole.SERVICE_ACCOUNT:
         return None
 
