@@ -8,7 +8,7 @@ from fastapi import status
 from app.api.version import API_BASE
 from app.common.models.base import Base
 from app.core.config import settings
-from app.features.user.auth.token_auth import generate_token
+from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.main import app

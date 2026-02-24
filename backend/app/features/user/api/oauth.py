@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.features.user.auth.oauth import GITHUB_OAUTH_BACKEND, GITHUB_OAUTH_CLIENT
-from app.features.user.auth.token_auth import JWT_BEARER_BACKEND
+from app.features.user.auth.token import JWT_BEARER_BACKEND
 from app.features.user.manager import (
     current_active_user,
     fastapi_users,

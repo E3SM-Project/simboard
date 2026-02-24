@@ -10,8 +10,8 @@ from app.core.logger import _setup_root_logger
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.simulation.api import router as simulations_router
-from app.features.user.api.oauth_api import auth_router, user_router
-from app.features.user.api.token_api import router as token_router
+from app.features.user.api.oauth import auth_router, user_router
+from app.features.user.api.token import router as token_router
 
 
 def create_app() -> FastAPI:

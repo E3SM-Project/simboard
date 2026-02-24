@@ -12,7 +12,7 @@ from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate
-from app.features.user.auth.token_auth import generate_token
+from app.features.user.auth.token import generate_token
 from app.features.user.models import ApiToken, User, UserRole
 from tests.conftest import engine
 

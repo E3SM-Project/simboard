@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from app.features.user.auth.token_auth import generate_token, hash_token, validate_token
+from app.features.user.auth.token import generate_token, hash_token, validate_token
 from app.features.user.models import ApiToken, User, UserRole
 
 

@@ -11,7 +11,7 @@ from app.common.dependencies import get_database_session
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.features.user.auth.oauth import GITHUB_OAUTH_BACKEND
-from app.features.user.auth.token_auth import JWT_BEARER_BACKEND, validate_token
+from app.features.user.auth.token import JWT_BEARER_BACKEND, validate_token
 from app.features.user.models import OAuthAccount, User
 
 logger = _setup_custom_logger(__name__)

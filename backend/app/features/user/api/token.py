@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.config import settings
-from app.features.user.auth.token_auth import generate_token
+from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.schemas import (
