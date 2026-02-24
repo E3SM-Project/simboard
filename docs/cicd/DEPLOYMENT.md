@@ -24,7 +24,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 - ✅ Automated dev builds from `main` branch
 - ✅ Component-level production releases via GitHub Releases
 - ✅ Independent frontend and backend versioning
-- ✅ Multi-architecture support (linux/amd64, linux/arm64)
+- ✅ linux/amd64 architecture support
 - ✅ Semantic versioning for production
 - ✅ Docker Buildx with layer caching
 - ✅ Separation via image tags and K8s namespaces
@@ -42,10 +42,10 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 ### Production
 
-| Component | Hosting           | Image              | Pull Policy  |
-| --------- | ----------------- | ------------------ | ------------ |
-| Backend   | NERSC Spin (prod) | `backend:1.0.0`   | IfNotPresent |
-| Frontend  | NERSC Spin (prod) | `frontend:2.1.0`  | IfNotPresent |
+| Component | Hosting           | Image            | Pull Policy  |
+| --------- | ----------------- | ---------------- | ------------ |
+| Backend   | NERSC Spin (prod) | `backend:1.0.0`  | IfNotPresent |
+| Frontend  | NERSC Spin (prod) | `frontend:2.1.0` | IfNotPresent |
 
 **Trigger:** Component-scoped GitHub Release tag (e.g., `backend-v1.0.0`, `frontend-v2.1.0`)
 
@@ -153,10 +153,10 @@ docker login registry.nersc.gov
 
 ### Tag Convention
 
-| Git Tag              | Component | Docker Image Tag                                     |
-| -------------------- | --------- | ---------------------------------------------------- |
-| `backend-v1.0.0`    | Backend   | `registry.nersc.gov/e3sm/simboard/backend:1.0.0`    |
-| `frontend-v2.1.0`   | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:2.1.0`   |
+| Git Tag           | Component | Docker Image Tag                                  |
+| ----------------- | --------- | ------------------------------------------------- |
+| `backend-v1.0.0`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:1.0.0`  |
+| `frontend-v2.1.0` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:2.1.0` |
 
 ## Development Deployment
 
@@ -174,10 +174,12 @@ Development images are automatically built and pushed when you push to `main`. T
 When creating or editing a workload in Rancher, set these values:
 
 **Dev backend:**
+
 - **Image:** `registry.nersc.gov/e3sm/simboard/backend:dev`
 - **Pull Policy:** Always
 
 **Dev frontend:**
+
 - **Image:** `registry.nersc.gov/e3sm/simboard/frontend:dev`
 - **Pull Policy:** Always
 
