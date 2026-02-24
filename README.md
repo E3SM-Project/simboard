@@ -377,12 +377,13 @@ export SIMBOARD_API_TOKEN=<TOKEN>
 Submit an ingestion request:
 
 ```bash
-curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestion/from-path \
+curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestions/from-path \
   -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-        "path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
-        "machine": "perlmutter"
+        "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+        "machine_name": "perlmutter",
+        "hpc_username": "<your_hpc_username>"
       }'
 ```
 
@@ -395,12 +396,13 @@ API_BASE = "https://simboard-dev-api.e3sm.org/api/v1"
 TOKEN = "<TOKEN>"
 
 resp = requests.post(
-    f"{API_BASE}/ingestion/path",
-    json={
-        "path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
-        "machine": "perlmutter",
-    },
-    headers={"Authorization": f"Bearer {TOKEN}"},
+  f"{API_BASE}/ingestions/from-path",
+  json={
+    "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+    "machine_name": "perlmutter",
+    "hpc_username": "<your_hpc_username>"
+  },
+  headers={"Authorization": f"Bearer {TOKEN}"},
 )
 
 print(resp.json())

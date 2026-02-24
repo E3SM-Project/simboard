@@ -29,7 +29,9 @@ router = APIRouter(prefix="/tokens", tags=["API Tokens"])
     status_code=status.HTTP_201_CREATED,
     responses={
         201: {"description": "API token created successfully"},
+        400: {"description": "Bad request: target user must be a service account"},
         403: {"description": "Forbidden: only administrators can create tokens"},
+        404: {"description": "Target user not found"},
     },
 )
 def create_api_token(
@@ -76,6 +78,12 @@ def create_api_token(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User with the given user_id does not exist",
+        )
+
+    if target_user.role != UserRole.SERVICE_ACCOUNT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API tokens can only be created for SERVICE_ACCOUNT users",
         )
 
     # Generate token

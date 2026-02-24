@@ -33,6 +33,20 @@ def _override_as_user(db, user_info):
     app.dependency_overrides[current_active_user] = lambda: user
 
 
+def _create_service_account_user(db, email: str = "token-bot@example.com") -> User:
+    """Create a SERVICE_ACCOUNT user for token creation tests."""
+    user = User(
+        email=email,
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 class TestTokenManagementAPI:
     """Integration tests for token management endpoints."""
 
@@ -52,14 +66,15 @@ class TestTokenManagementAPI:
         finally:
             app.dependency_overrides.clear()
 
-    def test_create_token_as_admin(self, client, admin_user_sync, normal_user_sync, db):
-        """Test that an admin can create an API token."""
+    def test_create_token_as_admin(self, client, admin_user_sync, db):
+        """Test that an admin can create an API token for a service account."""
         _override_as_user(db, admin_user_sync)
+        service_user = _create_service_account_user(db, "token-create-bot@example.com")
 
         try:
             payload = {
                 "name": "Test Token",
-                "user_id": str(normal_user_sync["id"]),
+                "user_id": str(service_user.id),
             }
 
             response = client.post(f"{API_BASE}/tokens", json=payload)
@@ -70,6 +85,28 @@ class TestTokenManagementAPI:
             assert data["token"].startswith("sbk_")
             assert data["name"] == "Test Token"
             assert "id" in data
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_create_token_rejects_non_service_account_user(
+        self, client, admin_user_sync, normal_user_sync, db
+    ):
+        """Test that creating a token for a non-SERVICE_ACCOUNT user fails."""
+        _override_as_user(db, admin_user_sync)
+
+        try:
+            payload = {
+                "name": "Test Token",
+                "user_id": str(normal_user_sync["id"]),
+            }
+
+            response = client.post(f"{API_BASE}/tokens", json=payload)
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert (
+                response.json()["detail"]
+                == "API tokens can only be created for SERVICE_ACCOUNT users"
+            )
         finally:
             app.dependency_overrides.clear()
 
