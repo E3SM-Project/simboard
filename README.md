@@ -15,22 +15,19 @@ AI-assisted capabilities are being explored to supplement these features, includ
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Developer Quickstart](#developer-quickstart)
-   - [1. Commands](#1-commands)
-   - [2. Setup GitHub OAuth Authentication](#2-setup-github-oauth-authentication)
-   - [3. Local HTTPS](#3-local-https)
-
-3. [Repository Structure](#repository-structure)
-4. [Development Notes](#development-notes)
-   - [Pre-commit Hooks](#pre-commit-hooks)
-
-5. [Staging and Production Environments](#staging-and-production-environments)
-   - [Building and Deploying Docker Containers for NERSC Spin (Manual)](#building-and-deploying-docker-containers-for-nersc-spin-manual)
-   - [Provisioning a Service Account for HPC (NERSC Spin)](#provisioning-a-service-account-for-hpc-nersc-spin)
-   - [Helpful Docker Commands](#helpful-docker-commands)
-
-6. [License](#license)
+- [Prerequisites](#prerequisites)
+- [Developer Quickstart](#developer-quickstart)
+  - [Commands](#1-commands)
+  - [Setup GitHub OAuth Authentication](#2-setup-github-oauth-authentication)
+  - [Local HTTPS](#3-local-https)
+- [Repository Structure](#repository-structure)
+- [Development Notes](#development-notes)
+  - [Pre-commit Hooks](#pre-commit-hooks)
+- [Staging and Production Environments](#staging-and-production-environments)
+  - [Building and Deploying Docker Containers for NERSC Spin (Manual)](#building-and-deploying-docker-containers-for-nersc-spin-manual)
+  - [Provisioning a Service Account for HPC (NERSC Spin)](#provisioning-a-service-account-for-hpc-nersc-spin)
+  - [Helpful Docker Commands](#helpful-docker-commands)
+- [License](#license)
 
 ---
 
@@ -279,7 +276,7 @@ uv run pre-commit run --all-files
 - Required tools (`uv`, `pnpm`, `node`) must be available in your system `PATH`
 - Hooks auto-fix most formatting issues; re-stage files and re-commit if needed
 
-#### 5. Skipping Hooks (Not Recommended)
+#### 6. Skipping Hooks (Not Recommended)
 
 ```bash
 git commit --no-verify
