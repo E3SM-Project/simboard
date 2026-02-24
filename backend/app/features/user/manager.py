@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from app.common.dependencies import get_database_session
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
+from app.features.user.auth.oauth import GITHUB_OAUTH_BACKEND
+from app.features.user.auth.token_auth import JWT_BEARER_BACKEND, validate_token
 from app.features.user.models import OAuthAccount, User
-from app.features.user.oauth import github_oauth_backend, jwt_bearer_backend
-from app.features.user.token_auth import validate_token
 
 logger = _setup_custom_logger(__name__)
 
@@ -31,7 +31,7 @@ async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008
 
 
 fastapi_users = FastAPIUsers[User, uuid.UUID](
-    get_user_manager, [github_oauth_backend, jwt_bearer_backend]
+    get_user_manager, [GITHUB_OAUTH_BACKEND, JWT_BEARER_BACKEND]
 )
 
 # Original OAuth-based authentication

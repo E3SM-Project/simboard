@@ -377,7 +377,7 @@ export SIMBOARD_API_TOKEN=<TOKEN>
 Submit an ingestion request:
 
 ```bash
-curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestion/path \
+curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestion/from-path \
   -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

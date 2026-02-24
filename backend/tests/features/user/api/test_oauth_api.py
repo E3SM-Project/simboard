@@ -9,7 +9,7 @@ from httpx import AsyncClient
 
 from app.api.version import API_BASE
 from app.core.config import settings
-from app.features.user import oauth
+from app.features.user.auth import oauth
 from app.features.user.manager import current_active_user
 from app.features.user.models import UserRole
 from app.main import app
@@ -59,12 +59,12 @@ class TestAuthRoutes:
         """Mock GitHub OAuth token + profile exchange (FastAPI-Users v14)."""
         with (
             patch.object(
-                oauth.github_oauth_client,
+                oauth.GITHUB_OAUTH_CLIENT,
                 "get_access_token",
                 new=AsyncMock(return_value={"access_token": "fake_token"}),
             ),
             patch.object(
-                oauth.github_oauth_client,
+                oauth.GITHUB_OAUTH_CLIENT,
                 "get_id_email",
                 new=AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
             ),

@@ -37,7 +37,8 @@ curl -X POST https://api.simboard.org/api/v1/tokens \
   }'
 ```
 
-**Response:**
+**Response (201 Created):**
+
 ```json
 {
   "id": "token-uuid",
@@ -47,6 +48,12 @@ curl -X POST https://api.simboard.org/api/v1/tokens \
   "expires_at": "2027-12-31T23:59:59Z"
 }
 ```
+
+**Possible Status Codes:**
+
+- `201 Created`: Token successfully created
+- `403 Forbidden`: Only administrators can create tokens
+- `404 Not Found`: User with the specified user_id does not exist
 
 ⚠️ **Important**: Save the `token` value immediately. It will never be shown again.
 
@@ -96,45 +103,51 @@ curl -X DELETE https://api.simboard.org/api/v1/tokens/{token_id} \
 Service accounts are users with `role=SERVICE_ACCOUNT`, modeled through the existing `UserRole` enum. No separate boolean or identity flag is used.
 
 **Via CLI script (recommended):**
+
 ```bash
-uv run python -m scripts.create_service_account \
+# This script will prompt for admin login (username/password) to obtain a JWT.
+uv run python -m app.scripts.users.provision_service_account \
   --base-url https://api.simboard.org \
-  --admin-token <ADMIN_TOKEN> \
   --service-name hpc-ingestion-bot
 
 # With expiration:
-uv run python -m scripts.create_service_account \
+uv run python -m app.scripts.users.provision_service_account \
   --base-url https://api.simboard.org \
-  --admin-token <ADMIN_TOKEN> \
   --service-name hpc-ingestion-bot \
   --expires-in-days 365
 ```
 
+> Note: The script will prompt for your admin username and password to authenticate and obtain a JWT. The --admin-token argument is not used.
+
 **Via REST API:**
+
 ```bash
 # Step 1: Create service account user
 curl -X POST https://api.simboard.org/api/v1/tokens/service-accounts \
-  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Authorization: Bearer <ADMIN_TOKEN_OR_OAUTH>" \
   -H "Content-Type: application/json" \
   -d '{"service_name": "hpc-ingestion-bot"}'
 
 # Step 2: Create API token (use user_id from step 1)
 curl -X POST https://api.simboard.org/api/v1/tokens \
-  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Authorization: Bearer <ADMIN_TOKEN_OR_OAUTH>" \
   -H "Content-Type: application/json" \
   -d '{"name": "hpc-ingestion-bot-token", "user_id": "<USER_ID>"}'
 ```
 
 **Constraints:**
+
 - `SERVICE_ACCOUNT` users authenticate via API tokens only.
 - They cannot log in via GitHub OAuth.
 - Only `SERVICE_ACCOUNT` users may use Bearer token authentication.
 
 ### Recommended Service Accounts
 
-- `hpc-ingestion-bot@service.local` - For HPC ingestion jobs
-- `ci-integration-bot@service.local` - For CI/CD pipelines
-- `monitoring-bot@service.local` - For monitoring and health checks
+> Note: Domain is set via an environment variable.
+
+- `hpc-ingestion-bot@{settings.domain}` - For HPC ingestion jobs
+- `ci-integration-bot@{settings.domain}` - For CI/CD pipelines
+- `monitoring-bot@{settings.domain}` - For monitoring and health checks
 
 ## HPC Username Provenance
 
@@ -228,6 +241,7 @@ make backend-upgrade
 ```
 
 This will:
+
 1. Add `SERVICE_ACCOUNT` enum value to `user_role` type
 2. Add `hpc_username` column to `simulations` table
 3. Create `api_tokens` table with proper indexes and constraints

@@ -3,7 +3,7 @@ from fastapi import Response
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.features.user.oauth import CustomCookieTransport
+from app.features.user.auth.oauth import CustomCookieTransport
 
 
 @pytest.mark.asyncio

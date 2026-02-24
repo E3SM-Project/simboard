@@ -8,9 +8,9 @@ from fastapi import status
 from app.api.version import API_BASE
 from app.common.models.base import Base
 from app.core.config import settings
+from app.features.user.auth.token_auth import generate_token
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
-from app.features.user.token_auth import generate_token
 from app.main import app
 from tests.conftest import engine
 
@@ -35,6 +35,22 @@ def _override_as_user(db, user_info):
 
 class TestTokenManagementAPI:
     """Integration tests for token management endpoints."""
+
+    def test_raises_if_user_id_does_not_exist(self, client, admin_user_sync, db):
+        """Test that creating a token with a non-existent user_id raises 404."""
+        _override_as_user(db, admin_user_sync)
+
+        try:
+            payload = {
+                "name": "Test Token",
+                "user_id": "00000000-0000-0000-0000-000000000000",
+            }
+
+            response = client.post(f"{API_BASE}/tokens", json=payload)
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+        finally:
+            app.dependency_overrides.clear()
 
     def test_create_token_as_admin(self, client, admin_user_sync, normal_user_sync, db):
         """Test that an admin can create an API token."""
@@ -75,7 +91,7 @@ class TestTokenManagementAPI:
 
     def test_list_tokens_as_admin(self, client, admin_user_sync, normal_user_sync, db):
         """Test that an admin can list all API tokens."""
-        raw_token, token_hash = generate_token()
+        _, token_hash = generate_token()
         api_token = ApiToken(
             name="Test Token",
             token_hash=token_hash,
@@ -112,7 +128,7 @@ class TestTokenManagementAPI:
 
     def test_revoke_token_as_admin(self, client, admin_user_sync, normal_user_sync, db):
         """Test that an admin can revoke an API token."""
-        raw_token, token_hash = generate_token()
+        _, token_hash = generate_token()
         api_token = ApiToken(
             name="Token to Revoke",
             token_hash=token_hash,
@@ -154,7 +170,7 @@ class TestTokenManagementAPI:
         self, client, normal_user_sync, admin_user_sync, db
     ):
         """Test that a non-admin cannot revoke an API token."""
-        raw_token, token_hash = generate_token()
+        _, token_hash = generate_token()
         api_token = ApiToken(
             name="Token to Revoke",
             token_hash=token_hash,

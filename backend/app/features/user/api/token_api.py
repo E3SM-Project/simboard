@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.config import settings
+from app.features.user.auth.token_auth import generate_token
 from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.features.user.schemas import (
@@ -17,7 +19,6 @@ from app.features.user.schemas import (
     ServiceAccountCreate,
     ServiceAccountResponse,
 )
-from app.features.user.token_auth import generate_token
 
 router = APIRouter(prefix="/tokens", tags=["API Tokens"])
 
@@ -65,6 +66,16 @@ def create_api_token(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators can create API tokens",
+        )
+
+    stmt = select(User).where(User.id == payload.user_id)
+    result = db.execute(stmt)
+    target_user = result.scalar_one_or_none()
+
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with the given user_id does not exist",
         )
 
     # Generate token

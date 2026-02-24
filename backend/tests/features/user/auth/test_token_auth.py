@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+from app.features.user.auth.token_auth import generate_token, hash_token, validate_token
 from app.features.user.models import ApiToken, User, UserRole
-from app.features.user.token_auth import generate_token, hash_token, validate_token
 
 
 class TestGenerateToken:
@@ -195,6 +195,21 @@ class TestValidateToken:
         token.expires_at = None
 
         db = _mock_db(token=token, user=user)
+        result = validate_token(raw_token, db)
+
+        assert result is None
+
+    def test_validate_token_hash_mismatch(self):
+        """Test that a token with mismatched hash is rejected (constant-time check)."""
+        raw_token, _ = generate_token()
+
+        # Return a token from DB whose stored hash doesn't match the computed hash
+        token = MagicMock(spec=ApiToken)
+        token.token_hash = "a" * 64  # wrong hash
+        token.revoked = False
+        token.expires_at = None
+
+        db = _mock_db(token=token)
         result = validate_token(raw_token, db)
 
         assert result is None

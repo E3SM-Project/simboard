@@ -89,7 +89,9 @@ class ApiTokenRead(BaseModel):
 class ServiceAccountCreate(BaseModel):
     """Schema for creating a SERVICE_ACCOUNT user via REST."""
 
-    service_name: Annotated[str, "Name used to derive email as {name}@service.local"]
+    service_name: Annotated[
+        str, "Name used to derive email as {service_name}@{settings.domain}"
+    ]
 
 
 class ServiceAccountResponse(BaseModel):

@@ -229,23 +229,9 @@ backend-seed:
 backend-rollback-seed:
 	cd $(BACKEND_DIR) && uv run python -m app.scripts.db.rollback_seed
 
-# Create admin user
-# Usage:
-#   make backend-create-admin email=admin@example.com password=secret
-#   make backend-create-admin   (if script is interactive)
 backend-create-admin:
-	cd $(BACKEND_DIR) && \
-	if [ -n "$(email)" ] && [ -n "$(password)" ]; then \
-		uv run python -m app.scripts.users.create_admin_account \
-			--email "$(email)" \
-			--password "$(password)"; \
-	else \
-		uv run python -m app.scripts.users.create_admin_account; \
-	fi
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.users.create_admin_account
 
-# Provision service account
-# Usage:
-#   make backend-provision-service service_name=local-ingestion
 backend-provision-service:
 	@if [ -z "$(service_name)" ]; then \
 		echo "Usage: make backend-provision-service service_name=<name>"; \

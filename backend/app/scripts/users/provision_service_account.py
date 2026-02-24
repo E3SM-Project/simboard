@@ -2,7 +2,7 @@
 Provision a SERVICE_ACCOUNT user and API token via the SimBoard REST API.
 
 Usage:
-    uv run python -m app.scripts.provision_service_account \
+    uv run python -m app.scripts.users.provision_service_account \
         --service-name perlmutter-ingestion
 
 Optional:

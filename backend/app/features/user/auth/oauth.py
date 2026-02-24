@@ -1,14 +1,10 @@
 from fastapi import Response
 from fastapi.responses import RedirectResponse
-from fastapi_users.authentication import (
-    AuthenticationBackend,
-    BearerTransport,
-    CookieTransport,
-    JWTStrategy,
-)
+from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from httpx_oauth.clients.github import GitHubOAuth2
 
 from app.core.config import settings
+from app.features.user.auth.utils import get_jwt_strategy
 
 
 class CustomCookieTransport(CookieTransport):
@@ -34,8 +30,7 @@ class CustomCookieTransport(CookieTransport):
         return self._set_login_cookie(response, token)
 
 
-# Cookie transport setup for OAuth.
-cookie_transport = CustomCookieTransport(
+COOKIE_TRANSPORT = CustomCookieTransport(
     cookie_name=settings.cookie_name,
     cookie_max_age=settings.cookie_max_age,
     cookie_secure=settings.cookie_secure,
@@ -43,29 +38,12 @@ cookie_transport = CustomCookieTransport(
     cookie_samesite=settings.cookie_samesite,
 )
 
-# GitHub OAuth2 client setup.
-github_oauth_client = GitHubOAuth2(
+GITHUB_OAUTH_CLIENT = GitHubOAuth2(
     client_id=settings.github_client_id,
     client_secret=settings.github_client_secret,
     scopes=["read:user", "user:email"],
 )
 
-
-def get_jwt_strategy() -> JWTStrategy:
-    """Return JWT strategy for OAuth backend."""
-    return JWTStrategy(secret=settings.github_state_secret_key, lifetime_seconds=3600)
-
-
-# OAuth backend definition.
-# For OAuth, the backend mainly defines the transport (cookie) and name.
-github_oauth_backend: AuthenticationBackend = AuthenticationBackend(
-    name="github", transport=cookie_transport, get_strategy=get_jwt_strategy
-)
-
-# Bearer transport for JWT login (returns token as JSON).
-bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
-
-# JWT auth backend for username/password login via Bearer token.
-jwt_bearer_backend: AuthenticationBackend = AuthenticationBackend(
-    name="jwt", transport=bearer_transport, get_strategy=get_jwt_strategy
+GITHUB_OAUTH_BACKEND: AuthenticationBackend = AuthenticationBackend(
+    name="github", transport=COOKIE_TRANSPORT, get_strategy=get_jwt_strategy
 )
