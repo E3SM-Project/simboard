@@ -11,7 +11,6 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 - [Image Tagging Strategy](#image-tagging-strategy)
 - [Development Deployment](#development-deployment)
 - [Production Release Process](#production-release-process)
-- [Kubernetes Configuration](#kubernetes-configuration)
 - [Manual Builds](#manual-builds)
 - [Troubleshooting](#troubleshooting)
 
@@ -139,49 +138,24 @@ docker login registry.nersc.gov
 
 ### Update Dev Environment
 
-Development images are automatically built and pushed when you push to `main`. To deploy:
+Development images are automatically built and pushed when you push to `main`. To deploy the updated images on NERSC Spin, use the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home):
 
-```bash
-# Force restart to pull latest :dev images
-kubectl rollout restart deployment/simboard-backend-dev -n simboard-dev
-kubectl rollout restart deployment/simboard-frontend-dev -n simboard-dev
+1. Navigate to **Workloads → Deployments** in the dev namespace
+2. Find the backend or frontend deployment
+3. Click **⋮ → Redeploy** to pull the latest `:dev` image
+4. Verify pods restart successfully in the **Pods** tab
 
-# Check status
-kubectl get pods -n simboard-dev
-kubectl logs -l app=simboard-backend -n simboard-dev --tail=20
-```
+### Image Configuration
 
-### Kubernetes Manifests
+When creating or editing a workload in Rancher, set these values:
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: simboard-backend-dev
-  namespace: simboard-dev
-spec:
-  template:
-    spec:
-      containers:
-        - name: backend
-          image: registry.nersc.gov/e3sm/simboard/backend:dev
-          imagePullPolicy: Always
-```
+**Dev backend:**
+- **Image:** `registry.nersc.gov/e3sm/simboard/backend:dev`
+- **Pull Policy:** Always
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: simboard-frontend-dev
-  namespace: simboard-dev
-spec:
-  template:
-    spec:
-      containers:
-        - name: frontend
-          image: registry.nersc.gov/e3sm/simboard/frontend:dev
-          imagePullPolicy: Always
-```
+**Dev frontend:**
+- **Image:** `registry.nersc.gov/e3sm/simboard/frontend:dev`
+- **Pull Policy:** Always
 
 ## Production Release Process
 
@@ -212,121 +186,26 @@ Check [Actions tab](https://github.com/E3SM-Project/simboard/actions) - both wor
 
 ### Step 4: Deploy to Production
 
-**Option A: Update manifests (GitOps)**
+Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home):
 
-Update your Kubernetes manifests:
-
-```yaml
-image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
-image: registry.nersc.gov/e3sm/simboard/frontend:v0.3.0
-```
-
-**Option B: Direct kubectl update**
-
-```bash
-kubectl set image deployment/simboard-backend-prod \
-  backend=registry.nersc.gov/e3sm/simboard/backend:v0.3.0 \
-  -n simboard-prod
-
-kubectl set image deployment/simboard-frontend-prod \
-  frontend=registry.nersc.gov/e3sm/simboard/frontend:v0.3.0 \
-  -n simboard-prod
-
-# Watch rollout
-kubectl rollout status deployment/simboard-backend-prod -n simboard-prod
-kubectl rollout status deployment/simboard-frontend-prod -n simboard-prod
-```
+1. Navigate to **Workloads → Deployments** in the prod namespace
+2. Click the backend deployment → **⋮ → Edit Config**
+3. Update the **Image** field to `registry.nersc.gov/e3sm/simboard/backend:v0.3.0`
+4. Set **Pull Policy** to `IfNotPresent`
+5. Click **Save** — Rancher will roll out the new version
+6. Repeat for the frontend deployment with `registry.nersc.gov/e3sm/simboard/frontend:v0.3.0`
 
 ### Step 5: Verify Production
 
-```bash
-# Check pods
-kubectl get pods -n simboard-prod
-
-# Check logs
-kubectl logs -l app=simboard-backend -n simboard-prod --tail=50
-
-# Test endpoints
-curl https://simboard-api.e3sm.org/api/v1/health
-curl https://simboard.e3sm.org/health
-```
+1. In Rancher, check that pods are **Running** under **Workloads → Pods** in the prod namespace
+2. Review pod logs via the **⋮ → View Logs** action in Rancher
+3. Test endpoints:
+   - `https://simboard-api.e3sm.org/api/v1/health`
+   - `https://simboard.e3sm.org/health`
 
 ### Rollback (if needed)
 
-```bash
-kubectl rollout undo deployment/simboard-backend-prod -n simboard-prod
-kubectl rollout undo deployment/simboard-frontend-prod -n simboard-prod
-```
-
-## Kubernetes Configuration
-
-### Development Deployment Example
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: simboard-backend-dev
-  namespace: simboard-dev
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: simboard-backend
-  template:
-    metadata:
-      labels:
-        app: simboard-backend
-    spec:
-      containers:
-        - name: backend
-          image: registry.nersc.gov/e3sm/simboard/backend:dev
-          imagePullPolicy: Always # Always pull latest :dev
-          ports:
-            - containerPort: 8000
-          env:
-            - name: ENV
-              value: "production"
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: simboard-secrets
-                  key: database-url
-```
-
-### Production Deployment Example
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: simboard-backend-prod
-  namespace: simboard-prod
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: simboard-backend
-  template:
-    metadata:
-      labels:
-        app: simboard-backend
-    spec:
-      containers:
-        - name: backend
-          image: registry.nersc.gov/e3sm/simboard/backend:v0.3.0
-          imagePullPolicy: IfNotPresent # Use immutable version
-          ports:
-            - containerPort: 8000
-          env:
-            - name: ENV
-              value: "production"
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: simboard-secrets
-                  key: database-url
-```
+In Rancher, navigate to the deployment and use **⋮ → Rollback** to revert to a previous revision.
 
 ## Manual Builds
 
@@ -388,8 +267,8 @@ docker buildx build \
 **Solutions:**
 
 1. Verify image was built (check GitHub Actions)
-2. Force restart: `kubectl rollout restart deployment/... -n simboard-dev`
-3. Check `imagePullPolicy: Always` is set for `:dev` tags
+2. In [Rancher](https://rancher2.spin.nersc.gov/dashboard/home), redeploy the workload: **Workloads → Deployments → ⋮ → Redeploy**
+3. Check that **Pull Policy** is set to `Always` for `:dev` tags
 
 ### Wrong API URL in Frontend
 

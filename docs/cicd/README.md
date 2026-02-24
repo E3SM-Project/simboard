@@ -98,16 +98,11 @@ Production:
    - Both backend and frontend prod workflows will trigger
 
 4. **Deploy to NERSC Spin:**
-
-   ```bash
-   kubectl set image deployment/simboard-backend-prod \
-     backend=registry.nersc.gov/e3sm/simboard/backend:v0.3.0 \
-     -n simboard-prod
-
-   kubectl set image deployment/simboard-frontend-prod \
-     frontend=registry.nersc.gov/e3sm/simboard/frontend:v0.3.0 \
-     -n simboard-prod
-   ```
+   - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
+   - Navigate to **Workloads → Deployments** in the prod namespace
+   - Edit each deployment's image tag to the new version (e.g., `v0.3.0`)
+   - Set **Pull Policy** to `IfNotPresent`
+   - Save to trigger the rollout
 
 ---
 
@@ -121,12 +116,8 @@ image: registry.nersc.gov/e3sm/simboard/backend:dev
 imagePullPolicy: Always
 ```
 
-Restart to pull latest:
-
-```bash
-kubectl rollout restart deployment/simboard-backend-dev -n simboard-dev
-kubectl rollout restart deployment/simboard-frontend-dev -n simboard-dev
-```
+To redeploy with the latest image, use the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home):
+**Workloads → Deployments → ⋮ → Redeploy**
 
 ### Production
 
@@ -147,8 +138,8 @@ imagePullPolicy: IfNotPresent
 
 **Image not updating in dev:**
 
-- Force restart: `kubectl rollout restart deployment/... -n simboard-dev`
-- Check imagePullPolicy is `Always` for `:dev` tags
+- In [Rancher](https://rancher2.spin.nersc.gov/dashboard/home), redeploy the workload: **Workloads → Deployments → ⋮ → Redeploy**
+- Check Pull Policy is `Always` for `:dev` tags
 
 **Workflow not triggering:**
 
