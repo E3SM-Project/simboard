@@ -296,7 +296,7 @@ Use only when absolutely necessary.
 
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
-- **Full Deployment Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- **Full Deployment Guide:** [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ### Deployment & CI/CD
 
@@ -429,7 +429,7 @@ docker image ls          # List local images
 docker tag <src> <dest>  # Tag an image
 ```
 
-For complete deployment instructions, release process, and troubleshooting, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+For complete deployment instructions, release process, and troubleshooting, see [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ---
 
