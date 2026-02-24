@@ -196,7 +196,7 @@ make backend-test
 make frontend-lint
 ```
 
-### Step 2: Create GitHub Release (Frontend)
+### Step 2a: Create GitHub Release (Frontend)
 
 1. Navigate to [Releases](https://github.com/E3SM-Project/simboard/releases/new)
 2. Click **Draft a new release**
@@ -216,7 +216,7 @@ Publishing the release creates the Git tag, which:
 - Pushes versioned tags (`:1.2.0`, `:sha-<short>`, `:latest`) to the registry
 - Does **not** modify the `:dev` image
 
-### Step 2 (Alternative): Create GitHub Release (Backend)
+### Step 2b: Create GitHub Release (Backend)
 
 Follow the same steps as above, but use a backend-scoped tag:
 
