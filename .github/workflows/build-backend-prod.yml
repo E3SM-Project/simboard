@@ -35,8 +35,12 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#backend-v}"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#backend-v}"
+          else
+            VERSION="manual"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract metadata (tags, labels)
@@ -47,7 +51,7 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
             type=sha,prefix=sha-,format=short
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
