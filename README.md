@@ -111,6 +111,12 @@ open https://127.0.0.1:8000/docs
 open https://127.0.0.1:5173
 ```
 
+For a list of all `make` commands, run:
+
+```bash
+make help
+```
+
 ### 2. Setup GitHub OAuth Authentication
 
 #### 1. Create a GitHub OAuth App
