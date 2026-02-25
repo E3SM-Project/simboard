@@ -35,6 +35,10 @@ dependencies = [
   # --- Authentication / Authorization ---
   "fastapi-users[sqlalchemy,oauth]>=14.0.0,<15.0.0",
   "python-jose>=3.5.0",
+
+  # --- AI / NLP tools ---
+  "transformers>=4.57.1,<4.58.0",
+  "sentence-transformers>=5.0.0,<5.1.0",
 ]
 
 [dependency-groups]
