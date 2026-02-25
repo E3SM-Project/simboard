@@ -6,7 +6,7 @@ Documentation for the SimBoard project.
 
 ## 📁 Documentation Structure
 
-```
+```bash
 docs/
 ├── README.md       # This file
 └── cicd/           # CI/CD and deployment
@@ -18,11 +18,13 @@ docs/
 
 ## 🚀 CI/CD Quick Links
 
-**New to CI/CD setup?**  
-→ [cicd/README.md](cicd/README.md) - Quick start guide
+**New to CI/CD setup?**
 
-**Need deployment details?**  
-→ [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) - Complete reference
+- [cicd/README.md](cicd/README.md) - Quick start guide
+
+**Need deployment details?**
+
+- [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) - Complete reference
 
 ---
 
