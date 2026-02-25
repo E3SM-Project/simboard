@@ -1,6 +1,23 @@
-"""Module for ingesting simulation archives and mapping to database schemas."""
+"""Module for ingesting simulation archives and mapping to database schemas.
 
-from dataclasses import dataclass
+Implements canonical run semantics for ``performance_archive`` ingestion:
+
+* A run is "successful" only when all required metadata files are present.
+* Within each case (parent directory), the **first** successful run
+  (sorted by experiment-directory name) is the *canonical baseline*.
+* Subsequent successful runs under the same case are compared against
+  the canonical baseline.  Only configuration differences (deltas) are
+  recorded in the canonical simulation's ``extra`` JSONB field; separate
+  simulation records are **not** created for non-canonical runs.
+* Incomplete runs (missing required files) are skipped at the parser
+  level and never reach ingestion.
+* Re-processing the same archive is idempotent thanks to the existing
+  ``(case_name, machine_id, simulation_start_date)`` uniqueness
+  constraint.
+"""
+
+from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -17,6 +34,28 @@ from app.features.simulation.models import Simulation
 from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
+
+# Configuration fields compared when computing deltas between a
+# canonical run and subsequent runs of the same case.  Timeline and
+# status fields are intentionally excluded because they are expected to
+# vary across successive executions of the same case.
+_CONFIG_DELTA_FIELDS: frozenset[str] = frozenset(
+    {
+        "compset",
+        "compset_alias",
+        "grid_name",
+        "grid_resolution",
+        "initialization_type",
+        "compiler",
+        "git_tag",
+        "git_commit_hash",
+        "git_branch",
+        "git_repository_url",
+        "campaign",
+        "experiment_type",
+        "group_name",
+    }
+)
 
 
 @dataclass
@@ -37,6 +76,10 @@ class IngestArchiveResult:
         Number of new simulations eligible for creation.
     duplicate_count : int
         Number of simulations skipped due to existing records in the database.
+    skipped_count : int
+        Number of non-canonical runs whose configuration deltas were
+        recorded on the canonical simulation rather than being ingested
+        as separate records.
     errors : list[dict[str, str]]
         List of ingestion errors encountered during processing. Each entry
         contains keys such as ``exp_dir``, ``error_type``, and ``error``,
@@ -46,7 +89,8 @@ class IngestArchiveResult:
     simulations: list[SimulationCreate]
     created_count: int
     duplicate_count: int
-    errors: list[dict[str, str]]
+    skipped_count: int = 0
+    errors: list[dict[str, str]] = field(default_factory=list)
 
 
 def ingest_archive(
@@ -55,6 +99,18 @@ def ingest_archive(
     db: Session,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
+
+    Implements canonical run semantics:
+
+    * Parsed simulations are grouped by ``case_name``.
+    * The first successful run per case (in sorted experiment-directory
+      order) is treated as the canonical baseline and mapped to a
+      ``SimulationCreate`` record.
+    * Subsequent successful runs for the same case are compared against
+      the canonical baseline; only configuration differences are stored
+      in the canonical simulation's ``extra["run_config_deltas"]`` list.
+    * Duplicate detection is based on the composite key
+      ``(case_name, machine_id, simulation_start_date)``.
 
     Parameters
     ----------
@@ -93,53 +149,176 @@ def ingest_archive(
         logger.warning(f"No simulations found in archive: {archive_path_resolved}")
 
         return IngestArchiveResult(
-            simulations=[], created_count=0, duplicate_count=0, errors=[]
+            simulations=[], created_count=0, duplicate_count=0, skipped_count=0
         )
+
+    # Group simulations by case_name for canonical run selection.
+    # The dict preserves insertion order (Python 3.7+), and main_parser
+    # returns experiment dirs sorted within each case group, so the
+    # first entry per case_name is the canonical candidate.
+    case_groups: dict[str, list[tuple[str, SimulationMetadata]]] = defaultdict(list)
+
+    for exp_dir, metadata in all_simulations.items():
+        case_name = metadata.get("case_name") or metadata.get("name") or "unknown"
+        case_groups[case_name].append((exp_dir, metadata))
 
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
+    skipped_count = 0
     errors: list[dict[str, str]] = []
 
-    for exp_dir, metadata in all_simulations.items():
-        try:
-            case_name, machine_id, simulation_start_date = _extract_simulation_key(
-                metadata, db
-            )
+    for case_name, runs in case_groups.items():
+        canonical_metadata: SimulationMetadata | None = None
+        canonical_exp_dir: str | None = None
 
-            existing_sim = _find_existing_simulation(
-                db, case_name, machine_id, simulation_start_date
-            )
-            if existing_sim:
-                logger.info(
-                    f"Simulation already exists in database with "
-                    f"case_name='{case_name}', machine_id={machine_id}, "
-                    f"simulation_start_date={simulation_start_date}. "
-                    f"Skipping duplicate from {exp_dir}."
+        for exp_dir, metadata in runs:
+            try:
+                case_key, machine_id, simulation_start_date = (
+                    _extract_simulation_key(metadata, db)
                 )
-                duplicate_count += 1
-                continue
 
-            sim_create = _map_metadata_to_schema(metadata, db, machine_id)
-            simulations.append(sim_create)
-            logger.info(f"Mapped new simulation from {exp_dir}: {metadata.get('name')}")
-        except (ValueError, LookupError, ValidationError) as e:
-            logger.error(f"Failed to process simulation from {exp_dir}: {e}")
-            errors.append(
-                {
-                    "exp_dir": str(exp_dir),
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                }
-            )
-            continue
+                existing_sim = _find_existing_simulation(
+                    db, case_key, machine_id, simulation_start_date
+                )
+                if existing_sim:
+                    logger.info(
+                        f"Simulation already exists in database with "
+                        f"case_name='{case_key}', machine_id={machine_id}, "
+                        f"simulation_start_date={simulation_start_date}. "
+                        f"Skipping duplicate from {exp_dir}."
+                    )
+                    duplicate_count += 1
+
+                    # If the existing sim is the canonical for this case,
+                    # record it so subsequent runs can compute deltas.
+                    if canonical_metadata is None:
+                        canonical_metadata = metadata
+                        canonical_exp_dir = exp_dir
+                    continue
+
+                if canonical_metadata is None:
+                    # First successful run → canonical baseline.
+                    canonical_metadata = metadata
+                    canonical_exp_dir = exp_dir
+
+                    sim_create = _map_metadata_to_schema(metadata, db, machine_id)
+                    simulations.append(sim_create)
+                    logger.info(
+                        f"Mapped canonical simulation from {exp_dir}: "
+                        f"{metadata.get('name')}"
+                    )
+                else:
+                    # Subsequent successful run → record config delta only.
+                    delta = _compute_config_delta(canonical_metadata, metadata)
+                    if delta:
+                        logger.info(
+                            f"Non-canonical run in '{exp_dir}' has config "
+                            f"differences from canonical '{canonical_exp_dir}': "
+                            f"{list(delta.keys())}"
+                        )
+                        # Attach the delta to the canonical simulation's
+                        # extra field so it can be persisted.
+                        _attach_config_delta(
+                            simulations, canonical_metadata, exp_dir, delta
+                        )
+                    else:
+                        logger.info(
+                            f"Non-canonical run in '{exp_dir}' has identical "
+                            f"configuration to canonical '{canonical_exp_dir}'."
+                        )
+                    skipped_count += 1
+
+            except (ValueError, LookupError, ValidationError) as e:
+                logger.error(f"Failed to process simulation from {exp_dir}: {e}")
+                errors.append(
+                    {
+                        "exp_dir": str(exp_dir),
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    }
+                )
+                continue
 
     result = IngestArchiveResult(
         simulations=simulations,
         created_count=len(simulations),
         duplicate_count=duplicate_count,
+        skipped_count=skipped_count,
         errors=errors,
     )
     return result
+
+
+def _compute_config_delta(
+    canonical: SimulationMetadata,
+    other: SimulationMetadata,
+) -> dict[str, dict[str, str | None]]:
+    """Compare two run metadata dicts and return configuration differences.
+
+    Only the fields in :data:`_CONFIG_DELTA_FIELDS` are compared.
+    Timeline, status, and other per-run fields are intentionally
+    excluded because they are expected to vary across successive
+    executions of the same case.
+
+    Parameters
+    ----------
+    canonical : SimulationMetadata
+        The canonical (baseline) run metadata.
+    other : SimulationMetadata
+        The subsequent run metadata to compare against.
+
+    Returns
+    -------
+    dict[str, dict[str, str | None]]
+        Mapping of field name → ``{"canonical": ..., "current": ...}``
+        for every field that differs.  Empty dict when runs are
+        identical.
+    """
+    delta: dict[str, dict[str, str | None]] = {}
+
+    for key in _CONFIG_DELTA_FIELDS:
+        canonical_val = canonical.get(key)
+        other_val = other.get(key)
+        if canonical_val != other_val:
+            delta[key] = {"canonical": canonical_val, "current": other_val}
+
+    return delta
+
+
+def _attach_config_delta(
+    simulations: list[SimulationCreate],
+    canonical_metadata: SimulationMetadata,
+    exp_dir: str,
+    delta: dict[str, dict[str, str | None]],
+) -> None:
+    """Attach a config delta to the canonical simulation's ``extra`` field.
+
+    The delta is appended to ``extra["run_config_deltas"]`` so that all
+    differences from non-canonical runs are preserved on the canonical
+    simulation record.
+
+    Parameters
+    ----------
+    simulations : list[SimulationCreate]
+        The list of ingested simulations; the last entry matching the
+        canonical metadata is updated.
+    canonical_metadata : SimulationMetadata
+        Metadata of the canonical run (used to locate the correct
+        SimulationCreate in *simulations*).
+    exp_dir : str
+        Experiment directory of the non-canonical run.
+    delta : dict[str, dict[str, str | None]]
+        Configuration differences to record.
+    """
+    # Find the canonical SimulationCreate (the one whose case_name matches).
+    canonical_case = canonical_metadata.get("case_name")
+    for sim in simulations:
+        if sim.case_name == canonical_case:
+            if sim.extra is None:
+                sim.extra = {}
+            deltas_list = sim.extra.setdefault("run_config_deltas", [])
+            deltas_list.append({"exp_dir": exp_dir, "deltas": delta})
+            break
 
 
 def _extract_simulation_key(

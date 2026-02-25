@@ -90,17 +90,29 @@ FILE_SPECS: dict[str, FileSpec] = {
 def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulations:
     """Main entrypoint for parser workflow.
 
+    Parses experiment directories from a performance archive, handling
+    incomplete or failed runs gracefully. Directories missing required
+    metadata files are skipped with a warning rather than aborting the
+    entire ingestion.
+
+    Within each case (parent directory), experiment subdirectories are
+    sorted deterministically so that canonical run selection is
+    reproducible.
+
     Parameters
     ----------
     archive_path : str
-        Path to the archive file (.zip, .tar.gz, .tgz).
+        Path to the archive file (.zip, .tar.gz, .tgz) or an
+        already-extracted directory.
     output_dir : str
         Directory to extract and process files.
 
     Returns
     -------
     AllSimulations
-        Dictionary mapping experiment directory paths to their parsed simulations.
+        Dictionary mapping experiment directory paths to their parsed
+        simulations.  Only directories that contain all required
+        metadata files are included.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
@@ -129,14 +141,31 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
             "Expected directory names matching pattern: <digits>.<digits>-<digits>"
         )
 
+    skipped_count = 0
+
     for base_dir, subdirs in exp_dirs.items():
+        # Sort subdirectories for deterministic canonical run selection.
+        sorted_subdirs = sorted(subdirs)
         logger.info(
-            f"Processing base directory: {base_dir} with {len(subdirs)} experiment "
-            "subdirectories."
+            f"Processing base directory: {base_dir} with {len(sorted_subdirs)} "
+            "experiment subdirectories."
         )
-        for exp_dir in subdirs:
-            files = _locate_files(exp_dir)
+        for exp_dir in sorted_subdirs:
+            try:
+                files = _locate_files(exp_dir)
+            except FileNotFoundError as exc:
+                logger.warning(
+                    f"Skipping incomplete run in '{exp_dir}': {exc}"
+                )
+                skipped_count += 1
+                continue
+
             results[exp_dir] = _parse_experiment_files(files)
+
+    if skipped_count:
+        logger.info(
+            f"Skipped {skipped_count} incomplete run(s) missing required files."
+        )
 
     logger.info("Completed parsing all experiment directories.")
 

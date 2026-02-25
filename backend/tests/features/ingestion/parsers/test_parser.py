@@ -257,8 +257,8 @@ class TestMainParser:
             assert len(result) > 0
             assert any("1.0-0" in key for key in result.keys())
 
-    def test_missing_required_files_raises_error(self, tmp_path: Path) -> None:
-        """Test error when required files are missing."""
+    def test_missing_required_files_skips_incomplete_run(self, tmp_path: Path) -> None:
+        """Test that incomplete runs (missing required files) are skipped."""
         # Create experiment directory WITHOUT required files
         archive_base = tmp_path / "archive_extract"
         exp_dir = archive_base / "1.0-0"
@@ -272,9 +272,9 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Should raise FileNotFoundError for missing required files
-        with pytest.raises(FileNotFoundError, match="Required files not found"):
-            parser.main_parser(archive_path, extract_dir)
+        # Incomplete runs are skipped; result is empty rather than an error
+        result = parser.main_parser(archive_path, extract_dir)
+        assert result == {}
 
     def test_multiple_matching_files_raises_error(self, tmp_path: Path) -> None:
         """Test error when multiple files match a pattern."""
@@ -457,3 +457,88 @@ class TestMainParser:
         finally:
             parser.FILE_SPECS.clear()
             parser.FILE_SPECS.update(original_specs)
+
+    def test_incomplete_run_among_valid_runs(self, tmp_path: Path) -> None:
+        """Test that an incomplete run is skipped while valid runs are parsed."""
+        archive_base = tmp_path / "archive_extract"
+
+        # Create a valid experiment directory
+        exp_dir_valid = archive_base / "1.0-0"
+        exp_dir_valid.mkdir(parents=True)
+        self._create_experiment_files(exp_dir_valid, "001.001")
+
+        # Create an incomplete experiment directory (missing required files)
+        exp_dir_incomplete = archive_base / "2.0-0"
+        exp_dir_incomplete.mkdir(parents=True)
+        (exp_dir_incomplete / "dummy.txt").write_text("no required files")
+
+        archive_path = tmp_path / "mixed.zip"
+        self._create_zip_archive(archive_base, archive_path)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with self._mock_all_parsers(parse_e3sm_timing={"case_name": "mixed_test"}):
+            result = parser.main_parser(archive_path, extract_dir)
+            # Only the valid experiment should be in the result
+            assert len(result) == 1
+            assert any("1.0-0" in key for key in result.keys())
+            assert not any("2.0-0" in key for key in result.keys())
+
+    def test_multiple_runs_under_same_casename(self, tmp_path: Path) -> None:
+        """Test multiple <jobID>.<timestamp> dirs under the same casename.
+
+        Simulates the performance_archive structure where a casename
+        directory contains multiple runs, each represented by a
+        subdirectory matching the <jobID>.<timestamp> pattern.
+        """
+        # Simulate: casename/1081156.251218-200923, casename/1081290.251218-211543
+        archive_base = tmp_path / "archive_extract"
+        casename_dir = archive_base / "v3.LR.historical_0121"
+        casename_dir.mkdir(parents=True)
+
+        run1 = casename_dir / "1081156.251218-200923"
+        run1.mkdir()
+        self._create_experiment_files(run1, "001.001")
+
+        run2 = casename_dir / "1081290.251218-211543"
+        run2.mkdir()
+        self._create_experiment_files(run2, "002.002")
+
+        with self._mock_all_parsers(parse_e3sm_timing={"case_name": "v3_hist"}):
+            result = parser.main_parser(casename_dir, tmp_path / "out")
+            # Both runs should be parsed successfully
+            assert len(result) == 2
+            assert any("1081156" in key for key in result.keys())
+            assert any("1081290" in key for key in result.keys())
+
+    def test_deterministic_sort_order(self, tmp_path: Path) -> None:
+        """Test that experiment dirs are sorted for deterministic processing."""
+        archive_base = tmp_path / "archive_extract"
+        casename_dir = archive_base / "case1"
+        casename_dir.mkdir(parents=True)
+
+        # Create dirs in reverse order
+        for name in ["3.0-0", "1.0-0", "2.0-0"]:
+            d = casename_dir / name
+            d.mkdir()
+            self._create_experiment_files(d, "001.001")
+
+        call_order: list[str] = []
+        original_locate = parser._locate_files
+
+        def tracking_locate(exp_dir: str) -> Any:
+            call_order.append(os.path.basename(exp_dir))
+            return original_locate(exp_dir)
+
+        with (
+            self._mock_all_parsers(),
+            patch(
+                "app.features.ingestion.parsers.parser._locate_files",
+                side_effect=tracking_locate,
+            ),
+        ):
+            parser.main_parser(casename_dir, tmp_path / "out")
+
+        # Should be processed in sorted order
+        assert call_order == sorted(call_order)

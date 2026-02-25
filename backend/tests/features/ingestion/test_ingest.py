@@ -1119,3 +1119,301 @@ class TestNormalizeGitUrl:
         db.commit()
         db.refresh(machine)
         return machine
+
+
+class TestCanonicalRunIngestion:
+    """Tests for canonical run selection and config delta semantics.
+
+    These tests verify that:
+    - Multiple runs under the same casename are grouped properly
+    - The first successful run is treated as canonical
+    - Subsequent runs record only config deltas
+    - Idempotent re-ingestion works correctly
+    - Incremental ingestion adds deltas without overwriting
+    """
+
+    @staticmethod
+    def _create_machine(db: Session, name: str) -> Machine:
+        """Create a test machine in the database."""
+        machine = Machine(
+            name=name,
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+        db.commit()
+        db.refresh(machine)
+        return machine
+
+    @staticmethod
+    def _make_metadata(
+        case_name: str = "case1",
+        machine: str = "test-machine",
+        simulation_start_date: str = "2020-01-01",
+        **overrides: str | None,
+    ) -> dict[str, str | None]:
+        """Build a complete simulation metadata dict with sensible defaults."""
+        base: dict[str, str | None] = {
+            "name": case_name,
+            "case_name": case_name,
+            "compset": "FHIST",
+            "compset_alias": "test_alias",
+            "grid_name": "grid1",
+            "grid_resolution": "0.9x1.25",
+            "machine": machine,
+            "simulation_start_date": simulation_start_date,
+            "initialization_type": "test",
+            "simulation_type": "test_type",
+            "status": None,
+            "experiment_type": None,
+            "campaign": None,
+            "group_name": None,
+            "run_start_date": None,
+            "run_end_date": None,
+            "compiler": None,
+            "git_repository_url": None,
+            "git_branch": None,
+            "git_tag": None,
+            "git_commit_hash": None,
+            "created_by": None,
+            "last_updated_by": None,
+        }
+        base.update(overrides)
+        return base
+
+    def test_canonical_run_selected_from_multiple_runs(
+        self, db: Session
+    ) -> None:
+        """Only the first successful run per casename becomes a simulation."""
+        machine = self._create_machine(db, "test-machine")
+
+        # Two runs with the same case_name but different start dates
+        mock_simulations = {
+            "run1": self._make_metadata(
+                simulation_start_date="2020-01-01",
+            ),
+            "run2": self._make_metadata(
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        # Only the canonical run is created as a simulation
+        assert result.created_count == 1
+        assert result.skipped_count == 1
+        assert len(result.simulations) == 1
+
+    def test_config_delta_stored_for_non_canonical_run(
+        self, db: Session
+    ) -> None:
+        """Non-canonical runs with config differences record deltas."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "run1": self._make_metadata(
+                simulation_start_date="2020-01-01",
+                compiler="gcc-11",
+            ),
+            "run2": self._make_metadata(
+                simulation_start_date="2020-06-01",
+                compiler="gcc-12",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.skipped_count == 1
+        canonical = result.simulations[0]
+        assert canonical.extra is not None
+        assert "run_config_deltas" in canonical.extra
+        deltas = canonical.extra["run_config_deltas"]
+        assert len(deltas) == 1
+        assert "compiler" in deltas[0]["deltas"]
+        assert deltas[0]["deltas"]["compiler"]["canonical"] == "gcc-11"
+        assert deltas[0]["deltas"]["compiler"]["current"] == "gcc-12"
+
+    def test_no_delta_when_configs_identical(self, db: Session) -> None:
+        """Non-canonical runs with identical config do not record deltas."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "run1": self._make_metadata(
+                simulation_start_date="2020-01-01",
+            ),
+            "run2": self._make_metadata(
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.skipped_count == 1
+        # No deltas recorded because configs are identical
+        assert result.simulations[0].extra == {}
+
+    def test_different_case_names_create_separate_simulations(
+        self, db: Session
+    ) -> None:
+        """Runs with different case_names are independent canonical selections."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "exp_a": self._make_metadata(case_name="case_alpha"),
+            "exp_b": self._make_metadata(case_name="case_beta"),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        # Each case_name gets its own canonical simulation
+        assert result.created_count == 2
+        assert result.skipped_count == 0
+        names = {s.case_name for s in result.simulations}
+        assert names == {"case_alpha", "case_beta"}
+
+    def test_idempotent_reingestion(self, db: Session) -> None:
+        """Re-ingesting the same archive does not create duplicates."""
+        machine = self._create_machine(db, "test-machine")
+
+        # First: create a simulation in the DB to simulate prior ingestion
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        sim = Simulation(
+            name="case1",
+            case_name="case1",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.commit()
+
+        # Now re-ingest with the same metadata
+        mock_simulations = {
+            "run1": self._make_metadata(
+                simulation_start_date="2020-01-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        # Duplicate detected, nothing new created
+        assert result.created_count == 0
+        assert result.duplicate_count == 1
+        assert len(result.simulations) == 0
+
+    def test_incremental_ingestion_new_run_adds_delta(
+        self, db: Session
+    ) -> None:
+        """A new run under an existing case records config delta."""
+        machine = self._create_machine(db, "test-machine")
+
+        # Pre-populate DB with a canonical simulation
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        sim = Simulation(
+            name="case1",
+            case_name="case1",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.commit()
+
+        # Ingest archive containing the existing run plus a new one
+        mock_simulations = {
+            "run1": self._make_metadata(
+                simulation_start_date="2020-01-01",
+                compiler="gcc-11",
+            ),
+            "run2": self._make_metadata(
+                simulation_start_date="2020-06-01",
+                compiler="gcc-12",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        # run1 is a duplicate, run2 is non-canonical → skipped with delta
+        assert result.duplicate_count == 1
+        assert result.skipped_count == 1
+        assert result.created_count == 0
