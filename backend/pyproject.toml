@@ -50,7 +50,7 @@ dev = [
   "pre-commit==4.3.0",
   "mypy==1.19.1",
 
-  # --- Runtime / ML ---
+  # --- Notebook runtime ---
   "ipykernel==7.0.0",
 
   # --- Python typings ---
