@@ -4,28 +4,28 @@ set -e
 echo "ENV=$ENV"
 
 # -----------------------------------------------------------
+# Require DATABASE_URL
+# -----------------------------------------------------------
+if [ -z "${DATABASE_URL}" ]; then
+    echo "❌ DATABASE_URL is required but not set"
+    exit 1
+fi
+
+# -----------------------------------------------------------
 # Database readiness check
 # -----------------------------------------------------------
-if [ -n "${DATABASE_URL}" ]; then
-    # Extract host and port from DATABASE_URL
-    # Supports: postgresql[+driver]://user:pass@host:port/dbname
-    DB_HOST=$(echo "${DATABASE_URL}" | sed -n 's|.*@\([^:/]*\).*|\1|p')
-    DB_PORT=$(echo "${DATABASE_URL}" | sed -n 's|.*@[^:]*:\([0-9]*\).*|\1|p')
-    DB_PORT=${DB_PORT:-5432}
-
-    echo "⏳ Waiting for database at ${DB_HOST}:${DB_PORT}..."
-    retries=0
-    max_retries=30
-    until pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -q; do
-        retries=$((retries + 1))
-        if [ "$retries" -ge "$max_retries" ]; then
-            echo "❌ Database not reachable after ${max_retries} attempts"
-            exit 1
-        fi
-        sleep 1
-    done
-    echo "✅ Database is ready"
-fi
+echo "⏳ Waiting for database..."
+retries=0
+max_retries=30
+until pg_isready -d "${DATABASE_URL}" -q; do
+    retries=$((retries + 1))
+    if [ "$retries" -ge "$max_retries" ]; then
+        echo "❌ Database not reachable after ${max_retries} attempts"
+        exit 1
+    fi
+    sleep 1
+done
+echo "✅ Database is ready"
 
 # -----------------------------------------------------------
 # Run Alembic migrations
