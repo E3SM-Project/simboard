@@ -252,6 +252,22 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
    - `https://simboard-api.e3sm.org/api/v1/health`
    - `https://simboard.e3sm.org/health`
 
+## Database Migrations
+
+Alembic database migrations run **automatically** when the backend container starts. No manual migration step is required during deployment.
+
+### Startup Sequence
+
+1. **Database readiness check** — the container waits (up to 30 seconds) for the PostgreSQL server to accept connections using `pg_isready`.
+2. **`alembic upgrade head`** — applies any pending migrations. If the database is already up to date, this is a no-op.
+3. **Application start** — Uvicorn launches only after migrations succeed.
+
+If either the database readiness check or migration step fails, the container exits immediately and does **not** start the application.
+
+### Concurrency Note
+
+The current deployment assumes a **single backend replica**. If horizontal scaling is introduced, migration execution should be separated into a one-time init container or deployment job to avoid race conditions.
+
 ## Rollback Procedure
 
 Version-tagged images are **immutable** — once published, a version tag (e.g., `:1.0.0`) always refers to the same image. This makes rollbacks safe and predictable.

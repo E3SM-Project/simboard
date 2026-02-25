@@ -3,6 +3,40 @@ set -e
 
 echo "ENV=$ENV"
 
+# -----------------------------------------------------------
+# Database readiness check
+# -----------------------------------------------------------
+if [ -n "${DATABASE_URL}" ]; then
+    # Extract host and port from DATABASE_URL
+    # Supports: postgresql[+driver]://user:pass@host:port/dbname
+    DB_HOST=$(echo "${DATABASE_URL}" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+    DB_PORT=$(echo "${DATABASE_URL}" | sed -n 's|.*@[^:]*:\([0-9]*\).*|\1|p')
+    DB_PORT=${DB_PORT:-5432}
+
+    echo "⏳ Waiting for database at ${DB_HOST}:${DB_PORT}..."
+    retries=0
+    max_retries=30
+    until pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -q 2>/dev/null; do
+        retries=$((retries + 1))
+        if [ "$retries" -ge "$max_retries" ]; then
+            echo "❌ Database not reachable after ${max_retries} attempts"
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "✅ Database is ready"
+fi
+
+# -----------------------------------------------------------
+# Run Alembic migrations
+# -----------------------------------------------------------
+echo "🔄 Running Alembic migrations..."
+uv run alembic upgrade head
+echo "✅ Alembic migrations complete"
+
+# -----------------------------------------------------------
+# Start application
+# -----------------------------------------------------------
 if [ "$ENV" = "production" ]; then
     echo "🚀 Starting SimBoard backend (production mode)..."
     # In production, HTTPS is expected to be handled by a reverse proxy (e.g., Traefik).

@@ -60,8 +60,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Minimal utilities (for healthcheck)
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+# Minimal utilities (wget for healthcheck, postgresql-client for pg_isready)
+RUN apt-get update && apt-get install -y --no-install-recommends wget postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Copy uv binary
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
