@@ -19,10 +19,12 @@ docs/
 ## 🚀 CI/CD Quick Links
 
 **New to CI/CD setup?**
-→ [cicd/README.md](cicd/README.md) - Quick start guide
+
+- [cicd/README.md](cicd/README.md) - Quick start guide
 
 **Need deployment details?**
-→ [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) - Complete reference
+
+- [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) - Complete reference
 
 ---
 
