@@ -14,10 +14,13 @@ fi
 # -----------------------------------------------------------
 # Database readiness check
 # -----------------------------------------------------------
+# Strip SQLAlchemy driver suffix (e.g., +psycopg, +asyncpg) for pg_isready
+PG_URL=$(echo "${DATABASE_URL}" | sed 's|^\(postgresql\)+[a-z]*://|\1://|')
+
 echo "⏳ Waiting for database..."
 retries=0
 max_retries=30
-until pg_isready -d "${DATABASE_URL}" -q; do
+until pg_isready -d "${PG_URL}" -q; do
     retries=$((retries + 1))
     if [ "$retries" -ge "$max_retries" ]; then
         echo "❌ Database not reachable after ${max_retries} attempts"
