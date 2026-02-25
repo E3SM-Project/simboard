@@ -16,7 +16,7 @@ if [ -n "${DATABASE_URL}" ]; then
     echo "⏳ Waiting for database at ${DB_HOST}:${DB_PORT}..."
     retries=0
     max_retries=30
-    until pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -q 2>/dev/null; do
+    until pg_isready -h "${DB_HOST}" -p "${DB_PORT}" -q; do
         retries=$((retries + 1))
         if [ "$retries" -ge "$max_retries" ]; then
             echo "❌ Database not reachable after ${max_retries} attempts"
@@ -31,7 +31,10 @@ fi
 # Run Alembic migrations
 # -----------------------------------------------------------
 echo "🔄 Running Alembic migrations..."
-uv run alembic upgrade head
+if ! uv run alembic upgrade head; then
+    echo "❌ Alembic migrations failed"
+    exit 1
+fi
 echo "✅ Alembic migrations complete"
 
 # -----------------------------------------------------------
