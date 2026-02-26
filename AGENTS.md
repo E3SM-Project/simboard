@@ -1,7 +1,7 @@
 # AGENTS.md — Canonical AI Development Rules
 
 > **This file is the single source of truth** for AI-assisted development in the SimBoard repository.
-> Tool-specific files (`.github/copilot-instructions.md`, `.claude/CLAUDE.md`) are derived from this document.
+> Tool-specific adapter files reference this document and add only tool-specific behavioral constraints.
 
 ---
 
@@ -23,7 +23,7 @@ When such values are needed, reference the authoritative source:
 
 Instruction files should be **structural** (architectural patterns, capability-based descriptions, policy-level constraints) rather than **quantitative** (numeric counts, dynamic file listings, version strings).
 
-All tool-specific files must remain valid if dependency versions or CI settings change, and must be safely regenerable without manual editing.
+All tool-specific adapter files must remain valid if dependency versions or CI settings change, and must be safely regenerable without manual editing.
 
 ---
 
