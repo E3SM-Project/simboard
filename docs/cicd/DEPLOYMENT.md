@@ -284,16 +284,16 @@ The `RUN_MIGRATIONS` environment variable controls whether
 
 | Value   | Behavior                        | Use Case                  |
 | ------- | ------------------------------- | ------------------------- |
-| `true`  | Runs `alembic upgrade head`     | Development / single‑replica |
-| `false` | Skips migrations                | Production multi‑replica  |
+| `true`  | Runs `alembic upgrade head`     | Development / single-replica |
+| `false` | Skips migrations                | Production multi-replica  |
 
-> **Default:** `true` (backward‑compatible with existing
-> single‑replica deployments).
+> **Default:** `true` (backward-compatible with existing
+> single-replica deployments).
 
 ### Production Deployment Flow
 
 1. **Build** — CI pushes a new image to the registry.
-2. **Migrate** — Create a one‑off Kubernetes Job in Rancher that runs
+2. **Migrate** — Create a one-off Kubernetes Job in Rancher that runs
    `migrate.sh` against the production database.
 3. **Deploy** — Update the Deployment image tag; pods start with
    `RUN_MIGRATIONS=false`.
@@ -362,7 +362,7 @@ The `migrate.sh` script provides a standalone migration runner:
 ```
 
 The script waits for database readiness before executing any Alembic
-command and exits with a non‑zero status on failure.
+command and exits with a non-zero status on failure.
 
 ### Scaling Constraints
 
