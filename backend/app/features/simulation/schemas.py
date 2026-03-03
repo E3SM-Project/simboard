@@ -245,12 +245,13 @@ class SimulationCreate(CamelInBaseModel):
         ),
     ]
     run_config_deltas: Annotated[
-        dict[str, Any] | None,
+        list[dict[str, Any]] | None,
         Field(
             None,
             description=(
-                "Configuration differences relative to the canonical simulation "
-                "for this case. None for canonical simulations."
+                "List of configuration differences between the canonical "
+                "simulation and its non-canonical runs for the same case. "
+                "None when no differences have been recorded."
             ),
         ),
     ]
@@ -427,12 +428,13 @@ class SimulationOut(CamelOutBaseModel):
         ),
     ]
     run_config_deltas: Annotated[
-        dict[str, Any] | None,
+        list[dict[str, Any]] | None,
         Field(
             None,
             description=(
-                "Configuration differences relative to the canonical simulation "
-                "for this case. None for canonical simulations."
+                "List of configuration differences between the canonical "
+                "simulation and its non-canonical runs for the same case. "
+                "None when no differences have been recorded."
             ),
         ),
     ]

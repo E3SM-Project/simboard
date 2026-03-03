@@ -109,7 +109,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    run_config_deltas: Mapped[dict[str, Any] | None] = mapped_column(
+    run_config_deltas: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSONB, nullable=True
     )
 
