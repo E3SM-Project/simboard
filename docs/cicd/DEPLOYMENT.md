@@ -279,24 +279,18 @@ The backend image ships two entrypoints:
 | `entrypoint.sh`  | Application startup (Uvicorn)      |
 | `migrate.sh`     | Standalone Alembic migration runner |
 
-The `RUN_MIGRATIONS` environment variable controls whether
-`entrypoint.sh` runs migrations at startup:
-
-| Value   | Behavior                        | Use Case                  |
-| ------- | ------------------------------- | ------------------------- |
-| `true`  | Runs `alembic upgrade head`     | Development / single-replica |
-| `false` | Skips migrations                | Production multi-replica  |
-
-> **Default:** `true` (backward-compatible with existing
-> single-replica deployments).
+Migrations are **not** run during application startup.
+`entrypoint.sh` only waits for the database to be reachable and then
+starts Uvicorn. All schema changes are applied via `migrate.sh`,
+either as a Kubernetes Job or manually.
 
 ### Production Deployment Flow
 
 1. **Build** — CI pushes a new image to the registry.
 2. **Migrate** — Create a one-off Kubernetes Job in Rancher that runs
    `migrate.sh` against the production database.
-3. **Deploy** — Update the Deployment image tag; pods start with
-   `RUN_MIGRATIONS=false`.
+3. **Deploy** — Update the Deployment image tag; pods start without
+   running migrations.
 4. **Verify** — Confirm pods are healthy and the migration Job
    completed successfully.
 
@@ -320,28 +314,15 @@ The `RUN_MIGRATIONS` environment variable controls whether
 5. Once the Job shows **Succeeded**, proceed with the Deployment
    update
 
-#### Step 3 Detail: Application Deployment
-
-Set the following environment variable on the backend Deployment when
-running with multiple replicas:
-
-```
-RUN_MIGRATIONS=false
-```
-
-This ensures application pods start without attempting migrations.
-
 ### Startup Sequence (entrypoint.sh)
 
 1. **Database readiness check** — waits up to 30 seconds for
    PostgreSQL to accept connections via `pg_isready`.
-2. **Conditional migration** — if `RUN_MIGRATIONS` is `true`
-   (default), runs `alembic upgrade head`. Skipped when `false`.
-3. **Application start** — Uvicorn launches only after the preceding
-   steps succeed.
+2. **Application start** — Uvicorn launches only after the database
+   is reachable.
 
-If the database readiness check or migration step fails, the container
-exits immediately and does **not** start the application.
+If the database readiness check fails, the container exits immediately
+and does **not** start the application.
 
 ### migrate.sh Reference
 
@@ -366,14 +347,12 @@ command and exits with a non-zero status on failure.
 
 ### Scaling Constraints
 
-| Replicas | `RUN_MIGRATIONS` | Migration Method          |
-| -------- | ----------------- | ------------------------- |
-| 1        | `true` (default)  | Startup migration (safe)  |
-| >1       | `false`           | Dedicated migration Job   |
+Migrations are fully decoupled from application startup. The backend
+Deployment can be scaled to any number of replicas without risk of
+concurrent migration execution.
 
-> **Important:** Never run startup migrations with more than one
-> replica. Concurrent `alembic upgrade head` executions can cause race
-> conditions, failed deployments, or data corruption.
+Always run the migration Job **before** deploying a new image version
+that includes schema changes.
 
 ### Migration Rollback
 

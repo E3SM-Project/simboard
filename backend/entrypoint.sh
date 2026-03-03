@@ -31,23 +31,6 @@ done
 echo "✅ Database is ready"
 
 # -----------------------------------------------------------
-# Run Alembic migrations (optional, controlled by RUN_MIGRATIONS)
-# -----------------------------------------------------------
-# Set RUN_MIGRATIONS=false to skip migrations at startup.
-# In production multi-replica deployments, run migrations via a
-# separate Kubernetes Job instead.  See docs/cicd/DEPLOYMENT.md.
-if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-    echo "🔄 Running Alembic migrations..."
-    if ! uv run alembic upgrade head; then
-        echo "❌ Alembic migrations failed"
-        exit 1
-    fi
-    echo "✅ Alembic migrations complete"
-else
-    echo "⏭️  Skipping Alembic migrations (RUN_MIGRATIONS=false)"
-fi
-
-# -----------------------------------------------------------
 # Start application
 # -----------------------------------------------------------
 if [ "$ENV" = "production" ]; then
