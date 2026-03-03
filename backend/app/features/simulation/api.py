@@ -23,10 +23,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     the associated Case relationship.
     """
     case = sim.case
-    is_canonical = (
-        case.canonical_simulation_id is not None
-        and sim.id == case.canonical_simulation_id
-    )
+    is_canonical = sim.id == case.canonical_simulation_id
     change_count = (
         len(sim.run_config_deltas) if sim.run_config_deltas else 0
     )

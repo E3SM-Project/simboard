@@ -397,9 +397,13 @@ def _persist_simulations(
     db.flush()
 
     # Set canonical_simulation_id on Cases that don't have one yet.
-    # The first simulation per case (with run_config_deltas=None) is canonical.
+    case_ids = {sim.case_id for sim in created_sims}
+    cases = {
+        c.id: c
+        for c in db.query(Case).filter(Case.id.in_(case_ids)).all()
+    }
     for sim in created_sims:
-        case = db.query(Case).filter(Case.id == sim.case_id).first()
+        case = cases.get(sim.case_id)
         if case and case.canonical_simulation_id is None:
             case.canonical_simulation_id = sim.id
             db.add(case)

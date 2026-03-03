@@ -92,8 +92,18 @@ def _derive_execution_id(exp_dir: str) -> str:
     The execution_id is the basename of the experiment directory
     (e.g. ``1125772.260116-181605``).  Absolute filesystem paths are
     never stored.
+
+    Raises
+    ------
+    ValueError
+        If the derived execution_id is empty.
     """
-    return os.path.basename(exp_dir)
+    execution_id = os.path.basename(exp_dir)
+    if not execution_id:
+        raise ValueError(
+            f"Cannot derive execution_id from experiment directory: '{exp_dir}'"
+        )
+    return execution_id
 
 
 def _get_or_create_case(db: Session, case_name: str) -> Case:
