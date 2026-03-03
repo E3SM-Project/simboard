@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
@@ -109,6 +109,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    run_config_deltas: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     # Relationships
     # ~~~~~~~~~~~~~

@@ -1236,9 +1236,8 @@ class TestCanonicalRunIngestion:
         assert result.created_count == 1
         assert result.skipped_count == 1
         canonical = result.simulations[0]
-        assert canonical.extra is not None
-        assert "run_config_deltas" in canonical.extra
-        deltas = canonical.extra["run_config_deltas"]
+        assert canonical.run_config_deltas is not None
+        deltas = canonical.run_config_deltas
         assert len(deltas) == 1
         assert "compiler" in deltas[0]["deltas"]
         assert deltas[0]["deltas"]["compiler"]["canonical"] == "gcc-11"
@@ -1266,7 +1265,7 @@ class TestCanonicalRunIngestion:
         assert result.created_count == 1
         assert result.skipped_count == 1
         # No deltas recorded because configs are identical
-        assert result.simulations[0].extra == {}
+        assert result.simulations[0].run_config_deltas is None
 
     def test_different_case_names_create_separate_simulations(
         self, db: Session

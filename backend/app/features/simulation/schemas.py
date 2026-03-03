@@ -244,6 +244,16 @@ class SimulationCreate(CamelInBaseModel):
             description="Optional extra metadata in flexible dictionary/JSON format",
         ),
     ]
+    run_config_deltas: Annotated[
+        dict[str, Any] | None,
+        Field(
+            None,
+            description=(
+                "Configuration differences relative to the canonical simulation "
+                "for this case. None for canonical simulations."
+            ),
+        ),
+    ]
 
     # Relationships
     # --------------
@@ -414,6 +424,16 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             default_factory=dict,
             description="Optional extra metadata in flexible dictionary/JSON format",
+        ),
+    ]
+    run_config_deltas: Annotated[
+        dict[str, Any] | None,
+        Field(
+            None,
+            description=(
+                "Configuration differences relative to the canonical simulation "
+                "for this case. None for canonical simulations."
+            ),
         ),
     ]
 

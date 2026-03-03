@@ -7,8 +7,9 @@ Implements canonical run semantics for ``performance_archive`` ingestion:
   (sorted by experiment-directory name) is the *canonical baseline*.
 * Subsequent successful runs under the same case are compared against
   the canonical baseline.  Only configuration differences (deltas) are
-  recorded in the canonical simulation's ``extra`` JSONB field; separate
-  simulation records are **not** created for non-canonical runs.
+  recorded in the canonical simulation's ``run_config_deltas`` JSONB
+  field; separate simulation records are **not** created for
+  non-canonical runs.
 * Incomplete runs (missing required files) are skipped at the parser
   level and never reach ingestion.
 * Re-processing the same archive is idempotent thanks to the existing
@@ -108,7 +109,7 @@ def ingest_archive(
       ``SimulationCreate`` record.
     * Subsequent successful runs for the same case are compared against
       the canonical baseline; only configuration differences are stored
-      in the canonical simulation's ``extra["run_config_deltas"]`` list.
+      in the canonical simulation's ``run_config_deltas`` field.
     * Duplicate detection is based on the composite key
       ``(case_name, machine_id, simulation_start_date)``.
 
@@ -291,9 +292,9 @@ def _attach_config_delta(
     exp_dir: str,
     delta: dict[str, dict[str, str | None]],
 ) -> None:
-    """Attach a config delta to the canonical simulation's ``extra`` field.
+    """Attach a config delta to the canonical simulation's ``run_config_deltas`` field.
 
-    The delta is appended to ``extra["run_config_deltas"]`` so that all
+    The delta is appended to ``run_config_deltas`` so that all
     differences from non-canonical runs are preserved on the canonical
     simulation record.
 
@@ -314,10 +315,9 @@ def _attach_config_delta(
     canonical_case = canonical_metadata.get("case_name")
     for sim in simulations:
         if sim.case_name == canonical_case:
-            if sim.extra is None:
-                sim.extra = {}
-            deltas_list = sim.extra.setdefault("run_config_deltas", [])
-            deltas_list.append({"exp_dir": exp_dir, "deltas": delta})
+            if sim.run_config_deltas is None:
+                sim.run_config_deltas = []
+            sim.run_config_deltas.append({"exp_dir": exp_dir, "deltas": delta})
             break
 
 
