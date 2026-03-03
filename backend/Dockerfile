@@ -69,11 +69,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 # Copy preinstalled virtualenv and source files
 COPY --from=builder /app /app
 
-# COPY entrypoint.sh BEFORE switching users
+# COPY entrypoint and migration scripts BEFORE switching users
 COPY entrypoint.sh /app/entrypoint.sh
+COPY migrate.sh /app/migrate.sh
 
-# Make it executable WHILE STILL ROOT
-RUN chmod +x /app/entrypoint.sh
+# Make them executable WHILE STILL ROOT
+RUN chmod +x /app/entrypoint.sh /app/migrate.sh
 
 EXPOSE 8000
 

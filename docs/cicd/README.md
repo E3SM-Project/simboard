@@ -103,7 +103,11 @@ Frontend and backend are released independently using component-scoped tags.
    - Check [Actions](https://github.com/E3SM-Project/simboard/actions) tab
    - Only the matching component workflow will trigger
 
-4. **Deploy to NERSC Spin:**
+4. **Run database migrations (if applicable):**
+   - Create a migration Job in [Rancher](https://rancher2.spin.nersc.gov/dashboard/home) using the new backend image
+   - See [DEPLOYMENT.md — Database Migrations](DEPLOYMENT.md#database-migrations) for details
+
+5. **Deploy to NERSC Spin:**
    - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
    - Navigate to **Workloads → Deployments** in the prod namespace
    - Edit the deployment's image tag to the new version (e.g., `1.0.0`)

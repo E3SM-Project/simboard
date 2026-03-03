@@ -11,6 +11,8 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 - [Image Tagging Strategy](#image-tagging-strategy)
 - [Development Deployment](#development-deployment)
 - [Production Release Process](#production-release-process)
+- [Database Migrations](#database-migrations)
+- [Network and Firewall Requirements](#network-and-firewall-requirements)
 - [Rollback Procedure](#rollback-procedure)
 - [Manual Builds](#manual-builds)
 - [Troubleshooting](#troubleshooting)
@@ -254,19 +256,182 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 
 ## Database Migrations
 
-Alembic database migrations run **automatically** when the backend container starts. No manual migration step is required during deployment.
+### Strategy Overview
 
-### Startup Sequence
+Database migrations are decoupled from application startup to support
+multi-replica and rolling deployments. The recommended deployment flow
+is:
 
-1. **Database readiness check** — the container waits (up to 30 seconds) for the PostgreSQL server to accept connections using `pg_isready`.
-2. **`alembic upgrade head`** — applies any pending migrations. If the database is already up to date, this is a no-op.
-3. **Application start** — Uvicorn launches only after migrations succeed.
+```
+build image → run migration Job → deploy/scale application
+```
 
-If either the database readiness check or migration step fails, the container exits immediately and does **not** start the application.
+Migrations are executed via a **dedicated Kubernetes Job** in Rancher
+that runs `alembic upgrade head` exactly once, before the application
+Deployment is updated or scaled.
 
-### Concurrency Note
+### How It Works
 
-The current deployment assumes a **single backend replica**. If horizontal scaling is introduced, migration execution should be separated into a one-time init container or deployment job to avoid race conditions.
+The backend image ships two entrypoints:
+
+| Script           | Purpose                            |
+| ---------------- | ---------------------------------- |
+| `entrypoint.sh`  | Application startup (Uvicorn)      |
+| `migrate.sh`     | Standalone Alembic migration runner |
+
+The `RUN_MIGRATIONS` environment variable controls whether
+`entrypoint.sh` runs migrations at startup:
+
+| Value   | Behavior                        | Use Case                  |
+| ------- | ------------------------------- | ------------------------- |
+| `true`  | Runs `alembic upgrade head`     | Development / single‑replica |
+| `false` | Skips migrations                | Production multi‑replica  |
+
+> **Default:** `true` (backward‑compatible with existing
+> single‑replica deployments).
+
+### Production Deployment Flow
+
+1. **Build** — CI pushes a new image to the registry.
+2. **Migrate** — Create a one‑off Kubernetes Job in Rancher that runs
+   `migrate.sh` against the production database.
+3. **Deploy** — Update the Deployment image tag; pods start with
+   `RUN_MIGRATIONS=false`.
+4. **Verify** — Confirm pods are healthy and the migration Job
+   completed successfully.
+
+#### Step 2 Detail: Running a Migration Job in Rancher
+
+1. Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
+2. Navigate to **Workloads → Jobs** in the prod namespace
+3. Click **Create** and configure:
+
+   | Field               | Value |
+   | ------------------- | ----- |
+   | **Name**            | `simboard-migrate-<version>` (e.g., `simboard-migrate-1-1-0`) |
+   | **Image**           | `registry.nersc.gov/e3sm/simboard/backend:<version>` |
+   | **Command**          | `/app/migrate.sh` |
+   | **Environment**     | `DATABASE_URL` — same value used by the backend Deployment |
+   | **Restart Policy**  | `Never` |
+   | **Completions**     | `1` |
+   | **Back Off Limit**  | `1` |
+
+4. Click **Create** and monitor the Job logs in Rancher
+5. Once the Job shows **Succeeded**, proceed with the Deployment
+   update
+
+#### Step 3 Detail: Application Deployment
+
+Set the following environment variable on the backend Deployment when
+running with multiple replicas:
+
+```
+RUN_MIGRATIONS=false
+```
+
+This ensures application pods start without attempting migrations.
+
+### Startup Sequence (entrypoint.sh)
+
+1. **Database readiness check** — waits up to 30 seconds for
+   PostgreSQL to accept connections via `pg_isready`.
+2. **Conditional migration** — if `RUN_MIGRATIONS` is `true`
+   (default), runs `alembic upgrade head`. Skipped when `false`.
+3. **Application start** — Uvicorn launches only after the preceding
+   steps succeed.
+
+If the database readiness check or migration step fails, the container
+exits immediately and does **not** start the application.
+
+### migrate.sh Reference
+
+The `migrate.sh` script provides a standalone migration runner:
+
+```bash
+# Apply all pending migrations (default)
+./migrate.sh
+
+# Show current migration revision
+./migrate.sh current
+
+# Show migration history
+./migrate.sh history
+
+# Downgrade by one revision
+./migrate.sh downgrade -1
+```
+
+The script waits for database readiness before executing any Alembic
+command and exits with a non‑zero status on failure.
+
+### Scaling Constraints
+
+| Replicas | `RUN_MIGRATIONS` | Migration Method          |
+| -------- | ----------------- | ------------------------- |
+| 1        | `true` (default)  | Startup migration (safe)  |
+| >1       | `false`           | Dedicated migration Job   |
+
+> **Important:** Never run startup migrations with more than one
+> replica. Concurrent `alembic upgrade head` executions can cause race
+> conditions, failed deployments, or data corruption.
+
+### Migration Rollback
+
+If a migration must be reverted:
+
+1. Create a new Job in Rancher with the **previous** backend image
+   version.
+2. Set the command to `/app/migrate.sh downgrade -1` (or the
+   appropriate Alembic target revision).
+3. Monitor the Job until it completes.
+4. Roll back the backend Deployment to the previous image tag.
+
+> **Note:** Downgrade migrations must be implemented in the Alembic
+> revision files. Always verify that downgrade paths exist before
+> relying on them.
+
+## Network and Firewall Requirements
+
+### Database Connectivity from Spin
+
+Backend pods and migration Jobs running in NERSC Spin connect to
+PostgreSQL using the `DATABASE_URL` environment variable.
+
+| Setting            | Value                              |
+| ------------------ | ---------------------------------- |
+| **Host**           | Configured via `DATABASE_URL`      |
+| **Port**           | `5432` (default PostgreSQL port)   |
+| **Protocol**       | TCP                                |
+| **Authentication** | Username/password in `DATABASE_URL`|
+
+### Firewall / Network Policy
+
+- The PostgreSQL instance must allow inbound connections from the Spin
+  namespace where SimBoard runs.
+- If the database is hosted outside Spin (e.g., on a NERSC-managed
+  database service), a firewall rule or network policy must permit
+  traffic from the Spin pod CIDR to the database host on port 5432.
+- Migration Jobs run in the **same namespace** as the backend
+  Deployment. No additional service account or network policy is
+  required beyond what the Deployment already uses.
+- If the database is deployed as a Spin workload in the same
+  namespace, connectivity works via the Kubernetes service name
+  (e.g., `db:5432`) without additional firewall rules.
+
+### Verifying Connectivity
+
+From a running pod or Job in Rancher, use the container shell
+(**⋮ → Execute Shell**):
+
+```bash
+pg_isready -d "$DATABASE_URL"
+```
+
+If this fails, verify:
+
+1. The `DATABASE_URL` is correct (host, port, credentials)
+2. Firewall rules allow traffic from the Spin namespace
+3. The PostgreSQL service is running and healthy
 
 ## Rollback Procedure
 
