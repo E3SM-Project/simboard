@@ -3,6 +3,17 @@ import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
 
 /**
+ * API response model for a Case.
+ */
+export interface CaseOut {
+  id: string;
+  name: string;
+  canonicalSimulationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * Request payload for creating a new simulation.
  * Equivalent to FastAPI SimulationCreate schema.
  */
@@ -10,7 +21,8 @@ export interface SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
   name: string;
-  caseName: string;
+  caseId: string; // UUID
+  executionId: string;
   description: string | null;
   compset: string;
   compsetAlias: string;
@@ -57,6 +69,7 @@ export interface SimulationCreate {
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
   extra?: Record<string, unknown>;
+  runConfigDeltas?: Record<string, { canonical: unknown; current: unknown }> | null;
 
   // Relationships
   // ~~~~~~~~~~~~~~
@@ -79,6 +92,9 @@ export interface SimulationOut extends SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
   id: string;
+  caseName: string;
+  isCanonical: boolean;
+  changeCount: number;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~

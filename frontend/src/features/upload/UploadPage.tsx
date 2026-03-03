@@ -34,7 +34,8 @@ type OpenKey =
 const initialState: SimulationCreateForm = {
   // --- Configuration ---
   name: '', // required
-  caseName: '', // required
+  caseId: '', // required (UUID of the Case)
+  executionId: '', // required
   description: null,
   compset: '', // required
   compsetAlias: '', // required
@@ -107,11 +108,18 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         placeholder: 'e.g., E3SM v3 LR Control 20190815',
       },
       {
-        label: 'Simulation Case Name',
-        name: 'caseName',
+        label: 'Case ID',
+        name: 'caseId',
         required: true,
         type: 'text',
-        placeholder: 'e.g., 20190815.ne30_oECv3_ICG.A_WCYCL1850S_CMIP6.piControl',
+        placeholder: 'UUID of the Case this simulation belongs to',
+      },
+      {
+        label: 'Execution ID',
+        name: 'executionId',
+        required: true,
+        type: 'text',
+        placeholder: 'e.g., 1125772.260116-181605',
       },
       {
         label: 'Description',

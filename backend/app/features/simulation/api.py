@@ -8,12 +8,41 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationOut
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.schemas import CaseOut, SimulationCreate, SimulationOut
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
+
+
+def _simulation_to_out(sim: Simulation) -> SimulationOut:
+    """Convert a Simulation ORM instance to a SimulationOut schema.
+
+    Derives ``case_name``, ``is_canonical``, and ``change_count`` from
+    the associated Case relationship.
+    """
+    case = sim.case
+    is_canonical = (
+        case.canonical_simulation_id is not None
+        and sim.id == case.canonical_simulation_id
+    )
+    change_count = (
+        len(sim.run_config_deltas) if sim.run_config_deltas else 0
+    )
+    return SimulationOut.model_validate(
+        {
+            **{
+                k: v
+                for k, v in sim.__dict__.items()
+                if not k.startswith("_")
+            },
+            "case_name": case.name,
+            "is_canonical": is_canonical,
+            "change_count": change_count,
+        },
+        from_attributes=True,
+    )
 
 
 @router.post(
@@ -35,6 +64,14 @@ def create_simulation(
 ):
     """Create a new simulation record in the database."""
     now = datetime.now(timezone.utc)
+
+    # Verify the case exists
+    case = db.query(Case).filter(Case.id == payload.case_id).first()
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Case '{payload.case_id}' not found.",
+        )
 
     sim = Simulation(
         **payload.model_dump(
@@ -79,7 +116,19 @@ def create_simulation(
         db.add(sim)
         db.flush()
 
-    return SimulationOut.model_validate(sim, from_attributes=True)
+    # Re-query with relationships loaded
+    sim = (
+        db.query(Simulation)
+        .options(
+            joinedload(Simulation.case),
+            joinedload(Simulation.machine),
+            selectinload(Simulation.artifacts),
+            selectinload(Simulation.links),
+        )
+        .filter(Simulation.id == sim.id)
+        .first()
+    )
+    return _simulation_to_out(sim)
 
 
 @router.get(
@@ -111,6 +160,7 @@ def list_simulations(db: Session = Depends(get_database_session)):
     sims = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.case),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -118,7 +168,7 @@ def list_simulations(db: Session = Depends(get_database_session)):
         .order_by(Simulation.created_at.desc())
         .all()
     )
-    return sims
+    return [_simulation_to_out(s) for s in sims]
 
 
 @router.get(
@@ -155,6 +205,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     sim = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.case),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -166,4 +217,38 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    return sim
+    return _simulation_to_out(sim)
+
+
+# ---- Case endpoints ----
+case_router = APIRouter(prefix="/cases", tags=["Cases"])
+
+
+@case_router.get(
+    "",
+    response_model=list[CaseOut],
+    responses={
+        200: {"description": "List all cases."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_cases(db: Session = Depends(get_database_session)):
+    """Retrieve all cases ordered by creation date descending."""
+    return db.query(Case).order_by(Case.created_at.desc()).all()
+
+
+@case_router.get(
+    "/{case_id}",
+    response_model=CaseOut,
+    responses={
+        200: {"description": "Case found."},
+        404: {"description": "Case not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def get_case(case_id: UUID, db: Session = Depends(get_database_session)):
+    """Retrieve a case by its unique identifier."""
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case

@@ -105,6 +105,40 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         size: 260,
       },
       {
+        accessorKey: 'caseName',
+        header: 'Case',
+        cell: ({ row }) => <span>{row.original.caseName}</span>,
+        size: 200,
+      },
+      {
+        accessorKey: 'executionId',
+        header: 'Execution ID',
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.executionId}</span>
+        ),
+        size: 200,
+      },
+      {
+        accessorKey: 'isCanonical',
+        header: 'Canonical',
+        cell: ({ row }) =>
+          row.original.isCanonical ? (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              Canonical
+            </Badge>
+          ) : null,
+        size: 100,
+      },
+      {
+        accessorKey: 'changeCount',
+        header: 'Changes',
+        cell: ({ row }) =>
+          row.original.changeCount > 0 ? (
+            <Badge variant="secondary">{row.original.changeCount}</Badge>
+          ) : null,
+        size: 80,
+      },
+      {
         accessorKey: 'simulationType',
         header: 'Type',
         cell: ({ row }) => (

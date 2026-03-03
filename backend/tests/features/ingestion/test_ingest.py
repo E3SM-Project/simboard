@@ -287,7 +287,7 @@ class TestIngestArchive:
 
         for idx, date_str in enumerate(test_cases):
             mock_simulations = {
-                f"/path/to/108116{idx}.251218-20092{idx}": {
+                f"/path/to/108200{idx}.251218-200900": {
                     "name": "sim1",
                     "case_name": f"case1_{date_str}",
                     "compset": "test",

@@ -20,7 +20,7 @@ from app.features.ingestion.schemas import (
     IngestionStatus,
 )
 from app.features.machine.models import Machine
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
@@ -339,9 +339,15 @@ def _persist_simulations(
     user: User,
     hpc_username: str | None = None,
 ) -> None:
-    """Persist simulation records with artifacts and links to the database."""
+    """Persist simulation records with artifacts and links to the database.
+
+    After all simulations are flushed, sets the canonical simulation on
+    each Case that does not yet have one.  The first simulation per Case
+    (in insertion order) becomes canonical.
+    """
 
     now = datetime.now(timezone.utc)
+    created_sims: list[Simulation] = []
 
     for sim_create in simulations:
         data = sim_create.model_dump(
@@ -386,5 +392,16 @@ def _persist_simulations(
                 sim.links.append(ExternalLink(**link_data))
 
         db.add(sim)
+        created_sims.append(sim)
+
+    db.flush()
+
+    # Set canonical_simulation_id on Cases that don't have one yet.
+    # The first simulation per case (with run_config_deltas=None) is canonical.
+    for sim in created_sims:
+        case = db.query(Case).filter(Case.id == sim.case_id).first()
+        if case and case.canonical_simulation_id is None:
+            case.canonical_simulation_id = sim.id
+            db.add(case)
 
     db.flush()

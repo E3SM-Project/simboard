@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,13 +24,48 @@ if TYPE_CHECKING:
     from app.features.machine.models import Machine
 
 
+class Case(Base, IDMixin, TimestampMixin):
+    """A logical experiment grouped by case name.
+
+    Each Case contains one or more Simulation executions.  Exactly one
+    Simulation may be designated as the *canonical baseline* via
+    :attr:`canonical_simulation_id`.
+    """
+
+    __tablename__ = "cases"
+
+    name: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    canonical_simulation_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("simulations.id", use_alter=True, name="fk_cases_canonical_sim"),
+        nullable=True,
+    )
+
+    # Relationships
+    simulations: Mapped[list[Simulation]] = relationship(
+        "Simulation",
+        back_populates="case",
+        foreign_keys="Simulation.case_id",
+    )
+    canonical_simulation: Mapped[Simulation | None] = relationship(
+        "Simulation",
+        foreign_keys=[canonical_simulation_id],
+        post_update=True,
+    )
+
+
 class Simulation(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
 
     # Configuration
     # ~~~~~~~~~~~~~~
     name: Mapped[str] = mapped_column(String(200), index=True)
-    case_name: Mapped[str] = mapped_column(String(200), index=True)
+    case_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id"), index=True, nullable=False
+    )
+    execution_id: Mapped[str] = mapped_column(
+        Text, unique=True, index=True, nullable=False
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(Text)
@@ -109,12 +144,15 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    run_config_deltas: Mapped[list[dict[str, Any]] | None] = mapped_column(
+    run_config_deltas: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
 
     # Relationships
     # ~~~~~~~~~~~~~
+    case: Mapped[Case] = relationship(
+        "Case", back_populates="simulations", foreign_keys=[case_id]
+    )
     created_by_user = relationship("User", foreign_keys=[created_by], lazy="joined")
     last_updated_by_user = relationship(
         "User", foreign_keys=[last_updated_by], lazy="joined"
@@ -131,17 +169,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"
-    )
-
-    # Constraints
-    # ~~~~~~~~~~~
-    __table_args__ = (
-        UniqueConstraint(
-            "case_name",
-            "machine_id",
-            "simulation_start_date",
-            name="uq_simulation_case_machine_date",
-        ),
     )
 
 
