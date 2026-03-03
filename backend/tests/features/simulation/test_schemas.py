@@ -20,7 +20,8 @@ class TestSimulationCreateSchema:
     def test_valid_simulation_create_required_fields(self):
         payload = {
             "name": "Test Simulation",
-            "caseName": "test_case",
+            "caseId": uuid4(),
+            "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -42,7 +43,8 @@ class TestSimulationCreateSchema:
     def test_valid_simulation_create_optional_fields(self):
         payload = {
             "name": "Test Simulation",
-            "caseName": "test_case",
+            "caseId": uuid4(),
+            "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -69,6 +71,7 @@ class TestSimulationCreateSchema:
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
+            "runConfigDeltas": {"compiler": {"canonical": "gcc-11", "current": "gcc-12"}},
             "artifacts": [
                 {
                     "kind": "output",
@@ -104,10 +107,15 @@ class TestSimulationCreateSchema:
 class TestSimulationOutSchema:
     def test_valid_simulation_out_required_fields(self):
         # Arrange: Define the required fields
+        case_id = uuid4()
         fields = {
             "id": uuid4(),
             "name": "Test Simulation",
+            "case_id": case_id,
             "case_name": "test_case",
+            "execution_id": "1081156.251218-200923",
+            "is_canonical": True,
+            "change_count": 0,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -180,10 +188,15 @@ class TestSimulationOutSchema:
         )
 
     def test_valid_simulation_out_optional_fields(self):
+        case_id = uuid4()
         required_fields = {
             "id": uuid4(),
             "name": "Test Simulation",
+            "case_id": case_id,
             "case_name": "test_case",
+            "execution_id": "1081156.251218-200923",
+            "is_canonical": False,
+            "change_count": 2,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -232,6 +245,7 @@ class TestSimulationOutSchema:
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
             "extra": {"key": "value"},
+            "run_config_deltas": {"compiler": {"canonical": "gcc-11", "current": "gcc-12"}},
             "artifacts": [
                 {
                     "kind": "output",
@@ -273,7 +287,11 @@ class TestSimulationOutSchema:
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
             name="Test Simulation",
+            case_id=uuid4(),
             case_name="test_case",
+            execution_id="1081156.251218-200923",
+            is_canonical=True,
+            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -341,7 +359,11 @@ class TestSimulationOutSchema:
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
             name="Test Simulation",
+            case_id=uuid4(),
             case_name="test_case",
+            execution_id="1081156.251218-200923",
+            is_canonical=True,
+            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",

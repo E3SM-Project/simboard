@@ -7,7 +7,7 @@ from app.api.version import API_BASE
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Case, Simulation
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -32,16 +32,27 @@ def override_auth_dependency(normal_user_sync):
     app.dependency_overrides.clear()
 
 
+def _create_case(db: Session, name: str = "test_case") -> Case:
+    """Helper to create a Case."""
+    case = Case(name=name)
+    db.add(case)
+    db.flush()
+    return case
+
+
 class TestCreateSimulation:
     def test_endpoint_succeeds_with_valid_payload(
         self, client, db: Session, normal_user_sync
     ):
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_create")
+        db.commit()
 
         payload = {
             "name": "Test Simulation 2",
-            "caseName": "test_case_2",
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -73,6 +84,9 @@ class TestCreateSimulation:
         assert res.status_code == 201
         data = res.json()
         assert data["name"] == payload["name"]
+        assert data["caseId"] == str(case.id)
+        assert data["caseName"] == "test_case_create"
+        assert data["executionId"] == "1081156.251218-200923"
         assert data["createdBy"] == str(normal_user_sync["id"])
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
         assert len(data["artifacts"]) == 1
@@ -91,6 +105,8 @@ class TestListSimulations:
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
+        case = _create_case(db, "test_case_list")
+
         ingestion = Ingestion(
             source_type=IngestionSourceType.BROWSER_UPLOAD,
             source_reference="test_simulation_list",
@@ -106,7 +122,8 @@ class TestListSimulations:
 
         sim = Simulation(
             name="Test Simulation",
-            case_name="test_case",
+            case_id=case.id,
+            execution_id="list-test-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -131,6 +148,8 @@ class TestListSimulations:
         data = res.json()
         assert len(data) == 1
         assert data[0]["name"] == sim.name
+        assert data[0]["caseName"] == "test_case_list"
+        assert data[0]["executionId"] == "list-test-exec-1"
 
 
 class TestGetSimulation:
@@ -139,6 +158,8 @@ class TestGetSimulation:
     ):
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_get")
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.BROWSER_UPLOAD,
@@ -155,7 +176,8 @@ class TestGetSimulation:
 
         sim = Simulation(
             name="Test Simulation",
-            case_name="test_case",
+            case_id=case.id,
+            execution_id="get-test-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -177,7 +199,10 @@ class TestGetSimulation:
 
         res = client.get(f"{API_BASE}/simulations/{sim.id}")
         assert res.status_code == 200
-        assert res.json()["name"] == sim.name
+        data = res.json()
+        assert data["name"] == sim.name
+        assert data["caseName"] == "test_case_get"
+        assert data["executionId"] == "get-test-exec-1"
 
     def test_endpoint_raises_404_if_simulation_not_found(self, client):
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
