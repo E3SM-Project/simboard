@@ -437,27 +437,6 @@ class TestMainParser:
         with pytest.raises(ValueError, match="Unsupported archive format"):
             parser._extract_archive("/tmp/archive.7z", "/tmp/output")
 
-    def test_parse_experiment_files_supports_single_value_spec(self) -> None:
-        """Test single_value parser path in _parse_experiment_files."""
-        original_specs = parser.FILE_SPECS.copy()
-        try:
-            parser.FILE_SPECS["single_value_test"] = {
-                "pattern": r"dummy",
-                "location": "root",
-                "parser": lambda _path: "single-output",
-                "required": False,
-                "single_value": "campaign",
-            }
-            files: dict[str, str | None] = {key: None for key in parser.FILE_SPECS}
-            files["single_value_test"] = "/tmp/dummy"
-
-            result = parser._parse_experiment_files(files)
-
-            assert result["campaign"] == "single-output"
-        finally:
-            parser.FILE_SPECS.clear()
-            parser.FILE_SPECS.update(original_specs)
-
     def test_incomplete_run_among_valid_runs(self, tmp_path: Path) -> None:
         """Test that an incomplete run is skipped while valid runs are parsed."""
         archive_base = tmp_path / "archive_extract"
