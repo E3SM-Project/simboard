@@ -1200,16 +1200,19 @@ class TestCanonicalRunIngestion:
     def test_canonical_run_selected_from_multiple_runs(
         self, db: Session
     ) -> None:
-        """Every run per casename gets its own SimulationCreate record."""
+        """First run per case is canonical (None deltas), subsequent runs
+        with config differences get a delta dict."""
         machine = self._create_machine(db, "test-machine")
 
-        # Two runs with the same case_name but different start dates
+        # Two runs with the same case_name but different compilers
         mock_simulations = {
             "/path/to/1081183.251218-200943": self._make_metadata(
                 simulation_start_date="2020-01-01",
+                compiler="gcc-11",
             ),
             "/path/to/1081184.251218-200944": self._make_metadata(
                 simulation_start_date="2020-06-01",
+                compiler="gcc-12",
             ),
         }
 
@@ -1224,7 +1227,9 @@ class TestCanonicalRunIngestion:
         assert len(result.simulations) == 2
         # Canonical run has run_config_deltas=None
         canonical = [s for s in result.simulations if s.run_config_deltas is None]
+        non_canonical = [s for s in result.simulations if s.run_config_deltas is not None]
         assert len(canonical) == 1
+        assert len(non_canonical) == 1
 
     def test_config_delta_stored_for_non_canonical_run(
         self, db: Session

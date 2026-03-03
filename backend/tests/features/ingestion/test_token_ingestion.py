@@ -10,7 +10,7 @@ from app.api.version import API_BASE
 from app.common.models.base import Base
 from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.auth.token import generate_token
 from app.features.user.models import ApiToken, User, UserRole
@@ -256,6 +256,12 @@ class TestIngestionWithAPIToken:
         db.add(machine)
         db.commit()
 
+        # Create a case for the test simulation
+        case = Case(name="test_case")
+        db.add(case)
+        db.flush()
+        db.commit()
+
         # Mock the necessary functions
         with (
             patch("app.features.ingestion.api._validate_archive_path") as mock_validate,
@@ -267,7 +273,8 @@ class TestIngestionWithAPIToken:
 
             mock_sim = SimulationCreate(
                 name="test_sim",
-                caseName="test_case",
+                caseId=case.id,
+                executionId="1081156.251218-200923",
                 compset="test_compset",
                 compsetAlias="test_alias",
                 gridName="test_grid",
