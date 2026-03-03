@@ -26,13 +26,13 @@ AllSimulations = dict[str, SimulationMetadata]
 logger = _setup_custom_logger(__name__)
 
 
-# The specifications for each file type to be parsed.
 class FileSpec(TypedDict, total=False):
+    """Specifications for each file type to be parsed."""
+
     pattern: str
     location: str
     parser: Callable
     required: bool
-    single_value: str
 
 
 FILE_SPECS: dict[str, FileSpec] = {
@@ -150,14 +150,14 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
             f"Processing base directory: {base_dir} with {len(sorted_subdirs)} "
             "experiment subdirectories."
         )
+
         for exp_dir in sorted_subdirs:
             try:
                 files = _locate_files(exp_dir)
             except FileNotFoundError as exc:
-                logger.warning(
-                    f"Skipping incomplete run in '{exp_dir}': {exc}"
-                )
+                logger.warning(f"Skipping incomplete run in '{exp_dir}': {exc}")
                 skipped_count += 1
+
                 continue
 
             results[exp_dir] = _parse_experiment_files(files)
@@ -363,11 +363,7 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
             continue
 
         parser: Callable = spec["parser"]
-
-        if "single_value" not in spec:
-            metadata.update(parser(path))
-        else:
-            metadata[spec["single_value"]] = parser(path)
+        metadata.update(parser(path))
 
     populated_fields: SimulationMetadata = {
         "name": metadata.get("case_name"),
