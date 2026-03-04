@@ -33,7 +33,6 @@ type OpenKey =
 // -------------------- Initial Form State --------------------
 const initialState: SimulationCreateForm = {
   // --- Configuration ---
-  name: '', // required
   caseId: '', // required (UUID of the Case)
   executionId: '', // required
   description: null,
@@ -100,13 +99,6 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   // --- Configuration fields (matches initialState order)
   const configFields = useMemo(
     (): RenderableField[] => [
-      {
-        name: 'name',
-        label: 'Simulation Name',
-        type: 'text',
-        required: true,
-        placeholder: 'e.g., E3SM v3 LR Control 20190815',
-      },
       {
         label: 'Case ID',
         name: 'caseId',
@@ -666,7 +658,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             description:
               typeof data?.detail === 'string'
                 ? data.detail
-                : 'A simulation with the same name or case already exists.',
+                : 'A simulation with the same execution ID already exists.',
             variant: 'destructive',
           });
 

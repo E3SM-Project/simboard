@@ -74,7 +74,7 @@ export const SimulationDetailsView = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{simulation.name}</h1>
+          <h1 className="text-2xl font-bold">{simulation.caseName}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Type:</span>
             <SimulationTypeBadge simulationType={simulation.simulationType} />
@@ -117,9 +117,6 @@ export const SimulationDetailsView = ({
                 <CardTitle className="text-base">Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <FieldRow label="Simulation Name">
-                  <ReadonlyInput value={simulation.name} />
-                </FieldRow>
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>

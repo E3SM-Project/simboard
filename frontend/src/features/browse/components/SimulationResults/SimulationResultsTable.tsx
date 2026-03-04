@@ -63,14 +63,14 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { sticky: true, width: 50, position: 'left' },
   },
   {
-    accessorKey: 'name',
+    accessorKey: 'caseName',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Name
+        Case Name
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('name')}</div>,
+    cell: ({ row }) => <div>{row.getValue('caseName')}</div>,
     enableSorting: true,
     meta: { sticky: true, width: 200, position: 'left' },
   },

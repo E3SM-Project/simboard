@@ -32,7 +32,7 @@ export const ComparePage = ({
 
   const simHeaders = selectedSimulationIds.map((id) => {
     const sim = selectedSimulations.find((s) => s.id === id);
-    return sim?.name || id;
+    return sim?.caseName || id;
   });
   const [headers, setHeaders] = useState(simHeaders);
 
@@ -100,7 +100,6 @@ export const ComparePage = ({
 
   const metrics = {
     configuration: [
-      makeMetricRow('Simulation Name', 'name', ''),
       makeMetricRow('Case Name', 'caseName', ''),
       makeMetricRow('Model Version', 'gitTag', ''),
       makeMetricRow('Compset', 'compset', ''),
@@ -209,7 +208,7 @@ export const ComparePage = ({
 
   useEffect(() => {
     setHeaders(
-      selectedSimulationIds.map((id) => selectedSimulations.find((s) => s.id === id)?.name || id),
+      selectedSimulationIds.map((id) => selectedSimulations.find((s) => s.id === id)?.caseName || id),
     );
     setOrder(selectedSimulationIds.map((_, i) => i));
   }, [selectedSimulationIds, selectedSimulations]);

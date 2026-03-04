@@ -110,7 +110,6 @@ class TestIngestFromPathEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-summary-1",
                     "compset": "AQUAPLANET",
@@ -143,7 +142,6 @@ class TestIngestFromPathEndpoint:
         data = res.json()
         assert data["created_count"] == 1
         assert data["duplicate_count"] == 0
-        assert data["simulations"][0]["name"] == "Test Simulation"
 
     def test_endpoint_returns_409_on_conflict(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
@@ -176,7 +174,6 @@ class TestIngestFromPathEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Sim1",
                     "caseId": str(case1.id),
                     "executionId": "exec-errors-1",
                     "compset": "AQUAPLANET",
@@ -194,7 +191,6 @@ class TestIngestFromPathEndpoint:
             ),
             SimulationCreate.model_validate(
                 {
-                    "name": "Sim2",
                     "caseId": str(case2.id),
                     "executionId": "exec-errors-2",
                     "compset": "AQUAPLANET",
@@ -233,8 +229,6 @@ class TestIngestFromPathEndpoint:
         assert data["errors"] == mock_errors
 
         assert len(data["simulations"]) == 2
-        assert data["simulations"][0]["name"] == "Sim1"
-        assert data["simulations"][1]["name"] == "Sim2"
 
     def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""
@@ -254,7 +248,6 @@ class TestIngestFromPathEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-audit-1",
                     "compset": "AQUAPLANET",
@@ -368,7 +361,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-zip-1",
                     "compset": "AQUAPLANET",
@@ -421,7 +413,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-targz-1",
                     "compset": "AQUAPLANET",
@@ -501,7 +492,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-sha256-1",
                     "compset": "AQUAPLANET",
@@ -564,7 +554,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
                     "caseId": str(case.id),
                     "executionId": "exec-partial-1",
                     "compset": "AQUAPLANET",
@@ -831,7 +820,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Artifacts",
                     "caseId": str(case.id),
                     "executionId": "exec-artifacts-1",
                     "compset": "AQUAPLANET",
@@ -895,7 +883,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Links",
                     "caseId": str(case.id),
                     "executionId": "exec-links-1",
                     "compset": "AQUAPLANET",
@@ -978,7 +965,6 @@ class TestIngestFromUploadEndpoint:
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Git URL",
                     "caseId": str(case.id),
                     "executionId": "exec-git-url-1",
                     "compset": "AQUAPLANET",

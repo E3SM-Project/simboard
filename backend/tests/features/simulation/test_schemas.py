@@ -19,7 +19,6 @@ from app.features.user.schemas import UserPreview
 class TestSimulationCreateSchema:
     def test_valid_simulation_create_required_fields(self):
         payload = {
-            "name": "Test Simulation",
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
@@ -42,7 +41,6 @@ class TestSimulationCreateSchema:
 
     def test_valid_simulation_create_optional_fields(self):
         payload = {
-            "name": "Test Simulation",
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
@@ -110,7 +108,6 @@ class TestSimulationOutSchema:
         case_id = uuid4()
         fields = {
             "id": uuid4(),
-            "name": "Test Simulation",
             "case_id": case_id,
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
@@ -191,7 +188,6 @@ class TestSimulationOutSchema:
         case_id = uuid4()
         required_fields = {
             "id": uuid4(),
-            "name": "Test Simulation",
             "case_id": case_id,
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
@@ -286,7 +282,6 @@ class TestSimulationOutSchema:
     def test_grouped_artifacts_computed_field(self):
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
-            name="Test Simulation",
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
@@ -358,7 +353,6 @@ class TestSimulationOutSchema:
     def test_grouped_links_computed_field(self):
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
-            name="Test Simulation",
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",

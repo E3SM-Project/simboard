@@ -140,7 +140,7 @@ def ingest_archive(  # noqa: C901
     case_groups: dict[str, list[tuple[str, SimulationMetadata]]] = defaultdict(list)
 
     for exp_dir, metadata in all_simulations.items():
-        case_name = metadata.get("case_name") or metadata.get("name") or "unknown"
+        case_name = metadata.get("case_name") or "unknown"
         case_groups[case_name].append((exp_dir, metadata))
 
     simulations: list[SimulationCreate] = []
@@ -200,7 +200,7 @@ def ingest_archive(  # noqa: C901
                     simulations.append(sim_create)
                     logger.info(
                         f"Mapped canonical simulation from {exp_dir}: "
-                        f"{metadata.get('name')}"
+                        f"{metadata.get('case_name')}"
                     )
                 else:
                     # Subsequent successful run → separate Simulation with delta.
@@ -451,7 +451,6 @@ def _map_metadata_to_schema(
     result = SimulationCreate.model_validate(
         {
             # Required identification fields
-            "name": metadata.get("name"),
             "caseId": case_id,
             "executionId": execution_id,
             # Required configuration fields

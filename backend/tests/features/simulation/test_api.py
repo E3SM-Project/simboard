@@ -50,7 +50,6 @@ class TestCreateSimulation:
         db.commit()
 
         payload = {
-            "name": "Test Simulation 2",
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
@@ -83,7 +82,6 @@ class TestCreateSimulation:
         res = client.post(f"{API_BASE}/simulations", json=payload)
         assert res.status_code == 201
         data = res.json()
-        assert data["name"] == payload["name"]
         assert data["caseId"] == str(case.id)
         assert data["caseName"] == "test_case_create"
         assert data["executionId"] == "1081156.251218-200923"
@@ -121,7 +119,6 @@ class TestListSimulations:
         db.flush()
 
         sim = Simulation(
-            name="Test Simulation",
             case_id=case.id,
             execution_id="list-test-exec-1",
             compset="AQUAPLANET",
@@ -147,7 +144,6 @@ class TestListSimulations:
         assert res.status_code == 200
         data = res.json()
         assert len(data) == 1
-        assert data[0]["name"] == sim.name
         assert data[0]["caseName"] == "test_case_list"
         assert data[0]["executionId"] == "list-test-exec-1"
 
@@ -175,7 +171,6 @@ class TestGetSimulation:
         db.flush()
 
         sim = Simulation(
-            name="Test Simulation",
             case_id=case.id,
             execution_id="get-test-exec-1",
             compset="AQUAPLANET",
@@ -200,7 +195,6 @@ class TestGetSimulation:
         res = client.get(f"{API_BASE}/simulations/{sim.id}")
         assert res.status_code == 200
         data = res.json()
-        assert data["name"] == sim.name
         assert data["caseName"] == "test_case_get"
         assert data["executionId"] == "get-test-exec-1"
 

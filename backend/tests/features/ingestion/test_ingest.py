@@ -59,7 +59,6 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081156.251218-200923": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -95,7 +94,6 @@ class TestIngestArchive:
             assert isinstance(ingest_result.simulations, list)
             assert len(ingest_result.simulations) == 1
             assert isinstance(ingest_result.simulations[0], SimulationCreate)
-            assert ingest_result.simulations[0].name == "sim1"
             assert ingest_result.simulations[0].execution_id == "1081156.251218-200923"
             # Verify Case was created
             case = db.query(Case).filter(Case.name == "case1").first()
@@ -108,7 +106,6 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081157.251218-200924": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -133,7 +130,6 @@ class TestIngestArchive:
                 "last_updated_by": None,
             },
             "/path/to/1081158.251218-200925": {
-                "name": "sim2",
                 "case_name": "case2",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -167,8 +163,8 @@ class TestIngestArchive:
             )
 
             assert len(ingest_result.simulations) == 2
-            names = {s.name for s in ingest_result.simulations}
-            assert names == {"sim1", "sim2"}
+            exec_ids = {s.execution_id for s in ingest_result.simulations}
+            assert exec_ids == {"1081157.251218-200924", "1081158.251218-200925"}
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
@@ -186,7 +182,6 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081159.251218-200926": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -228,7 +223,6 @@ class TestIngestArchive:
         """Test that mapping errors are collected and ingestion continues."""
         mock_simulations = {
             "/path/to/1081160.251218-200927": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -288,7 +282,6 @@ class TestIngestArchive:
         for idx, date_str in enumerate(test_cases):
             mock_simulations = {
                 f"/path/to/108200{idx}.251218-200900": {
-                    "name": "sim1",
                     "case_name": f"case1_{date_str}",
                     "compset": "test",
                     "compset_alias": "test_alias",
@@ -337,7 +330,6 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081170.251218-200930": {
-                "name": None,
                 "case_name": None,
                 "compset": None,
                 "compset_alias": "test_alias",
@@ -388,7 +380,6 @@ class TestIngestArchive:
         # Create valid simulation
         valid_mock = {
             "/path/to/1081171.251218-200931": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -426,7 +417,6 @@ class TestIngestArchive:
         # Test with missing machine
         invalid_mock = {
             "/path/to/1081172.251218-200932": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -495,7 +485,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081173.251218-200933": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -546,7 +535,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081174.251218-200934": {
-                "name": "sim_with_optionals",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
@@ -628,7 +616,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.flush()
 
         existing_sim = Simulation(
-            name="existing_sim",
             case_id=case.id,
             execution_id="1081175.251218-200935",
             compset="FHIST",
@@ -650,7 +637,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # Try to ingest a simulation with the same execution_id
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
-                "name": "existing_sim",
                 "case_name": "existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -714,7 +700,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.flush()
 
         existing_sim = Simulation(
-            name="existing_sim",
             case_id=case.id,
             execution_id="1081176.251218-200936",
             compset="FHIST",
@@ -735,7 +720,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081176.251218-200936": {
-                "name": "existing_sim",
                 "case_name": "existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -760,7 +744,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "last_updated_by": None,
             },
             "/path/to/1081177.251218-200937": {
-                "name": "new_sim",
                 "case_name": "new_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -796,7 +779,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.created_count == 1
             assert ingest_result.duplicate_count == 1
             assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].name == "new_sim"
+            assert ingest_result.simulations[0].execution_id == "1081177.251218-200937"
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
@@ -821,7 +804,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # This will be parsed but not raise an error
         mock_simulations = {
             "/path/to/1081178.251218-200938": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -871,7 +853,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # This ensures we exercise the except block in _parse_datetime_field
         mock_simulations = {
             "/path/to/1081179.251218-200939": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -927,7 +908,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """Test error handling when machine name is missing from metadata."""
         mock_simulations = {
             "/path/to/1081180.251218-200940": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -971,7 +951,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081181.251218-200941": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -1080,7 +1059,6 @@ class TestNormalizeGitUrl:
         # SSH URL in metadata
         mock_simulations = {
             "/path/to/1081182.251218-200942": {
-                "name": "sim1",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -1170,7 +1148,6 @@ class TestCanonicalRunIngestion:
     ) -> dict[str, str | None]:
         """Build a complete simulation metadata dict with sensible defaults."""
         base: dict[str, str | None] = {
-            "name": case_name,
             "case_name": case_name,
             "compset": "FHIST",
             "compset_alias": "test_alias",
@@ -1346,7 +1323,6 @@ class TestCanonicalRunIngestion:
         db.flush()
 
         sim = Simulation(
-            name="case1",
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1413,7 +1389,6 @@ class TestCanonicalRunIngestion:
         db.flush()
 
         sim = Simulation(
-            name="case1",
             case_id=case.id,
             execution_id="1081192.251218-200952",
             compset="FHIST",

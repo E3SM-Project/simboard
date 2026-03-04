@@ -101,7 +101,6 @@ class SimulationCreate(CamelInBaseModel):
 
     # Configuration
     # --------------
-    name: Annotated[str, Field(..., description="Name of the simulation")]
     case_id: Annotated[
         UUID, Field(..., description="ID of the Case this simulation belongs to")
     ]
@@ -310,7 +309,6 @@ class SimulationOut(CamelOutBaseModel):
 
     # Configuration
     # --------------
-    name: Annotated[str, Field(..., description="Name of the simulation")]
     case_id: Annotated[
         UUID, Field(..., description="ID of the Case this simulation belongs to")
     ]

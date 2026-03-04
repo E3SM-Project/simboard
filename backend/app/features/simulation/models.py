@@ -61,7 +61,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Configuration
     # ~~~~~~~~~~~~~~
-    name: Mapped[str] = mapped_column(String(200), index=True)
     case_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("cases.id", ondelete="CASCADE"),

@@ -272,7 +272,6 @@ class TestIngestionWithAPIToken:
             mock_compute.return_value = "a" * 64
 
             mock_sim = SimulationCreate(
-                name="test_sim",
                 caseId=case.id,
                 executionId="1081156.251218-200923",
                 compset="test_compset",
@@ -310,7 +309,9 @@ class TestIngestionWithAPIToken:
             # Verify hpc_username was stored
 
             simulation = (
-                db.query(Simulation).filter(Simulation.name == "test_sim").first()
+                db.query(Simulation)
+                .filter(Simulation.execution_id == "1081156.251218-200923")
+                .first()
             )
             assert simulation is not None
             assert simulation.hpc_username == "hpc_user_test"

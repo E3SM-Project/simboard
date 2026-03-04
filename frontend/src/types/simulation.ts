@@ -20,7 +20,6 @@ export interface CaseOut {
 export interface SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
-  name: string;
   caseId: string; // UUID
   executionId: string;
   description: string | null;

@@ -82,7 +82,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
-    { id: 'name', desc: false },
+    { id: 'caseName', desc: false },
   ]);
   const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -91,24 +91,18 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const columns = useMemo<ColumnDef<SimulationOut>[]>(
     () => [
       {
-        accessorKey: 'name',
-        header: 'Name',
+        accessorKey: 'caseName',
+        header: 'Case Name',
         cell: ({ row }) => (
           <Link
             to={`/simulations/${row.original.id}`}
             className="text-blue-600 hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            {row.original.name}
+            {row.original.caseName}
           </Link>
         ),
         size: 260,
-      },
-      {
-        accessorKey: 'caseName',
-        header: 'Case',
-        cell: ({ row }) => <span>{row.original.caseName}</span>,
-        size: 200,
       },
       {
         accessorKey: 'executionId',
@@ -262,7 +256,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       if (!value) return true;
       const v = String(value).toLowerCase();
       const s: SimulationOut = row.original as SimulationOut;
-      return [s.id, s.name, s.gitTag, s.gridName, s.compset, s.machineId]
+      return [s.id, s.caseName, s.executionId, s.gitTag, s.gridName, s.compset, s.machineId]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(v));
     },
@@ -301,7 +295,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       {/* Filter & Search Controls */}
       <div className="flex flex-wrap gap-3 items-center bg-muted p-4 rounded-md">
         <Input
-          placeholder="Search by ID, name, version, grid, compset, machine, or variable…"
+          placeholder="Search by case name, execution ID, version, grid, compset, or machine…"
           value={globalFilter}
           onChange={(e) => setGlobalFilter(e.target.value)}
           className="w-[500px]"
@@ -386,7 +380,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                   />
                 </TableHead>
                 {headerGroup.headers.map((header) => {
-                  const isName = header.column.id === 'name';
+                  const isName = header.column.id === 'caseName';
                   const isAdvanced = header.column.columnDef.meta?.isAdvanced;
                   return (
                     <TableHead
@@ -444,7 +438,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                   />
                 </TableCell>
                 {row.getVisibleCells().map((cell) => {
-                  const isName = cell.column.id === 'name';
+                  const isName = cell.column.id === 'caseName';
                   const isAdvanced = cell.column.columnDef.meta?.isAdvanced;
                   return (
                     <TableCell
