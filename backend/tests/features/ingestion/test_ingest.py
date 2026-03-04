@@ -337,7 +337,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081170.251218-200930": {
                 "case_name": None,
-                "case_hash": None,
+                "case_hash": "hash_test_missing_fields",
                 "compset": None,
                 "compset_alias": "test_alias",
                 "grid_name": None,
@@ -1161,7 +1161,7 @@ class TestCanonicalRunIngestion:
     @staticmethod
     def _make_metadata(
         case_name: str = "case1",
-        case_hash: str = "hash_case1",
+        case_hash: str | None = "hash_case1",
         machine: str = "test-machine",
         simulation_start_date: str = "2020-01-01",
         **overrides: str | None,
@@ -1461,3 +1461,81 @@ class TestCanonicalRunIngestion:
         assert "compiler" in new_sim.run_config_deltas
         assert new_sim.run_config_deltas["compiler"]["canonical"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
+
+    def test_missing_case_hash_is_rejected(self, db: Session) -> None:
+        """Runs without CASE_HASH are rejected with a validation error."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081194.251218-200954": self._make_metadata(
+                case_hash=None,
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 0
+        assert len(result.errors) == 1
+        assert result.errors[0]["error_type"] == "ValueError"
+        assert "CASE_HASH" in result.errors[0]["error"]
+
+    def test_same_case_hash_groups_to_same_case(self, db: Session) -> None:
+        """Runs with the same CASE_HASH belong to the same Case."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081195.251218-200955": self._make_metadata(
+                case_name="case_A",
+                case_hash="shared_hash",
+            ),
+            "/path/to/1081196.251218-200956": self._make_metadata(
+                case_name="case_A",
+                case_hash="shared_hash",
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 2
+        # Both simulations must share the same case_id
+        case_ids = {s.case_id for s in result.simulations}
+        assert len(case_ids) == 1
+        # Case was created with the shared hash
+        case = db.query(Case).filter(Case.case_hash == "shared_hash").first()
+        assert case is not None
+
+    def test_different_case_hash_creates_separate_cases(
+        self, db: Session
+    ) -> None:
+        """Runs with different CASE_HASH values create separate Cases."""
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081197.251218-200957": self._make_metadata(
+                case_name="case_X",
+                case_hash="hash_X",
+            ),
+            "/path/to/1081198.251218-200958": self._make_metadata(
+                case_name="case_Y",
+                case_hash="hash_Y",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=mock_simulations,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 2
+        case_ids = {s.case_id for s in result.simulations}
+        assert len(case_ids) == 2
