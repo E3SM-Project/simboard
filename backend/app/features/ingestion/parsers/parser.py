@@ -58,7 +58,7 @@ FILE_SPECS: dict[str, FileSpec] = {
         "pattern": r"env_case\.xml\..*\.gz",
         "location": "casedocs",
         "parser": parse_env_case,
-        "required": False,
+        "required": True,
     },
     "case_docs_env_build": {
         "pattern": r"env_build\.xml\..*\.gz",
@@ -366,8 +366,8 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
         metadata.update(parser(path))
 
     populated_fields: SimulationMetadata = {
-        "name": metadata.get("case_name"),
         "case_name": metadata.get("case_name"),
+        "case_hash": metadata.get("case_hash"),
         "compset": metadata.get("compset"),
         "compset_alias": metadata.get("compset_alias"),
         "grid_name": metadata.get("grid_name"),

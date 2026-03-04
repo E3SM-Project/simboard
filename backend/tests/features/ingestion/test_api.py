@@ -103,7 +103,7 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case")
+        case = Case(name="test_case", case_hash="hash_test_case")
         db.add(case)
         db.flush()
 
@@ -166,8 +166,8 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case1 = Case(name="test_case_errors")
-        case2 = Case(name="case2_errors")
+        case1 = Case(name="test_case_errors", case_hash="hash_test_case_errors")
+        case2 = Case(name="case2_errors", case_hash="hash_case2_errors")
         db.add_all([case1, case2])
         db.flush()
 
@@ -241,7 +241,7 @@ class TestIngestFromPathEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_audit")
+        case = Case(name="test_case_audit", case_hash="hash_test_case_audit")
         db.add(case)
         db.flush()
 
@@ -354,7 +354,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"  # ZIP file magic bytes
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_zip")
+        case = Case(name="test_case_zip", case_hash="hash_test_case_zip")
         db.add(case)
         db.flush()
 
@@ -406,7 +406,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"\x1f\x8b\x08"  # GZIP magic bytes
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_targz")
+        case = Case(name="test_case_targz", case_hash="hash_test_case_targz")
         db.add(case)
         db.flush()
 
@@ -485,7 +485,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04test content"
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_sha256")
+        case = Case(name="test_case_sha256", case_hash="hash_test_case_sha256")
         db.add(case)
         db.flush()
 
@@ -547,7 +547,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_partial")
+        case = Case(name="test_case_partial", case_hash="hash_test_case_partial")
         db.add(case)
         db.flush()
 
@@ -813,7 +813,7 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_artifacts")
+        case = Case(name="test_case_artifacts", case_hash="hash_test_case_artifacts")
         db.add(case)
         db.flush()
 
@@ -876,7 +876,7 @@ class TestIngestFromUploadEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive_with_links.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_links")
+        case = Case(name="test_case_links", case_hash="hash_test_case_links")
         db.add(case)
         db.flush()
 
@@ -958,7 +958,7 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_git_url")
+        case = Case(name="test_case_git_url", case_hash="hash_test_case_git_url")
         db.add(case)
         db.flush()
 

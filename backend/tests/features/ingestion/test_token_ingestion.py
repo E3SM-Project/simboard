@@ -257,7 +257,7 @@ class TestIngestionWithAPIToken:
         db.commit()
 
         # Create a case for the test simulation
-        case = Case(name="test_case")
+        case = Case(name="test_case", case_hash="hash_test_case")
         db.add(case)
         db.flush()
         db.commit()

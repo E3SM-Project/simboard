@@ -60,6 +60,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081156.251218-200923": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
@@ -107,6 +108,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081157.251218-200924": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
@@ -131,6 +133,7 @@ class TestIngestArchive:
             },
             "/path/to/1081158.251218-200925": {
                 "case_name": "case2",
+                "case_hash": "hash_case2",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid2",
@@ -183,6 +186,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081159.251218-200926": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -224,6 +228,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081160.251218-200927": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -283,6 +288,7 @@ class TestIngestArchive:
             mock_simulations = {
                 f"/path/to/108200{idx}.251218-200900": {
                     "case_name": f"case1_{date_str}",
+                    "case_hash": f"hash_case1_{date_str}",
                     "compset": "test",
                     "compset_alias": "test_alias",
                     "grid_name": "grid",
@@ -331,6 +337,7 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081170.251218-200930": {
                 "case_name": None,
+                "case_hash": None,
                 "compset": None,
                 "compset_alias": "test_alias",
                 "grid_name": None,
@@ -381,6 +388,7 @@ class TestIngestArchive:
         valid_mock = {
             "/path/to/1081171.251218-200931": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -418,6 +426,7 @@ class TestIngestArchive:
         invalid_mock = {
             "/path/to/1081172.251218-200932": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -486,6 +495,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081173.251218-200933": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -536,6 +546,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081174.251218-200934": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
                 "grid_name": "f09_fe",
@@ -611,7 +622,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.flush()
 
         # Create a Case and Simulation directly in the database
-        case = Case(name="existing_case")
+        case = Case(name="existing_case", case_hash="hash_existing_case")
         db.add(case)
         db.flush()
 
@@ -638,6 +649,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
                 "case_name": "existing_case",
+                "case_hash": "hash_existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -695,7 +707,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(ingestion)
         db.flush()
 
-        case = Case(name="existing_case")
+        case = Case(name="existing_case", case_hash="hash_existing_case")
         db.add(case)
         db.flush()
 
@@ -721,6 +733,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081176.251218-200936": {
                 "case_name": "existing_case",
+                "case_hash": "hash_existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -745,6 +758,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             },
             "/path/to/1081177.251218-200937": {
                 "case_name": "new_case",
+                "case_hash": "hash_new_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -805,6 +819,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081178.251218-200938": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -854,6 +869,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081179.251218-200939": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -909,6 +925,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081180.251218-200940": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -952,6 +969,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081181.251218-200941": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -1060,6 +1078,7 @@ class TestNormalizeGitUrl:
         mock_simulations = {
             "/path/to/1081182.251218-200942": {
                 "case_name": "case1",
+                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -1142,6 +1161,7 @@ class TestCanonicalRunIngestion:
     @staticmethod
     def _make_metadata(
         case_name: str = "case1",
+        case_hash: str = "hash_case1",
         machine: str = "test-machine",
         simulation_start_date: str = "2020-01-01",
         **overrides: str | None,
@@ -1149,6 +1169,7 @@ class TestCanonicalRunIngestion:
         """Build a complete simulation metadata dict with sensible defaults."""
         base: dict[str, str | None] = {
             "case_name": case_name,
+            "case_hash": case_hash,
             "compset": "FHIST",
             "compset_alias": "test_alias",
             "grid_name": "grid1",
@@ -1274,8 +1295,8 @@ class TestCanonicalRunIngestion:
         machine = self._create_machine(db, "test-machine")
 
         mock_simulations = {
-            "/path/to/1081189.251218-200949": self._make_metadata(case_name="case_alpha"),
-            "/path/to/1081190.251218-200950": self._make_metadata(case_name="case_beta"),
+            "/path/to/1081189.251218-200949": self._make_metadata(case_name="case_alpha", case_hash="hash_case_alpha"),
+            "/path/to/1081190.251218-200950": self._make_metadata(case_name="case_beta", case_hash="hash_case_beta"),
         }
 
         with patch(
@@ -1318,7 +1339,7 @@ class TestCanonicalRunIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
+        case = Case(name="case1", case_hash="hash_case1")
         db.add(case)
         db.flush()
 
@@ -1384,7 +1405,7 @@ class TestCanonicalRunIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
+        case = Case(name="case1", case_hash="hash_case1")
         db.add(case)
         db.flush()
 

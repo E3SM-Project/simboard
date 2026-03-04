@@ -288,6 +288,16 @@ class CaseOut(CamelOutBaseModel):
 
     id: Annotated[UUID, Field(..., description="The unique identifier of the case.")]
     name: Annotated[str, Field(..., description="The case name.")]
+    case_hash: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "Unique hash derived from case parameters (CASE_HASH from "
+                "env_case.xml). Used as the canonical identity for case grouping."
+            ),
+        ),
+    ]
     canonical_simulation_id: Annotated[
         UUID | None,
         Field(None, description="ID of the canonical simulation for this case."),

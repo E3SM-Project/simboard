@@ -35,6 +35,7 @@ class Case(Base, IDMixin, TimestampMixin):
     __tablename__ = "cases"
 
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    case_hash: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
     canonical_simulation_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("simulations.id", use_alter=True, name="fk_cases_canonical_sim"),

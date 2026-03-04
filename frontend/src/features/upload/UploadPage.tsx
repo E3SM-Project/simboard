@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -781,6 +781,14 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
           <p className="text-sm text-muted-foreground mt-1">
             Provide configuration and context. You can save a draft at any time.
           </p>
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              Archive uploads require <code className="font-mono text-xs bg-blue-100 px-1 rounded">env_case.xml</code> with
+              a valid <code className="font-mono text-xs bg-blue-100 px-1 rounded">CASE_HASH</code> entry.
+              Simulations missing this metadata will be rejected during ingestion.
+            </p>
+          </div>
         </header>
 
         <FormSection

@@ -5,7 +5,7 @@ from app.features.ingestion.parsers.utils import _open_text
 
 
 def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
-    """Parse env_case.xml (plain or gzipped) to extract group_name.
+    """Parse env_case.xml (plain or gzipped) to extract case_hash and group_name.
 
     Parameters
     ----------
@@ -15,12 +15,13 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with key 'group_name' (str or None)
+        Dictionary with keys 'case_hash' and 'group_name' (str or None)
     """
     env_case_path = Path(env_case_path)
+    case_hash = _extract_value_from_file(env_case_path, "CASE_HASH")
     group_name = _extract_value_from_file(env_case_path, "CASE_GROUP")
 
-    return {"group_name": group_name}
+    return {"case_hash": case_hash, "group_name": group_name}
 
 
 def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:

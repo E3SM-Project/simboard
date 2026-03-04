@@ -34,7 +34,7 @@ def override_auth_dependency(normal_user_sync):
 
 def _create_case(db: Session, name: str = "test_case") -> Case:
     """Helper to create a Case."""
-    case = Case(name=name)
+    case = Case(name=name, case_hash=f"hash_{name}")
     db.add(case)
     db.flush()
     return case

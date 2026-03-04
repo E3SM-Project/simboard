@@ -3,8 +3,10 @@
 Implements canonical run semantics for ``performance_archive`` ingestion:
 
 * A run is "successful" only when all required metadata files are present.
-* Within each case (parent directory), the **first** successful run
-  (sorted by experiment-directory name) is the *canonical baseline*.
+* ``CASE_HASH`` from ``env_case.xml`` is the **mandatory** identity for
+  Case grouping — no fallback to directory name or other heuristics.
+* Within each case, the **first** successful run is the *canonical
+  baseline*.
 * Each successful run creates its own ``Simulation`` record linked to
   a ``Case`` via ``case_id``.
 * The canonical simulation has ``run_config_deltas = None``.
@@ -17,7 +19,6 @@ Implements canonical run semantics for ``performance_archive`` ingestion:
 """
 
 import os
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,14 +94,14 @@ def ingest_archive(  # noqa: C901
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements canonical run semantics:
+    Implements canonical run semantics using ``CASE_HASH`` for identity:
 
-    * Parsed simulations are grouped by ``case_name``.
-    * The first successful run per case (in sorted experiment-directory
-      order) is treated as the canonical baseline.
-    * Each successful run creates its own ``SimulationCreate`` record
-      with a unique ``execution_id``.
-    * The canonical simulation has ``run_config_deltas = None``.
+    * Each run must contain a ``CASE_HASH`` value extracted from
+      ``env_case.xml``.  Runs missing ``CASE_HASH`` are rejected.
+    * Case lookup/creation is done by ``case_hash`` — no fallback to
+      directory name or other heuristics.
+    * The first successful run per case becomes the canonical baseline
+      (``run_config_deltas = None``).
     * Non-canonical simulations store a single dict of configuration
       differences versus the canonical.
     * Duplicate detection is based on ``execution_id`` uniqueness.
@@ -136,108 +137,111 @@ def ingest_archive(  # noqa: C901
             simulations=[], created_count=0, duplicate_count=0, skipped_count=0
         )
 
-    # Group simulations by case_name for canonical run selection.
-    case_groups: dict[str, list[tuple[str, SimulationMetadata]]] = defaultdict(list)
-
-    for exp_dir, metadata in all_simulations.items():
-        case_name = metadata.get("case_name") or "unknown"
-        case_groups[case_name].append((exp_dir, metadata))
-
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     skipped_count = 0
     errors: list[dict[str, str]] = []
 
-    for case_name, runs in case_groups.items():
-        # Get or create the Case record.
-        case = _get_or_create_case(db, case_name)
-        canonical_metadata: SimulationMetadata | None = None
-        canonical_exp_dir: str | None = None
+    # Track canonical metadata per case_hash for batch processing.
+    # Handles the case where multiple runs for the same (new) case
+    # appear in a single archive before any are persisted.
+    canonical_cache: dict[str, SimulationMetadata] = {}
 
-        # If the case already has a canonical simulation, use its
-        # metadata for computing deltas against new runs.
-        if case.canonical_simulation_id is not None:
-            canonical_sim = (
-                db.query(Simulation)
-                .filter(Simulation.id == case.canonical_simulation_id)
-                .first()
-            )
-            if canonical_sim:
-                # Build a metadata dict from the existing canonical so
-                # deltas can be computed against it.
-                canonical_metadata = _sim_to_metadata(canonical_sim)
-                canonical_exp_dir = canonical_sim.execution_id
+    for exp_dir, metadata in all_simulations.items():
+        execution_id = _derive_execution_id(exp_dir)
 
-        for exp_dir, metadata in runs:
-            execution_id = _derive_execution_id(exp_dir)
+        try:
+            # Validate CASE_HASH presence — mandatory for case identity.
+            case_hash = metadata.get("case_hash")
+            if not case_hash:
+                raise ValueError(
+                    f"CASE_HASH is required but missing from '{exp_dir}'. "
+                    "Ensure env_case.xml contains a CASE_HASH entry."
+                )
 
-            try:
-                machine_id = _resolve_machine_id(metadata, db)
+            case_name = metadata.get("case_name") or "unknown"
+            machine_id = _resolve_machine_id(metadata, db)
 
-                # Duplicate check by execution_id
-                existing_sim = _find_existing_simulation(db, execution_id)
-                if existing_sim:
+            # Get or create Case by case_hash (not by name).
+            case = _get_or_create_case(db, case_hash=case_hash, name=case_name)
+
+            # Duplicate check by execution_id.
+            existing_sim = _find_existing_simulation(db, execution_id)
+            if existing_sim:
+                logger.info(
+                    f"Simulation with execution_id='{execution_id}' "
+                    f"already exists. Skipping duplicate from {exp_dir}."
+                )
+                duplicate_count += 1
+
+                # Seed canonical cache if we haven't seen this case yet.
+                if case_hash not in canonical_cache:
+                    canonical_cache[case_hash] = metadata
+                continue
+
+            # Determine canonical metadata for this case.
+            canonical_metadata: SimulationMetadata | None = None
+
+            if case.canonical_simulation_id is not None:
+                # Case already has a persisted canonical.
+                canonical_sim = (
+                    db.query(Simulation)
+                    .filter(Simulation.id == case.canonical_simulation_id)
+                    .first()
+                )
+                if canonical_sim:
+                    canonical_metadata = _sim_to_metadata(canonical_sim)
+            elif case_hash in canonical_cache:
+                # Canonical assigned earlier in this batch (not yet persisted).
+                canonical_metadata = canonical_cache[case_hash]
+
+            if canonical_metadata is None:
+                # First successful run → canonical baseline.
+                canonical_cache[case_hash] = metadata
+
+                sim_create = _map_metadata_to_schema(
+                    metadata, db, machine_id, case.id, execution_id
+                )
+                simulations.append(sim_create)
+                logger.info(
+                    f"Mapped canonical simulation from {exp_dir}: "
+                    f"{case_name} (hash={case_hash})"
+                )
+            else:
+                # Subsequent successful run → separate Simulation with delta.
+                delta = _compute_config_delta(canonical_metadata, metadata)
+                run_config_deltas = delta if delta else None
+
+                sim_create = _map_metadata_to_schema(
+                    metadata,
+                    db,
+                    machine_id,
+                    case.id,
+                    execution_id,
+                    run_config_deltas=run_config_deltas,
+                )
+                simulations.append(sim_create)
+                if delta:
                     logger.info(
-                        f"Simulation with execution_id='{execution_id}' "
-                        f"already exists. Skipping duplicate from {exp_dir}."
-                    )
-                    duplicate_count += 1
-
-                    # Use it as canonical if we don't have one yet
-                    if canonical_metadata is None:
-                        canonical_metadata = metadata
-                        canonical_exp_dir = execution_id
-                    continue
-
-                if canonical_metadata is None:
-                    # First successful run → canonical baseline.
-                    canonical_metadata = metadata
-                    canonical_exp_dir = execution_id
-
-                    sim_create = _map_metadata_to_schema(
-                        metadata, db, machine_id, case.id, execution_id
-                    )
-                    simulations.append(sim_create)
-                    logger.info(
-                        f"Mapped canonical simulation from {exp_dir}: "
-                        f"{metadata.get('case_name')}"
+                        f"Non-canonical run in '{exp_dir}' has config "
+                        f"differences from canonical: {list(delta.keys())}"
                     )
                 else:
-                    # Subsequent successful run → separate Simulation with delta.
-                    delta = _compute_config_delta(canonical_metadata, metadata)
-                    run_config_deltas = delta if delta else None
-
-                    sim_create = _map_metadata_to_schema(
-                        metadata,
-                        db,
-                        machine_id,
-                        case.id,
-                        execution_id,
-                        run_config_deltas=run_config_deltas,
+                    logger.info(
+                        f"Non-canonical run in '{exp_dir}' has identical "
+                        f"configuration to canonical."
                     )
-                    simulations.append(sim_create)
-                    if delta:
-                        logger.info(
-                            f"Non-canonical run in '{exp_dir}' has config "
-                            f"differences from canonical '{canonical_exp_dir}': "
-                            f"{list(delta.keys())}"
-                        )
-                    else:
-                        logger.info(
-                            f"Non-canonical run in '{exp_dir}' has identical "
-                            f"configuration to canonical '{canonical_exp_dir}'."
-                        )
 
-            except (ValueError, LookupError, ValidationError) as e:
-                logger.error(f"Failed to process simulation from {exp_dir}: {e}")
-                errors.append(
-                    {
-                        "exp_dir": str(exp_dir),
-                        "error_type": type(e).__name__,
-                        "error": str(e),
-                    }
-                )
-                continue
+        except (ValueError, LookupError, ValidationError) as e:
+            logger.error(f"Failed to process simulation from {exp_dir}: {e}")
+            errors.append(
+                {
+                    "exp_dir": str(exp_dir),
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                }
+            )
+            continue
 
     result = IngestArchiveResult(
         simulations=simulations,
@@ -270,15 +274,26 @@ def _derive_execution_id(exp_dir: str) -> str:
     return execution_id
 
 
-def _get_or_create_case(db: Session, case_name: str) -> Case:
-    """Get or create a Case record by name."""
-    case = db.query(Case).filter(Case.name == case_name).first()
+def _get_or_create_case(db: Session, case_hash: str, name: str) -> Case:
+    """Get or create a Case record by case_hash.
+
+    Parameters
+    ----------
+    db : Session
+        Active database session.
+    case_hash : str
+        The CASE_HASH value from env_case.xml, used as the canonical
+        identity for case grouping.
+    name : str
+        Human-readable case name (used when creating a new Case).
+    """
+    case = db.query(Case).filter(Case.case_hash == case_hash).first()
 
     if not case:
-        case = Case(name=case_name)
+        case = Case(name=name, case_hash=case_hash)
         db.add(case)
         db.flush()
-        logger.info(f"Created new Case: {case_name}")
+        logger.info(f"Created new Case: {name} (hash={case_hash})")
 
     return case
 

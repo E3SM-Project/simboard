@@ -8,6 +8,7 @@ import type { Machine } from '@/types/machine';
 export interface CaseOut {
   id: string;
   name: string;
+  caseHash: string;
   canonicalSimulationId: string | null;
   createdAt: string;
   updatedAt: string;
