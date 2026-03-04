@@ -22,7 +22,6 @@ export interface CaseOut {
 export interface SimulationSummaryOut {
   id: string;
   executionId: string;
-  caseHash: string;
   status: string;
   isCanonical: boolean;
   changeCount: number;
@@ -39,7 +38,6 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~
   caseId: string; // UUID
   executionId: string;
-  caseHash: string;
   description: string | null;
   compset: string;
   compsetAlias: string;

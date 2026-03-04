@@ -72,7 +72,6 @@ class TestListCases:
         # Create two simulations under the same case
         sim1 = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="case-nested-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -89,7 +88,6 @@ class TestListCases:
         )
         sim2 = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="case-nested-exec-2",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -177,7 +175,6 @@ class TestGetCase:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="case-detail-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -223,7 +220,6 @@ class TestCreateSimulation:
 
         payload = {
             "caseId": str(case.id),
-            "caseHash": "test_hash",
             "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
@@ -318,7 +314,6 @@ class TestListSimulations:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="list-test-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -371,7 +366,6 @@ class TestGetSimulation:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="get-test-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -429,7 +423,6 @@ class TestSimulationBrowserIncludesCaseMetadata:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="browser-exec-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",

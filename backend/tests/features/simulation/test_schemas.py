@@ -23,7 +23,6 @@ class TestSimulationCreateSchema:
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
-            "caseHash": "test_hash",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -46,7 +45,6 @@ class TestSimulationCreateSchema:
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
-            "caseHash": "test_hash",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -115,7 +113,6 @@ class TestSimulationOutSchema:
             "id": uuid4(),
             "case_id": case_id,
             "case_name": "test_case",
-            "case_hash": "test_hash",
             "execution_id": "1081156.251218-200923",
             "is_canonical": True,
             "change_count": 0,
@@ -196,7 +193,6 @@ class TestSimulationOutSchema:
             "id": uuid4(),
             "case_id": case_id,
             "case_name": "test_case",
-            "case_hash": "test_hash",
             "execution_id": "1081156.251218-200923",
             "is_canonical": False,
             "change_count": 2,
@@ -293,7 +289,6 @@ class TestSimulationOutSchema:
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
-            case_hash="test_hash",
             execution_id="1081156.251218-200923",
             is_canonical=True,
             change_count=0,
@@ -365,7 +360,6 @@ class TestSimulationOutSchema:
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
-            case_hash="test_hash",
             execution_id="1081156.251218-200923",
             is_canonical=True,
             change_count=0,
@@ -430,7 +424,6 @@ class TestSimulationSummaryOutSchema:
         summary = SimulationSummaryOut(
             id=uuid4(),
             execution_id="1081156.251218-200923",
-            case_hash="test_hash",
             status="created",
             is_canonical=True,
             change_count=0,
@@ -445,7 +438,6 @@ class TestSimulationSummaryOutSchema:
         summary = SimulationSummaryOut(
             id=uuid4(),
             execution_id="1081290.251218-211543",
-            case_hash="test_hash",
             status="completed",
             is_canonical=False,
             change_count=3,
@@ -469,7 +461,6 @@ class TestCaseOutSchema:
                 SimulationSummaryOut(
                     id=sim_id,
                     execution_id="1081156.251218-200923",
-                    case_hash="hash_A",
                     status="completed",
                     is_canonical=True,
                     change_count=0,
@@ -479,7 +470,6 @@ class TestCaseOutSchema:
                 SimulationSummaryOut(
                     id=uuid4(),
                     execution_id="1081290.251218-211543",
-                    case_hash="hash_B",
                     status="completed",
                     is_canonical=False,
                     change_count=2,

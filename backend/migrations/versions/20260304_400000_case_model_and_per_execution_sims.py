@@ -1,4 +1,4 @@
-"""Add Case model, per-execution simulations, and CASE_GROUP/CASE_HASH
+"""Add Case model, per-execution simulations, and CASE_GROUP
 
 Squashed migration that applies the full case-based refactor in one step.
 
@@ -6,11 +6,13 @@ Changes to ``simulations``:
 - Add ``run_config_deltas`` JSONB column (migrated from ``extra``)
 - Add ``case_id`` FK → ``cases.id`` (non-null, CASCADE, indexed)
 - Add ``execution_id`` (non-null, unique, indexed)
-- Add ``case_hash`` (non-null, indexed)
 - Drop ``case_name`` column and ``uq_simulation_case_machine_date`` constraint
 - Drop ``name`` column and ``ix_simulations_name`` index
 - Drop ``group_name`` column
 - Convert legacy list-format ``run_config_deltas`` to dict
+
+CASE_HASH was evaluated for configuration identity but is not currently
+used for grouping or validation in SimBoard.
 
 New ``cases`` table:
 - ``id`` UUID PK
@@ -83,10 +85,6 @@ def upgrade() -> None:
         "simulations",
         sa.Column("execution_id", sa.Text(), nullable=True),
     )
-    op.add_column(
-        "simulations",
-        sa.Column("case_hash", sa.Text(), nullable=True),
-    )
 
     # ── 4. Populate cases from distinct case_name values ─────────────
     op.execute(
@@ -121,7 +119,7 @@ def upgrade() -> None:
         """
     )
 
-    # ── 6. Derive execution_id and case_hash for existing rows ───────
+    # ── 6. Derive execution_id for existing rows ───────
     op.execute(
         """
         UPDATE simulations
@@ -129,12 +127,9 @@ def upgrade() -> None:
         WHERE execution_id IS NULL
         """
     )
-    op.execute(sa.text("UPDATE simulations SET case_hash = '' WHERE case_hash IS NULL"))
-
     # ── 7. Enforce NOT NULL ──────────────────────────────────────────
     op.alter_column("simulations", "case_id", nullable=False)
     op.alter_column("simulations", "execution_id", nullable=False)
-    op.alter_column("simulations", "case_hash", nullable=False)
 
     # ── 8. Add indexes and FK ────────────────────────────────────────
     op.create_index("ix_simulations_case_id", "simulations", ["case_id"])
@@ -144,7 +139,6 @@ def upgrade() -> None:
         ["execution_id"],
         unique=True,
     )
-    op.create_index("ix_simulations_case_hash", "simulations", ["case_hash"])
     op.create_foreign_key(
         "fk_simulations_case_id_cases",
         "simulations",
@@ -243,10 +237,8 @@ def downgrade() -> None:
         "fk_simulations_case_id_cases", "simulations", type_="foreignkey"
     )
     op.drop_constraint("fk_cases_canonical_sim", "cases", type_="foreignkey")
-    op.drop_index("ix_simulations_case_hash", table_name="simulations")
     op.drop_index("ix_simulations_execution_id", table_name="simulations")
     op.drop_index("ix_simulations_case_id", table_name="simulations")
-    op.drop_column("simulations", "case_hash")
     op.drop_column("simulations", "execution_id")
     op.drop_column("simulations", "case_id")
 

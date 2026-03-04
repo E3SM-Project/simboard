@@ -5,7 +5,6 @@ class TestParseEnvCase:
     def test_value(self, tmp_path):
         xml_case = """
         <config>
-            <entry id="CASE_HASH" value="abc123def456" />
             <entry id="CASE_GROUP" value="groupX" />
         </config>
         """
@@ -13,13 +12,11 @@ class TestParseEnvCase:
         tmp_case.write_text(xml_case)
         result = parse_env_case(tmp_case)
 
-        assert result["case_hash"] == "abc123def456"
         assert result["case_group"] == "groupX"
 
     def test_text(self, tmp_path):
         xml_case = """
         <config>
-            <entry id="CASE_HASH">hash789</entry>
             <entry id="CASE_GROUP">groupY</entry>
         </config>
         """
@@ -27,7 +24,6 @@ class TestParseEnvCase:
         tmp_case.write_text(xml_case)
         result = parse_env_case(tmp_case)
 
-        assert result["case_hash"] == "hash789"
         assert result["case_group"] == "groupY"
 
     def test_invalid_xml_returns_none(self, tmp_path):
@@ -37,7 +33,6 @@ class TestParseEnvCase:
 
         result = parse_env_case(tmp_case)
 
-        assert result["case_hash"] is None
         assert result["case_group"] is None
 
     def test_missing_entry_returns_none(self, tmp_path):
@@ -51,20 +46,6 @@ class TestParseEnvCase:
 
         result = parse_env_case(tmp_case)
 
-        assert result["case_hash"] is None
-        assert result["case_group"] is None
-
-    def test_case_hash_without_case_group(self, tmp_path):
-        xml_case = """
-        <config>
-            <entry id="CASE_HASH" value="hash_only" />
-        </config>
-        """
-        tmp_case = tmp_path / "env_case_hash_only.xml"
-        tmp_case.write_text(xml_case)
-        result = parse_env_case(tmp_case)
-
-        assert result["case_hash"] == "hash_only"
         assert result["case_group"] is None
 
 

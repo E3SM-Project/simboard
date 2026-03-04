@@ -114,16 +114,6 @@ class SimulationCreate(CamelInBaseModel):
             ),
         ),
     ]
-    case_hash: Annotated[
-        str,
-        Field(
-            ...,
-            description=(
-                "CASE_HASH from env_case.xml for this execution. "
-                "Identifies the case configuration at the time of this run."
-            ),
-        ),
-    ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
@@ -308,16 +298,6 @@ class SimulationSummaryOut(CamelOutBaseModel):
             ),
         ),
     ]
-    case_hash: Annotated[
-        str,
-        Field(
-            ...,
-            description=(
-                "CASE_HASH from env_case.xml for this execution. "
-                "Identifies the case configuration at the time of this run."
-            ),
-        ),
-    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -412,16 +392,6 @@ class SimulationOut(CamelOutBaseModel):
             description=(
                 "Unique identifier for this execution, derived from the "
                 "archive directory name"
-            ),
-        ),
-    ]
-    case_hash: Annotated[
-        str,
-        Field(
-            ...,
-            description=(
-                "CASE_HASH from env_case.xml for this execution. "
-                "Identifies the case configuration at the time of this run."
             ),
         ),
     ]

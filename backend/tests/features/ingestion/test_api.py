@@ -111,7 +111,6 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-summary-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -176,7 +175,6 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case1.id),
                     "executionId": "exec-errors-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -194,7 +192,6 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case2.id),
                     "executionId": "exec-errors-2",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -252,7 +249,6 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-audit-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -366,7 +362,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-zip-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -419,7 +414,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-targz-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -499,7 +493,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-sha256-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -562,7 +555,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-partial-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -829,7 +821,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-artifacts-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -889,7 +880,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-links-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -968,7 +958,6 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-git-url-1",
-                    "caseHash": "test_hash",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",

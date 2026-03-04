@@ -61,7 +61,6 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081156.251218-200923": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
@@ -108,7 +107,6 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081157.251218-200924": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
@@ -132,7 +130,6 @@ class TestIngestArchive:
             },
             "/path/to/1081158.251218-200925": {
                 "case_name": "case2",
-                "case_hash": "hash_case2",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid2",
@@ -184,7 +181,6 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081159.251218-200926": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -225,7 +221,6 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081160.251218-200927": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -284,7 +279,6 @@ class TestIngestArchive:
             mock_simulations = {
                 f"/path/to/108200{idx}.251218-200900": {
                     "case_name": f"case1_{date_str}",
-                    "case_hash": f"hash_case1_{date_str}",
                     "compset": "test",
                     "compset_alias": "test_alias",
                     "grid_name": "grid",
@@ -332,7 +326,6 @@ class TestIngestArchive:
         mock_simulations = {
             "/path/to/1081170.251218-200930": {
                 "case_name": None,
-                "case_hash": "hash_test_missing_fields",
                 "compset": None,
                 "compset_alias": "test_alias",
                 "grid_name": None,
@@ -382,7 +375,6 @@ class TestIngestArchive:
         valid_mock = {
             "/path/to/1081171.251218-200931": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -419,7 +411,6 @@ class TestIngestArchive:
         invalid_mock = {
             "/path/to/1081172.251218-200932": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -487,7 +478,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081173.251218-200933": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -537,7 +527,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081174.251218-200934": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
                 "grid_name": "f09_fe",
@@ -623,7 +612,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         existing_sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="1081175.251218-200935",
             compset="FHIST",
             compset_alias="FHIST_f09_fe",
@@ -645,7 +633,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
                 "case_name": "existing_case",
-                "case_hash": "hash_existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -708,7 +695,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         existing_sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="1081176.251218-200936",
             compset="FHIST",
             compset_alias="FHIST_f09_fe",
@@ -729,7 +715,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081176.251218-200936": {
                 "case_name": "existing_case",
-                "case_hash": "hash_existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -753,7 +738,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             },
             "/path/to/1081177.251218-200937": {
                 "case_name": "new_case",
-                "case_hash": "hash_new_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -813,7 +797,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081178.251218-200938": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -862,7 +845,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081179.251218-200939": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -917,7 +899,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081180.251218-200940": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -960,7 +941,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
         mock_simulations = {
             "/path/to/1081181.251218-200941": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -1068,7 +1048,6 @@ class TestNormalizeGitUrl:
         mock_simulations = {
             "/path/to/1081182.251218-200942": {
                 "case_name": "case1",
-                "case_hash": "hash_case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
@@ -1150,7 +1129,6 @@ class TestCanonicalRunIngestion:
     @staticmethod
     def _make_metadata(
         case_name: str = "case1",
-        case_hash: str | None = "hash_case1",
         machine: str = "test-machine",
         simulation_start_date: str = "2020-01-01",
         **overrides: str | None,
@@ -1158,7 +1136,6 @@ class TestCanonicalRunIngestion:
         """Build a complete simulation metadata dict with sensible defaults."""
         base: dict[str, str | None] = {
             "case_name": case_name,
-            "case_hash": case_hash,
             "compset": "FHIST",
             "compset_alias": "test_alias",
             "grid_name": "grid1",
@@ -1285,10 +1262,10 @@ class TestCanonicalRunIngestion:
 
         mock_simulations = {
             "/path/to/1081189.251218-200949": self._make_metadata(
-                case_name="case_alpha", case_hash="hash_case_alpha"
+                case_name="case_alpha",
             ),
             "/path/to/1081190.251218-200950": self._make_metadata(
-                case_name="case_beta", case_hash="hash_case_beta"
+                case_name="case_beta",
             ),
         }
 
@@ -1338,7 +1315,6 @@ class TestCanonicalRunIngestion:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="1081191.251218-200951",
             compset="FHIST",
             compset_alias="test_alias",
@@ -1403,7 +1379,6 @@ class TestCanonicalRunIngestion:
 
         sim = Simulation(
             case_id=case.id,
-            case_hash="test_hash",
             execution_id="1081192.251218-200952",
             compset="FHIST",
             compset_alias="test_alias",
@@ -1456,27 +1431,6 @@ class TestCanonicalRunIngestion:
         assert new_sim.run_config_deltas["compiler"]["canonical"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
 
-    def test_missing_case_hash_stores_empty_string(self, db: Session) -> None:
-        """Runs without CASE_HASH succeed and store empty string."""
-        self._create_machine(db, "test-machine")
-
-        mock_simulations = {
-            "/path/to/1081194.251218-200954": self._make_metadata(
-                case_hash=None,
-            ),
-        }
-
-        with patch(
-            "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
-        ):
-            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
-
-        assert result.created_count == 1
-        assert len(result.errors) == 0
-        sim = result.simulations[0]
-        assert sim.case_hash == ""
-
     def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
         """Runs with the same case_name belong to the same Case."""
         self._create_machine(db, "test-machine")
@@ -1484,11 +1438,9 @@ class TestCanonicalRunIngestion:
         mock_simulations = {
             "/path/to/1081195.251218-200955": self._make_metadata(
                 case_name="case1",
-                case_hash="hash_A",
             ),
             "/path/to/1081196.251218-200956": self._make_metadata(
                 case_name="case1",
-                case_hash="hash_B",
                 simulation_start_date="2020-06-01",
             ),
         }
@@ -1506,9 +1458,6 @@ class TestCanonicalRunIngestion:
         # Case was created with the shared name
         case = db.query(Case).filter(Case.name == "case1").first()
         assert case is not None
-        # Both simulations have different case_hash values
-        case_hashes = {s.case_hash for s in result.simulations}
-        assert len(case_hashes) == 2
 
     def test_different_case_name_creates_separate_cases(self, db: Session) -> None:
         """Runs with different case_name values create separate Cases."""
@@ -1517,11 +1466,9 @@ class TestCanonicalRunIngestion:
         mock_simulations = {
             "/path/to/1081197.251218-200957": self._make_metadata(
                 case_name="case_X",
-                case_hash="hash_X",
             ),
             "/path/to/1081198.251218-200958": self._make_metadata(
                 case_name="case_Y",
-                case_hash="hash_Y",
             ),
         }
 

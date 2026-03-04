@@ -4,9 +4,6 @@ Implements canonical run semantics for ``performance_archive`` ingestion:
 
 * A run is "successful" only when all required metadata files are present.
 * ``case_name`` (from timing files) is the identity for Case grouping.
-* ``CASE_HASH`` from ``env_case.xml`` is stored per-Simulation as
-  execution-specific metadata — it may differ between executions of
-  the same case.
 * Within each case, the **first** successful run is the *canonical
   baseline*.
 * Each successful run creates its own ``Simulation`` record linked to
@@ -95,12 +92,9 @@ def ingest_archive(  # noqa: C901
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements canonical run semantics using ``CASE_HASH`` for identity:
+    Implements canonical run semantics:
 
-    * Each run must contain a ``CASE_HASH`` value extracted from
-      ``env_case.xml``.  Runs missing ``CASE_HASH`` are rejected.
-    * Case lookup/creation is done by ``case_hash`` — no fallback to
-      directory name or other heuristics.
+    * Case lookup/creation is done by ``case_name`` from timing files.
     * The first successful run per case becomes the canonical baseline
       (``run_config_deltas = None``).
     * Non-canonical simulations store a single dict of configuration
@@ -159,9 +153,6 @@ def ingest_archive(  # noqa: C901
                     "Cannot determine Case identity."
                 )
 
-            # case_hash is execution-specific metadata (may vary per run).
-            # Defaults to empty string when missing from env_case.xml.
-            case_hash = metadata.get("case_hash") or ""
             machine_id = _resolve_machine_id(metadata, db)
 
             # Get or create Case by case_name.
@@ -212,7 +203,6 @@ def ingest_archive(  # noqa: C901
                     machine_id,
                     case.id,
                     execution_id,
-                    case_hash=case_hash,
                 )
                 simulations.append(sim_create)
                 logger.info(f"Mapped canonical simulation from {exp_dir}: {case_name}")
@@ -227,7 +217,6 @@ def ingest_archive(  # noqa: C901
                     machine_id,
                     case.id,
                     execution_id,
-                    case_hash=case_hash,
                     run_config_deltas=run_config_deltas,
                 )
                 simulations.append(sim_create)
@@ -451,7 +440,6 @@ def _map_metadata_to_schema(
     machine_id: UUID,
     case_id: UUID,
     execution_id: str,
-    case_hash: str = "",
     run_config_deltas: dict[str, dict[str, str | None]] | None = None,
 ) -> SimulationCreate:
     """Map parser metadata to SimulationCreate schema with type conversions.
@@ -468,8 +456,6 @@ def _map_metadata_to_schema(
         ID of the Case this simulation belongs to.
     execution_id : str
         Unique execution identifier derived from the archive directory.
-    case_hash : str
-        CASE_HASH from env_case.xml, stored per-simulation.
     run_config_deltas : dict | None
         Configuration differences vs canonical baseline, or None.
 
@@ -497,7 +483,6 @@ def _map_metadata_to_schema(
             # Required identification fields
             "caseId": case_id,
             "executionId": execution_id,
-            "caseHash": case_hash,
             # Required configuration fields
             "compset": metadata.get("compset"),
             "compsetAlias": metadata.get("compset_alias"),

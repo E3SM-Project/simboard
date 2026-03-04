@@ -35,7 +35,6 @@ const initialState: SimulationCreateForm = {
   // --- Configuration ---
   caseId: '', // required (UUID of the Case)
   executionId: '', // required
-  caseHash: '', // CASE_HASH from env_case.xml
   description: null,
   compset: '', // required
   compsetAlias: '', // required
@@ -785,9 +784,9 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
           <div className="mt-3 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
             <Info className="h-4 w-4 mt-0.5 shrink-0" />
             <p>
-              Archive uploads require <code className="font-mono text-xs bg-blue-100 px-1 rounded">env_case.xml</code> with
-              a valid <code className="font-mono text-xs bg-blue-100 px-1 rounded">CASE_HASH</code> entry.
-              Simulations missing this metadata will be rejected during ingestion.
+              Archive uploads require <code className="font-mono text-xs bg-blue-100 px-1 rounded">env_case.xml</code> for
+              case metadata extraction (e.g. <code className="font-mono text-xs bg-blue-100 px-1 rounded">CASE_GROUP</code>).
+              Simulations missing required metadata files will be skipped during ingestion.
             </p>
           </div>
         </header>

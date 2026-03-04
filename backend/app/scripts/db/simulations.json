@@ -5,18 +5,19 @@
     "simulations": [
       {
         "executionId": "1000001.240101-120000",
-        "caseHash": "a1b2c3d4e5f6",
         "description": "Baseline preindustrial control run for E3SM version 1.1.0.",
         "compset": "PICNTRL",
         "compsetAlias": "piControl",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "completed",
         "campaign": "DECK",
         "experimentType": "piControl",
         "initializationType": "restart",
-        "machine": { "name": "perlmutter" },
+        "machine": {
+          "name": "perlmutter"
+        },
         "simulationStartDate": "1900-01-01T00:00:00Z",
         "simulationEndDate": "1950-12-31T00:00:00Z",
         "runStartDate": "2019-01-01T00:00:00Z",
@@ -57,18 +58,19 @@
       },
       {
         "executionId": "1000002.240215-093000",
-        "caseHash": "a1b2c3d4e5f7",
-        "description": "Second execution of piControl — continued from year 45.",
+        "description": "Second execution of piControl \u2014 continued from year 45.",
         "compset": "PICNTRL",
         "compsetAlias": "piControl",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "completed",
         "campaign": "DECK",
         "experimentType": "piControl",
         "initializationType": "restart",
-        "machine": { "name": "perlmutter" },
+        "machine": {
+          "name": "perlmutter"
+        },
         "simulationStartDate": "1950-01-01T00:00:00Z",
         "simulationEndDate": "2000-12-31T00:00:00Z",
         "runStartDate": "2019-07-01T00:00:00Z",
@@ -92,18 +94,19 @@
     "simulations": [
       {
         "executionId": "1000003.240301-080000",
-        "caseHash": "b2c3d4e5f6a1",
         "description": "E3SM historical simulation for CMIP6 experiments.",
         "compset": "HIST",
         "compsetAlias": "historical",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "production",
         "status": "running",
         "campaign": "CMIP6",
         "experimentType": "historical",
         "initializationType": "restart",
-        "machine": { "name": "compy" },
+        "machine": {
+          "name": "compy"
+        },
         "simulationStartDate": "1850-01-01T00:00:00Z",
         "simulationEndDate": "2014-12-31T00:00:00Z",
         "runStartDate": "2020-01-01T00:00:00Z",
@@ -149,18 +152,19 @@
     "simulations": [
       {
         "executionId": "1000004.240401-140000",
-        "caseHash": "c3d4e5f6a1b2",
         "description": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
         "compset": "SSP585",
         "compsetAlias": "ssp585",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "queued",
         "campaign": "CMIP6",
         "experimentType": "ssp585",
         "initializationType": "restart",
-        "machine": { "name": "frontier" },
+        "machine": {
+          "name": "frontier"
+        },
         "simulationStartDate": "2015-01-01T00:00:00Z",
         "simulationEndDate": "2100-12-31T00:00:00Z",
         "compiler": "intel",
@@ -195,18 +199,19 @@
     "simulations": [
       {
         "executionId": "1000005.240501-100000",
-        "caseHash": "d4e5f6a1b2c3",
         "description": "Atmospheric Model Intercomparison Project (AMIP) simulation for E3SM v1.2.0.",
         "compset": "AMIP",
         "compsetAlias": "amip",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "completed",
         "campaign": "DECK",
         "experimentType": "amip",
         "initializationType": "coldstart",
-        "machine": { "name": "anvil" },
+        "machine": {
+          "name": "anvil"
+        },
         "simulationStartDate": "1979-01-01T00:00:00Z",
         "simulationEndDate": "2008-12-31T00:00:00Z",
         "compiler": "gnu",
@@ -241,18 +246,19 @@
     "simulations": [
       {
         "executionId": "1000006.240601-060000",
-        "caseHash": "e5f6a1b2c3d4",
         "description": "Representative Concentration Pathway 4.5 (RCP4.5) simulation for E3SM v2.1.0.",
         "compset": "RCP45",
         "compsetAlias": "rcp45",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "running",
         "campaign": "CMIP5",
         "experimentType": "rcp45",
         "initializationType": "restart",
-        "machine": { "name": "anvil" },
+        "machine": {
+          "name": "anvil"
+        },
         "simulationStartDate": "2006-01-01T00:00:00Z",
         "simulationEndDate": "2100-12-31T00:00:00Z",
         "compiler": "intel",
@@ -287,18 +293,19 @@
     "simulations": [
       {
         "executionId": "1000007.240701-070000",
-        "caseHash": "f6a1b2c3d4e5",
         "description": "Preindustrial climate simulation for E3SM v3.1.0.",
         "compset": "PICLIM",
         "compsetAlias": "piClim",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "completed",
         "campaign": "DECK",
         "experimentType": "piClim",
         "initializationType": "coldstart",
-        "machine": { "name": "andes" },
+        "machine": {
+          "name": "andes"
+        },
         "simulationStartDate": "1850-01-01T00:00:00Z",
         "simulationEndDate": "1900-12-31T00:00:00Z",
         "compiler": "gnu",
@@ -327,18 +334,19 @@
       },
       {
         "executionId": "1000008.240815-110000",
-        "caseHash": "f6a1b2c3d4e6",
         "description": "Second piClim execution with updated aerosol scheme.",
         "compset": "PICLIM",
         "compsetAlias": "piClim",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "completed",
         "campaign": "DECK",
         "experimentType": "piClim",
         "initializationType": "coldstart",
-        "machine": { "name": "andes" },
+        "machine": {
+          "name": "andes"
+        },
         "simulationStartDate": "1850-01-01T00:00:00Z",
         "simulationEndDate": "1900-12-31T00:00:00Z",
         "runStartDate": "2024-08-15T00:00:00Z",
@@ -352,8 +360,14 @@
         "gitCommitHash": "mno7891",
         "extra": {},
         "runConfigDeltas": {
-          "compiler": { "canonical": "gnu", "current": "intel" },
-          "git_commit_hash": { "canonical": "mno7890", "current": "mno7891" }
+          "compiler": {
+            "canonical": "gnu",
+            "current": "intel"
+          },
+          "git_commit_hash": {
+            "canonical": "mno7890",
+            "current": "mno7891"
+          }
         },
         "artifacts": [],
         "links": []
@@ -366,18 +380,19 @@
     "simulations": [
       {
         "executionId": "1000009.240901-150000",
-        "caseHash": "a1c2e3g4i5k6",
         "description": "Low-emissions scenario (SSP1-2.6) projection using E3SM v3.2.0.",
         "compset": "SSP126",
         "compsetAlias": "ssp126",
         "gridName": "ne30_oECv3",
-        "gridResolution": "1°",
+        "gridResolution": "1\u00b0",
         "simulationType": "experimental",
         "status": "queued",
         "campaign": "CMIP6",
         "experimentType": "ssp126",
         "initializationType": "restart",
-        "machine": { "name": "frontier" },
+        "machine": {
+          "name": "frontier"
+        },
         "simulationStartDate": "2015-01-01T00:00:00Z",
         "simulationEndDate": "2100-12-31T00:00:00Z",
         "compiler": "intel",
@@ -412,23 +427,24 @@
     "simulations": [
       {
         "executionId": "1000010.241001-180000",
-        "caseHash": "b2d4f6h8j0l2",
         "description": "High-resolution simulation for E3SM v3.3.0.",
         "compset": "HIGHRES",
         "compsetAlias": "highres",
         "gridName": "ne120_oRRS18v3",
-        "gridResolution": "0.25°",
+        "gridResolution": "0.25\u00b0",
         "simulationType": "experimental",
         "status": "running",
         "campaign": "DECK",
         "experimentType": "highres",
         "initializationType": "restart",
-        "machine": { "name": "perlmutter" },
+        "machine": {
+          "name": "perlmutter"
+        },
         "simulationStartDate": "2000-01-01T00:00:00Z",
         "simulationEndDate": "2020-12-31T00:00:00Z",
         "compiler": "intel",
-        "notesMarkdown": "This high-resolution simulation uses a 0.25° grid for enhanced spatial detail.",
-        "keyFeatures": "Enhanced spatial resolution with 0.25° grid.",
+        "notesMarkdown": "This high-resolution simulation uses a 0.25\u00b0 grid for enhanced spatial detail.",
+        "keyFeatures": "Enhanced spatial resolution with 0.25\u00b0 grid.",
         "knownIssues": "High computational cost.",
         "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
         "gitBranch": "main",

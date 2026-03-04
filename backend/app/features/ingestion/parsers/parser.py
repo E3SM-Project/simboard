@@ -367,7 +367,6 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
 
     populated_fields: SimulationMetadata = {
         "case_name": metadata.get("case_name"),
-        "case_hash": metadata.get("case_hash"),
         "compset": metadata.get("compset"),
         "compset_alias": metadata.get("compset_alias"),
         "grid_name": metadata.get("grid_name"),

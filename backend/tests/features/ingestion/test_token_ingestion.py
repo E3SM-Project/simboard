@@ -274,7 +274,6 @@ class TestIngestionWithAPIToken:
             mock_sim = SimulationCreate(
                 caseId=case.id,
                 executionId="1081156.251218-200923",
-                caseHash="test_hash",
                 compset="test_compset",
                 compsetAlias="test_alias",
                 gridName="test_grid",
