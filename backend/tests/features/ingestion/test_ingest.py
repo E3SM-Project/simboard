@@ -579,7 +579,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.simulations[0].git_commit_hash == "abc123"
 
             # Verify case_group is stored on the Case, not the Simulation
-            case = db.query(Case).filter(Case.case_hash == "hash_case1").first()
+            case = db.query(Case).filter(Case.name == "case1").first()
             assert case is not None
             assert case.case_group == "test_group"
 
@@ -614,12 +614,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.flush()
 
         # Create a Case and Simulation directly in the database
-        case = Case(name="existing_case", case_hash="hash_existing_case")
+        case = Case(name="existing_case")
         db.add(case)
         db.flush()
 
         existing_sim = Simulation(
             case_id=case.id,
+            case_hash="test_hash",
             execution_id="1081175.251218-200935",
             compset="FHIST",
             compset_alias="FHIST_f09_fe",
@@ -698,12 +699,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(ingestion)
         db.flush()
 
-        case = Case(name="existing_case", case_hash="hash_existing_case")
+        case = Case(name="existing_case")
         db.add(case)
         db.flush()
 
         existing_sim = Simulation(
             case_id=case.id,
+            case_hash="test_hash",
             execution_id="1081176.251218-200936",
             compset="FHIST",
             compset_alias="FHIST_f09_fe",
@@ -1326,12 +1328,13 @@ class TestCanonicalRunIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1", case_hash="hash_case1")
+        case = Case(name="case1")
         db.add(case)
         db.flush()
 
         sim = Simulation(
             case_id=case.id,
+            case_hash="test_hash",
             execution_id="1081191.251218-200951",
             compset="FHIST",
             compset_alias="test_alias",
@@ -1390,12 +1393,13 @@ class TestCanonicalRunIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1", case_hash="hash_case1")
+        case = Case(name="case1")
         db.add(case)
         db.flush()
 
         sim = Simulation(
             case_id=case.id,
+            case_hash="test_hash",
             execution_id="1081192.251218-200952",
             compset="FHIST",
             compset_alias="test_alias",
@@ -1447,8 +1451,8 @@ class TestCanonicalRunIngestion:
         assert new_sim.run_config_deltas["compiler"]["canonical"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
 
-    def test_missing_case_hash_is_rejected(self, db: Session) -> None:
-        """Runs without CASE_HASH are rejected with a validation error."""
+    def test_missing_case_hash_stores_empty_string(self, db: Session) -> None:
+        """Runs without CASE_HASH succeed and store empty string."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1463,23 +1467,23 @@ class TestCanonicalRunIngestion:
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
-        assert result.created_count == 0
-        assert len(result.errors) == 1
-        assert result.errors[0]["error_type"] == "ValueError"
-        assert "CASE_HASH" in result.errors[0]["error"]
+        assert result.created_count == 1
+        assert len(result.errors) == 0
+        sim = result.simulations[0]
+        assert sim.case_hash == ""
 
-    def test_same_case_hash_groups_to_same_case(self, db: Session) -> None:
-        """Runs with the same CASE_HASH belong to the same Case."""
+    def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
+        """Runs with the same case_name belong to the same Case."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081195.251218-200955": self._make_metadata(
-                case_name="case_A",
-                case_hash="shared_hash",
+                case_name="case1",
+                case_hash="hash_A",
             ),
             "/path/to/1081196.251218-200956": self._make_metadata(
-                case_name="case_A",
-                case_hash="shared_hash",
+                case_name="case1",
+                case_hash="hash_B",
                 simulation_start_date="2020-06-01",
             ),
         }
@@ -1494,12 +1498,15 @@ class TestCanonicalRunIngestion:
         # Both simulations must share the same case_id
         case_ids = {s.case_id for s in result.simulations}
         assert len(case_ids) == 1
-        # Case was created with the shared hash
-        case = db.query(Case).filter(Case.case_hash == "shared_hash").first()
+        # Case was created with the shared name
+        case = db.query(Case).filter(Case.name == "case1").first()
         assert case is not None
+        # Both simulations have different case_hash values
+        case_hashes = {s.case_hash for s in result.simulations}
+        assert len(case_hashes) == 2
 
-    def test_different_case_hash_creates_separate_cases(self, db: Session) -> None:
-        """Runs with different CASE_HASH values create separate Cases."""
+    def test_different_case_name_creates_separate_cases(self, db: Session) -> None:
+        """Runs with different case_name values create separate Cases."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {

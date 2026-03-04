@@ -113,6 +113,7 @@ class TestSimulationOutSchema:
             "id": uuid4(),
             "case_id": case_id,
             "case_name": "test_case",
+            "case_hash": "test_hash",
             "execution_id": "1081156.251218-200923",
             "is_canonical": True,
             "change_count": 0,
@@ -193,6 +194,7 @@ class TestSimulationOutSchema:
             "id": uuid4(),
             "case_id": case_id,
             "case_name": "test_case",
+            "case_hash": "test_hash",
             "execution_id": "1081156.251218-200923",
             "is_canonical": False,
             "change_count": 2,
@@ -289,6 +291,7 @@ class TestSimulationOutSchema:
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
+            case_hash="test_hash",
             execution_id="1081156.251218-200923",
             is_canonical=True,
             change_count=0,
@@ -360,6 +363,7 @@ class TestSimulationOutSchema:
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
+            case_hash="test_hash",
             execution_id="1081156.251218-200923",
             is_canonical=True,
             change_count=0,
@@ -424,6 +428,7 @@ class TestSimulationSummaryOutSchema:
         summary = SimulationSummaryOut(
             id=uuid4(),
             execution_id="1081156.251218-200923",
+            case_hash="test_hash",
             status="created",
             is_canonical=True,
             change_count=0,
@@ -438,6 +443,7 @@ class TestSimulationSummaryOutSchema:
         summary = SimulationSummaryOut(
             id=uuid4(),
             execution_id="1081290.251218-211543",
+            case_hash="test_hash",
             status="completed",
             is_canonical=False,
             change_count=3,
@@ -455,7 +461,6 @@ class TestCaseOutSchema:
         case_out = CaseOut(
             id=uuid4(),
             name="v3.LR.historical_0121",
-            case_hash="abc123hash",
             case_group="ensemble_v3",
             canonical_simulation_id=sim_id,
             simulations=[
@@ -482,7 +487,6 @@ class TestCaseOutSchema:
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
         assert case_out.name == "v3.LR.historical_0121"
-        assert case_out.case_hash == "abc123hash"
         assert case_out.case_group == "ensemble_v3"
         assert len(case_out.simulations) == 2
         assert case_out.simulations[0].is_canonical is True
@@ -492,7 +496,6 @@ class TestCaseOutSchema:
         case_out = CaseOut(
             id=uuid4(),
             name="empty_case",
-            case_hash="emptyhash",
             case_group=None,
             canonical_simulation_id=None,
             simulations=[],
