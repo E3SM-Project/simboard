@@ -35,8 +35,10 @@ def override_auth_dependency(normal_user_sync):
 def _create_case(db: Session, name: str = "test_case") -> Case:
     """Helper to create a Case."""
     case = Case(name=name)
+
     db.add(case)
     db.flush()
+
     return case
 
 
@@ -108,6 +110,7 @@ class TestListCases:
         db.add(sim1)
         db.flush()
         # Set canonical
+        assert sim1.id is not None
         case.canonical_simulation_id = sim1.id
         db.add(sim2)
         db.commit()
@@ -191,6 +194,7 @@ class TestGetCase:
         )
         db.add(sim)
         db.flush()
+        assert sim.id is not None
         case.canonical_simulation_id = sim.id
         db.commit()
 
@@ -258,6 +262,31 @@ class TestCreateSimulation:
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
         assert len(data["artifacts"]) == 1
         assert len(data["links"]) == 1
+
+    def test_endpoint_returns_400_when_case_not_found(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        payload = {
+            "caseId": str(uuid4()),
+            "caseHash": "test_hash",
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+        assert res.status_code == 400
+        assert "not found" in res.json()["detail"].lower()
 
 
 class TestListSimulations:

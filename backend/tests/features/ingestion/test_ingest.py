@@ -3,10 +3,13 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
+    _derive_execution_id,
+    _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
@@ -1245,6 +1248,7 @@ class TestCanonicalRunIngestion:
         assert len(canonical) == 1
         assert len(non_canonical) == 1
         deltas = non_canonical[0].run_config_deltas
+        assert deltas is not None
         assert "compiler" in deltas
         assert deltas["compiler"]["canonical"] == "gcc-11"
         assert deltas["compiler"]["current"] == "gcc-12"
@@ -1419,6 +1423,7 @@ class TestCanonicalRunIngestion:
         db.flush()
 
         # Set canonical_simulation_id on the case
+        assert sim.id is not None
         case.canonical_simulation_id = sim.id
         db.commit()
 
@@ -1529,3 +1534,35 @@ class TestCanonicalRunIngestion:
         assert result.created_count == 2
         case_ids = {s.case_id for s in result.simulations}
         assert len(case_ids) == 2
+
+
+class TestIngestHelpers:
+    def test_derive_execution_id_raises_on_empty_path(self) -> None:
+        with pytest.raises(ValueError, match="Cannot derive execution_id"):
+            _derive_execution_id("")
+
+    def test_get_or_create_case_sets_missing_case_group(self, db: Session) -> None:
+        case = Case(name="case_group_test", case_group=None)
+        db.add(case)
+        db.commit()
+
+        updated = _get_or_create_case(db, name="case_group_test", case_group="groupA")
+
+        assert updated.id == case.id
+        assert updated.case_group == "groupA"
+
+    def test_get_or_create_case_keeps_existing_on_conflict(self, db: Session) -> None:
+        case = Case(name="case_group_conflict", case_group="groupA")
+        db.add(case)
+        db.commit()
+
+        with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
+            updated = _get_or_create_case(
+                db,
+                name="case_group_conflict",
+                case_group="groupB",
+            )
+
+        assert updated.id == case.id
+        assert updated.case_group == "groupA"
+        mock_warning.assert_called_once()

@@ -135,6 +135,70 @@ def load_json(path: str) -> dict:
         return json.load(f)
 
 
+def seed_from_json(db: Session, json_path: str):
+    print(f"🌱 Seeding database from {json_path}...")
+    data = load_json(json_path)
+
+    # Clear dev data using rollback_seed
+    rollback_seed(db)
+
+    # ✅ Ensure at least one user exists
+    first_user = db.query(User).order_by(User.id.asc()).first()
+    if not first_user:
+        first_user = create_dev_oauth_user(db)
+        db.refresh(first_user)
+
+    first_user_id = first_user.id
+
+    total_sims = 0
+
+    for case_entry in data:
+        case_name = case_entry.get("caseName")
+        if not case_name:
+            raise ValueError(f"Missing 'caseName' in JSON case entry: {case_entry}")
+
+        case_group = case_entry.get("caseGroup")
+        simulations_data = case_entry.get("simulations", [])
+        if not simulations_data:
+            raise ValueError(f"No simulations for case '{case_name}'")
+
+        # Create the Case record
+        case = Case(name=case_name, case_group=case_group)
+        db.add(case)
+        db.flush()
+
+        first_sim = None
+
+        for sim_entry in simulations_data:
+            sim = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
+
+            if first_sim is None:
+                first_sim = sim
+
+            total_sims += 1
+
+        # Set the first simulation as canonical for this case
+        if first_sim is not None:
+            if first_sim.id is not None:
+                case.canonical_simulation_id = first_sim.id
+            db.flush()
+
+    db.commit()
+    print(
+        f"✅ Done! Inserted {len(data)} cases with "
+        f"{total_sims} simulations, artifacts, and links."
+    )
+
+
+def _parse_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
 def _seed_simulation(
     db: Session, sim_entry: dict, case: Case, case_name: str, user_id
 ) -> Simulation:
@@ -227,69 +291,6 @@ def _seed_simulation(
         )
 
     return sim
-
-
-def seed_from_json(db: Session, json_path: str):
-    print(f"🌱 Seeding database from {json_path}...")
-    data = load_json(json_path)
-
-    # Clear dev data using rollback_seed
-    rollback_seed(db)
-
-    # ✅ Ensure at least one user exists
-    first_user = db.query(User).order_by(User.id.asc()).first()
-    if not first_user:
-        first_user = create_dev_oauth_user(db)
-        db.refresh(first_user)
-
-    first_user_id = first_user.id
-
-    total_sims = 0
-
-    for case_entry in data:
-        case_name = case_entry.get("caseName")
-        if not case_name:
-            raise ValueError(f"Missing 'caseName' in JSON case entry: {case_entry}")
-
-        case_group = case_entry.get("caseGroup")
-        simulations_data = case_entry.get("simulations", [])
-        if not simulations_data:
-            raise ValueError(f"No simulations for case '{case_name}'")
-
-        # Create the Case record
-        case = Case(name=case_name, case_group=case_group)
-        db.add(case)
-        db.flush()
-
-        first_sim = None
-
-        for sim_entry in simulations_data:
-            sim = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
-
-            if first_sim is None:
-                first_sim = sim
-
-            total_sims += 1
-
-        # Set the first simulation as canonical for this case
-        if first_sim is not None:
-            case.canonical_simulation_id = first_sim.id
-            db.flush()
-
-    db.commit()
-    print(
-        f"✅ Done! Inserted {len(data)} cases with "
-        f"{total_sims} simulations, artifacts, and links."
-    )
-
-
-def _parse_datetime(value):
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except Exception:
-        return None
 
 
 if __name__ == "__main__":

@@ -214,7 +214,7 @@ def create_simulation(
         db.flush()
 
     # Re-query with relationships loaded
-    sim = (
+    sim_loaded = (
         db.query(Simulation)
         .options(
             joinedload(Simulation.case),
@@ -226,7 +226,13 @@ def create_simulation(
         .first()
     )
 
-    result = _simulation_to_out(sim)
+    if sim_loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load newly created simulation.",
+        )
+
+    result = _simulation_to_out(sim_loaded)
 
     return result
 

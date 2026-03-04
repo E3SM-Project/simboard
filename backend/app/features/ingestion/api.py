@@ -332,6 +332,29 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
     return IngestionStatus.FAILED.value
 
 
+def _set_canonical_simulations(db: Session, created_sims: list[Simulation]) -> None:
+    """Set canonical simulation per case when canonical is not already set."""
+    case_ids: set[uuid.UUID] = {
+        case_id
+        for sim in created_sims
+        if isinstance((case_id := sim.case_id), uuid.UUID)
+    }
+    cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
+
+    for sim in created_sims:
+        if not isinstance(sim.case_id, uuid.UUID):
+            continue
+
+        case = cases.get(sim.case_id)
+        if (
+            case
+            and case.canonical_simulation_id is None
+            and isinstance(sim.id, uuid.UUID)
+        ):
+            case.canonical_simulation_id = sim.id
+            db.add(case)
+
+
 def _persist_simulations(
     ingestion_id: uuid.UUID,
     simulations: list[SimulationCreate],
@@ -396,13 +419,6 @@ def _persist_simulations(
 
     db.flush()
 
-    # Set canonical_simulation_id on Cases that don't have one yet.
-    case_ids = {sim.case_id for sim in created_sims}
-    cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
-    for sim in created_sims:
-        case = cases.get(sim.case_id)
-        if case and case.canonical_simulation_id is None:
-            case.canonical_simulation_id = sim.id
-            db.add(case)
+    _set_canonical_simulations(db, created_sims)
 
     db.flush()

@@ -1,5 +1,7 @@
 """Rollback seeded data script from seed.py."""
 
+from uuid import UUID
+
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -47,9 +49,9 @@ def rollback_seed(db: Session):
             )
 
             # Collect case_ids before deleting simulations
-            case_ids = []
+            case_ids: list[UUID] = []
             if simulation_ids:
-                case_ids = (
+                case_ids = list(
                     db.execute(
                         select(Simulation.__table__.c.case_id)
                         .where(Simulation.__table__.c.id.in_(simulation_ids))
@@ -93,7 +95,7 @@ def rollback_seed(db: Session):
             # Delete cases that no longer have any simulations
             if case_ids:
                 # Only delete cases that have no remaining simulations
-                cases_with_sims = (
+                cases_with_sims = list(
                     db.execute(
                         select(Simulation.__table__.c.case_id)
                         .where(Simulation.__table__.c.case_id.in_(case_ids))
