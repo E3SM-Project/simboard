@@ -3,8 +3,10 @@
 Implements canonical run semantics for ``performance_archive`` ingestion:
 
 * A run is "successful" only when all required metadata files are present.
-* ``CASE_HASH`` from ``env_case.xml`` is the **mandatory** identity for
-  Case grouping — no fallback to directory name or other heuristics.
+* ``case_name`` (from timing files) is the identity for Case grouping.
+* ``CASE_HASH`` from ``env_case.xml`` is stored per-Simulation as
+  execution-specific metadata — it may differ between executions of
+  the same case.
 * Within each case, the **first** successful run is the *canonical
   baseline*.
 * Each successful run creates its own ``Simulation`` record linked to
@@ -141,7 +143,7 @@ def ingest_archive(  # noqa: C901
     skipped_count = 0
     errors: list[dict[str, str]] = []
 
-    # Track canonical metadata per case_hash for batch processing.
+    # Track canonical metadata per case_name for batch processing.
     # Handles the case where multiple runs for the same (new) case
     # appear in a single archive before any are persisted.
     canonical_cache: dict[str, SimulationMetadata] = {}
@@ -150,29 +152,21 @@ def ingest_archive(  # noqa: C901
         execution_id = _derive_execution_id(exp_dir)
 
         try:
-            # Validate CASE_HASH presence — mandatory for case identity.
-            case_hash = metadata.get("case_hash")
-            if not case_hash:
-                raise ValueError(
-                    f"CASE_HASH is required but missing from '{exp_dir}'. "
-                    "Ensure env_case.xml contains a CASE_HASH entry."
-                )
-
             case_name = metadata.get("case_name")
             if not case_name:
-                logger.warning(
-                    f"case_name missing from '{exp_dir}'; defaulting to "
-                    f"'unknown'. The Case will be identified by its "
-                    f"CASE_HASH ({case_hash}) regardless."
+                raise ValueError(
+                    f"case_name is required but missing from '{exp_dir}'. "
+                    "Cannot determine Case identity."
                 )
-                case_name = "unknown"
+
+            # case_hash is execution-specific metadata (may vary per run).
+            case_hash = metadata.get("case_hash") or ""
             machine_id = _resolve_machine_id(metadata, db)
 
-            # Get or create Case by case_hash (not by name).
+            # Get or create Case by case_name.
             case_group = metadata.get("case_group")
             case = _get_or_create_case(
                 db,
-                case_hash=case_hash,
                 name=case_name,
                 case_group=case_group,
             )
@@ -187,8 +181,8 @@ def ingest_archive(  # noqa: C901
                 duplicate_count += 1
 
                 # Seed canonical cache if we haven't seen this case yet.
-                if case_hash not in canonical_cache:
-                    canonical_cache[case_hash] = metadata
+                if case_name not in canonical_cache:
+                    canonical_cache[case_name] = metadata
                 continue
 
             # Determine canonical metadata for this case.
@@ -203,22 +197,24 @@ def ingest_archive(  # noqa: C901
                 )
                 if canonical_sim:
                     canonical_metadata = _sim_to_metadata(canonical_sim)
-            elif case_hash in canonical_cache:
+            elif case_name in canonical_cache:
                 # Canonical assigned earlier in this batch (not yet persisted).
-                canonical_metadata = canonical_cache[case_hash]
+                canonical_metadata = canonical_cache[case_name]
 
             if canonical_metadata is None:
                 # First successful run → canonical baseline.
-                canonical_cache[case_hash] = metadata
+                canonical_cache[case_name] = metadata
 
                 sim_create = _map_metadata_to_schema(
-                    metadata, db, machine_id, case.id, execution_id
+                    metadata,
+                    db,
+                    machine_id,
+                    case.id,
+                    execution_id,
+                    case_hash=case_hash,
                 )
                 simulations.append(sim_create)
-                logger.info(
-                    f"Mapped canonical simulation from {exp_dir}: "
-                    f"{case_name} (hash={case_hash})"
-                )
+                logger.info(f"Mapped canonical simulation from {exp_dir}: {case_name}")
             else:
                 # Subsequent successful run → separate Simulation with delta.
                 delta = _compute_config_delta(canonical_metadata, metadata)
@@ -230,6 +226,7 @@ def ingest_archive(  # noqa: C901
                     machine_id,
                     case.id,
                     execution_id,
+                    case_hash=case_hash,
                     run_config_deltas=run_config_deltas,
                 )
                 simulations.append(sim_create)
@@ -288,42 +285,39 @@ def _derive_execution_id(exp_dir: str) -> str:
 
 def _get_or_create_case(
     db: Session,
-    case_hash: str,
     name: str,
     case_group: str | None = None,
 ) -> Case:
-    """Get or create a Case record by case_hash.
+    """Get or create a Case record by case name.
 
     Parameters
     ----------
     db : Session
         Active database session.
-    case_hash : str
-        The CASE_HASH value from env_case.xml, used as the canonical
-        identity for case grouping.
     name : str
-        Human-readable case name (used when creating a new Case).
+        Case name derived from the experiment (e.g. from timing files).
+        Used as the canonical identity for case grouping.
     case_group : str | None
         Optional CASE_GROUP from env_case.xml.  Stored on ``Case``
         if present.  An existing non-null value is never overwritten
         with null; a conflicting non-null value logs a warning and
         keeps the original.
     """
-    case = db.query(Case).filter(Case.case_hash == case_hash).first()
+    case = db.query(Case).filter(Case.name == name).first()
 
     if not case:
-        case = Case(name=name, case_hash=case_hash, case_group=case_group)
+        case = Case(name=name, case_group=case_group)
         db.add(case)
         db.flush()
-        logger.info(f"Created new Case: {name} (hash={case_hash})")
+        logger.info(f"Created new Case: {name}")
     elif case_group is not None:
         if case.case_group is None:
             case.case_group = case_group
             db.flush()
         elif case.case_group != case_group:
             logger.warning(
-                f"Conflicting CASE_GROUP for case '{name}' "
-                f"(hash={case_hash}): existing='{case.case_group}', "
+                f"Conflicting CASE_GROUP for case '{name}': "
+                f"existing='{case.case_group}', "
                 f"new='{case_group}'. Retaining existing value."
             )
 
@@ -456,6 +450,7 @@ def _map_metadata_to_schema(
     machine_id: UUID,
     case_id: UUID,
     execution_id: str,
+    case_hash: str = "",
     run_config_deltas: dict[str, dict[str, str | None]] | None = None,
 ) -> SimulationCreate:
     """Map parser metadata to SimulationCreate schema with type conversions.
@@ -472,6 +467,8 @@ def _map_metadata_to_schema(
         ID of the Case this simulation belongs to.
     execution_id : str
         Unique execution identifier derived from the archive directory.
+    case_hash : str
+        CASE_HASH from env_case.xml, stored per-simulation.
     run_config_deltas : dict | None
         Configuration differences vs canonical baseline, or None.
 
@@ -499,6 +496,7 @@ def _map_metadata_to_schema(
             # Required identification fields
             "caseId": case_id,
             "executionId": execution_id,
+            "caseHash": case_hash,
             # Required configuration fields
             "compset": metadata.get("compset"),
             "compsetAlias": metadata.get("compset_alias"),

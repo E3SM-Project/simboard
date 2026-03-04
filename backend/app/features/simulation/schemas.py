@@ -114,6 +114,16 @@ class SimulationCreate(CamelInBaseModel):
             ),
         ),
     ]
+    case_hash: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "CASE_HASH from env_case.xml for this execution. "
+                "Identifies the case configuration at the time of this run."
+            ),
+        ),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
@@ -298,6 +308,16 @@ class SimulationSummaryOut(CamelOutBaseModel):
             ),
         ),
     ]
+    case_hash: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "CASE_HASH from env_case.xml for this execution. "
+                "Identifies the case configuration at the time of this run."
+            ),
+        ),
+    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -331,16 +351,6 @@ class CaseOut(CamelOutBaseModel):
 
     id: Annotated[UUID, Field(..., description="The unique identifier of the case.")]
     name: Annotated[str, Field(..., description="The case name.")]
-    case_hash: Annotated[
-        str,
-        Field(
-            ...,
-            description=(
-                "Unique hash derived from case parameters (CASE_HASH from "
-                "env_case.xml). Used as the canonical identity for case grouping."
-            ),
-        ),
-    ]
     case_group: Annotated[
         str | None,
         Field(
@@ -402,6 +412,16 @@ class SimulationOut(CamelOutBaseModel):
             description=(
                 "Unique identifier for this execution, derived from the "
                 "archive directory name"
+            ),
+        ),
+    ]
+    case_hash: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "CASE_HASH from env_case.xml for this execution. "
+                "Identifies the case configuration at the time of this run."
             ),
         ),
     ]

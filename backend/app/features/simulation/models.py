@@ -35,9 +35,6 @@ class Case(Base, IDMixin, TimestampMixin):
     __tablename__ = "cases"
 
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
-    case_hash: Mapped[str] = mapped_column(
-        Text, unique=True, index=True, nullable=False
-    )
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
     canonical_simulation_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -74,6 +71,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     execution_id: Mapped[str] = mapped_column(
         Text, unique=True, index=True, nullable=False
     )
+    case_hash: Mapped[str] = mapped_column(Text, index=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(Text)

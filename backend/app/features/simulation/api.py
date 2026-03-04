@@ -120,6 +120,7 @@ def _case_to_out(case: Case) -> CaseOut:
             SimulationSummaryOut(
                 id=sim.id,
                 execution_id=sim.execution_id,
+                case_hash=sim.case_hash,
                 status=sim.status,
                 is_canonical=is_canonical,
                 change_count=change_count,
@@ -131,7 +132,6 @@ def _case_to_out(case: Case) -> CaseOut:
     result = CaseOut(
         id=case.id,
         name=case.name,
-        case_hash=case.case_hash,
         case_group=case.case_group,
         canonical_simulation_id=case.canonical_simulation_id,
         simulations=summaries,

@@ -362,7 +362,7 @@ class TestIngestArchive:
 
             assert ingest_result.simulations == []
             assert len(ingest_result.errors) == 1
-            assert ingest_result.errors[0]["error_type"] == "ValidationError"
+            assert ingest_result.errors[0]["error_type"] == "ValueError"
 
     def test_machine_lookup_and_validation_through_public_api(
         self, db: Session

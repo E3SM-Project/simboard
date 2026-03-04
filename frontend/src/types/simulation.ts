@@ -8,7 +8,6 @@ import type { Machine } from '@/types/machine';
 export interface CaseOut {
   id: string;
   name: string;
-  caseHash: string;
   caseGroup: string | null;
   canonicalSimulationId: string | null;
   simulations: SimulationSummaryOut[];
@@ -23,6 +22,7 @@ export interface CaseOut {
 export interface SimulationSummaryOut {
   id: string;
   executionId: string;
+  caseHash: string;
   status: string;
   isCanonical: boolean;
   changeCount: number;
@@ -39,6 +39,7 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~
   caseId: string; // UUID
   executionId: string;
+  caseHash: string;
   description: string | null;
   compset: string;
   compsetAlias: string;
