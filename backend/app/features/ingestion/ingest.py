@@ -162,7 +162,9 @@ def ingest_archive(  # noqa: C901
             case_name = metadata.get("case_name")
             if not case_name:
                 logger.warning(
-                    f"case_name missing from '{exp_dir}'; using 'unknown'."
+                    f"case_name missing from '{exp_dir}'; defaulting to "
+                    f"'unknown'. The Case will be identified by its "
+                    f"CASE_HASH ({case_hash}) regardless."
                 )
                 case_name = "unknown"
             machine_id = _resolve_machine_id(metadata, db)
