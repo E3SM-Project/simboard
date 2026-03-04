@@ -25,6 +25,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -79,6 +86,8 @@ const formatDate = (d?: string) => {
 
 export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [globalFilter, setGlobalFilter] = useState('');
+  const [caseNameFilter, setCaseNameFilter] = useState<string>('');
+  const [caseGroupFilter, setCaseGroupFilter] = useState<string>('');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -87,6 +96,29 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
+
+  // Derive unique case names and case groups for filter dropdowns.
+  const caseNames = useMemo(
+    () => [...new Set(simulations.map((s) => s.caseName))].sort(),
+    [simulations],
+  );
+  const caseGroups = useMemo(
+    () =>
+      [...new Set(simulations.map((s) => s.caseGroup).filter((g): g is string => g != null))].sort(),
+    [simulations],
+  );
+
+  // Pre-filter simulations by case name / case group before passing to table.
+  const filteredSimulations = useMemo(() => {
+    let result = simulations;
+    if (caseNameFilter) {
+      result = result.filter((s) => s.caseName === caseNameFilter);
+    }
+    if (caseGroupFilter) {
+      result = result.filter((s) => s.caseGroup === caseGroupFilter);
+    }
+    return result;
+  }, [simulations, caseNameFilter, caseGroupFilter]);
 
   const columns = useMemo<ColumnDef<SimulationOut>[]>(
     () => [
@@ -247,7 +279,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   );
 
   const table = useReactTable({
-    data: simulations,
+    data: filteredSimulations,
     columns,
     state: { globalFilter, sorting, columnVisibility },
     onSortingChange: setSorting,
@@ -300,6 +332,38 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
           onChange={(e) => setGlobalFilter(e.target.value)}
           className="w-[500px]"
         />
+
+        {/* Case Name filter */}
+        <Select value={caseNameFilter} onValueChange={(v) => setCaseNameFilter(v === '__all__' ? '' : v)}>
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="All case names" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All case names</SelectItem>
+            {caseNames.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Case Group filter */}
+        {caseGroups.length > 0 && (
+          <Select value={caseGroupFilter} onValueChange={(v) => setCaseGroupFilter(v === '__all__' ? '' : v)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All case groups" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All case groups</SelectItem>
+              {caseGroups.map((group) => (
+                <SelectItem key={group} value={group}>
+                  {group}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {/* Column visibility quick presets */}
         <div className="ml-auto flex items-center gap-2 text-sm">
           <DropdownMenu>
@@ -464,7 +528,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       {/* Footer / Pagination */}
       <div className="flex items-center justify-between py-2 text-sm text-muted-foreground">
         <div>
-          Showing {table.getRowModel().rows.length} of {simulations.length}
+          Showing {table.getRowModel().rows.length} of {filteredSimulations.length}
         </div>
         <div className="flex items-center gap-2">
           <Button

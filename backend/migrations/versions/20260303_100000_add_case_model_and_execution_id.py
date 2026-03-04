@@ -10,7 +10,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision: str = "20260303_100000"
@@ -25,14 +25,26 @@ def upgrade() -> None:
     # 1. Create cases table (without canonical_simulation_id FK first)
     op.create_table(
         "cases",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True,
-                  server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("canonical_simulation_id", UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_index("ix_cases_name", "cases", ["name"], unique=True)
 
@@ -83,13 +95,17 @@ def upgrade() -> None:
     # 7. Add indexes and constraints
     op.create_index("ix_simulations_case_id", "simulations", ["case_id"])
     op.create_index(
-        "ix_simulations_execution_id", "simulations", ["execution_id"],
+        "ix_simulations_execution_id",
+        "simulations",
+        ["execution_id"],
         unique=True,
     )
     op.create_foreign_key(
         "fk_simulations_case_id_cases",
-        "simulations", "cases",
-        ["case_id"], ["id"],
+        "simulations",
+        "cases",
+        ["case_id"],
+        ["id"],
     )
 
     # 8. Set canonical_simulation_id for each case (earliest simulation)
@@ -109,8 +125,10 @@ def upgrade() -> None:
     # 9. Add FK from cases.canonical_simulation_id -> simulations.id
     op.create_foreign_key(
         "fk_cases_canonical_sim",
-        "cases", "simulations",
-        ["canonical_simulation_id"], ["id"],
+        "cases",
+        "simulations",
+        ["canonical_simulation_id"],
+        ["id"],
     )
 
     # 10. Convert run_config_deltas from list to dict if legacy data exists
@@ -137,9 +155,7 @@ def upgrade() -> None:
     )
 
     # 11. Drop old case_name column and its unique constraint
-    op.drop_constraint(
-        "uq_simulation_case_machine_date", "simulations", type_="unique"
-    )
+    op.drop_constraint("uq_simulation_case_machine_date", "simulations", type_="unique")
     op.drop_column("simulations", "case_name")
 
 
@@ -175,9 +191,7 @@ def downgrade() -> None:
     op.drop_constraint(
         "fk_simulations_case_id_cases", "simulations", type_="foreignkey"
     )
-    op.drop_constraint(
-        "fk_cases_canonical_sim", "cases", type_="foreignkey"
-    )
+    op.drop_constraint("fk_cases_canonical_sim", "cases", type_="foreignkey")
     op.drop_index("ix_simulations_execution_id", table_name="simulations")
     op.drop_index("ix_simulations_case_id", table_name="simulations")
 

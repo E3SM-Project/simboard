@@ -6,7 +6,6 @@ including path-based and upload-based ingestion endpoints.
 
 import uuid
 from io import BytesIO
-from uuid import uuid4
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -857,11 +856,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_id == case.id)
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert len(simulation.artifacts) == 1
@@ -920,11 +915,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_id == case.id)
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert len(simulation.links) == 1
@@ -996,11 +987,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_id == case.id)
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert (

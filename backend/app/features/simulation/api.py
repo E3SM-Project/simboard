@@ -132,6 +132,7 @@ def _case_to_out(case: Case) -> CaseOut:
         id=case.id,
         name=case.name,
         case_hash=case.case_hash,
+        case_group=case.case_group,
         canonical_simulation_id=case.canonical_simulation_id,
         simulations=summaries,
         created_at=case.created_at,
@@ -344,6 +345,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
         {
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
+            "case_group": case.case_group,
             "is_canonical": is_canonical,
             "change_count": change_count,
         },

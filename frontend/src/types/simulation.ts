@@ -9,6 +9,7 @@ export interface CaseOut {
   id: string;
   name: string;
   caseHash: string;
+  caseGroup: string | null;
   canonicalSimulationId: string | null;
   simulations: SimulationSummaryOut[];
   createdAt: string;
@@ -52,7 +53,6 @@ export interface SimulationCreate {
   campaign?: string | null;
   experimentType?: string | null;
   initializationType: string;
-  groupName?: string | null;
 
   // Model timeline
   // ~~~~~~~~~~~~~~
@@ -108,6 +108,7 @@ export interface SimulationOut extends SimulationCreate {
   // ~~~~~~~~~~~~~~
   id: string;
   caseName: string;
+  caseGroup: string | null;
   isCanonical: boolean;
   changeCount: number;
 

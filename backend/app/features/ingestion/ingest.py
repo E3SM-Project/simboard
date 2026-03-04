@@ -55,7 +55,6 @@ _CONFIG_DELTA_FIELDS: frozenset[str] = frozenset(
         "git_repository_url",
         "campaign",
         "experiment_type",
-        "group_name",
     }
 )
 
@@ -170,7 +169,13 @@ def ingest_archive(  # noqa: C901
             machine_id = _resolve_machine_id(metadata, db)
 
             # Get or create Case by case_hash (not by name).
-            case = _get_or_create_case(db, case_hash=case_hash, name=case_name)
+            case_group = metadata.get("case_group")
+            case = _get_or_create_case(
+                db,
+                case_hash=case_hash,
+                name=case_name,
+                case_group=case_group,
+            )
 
             # Duplicate check by execution_id.
             existing_sim = _find_existing_simulation(db, execution_id)
@@ -281,7 +286,12 @@ def _derive_execution_id(exp_dir: str) -> str:
     return execution_id
 
 
-def _get_or_create_case(db: Session, case_hash: str, name: str) -> Case:
+def _get_or_create_case(
+    db: Session,
+    case_hash: str,
+    name: str,
+    case_group: str | None = None,
+) -> Case:
     """Get or create a Case record by case_hash.
 
     Parameters
@@ -293,14 +303,29 @@ def _get_or_create_case(db: Session, case_hash: str, name: str) -> Case:
         identity for case grouping.
     name : str
         Human-readable case name (used when creating a new Case).
+    case_group : str | None
+        Optional CASE_GROUP from env_case.xml.  Stored on ``Case``
+        if present.  An existing non-null value is never overwritten
+        with null; a conflicting non-null value logs a warning and
+        keeps the original.
     """
     case = db.query(Case).filter(Case.case_hash == case_hash).first()
 
     if not case:
-        case = Case(name=name, case_hash=case_hash)
+        case = Case(name=name, case_hash=case_hash, case_group=case_group)
         db.add(case)
         db.flush()
         logger.info(f"Created new Case: {name} (hash={case_hash})")
+    elif case_group is not None:
+        if case.case_group is None:
+            case.case_group = case_group
+            db.flush()
+        elif case.case_group != case_group:
+            logger.warning(
+                f"Conflicting CASE_GROUP for case '{name}' "
+                f"(hash={case_hash}): existing='{case.case_group}', "
+                f"new='{case_group}'. Retaining existing value."
+            )
 
     return case
 
@@ -321,7 +346,6 @@ def _sim_to_metadata(sim: Simulation) -> SimulationMetadata:
         "git_repository_url": sim.git_repository_url,
         "campaign": sim.campaign,
         "experiment_type": sim.experiment_type,
-        "group_name": sim.group_name,
     }
 
 
@@ -490,7 +514,6 @@ def _map_metadata_to_schema(
             # Optional experiment classification
             "experimentType": metadata.get("experiment_type"),
             "campaign": metadata.get("campaign"),
-            "groupName": metadata.get("group_name"),
             # Optional timing fields
             "runStartDate": run_start_date,
             "runEndDate": run_end_date,

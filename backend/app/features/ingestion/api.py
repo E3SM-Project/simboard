@@ -398,10 +398,7 @@ def _persist_simulations(
 
     # Set canonical_simulation_id on Cases that don't have one yet.
     case_ids = {sim.case_id for sim in created_sims}
-    cases = {
-        c.id: c
-        for c in db.query(Case).filter(Case.id.in_(case_ids)).all()
-    }
+    cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
     for sim in created_sims:
         case = cases.get(sim.case_id)
         if case and case.canonical_simulation_id is None:

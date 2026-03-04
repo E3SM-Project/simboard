@@ -158,11 +158,6 @@ class SimulationCreate(CamelInBaseModel):
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
     ]
-    group_name: Annotated[
-        str | None,
-        Field(None, description="Optional group name associated with the simulation"),
-    ]
-
     # Model timeline
     # --------------
     machine_id: Annotated[
@@ -346,6 +341,16 @@ class CaseOut(CamelOutBaseModel):
             ),
         ),
     ]
+    case_group: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional case group (CASE_GROUP from env_case.xml). "
+                "Groups related cases (e.g. ensemble members) together."
+            ),
+        ),
+    ]
     canonical_simulation_id: Annotated[
         UUID | None,
         Field(None, description="ID of the canonical simulation for this case."),
@@ -379,6 +384,16 @@ class SimulationOut(CamelOutBaseModel):
     ]
     case_name: Annotated[
         str, Field(..., description="Case name (derived from the associated Case)")
+    ]
+    case_group: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Case group (CASE_GROUP from env_case.xml, derived from Case). "
+                "Groups related cases together."
+            ),
+        ),
     ]
     execution_id: Annotated[
         str,
@@ -451,11 +466,6 @@ class SimulationOut(CamelOutBaseModel):
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
     ]
-    group_name: Annotated[
-        str | None,
-        Field(None, description="Optional group name associated with the simulation"),
-    ]
-
     # Model timeline
     # --------------
     machine_id: Annotated[

@@ -7,8 +7,6 @@ from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
-    _derive_execution_id,
-    _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
@@ -72,7 +70,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -120,7 +117,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -145,7 +141,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -198,7 +193,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -240,7 +234,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -300,7 +293,6 @@ class TestIngestArchive:
                     "status": None,
                     "experiment_type": None,
                     "campaign": None,
-                    "group_name": None,
                     "run_start_date": None,
                     "run_end_date": None,
                     "compiler": None,
@@ -349,7 +341,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -400,7 +391,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -438,7 +428,6 @@ class TestIngestArchive:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -507,7 +496,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": "2020-01-01",
                 "run_end_date": "2020-12-31",
                 "compiler": None,
@@ -558,7 +546,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": "historical",
                 "campaign": "CMIP6",
-                "group_name": "test_group",
+                "case_group": "test_group",
                 "run_start_date": "2020-01-01 00:00:00",
                 "run_end_date": "2020-12-31 23:59:59",
                 "compiler": "gcc",
@@ -581,7 +569,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert len(ingest_result.simulations) == 1
             assert ingest_result.simulations[0].experiment_type == "historical"
             assert ingest_result.simulations[0].campaign == "CMIP6"
-            assert ingest_result.simulations[0].group_name == "test_group"
             assert ingest_result.simulations[0].compiler == "gcc"
             assert (
                 str(ingest_result.simulations[0].git_repository_url)
@@ -590,6 +577,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.simulations[0].git_branch == "main"
             assert ingest_result.simulations[0].git_tag == "v1.0.0"
             assert ingest_result.simulations[0].git_commit_hash == "abc123"
+
+            # Verify case_group is stored on the Case, not the Simulation
+            case = db.query(Case).filter(Case.case_hash == "hash_case1").first()
+            assert case is not None
+            assert case.case_group == "test_group"
 
     def test_skips_duplicate_simulations(self, db: Session) -> None:
         """Test that duplicate simulations are skipped during ingestion.
@@ -661,7 +653,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -745,7 +736,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -770,7 +760,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -831,7 +820,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,  # None should parse gracefully
                 "run_end_date": None,  # None should parse gracefully
                 "compiler": None,
@@ -881,7 +869,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": "INVALID_DATE_STRING_FOR_TESTING",
                 "run_end_date": None,
                 "compiler": None,
@@ -937,7 +924,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -981,7 +967,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -1090,7 +1075,6 @@ class TestNormalizeGitUrl:
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
-                "group_name": None,
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
@@ -1181,7 +1165,6 @@ class TestCanonicalRunIngestion:
             "status": None,
             "experiment_type": None,
             "campaign": None,
-            "group_name": None,
             "run_start_date": None,
             "run_end_date": None,
             "compiler": None,
@@ -1195,12 +1178,10 @@ class TestCanonicalRunIngestion:
         base.update(overrides)
         return base
 
-    def test_canonical_run_selected_from_multiple_runs(
-        self, db: Session
-    ) -> None:
+    def test_canonical_run_selected_from_multiple_runs(self, db: Session) -> None:
         """First run per case is canonical (None deltas), subsequent runs
         with config differences get a delta dict."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         # Two runs with the same case_name but different compilers
         mock_simulations = {
@@ -1225,15 +1206,15 @@ class TestCanonicalRunIngestion:
         assert len(result.simulations) == 2
         # Canonical run has run_config_deltas=None
         canonical = [s for s in result.simulations if s.run_config_deltas is None]
-        non_canonical = [s for s in result.simulations if s.run_config_deltas is not None]
+        non_canonical = [
+            s for s in result.simulations if s.run_config_deltas is not None
+        ]
         assert len(canonical) == 1
         assert len(non_canonical) == 1
 
-    def test_config_delta_stored_for_non_canonical_run(
-        self, db: Session
-    ) -> None:
+    def test_config_delta_stored_for_non_canonical_run(self, db: Session) -> None:
         """Non-canonical runs with config differences record deltas as a dict."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081185.251218-200945": self._make_metadata(
@@ -1256,7 +1237,9 @@ class TestCanonicalRunIngestion:
         assert result.created_count == 2
         # Find canonical (run_config_deltas=None) and non-canonical
         canonical = [s for s in result.simulations if s.run_config_deltas is None]
-        non_canonical = [s for s in result.simulations if s.run_config_deltas is not None]
+        non_canonical = [
+            s for s in result.simulations if s.run_config_deltas is not None
+        ]
         assert len(canonical) == 1
         assert len(non_canonical) == 1
         deltas = non_canonical[0].run_config_deltas
@@ -1266,7 +1249,7 @@ class TestCanonicalRunIngestion:
 
     def test_no_delta_when_configs_identical(self, db: Session) -> None:
         """Non-canonical runs with identical config have run_config_deltas=None."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081187.251218-200947": self._make_metadata(
@@ -1292,11 +1275,15 @@ class TestCanonicalRunIngestion:
         self, db: Session
     ) -> None:
         """Runs with different case_names are independent canonical selections."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
-            "/path/to/1081189.251218-200949": self._make_metadata(case_name="case_alpha", case_hash="hash_case_alpha"),
-            "/path/to/1081190.251218-200950": self._make_metadata(case_name="case_beta", case_hash="hash_case_beta"),
+            "/path/to/1081189.251218-200949": self._make_metadata(
+                case_name="case_alpha", case_hash="hash_case_alpha"
+            ),
+            "/path/to/1081190.251218-200950": self._make_metadata(
+                case_name="case_beta", case_hash="hash_case_beta"
+            ),
         }
 
         with patch(
@@ -1380,9 +1367,7 @@ class TestCanonicalRunIngestion:
         assert result.duplicate_count == 1
         assert len(result.simulations) == 0
 
-    def test_incremental_ingestion_new_run_adds_delta(
-        self, db: Session
-    ) -> None:
+    def test_incremental_ingestion_new_run_adds_delta(self, db: Session) -> None:
         """A new run under an existing case records config delta."""
         machine = self._create_machine(db, "test-machine")
 
@@ -1464,7 +1449,7 @@ class TestCanonicalRunIngestion:
 
     def test_missing_case_hash_is_rejected(self, db: Session) -> None:
         """Runs without CASE_HASH are rejected with a validation error."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081194.251218-200954": self._make_metadata(
@@ -1485,7 +1470,7 @@ class TestCanonicalRunIngestion:
 
     def test_same_case_hash_groups_to_same_case(self, db: Session) -> None:
         """Runs with the same CASE_HASH belong to the same Case."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081195.251218-200955": self._make_metadata(
@@ -1513,11 +1498,9 @@ class TestCanonicalRunIngestion:
         case = db.query(Case).filter(Case.case_hash == "shared_hash").first()
         assert case is not None
 
-    def test_different_case_hash_creates_separate_cases(
-        self, db: Session
-    ) -> None:
+    def test_different_case_hash_creates_separate_cases(self, db: Session) -> None:
         """Runs with different CASE_HASH values create separate Cases."""
-        machine = self._create_machine(db, "test-machine")
+        self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081197.251218-200957": self._make_metadata(

@@ -59,7 +59,6 @@ class TestSimulationCreateSchema:
             "parentSimulationId": uuid4(),
             "campaign": "campaign1",
             "experimentType": "exp1",
-            "groupName": "group1",
             "simulationEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
@@ -71,7 +70,9 @@ class TestSimulationCreateSchema:
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
-            "runConfigDeltas": {"compiler": {"canonical": "gcc-11", "current": "gcc-12"}},
+            "runConfigDeltas": {
+                "compiler": {"canonical": "gcc-11", "current": "gcc-12"}
+            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -161,7 +162,7 @@ class TestSimulationOutSchema:
             "parent_simulation_id",
             "campaign",
             "experiment_type",
-            "group_name",
+            "case_group",
             "simulation_end_date",
             "run_start_date",
             "run_end_date",
@@ -231,7 +232,7 @@ class TestSimulationOutSchema:
             "parent_simulation_id": uuid4(),
             "campaign": "campaign1",
             "experiment_type": "exp1",
-            "group_name": "group1",
+            "case_group": "group1",
             "simulation_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
@@ -243,7 +244,9 @@ class TestSimulationOutSchema:
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
             "extra": {"key": "value"},
-            "run_config_deltas": {"compiler": {"canonical": "gcc-11", "current": "gcc-12"}},
+            "run_config_deltas": {
+                "compiler": {"canonical": "gcc-11", "current": "gcc-12"}
+            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -453,6 +456,7 @@ class TestCaseOutSchema:
             id=uuid4(),
             name="v3.LR.historical_0121",
             case_hash="abc123hash",
+            case_group="ensemble_v3",
             canonical_simulation_id=sim_id,
             simulations=[
                 SimulationSummaryOut(
@@ -479,6 +483,7 @@ class TestCaseOutSchema:
         )
         assert case_out.name == "v3.LR.historical_0121"
         assert case_out.case_hash == "abc123hash"
+        assert case_out.case_group == "ensemble_v3"
         assert len(case_out.simulations) == 2
         assert case_out.simulations[0].is_canonical is True
         assert case_out.simulations[1].change_count == 2
@@ -488,6 +493,7 @@ class TestCaseOutSchema:
             id=uuid4(),
             name="empty_case",
             case_hash="emptyhash",
+            case_group=None,
             canonical_simulation_id=None,
             simulations=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),

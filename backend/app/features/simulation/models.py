@@ -35,7 +35,10 @@ class Case(Base, IDMixin, TimestampMixin):
     __tablename__ = "cases"
 
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
-    case_hash: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
+    case_hash: Mapped[str] = mapped_column(
+        Text, unique=True, index=True, nullable=False
+    )
+    case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
     canonical_simulation_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("simulations.id", use_alter=True, name="fk_cases_canonical_sim"),
@@ -105,7 +108,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     campaign: Mapped[str | None] = mapped_column(Text)
     experiment_type: Mapped[str | None] = mapped_column(Text)
     initialization_type: Mapped[str] = mapped_column(String(50))
-    group_name: Mapped[str | None] = mapped_column(Text)
 
     # Model timeline
     # ~~~~~~~~~~~~~~

@@ -375,7 +375,7 @@ def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
         "campaign": metadata.get("campaign"),
         "experiment_type": metadata.get("experiment_type"),
         "initialization_type": metadata.get("initialization_type"),
-        "group_name": metadata.get("group_name"),
+        "case_group": metadata.get("case_group"),
         "simulation_start_date": metadata.get("simulation_start_date"),
         "simulation_end_date": metadata.get("simulation_end_date"),
         "run_start_date": metadata.get("run_start_date"),

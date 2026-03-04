@@ -40,7 +40,9 @@ class TestMainParser:
         casedocs.mkdir(exist_ok=True)
         with gzip.open(casedocs / f"README.case.{version.split('.')[0]}.gz", "wt") as f:
             f.write("readme content")
-        with gzip.open(casedocs / f"env_case.xml.{version.split('.')[0]}.gz", "wt") as f:
+        with gzip.open(
+            casedocs / f"env_case.xml.{version.split('.')[0]}.gz", "wt"
+        ) as f:
             f.write('<config><entry id="CASE_HASH" value="testhash123" /></config>')
 
         # Create required GIT_DESCRIBE file
