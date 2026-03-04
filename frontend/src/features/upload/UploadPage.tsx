@@ -35,6 +35,7 @@ const initialState: SimulationCreateForm = {
   // --- Configuration ---
   caseId: '', // required (UUID of the Case)
   executionId: '', // required
+  caseHash: '', // CASE_HASH from env_case.xml
   description: null,
   compset: '', // required
   compsetAlias: '', // required
