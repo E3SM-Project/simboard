@@ -267,7 +267,6 @@ class TestCreateSimulation:
 
         payload = {
             "caseId": str(uuid4()),
-            "caseHash": "test_hash",
             "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
