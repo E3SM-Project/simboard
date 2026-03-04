@@ -160,6 +160,7 @@ def ingest_archive(  # noqa: C901
                 )
 
             # case_hash is execution-specific metadata (may vary per run).
+            # Defaults to empty string when missing from env_case.xml.
             case_hash = metadata.get("case_hash") or ""
             machine_id = _resolve_machine_id(metadata, db)
 
