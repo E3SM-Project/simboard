@@ -18,36 +18,130 @@ from app.features.simulation.schemas import (
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
-router = APIRouter(prefix="/simulations", tags=["Simulations"])
+simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
+case_router = APIRouter(prefix="/cases", tags=["Cases"])
 
 
-def _simulation_to_out(sim: Simulation) -> SimulationOut:
-    """Convert a Simulation ORM instance to a SimulationOut schema.
+@case_router.get(
+    "",
+    response_model=list[CaseOut],
+    responses={
+        200: {"description": "List all cases."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
+    """Retrieve all cases with nested simulation summaries.
 
-    Derives ``case_name``, ``is_canonical``, and ``change_count`` from
-    the associated Case relationship.
+    Parameters
+    ----------
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    list[CaseOut]
+        A list of cases, each with nested summaries of their associated
+        simulations.
     """
-    case = sim.case
-    is_canonical = sim.id == case.canonical_simulation_id
-    change_count = (
-        len(sim.run_config_deltas) if sim.run_config_deltas else 0
-    )
-    return SimulationOut.model_validate(
-        {
-            **{
-                k: v
-                for k, v in sim.__dict__.items()
-                if not k.startswith("_")
-            },
-            "case_name": case.name,
-            "is_canonical": is_canonical,
-            "change_count": change_count,
-        },
-        from_attributes=True,
+    cases = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .order_by(Case.created_at.desc())
+        .all()
     )
 
+    resp = [_case_to_out(c) for c in cases]
 
-@router.post(
+    return resp
+
+
+@case_router.get(
+    "/{case_id}",
+    response_model=CaseOut,
+    responses={
+        200: {"description": "Case found."},
+        404: {"description": "Case not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> CaseOut:
+    """Retrieve a case by its unique identifier.
+
+    Parameters
+    ----------
+    case_id : UUID
+        The unique identifier of the case to retrieve.
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    CaseOut
+        The case object with nested simulation summaries if found.
+    """
+    case = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .filter(Case.id == case_id)
+        .first()
+    )
+
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    resp = _case_to_out(case)
+
+    return resp
+
+
+def _case_to_out(case: Case) -> CaseOut:
+    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
+
+    Parameters
+    ----------
+    case : Case
+        The Case ORM instance to convert.
+
+    Returns
+    -------
+    CaseOut
+        The corresponding CaseOut schema instance with nested
+        SimulationSummaryOut
+    """
+    summaries = []
+
+    for sim in case.simulations:
+        is_canonical = sim.id == case.canonical_simulation_id
+        change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+        summaries.append(
+            SimulationSummaryOut(
+                id=sim.id,
+                execution_id=sim.execution_id,
+                status=sim.status,
+                is_canonical=is_canonical,
+                change_count=change_count,
+                simulation_start_date=sim.simulation_start_date,
+                simulation_end_date=sim.simulation_end_date,
+            )
+        )
+
+    result = CaseOut(
+        id=case.id,
+        name=case.name,
+        case_hash=case.case_hash,
+        canonical_simulation_id=case.canonical_simulation_id,
+        simulations=summaries,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )
+
+    return result
+
+
+@simulation_router.post(
     "",
     response_model=SimulationOut,
     status_code=status.HTTP_201_CREATED,
@@ -130,10 +224,13 @@ def create_simulation(
         .filter(Simulation.id == sim.id)
         .first()
     )
-    return _simulation_to_out(sim)
+
+    result = _simulation_to_out(sim)
+
+    return result
 
 
-@router.get(
+@simulation_router.get(
     "",
     response_model=list[SimulationOut],
     responses={
@@ -173,7 +270,7 @@ def list_simulations(db: Session = Depends(get_database_session)):
     return [_simulation_to_out(s) for s in sims]
 
 
-@router.get(
+@simulation_router.get(
     "/{sim_id}",
     response_model=SimulationOut,
     responses={
@@ -222,74 +319,35 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     return _simulation_to_out(sim)
 
 
-# ---- Case endpoints ----
-case_router = APIRouter(prefix="/cases", tags=["Cases"])
+def _simulation_to_out(sim: Simulation) -> SimulationOut:
+    """Convert a Simulation ORM instance to a SimulationOut schema.
 
+    Derives ``case_name``, ``is_canonical``, and ``change_count`` from
+    the associated Case relationship.
 
-def _case_to_out(case: Case) -> CaseOut:
-    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut."""
-    summaries = []
-    for sim in case.simulations:
-        is_canonical = sim.id == case.canonical_simulation_id
-        change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
-        summaries.append(
-            SimulationSummaryOut(
-                id=sim.id,
-                execution_id=sim.execution_id,
-                status=sim.status,
-                is_canonical=is_canonical,
-                change_count=change_count,
-                simulation_start_date=sim.simulation_start_date,
-                simulation_end_date=sim.simulation_end_date,
-            )
-        )
-    return CaseOut(
-        id=case.id,
-        name=case.name,
-        case_hash=case.case_hash,
-        canonical_simulation_id=case.canonical_simulation_id,
-        simulations=summaries,
-        created_at=case.created_at,
-        updated_at=case.updated_at,
+    Parameters
+    ----------
+    sim : Simulation
+        The Simulation ORM instance to convert.
+
+    Returns
+    -------
+    SimulationOut
+        The corresponding SimulationOut schema instance with additional derived
+        fields.
+    """
+    case = sim.case
+    is_canonical = sim.id == case.canonical_simulation_id
+    change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+
+    result = SimulationOut.model_validate(
+        {
+            **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
+            "case_name": case.name,
+            "is_canonical": is_canonical,
+            "change_count": change_count,
+        },
+        from_attributes=True,
     )
 
-
-@case_router.get(
-    "",
-    response_model=list[CaseOut],
-    responses={
-        200: {"description": "List all cases."},
-        500: {"description": "Internal server error."},
-    },
-)
-def list_cases(db: Session = Depends(get_database_session)):
-    """Retrieve all cases with nested simulation summaries."""
-    cases = (
-        db.query(Case)
-        .options(selectinload(Case.simulations))
-        .order_by(Case.created_at.desc())
-        .all()
-    )
-    return [_case_to_out(c) for c in cases]
-
-
-@case_router.get(
-    "/{case_id}",
-    response_model=CaseOut,
-    responses={
-        200: {"description": "Case found."},
-        404: {"description": "Case not found."},
-        500: {"description": "Internal server error."},
-    },
-)
-def get_case(case_id: UUID, db: Session = Depends(get_database_session)):
-    """Retrieve a case by its unique identifier."""
-    case = (
-        db.query(Case)
-        .options(selectinload(Case.simulations))
-        .filter(Case.id == case_id)
-        .first()
-    )
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    return _case_to_out(case)
+    return result
