@@ -1,7 +1,7 @@
 """
 SimBoard Development Seeder
 -----------------------------
-Seeds the database with simulation, artifact, and external link data
+Seeds the database with case, simulation, artifact, and external link data
 from a JSON file. Safe to run only in non-production environments.
 
 Usage:
@@ -24,7 +24,7 @@ from app.core.database import SessionLocal
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     ArtifactCreate,
     ExternalLinkCreate,
@@ -135,6 +135,100 @@ def load_json(path: str) -> dict:
         return json.load(f)
 
 
+def _seed_simulation(
+    db: Session, sim_entry: dict, case: Case, case_name: str, user_id
+) -> Simulation:
+    """Create a single Simulation, Ingestion, and related entities from seed data."""
+    machine_name = sim_entry.get("machine", {}).get("name")
+    if not machine_name:
+        raise ValueError(
+            f"Missing 'machine.name' in simulation entry for case '{case_name}'"
+        )
+
+    machine = db.query(Machine).filter(Machine.name == machine_name).one_or_none()
+    if not machine:
+        raise ValueError(
+            f"No machine found in DB with name '{machine_name}' for case '{case_name}'"
+        )
+
+    sim_in = SimulationCreate(
+        **{
+            **sim_entry,
+            "caseId": case.id,
+            "machineId": machine.id,
+            "simulationStartDate": _parse_datetime(
+                sim_entry.get("simulationStartDate")
+            ),
+            "simulationEndDate": _parse_datetime(sim_entry.get("simulationEndDate")),
+            "runStartDate": _parse_datetime(sim_entry.get("runStartDate")),
+            "runEndDate": _parse_datetime(sim_entry.get("runEndDate")),
+            "createdBy": user_id,
+            "lastUpdatedBy": user_id,
+            "artifacts": [ArtifactCreate(**a) for a in sim_entry.get("artifacts", [])],
+            "links": [
+                ExternalLinkCreate(**link) for link in sim_entry.get("links", [])
+            ],
+        }
+    )
+
+    sim = Simulation(
+        **{
+            **sim_in.model_dump(exclude={"artifacts", "links"}),
+            "git_repository_url": str(sim_in.git_repository_url)
+            if isinstance(sim_in.git_repository_url, HttpUrl)
+            else sim_in.git_repository_url,
+        }
+    )
+
+    execution_id = sim_entry.get("executionId")
+    if not execution_id:
+        raise ValueError(
+            f"Missing 'executionId' in simulation entry for case '{case_name}'"
+        )
+
+    ingestion = Ingestion(
+        source_type=IngestionSourceType.HPC_PATH,
+        source_reference=f"seed:{case_name}/{execution_id}",
+        machine_id=machine.id,
+        triggered_by=user_id,
+        status=IngestionStatus.SUCCESS,
+        created_count=1,
+        duplicate_count=0,
+        error_count=0,
+        archive_sha256=None,
+    )
+    db.add(ingestion)
+    db.flush()
+
+    sim.ingestion_id = ingestion.id
+    db.add(sim)
+    db.flush()
+
+    for a in sim_in.artifacts or []:
+        db.add(
+            Artifact(
+                simulation_id=sim.id,
+                **{
+                    **a.model_dump(),
+                    "uri": str(a.uri) if isinstance(a.uri, AnyUrl) else a.uri,
+                },
+            )
+        )
+
+    for link in sim_in.links or []:
+        db.add(
+            ExternalLink(
+                simulation_id=sim.id,
+                **{
+                    **link.model_dump(),
+                    "url": str(link.url) if isinstance(link.url, HttpUrl) else link.url,
+                },
+            )
+        )
+
+    return sim
+
+
 def seed_from_json(db: Session, json_path: str):
     print(f"🌱 Seeding database from {json_path}...")
     data = load_json(json_path)
@@ -142,102 +236,51 @@ def seed_from_json(db: Session, json_path: str):
     # Clear dev data using rollback_seed
     rollback_seed(db)
 
-    for entry in data:
-        machine_name = entry.get("machine", {}).get("name")
-        if not machine_name:
-            raise ValueError(
-                f"Missing 'machine.name' in JSON entry: {entry.get('name')}"
-            )
+    # ✅ Ensure at least one user exists
+    first_user = db.query(User).order_by(User.id.asc()).first()
+    if not first_user:
+        first_user = create_dev_oauth_user(db)
+        db.refresh(first_user)
 
-        machine = db.query(Machine).filter(Machine.name == machine_name).one_or_none()
-        if not machine:
-            raise ValueError(
-                f"No machine found in DB with name '{machine_name}' "
-                f"for simulation '{entry.get('name')}'"
-            )
+    first_user_id = first_user.id
 
-        # ✅ Ensure at least one user exists
-        first_user = db.query(User).order_by(User.id.asc()).first()
-        if not first_user:
-            first_user = create_dev_oauth_user(db)
-            db.refresh(first_user)
+    total_sims = 0
 
-        first_user_id = first_user.id
+    for case_entry in data:
+        case_name = case_entry.get("caseName")
+        if not case_name:
+            raise ValueError(f"Missing 'caseName' in JSON case entry: {case_entry}")
 
-        sim_in = SimulationCreate(
-            **{
-                **entry,
-                "machineId": machine.id,
-                "simulationStartDate": _parse_datetime(
-                    entry.get("simulationStartDate")
-                ),
-                "simulationEndDate": _parse_datetime(entry.get("simulationEndDate")),
-                "runStartDate": _parse_datetime(entry.get("runStartDate")),
-                "runEndDate": _parse_datetime(entry.get("runEndDate")),
-                "createdAt": _parse_datetime(entry.get("createdAt")),
-                "createdBy": first_user_id,
-                "updatedBy": first_user_id,
-                "lastUpdatedBy": first_user_id,
-                "artifacts": [ArtifactCreate(**a) for a in entry.get("artifacts", [])],
-                "links": [
-                    ExternalLinkCreate(**link) for link in entry.get("links", [])
-                ],
-            }
-        )
+        case_group = case_entry.get("caseGroup")
+        simulations_data = case_entry.get("simulations", [])
+        if not simulations_data:
+            raise ValueError(f"No simulations for case '{case_name}'")
 
-        sim = Simulation(
-            **{
-                **sim_in.model_dump(exclude={"artifacts", "links"}),
-                "git_repository_url": str(sim_in.git_repository_url)
-                if isinstance(sim_in.git_repository_url, HttpUrl)
-                else sim_in.git_repository_url,
-            }
-        )
-
-        ingestion = Ingestion(
-            source_type=IngestionSourceType.HPC_PATH,
-            source_reference=f"seed:{entry.get('name', 'unknown')}",
-            machine_id=machine.id,
-            triggered_by=first_user_id,
-            status=IngestionStatus.SUCCESS,
-            created_count=1,
-            duplicate_count=0,
-            error_count=0,
-            archive_sha256=None,
-        )
-        db.add(ingestion)
+        # Create the Case record
+        case = Case(name=case_name, case_group=case_group)
+        db.add(case)
         db.flush()
 
-        sim.ingestion_id = ingestion.id
-        db.add(sim)
-        db.flush()
+        first_sim = None
 
-        for a in sim_in.artifacts or []:
-            db.add(
-                Artifact(
-                    simulation_id=sim.id,
-                    **{
-                        **a.model_dump(),
-                        "uri": str(a.uri) if isinstance(a.uri, AnyUrl) else a.uri,
-                    },
-                )
-            )
+        for sim_entry in simulations_data:
+            sim = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
 
-        for link in sim_in.links or []:
-            db.add(
-                ExternalLink(
-                    simulation_id=sim.id,
-                    **{
-                        **link.model_dump(),
-                        "url": str(link.url)
-                        if isinstance(link.url, HttpUrl)
-                        else link.url,
-                    },
-                )
-            )
+            if first_sim is None:
+                first_sim = sim
+
+            total_sims += 1
+
+        # Set the first simulation as canonical for this case
+        if first_sim is not None:
+            case.canonical_simulation_id = first_sim.id
+            db.flush()
 
     db.commit()
-    print(f"✅ Done! Inserted {len(data)} simulations with artifacts and links.")
+    print(
+        f"✅ Done! Inserted {len(data)} cases with "
+        f"{total_sims} simulations, artifacts, and links."
+    )
 
 
 def _parse_datetime(value):
