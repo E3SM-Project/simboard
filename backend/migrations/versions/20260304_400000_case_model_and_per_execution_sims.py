@@ -45,15 +45,6 @@ def upgrade() -> None:
         "simulations",
         sa.Column("run_config_deltas", JSONB, nullable=True),
     )
-    # Migrate existing data from extra->'run_config_deltas'
-    op.execute(
-        """
-        UPDATE simulations
-        SET run_config_deltas = extra->'run_config_deltas',
-            extra = extra - 'run_config_deltas'
-        WHERE extra ? 'run_config_deltas'
-        """
-    )
 
     # ── 2. Create cases table ────────────────────────────────────────
     op.create_table(
@@ -261,17 +252,6 @@ def downgrade() -> None:
 
     # ── 4. Drop run_config_deltas ────────────────────────────────────
     # Move non-null column data back into extra['run_config_deltas']
-    op.execute(
-        """
-        UPDATE simulations
-        SET extra = jsonb_set(
-            COALESCE(extra, '{}'::jsonb),
-            '{run_config_deltas}',
-            run_config_deltas
-        )
-        WHERE run_config_deltas IS NOT NULL
-        """
-    )
     op.drop_column("simulations", "run_config_deltas")
 
     # ── 5. Drop cases table ──────────────────────────────────────────
