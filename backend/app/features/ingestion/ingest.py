@@ -86,38 +86,7 @@ class IngestArchiveResult:
     errors: list[dict[str, str]] = field(default_factory=list)
 
 
-def _derive_execution_id(exp_dir: str) -> str:
-    """Extract execution_id from the experiment directory path.
-
-    The execution_id is the basename of the experiment directory
-    (e.g. ``1125772.260116-181605``).  Absolute filesystem paths are
-    never stored.
-
-    Raises
-    ------
-    ValueError
-        If the derived execution_id is empty.
-    """
-    execution_id = os.path.basename(exp_dir)
-    if not execution_id:
-        raise ValueError(
-            f"Cannot derive execution_id from experiment directory: '{exp_dir}'"
-        )
-    return execution_id
-
-
-def _get_or_create_case(db: Session, case_name: str) -> Case:
-    """Get or create a Case record by name."""
-    case = db.query(Case).filter(Case.name == case_name).first()
-    if not case:
-        case = Case(name=case_name)
-        db.add(case)
-        db.flush()
-        logger.info(f"Created new Case: {case_name}")
-    return case
-
-
-def ingest_archive(
+def ingest_archive(  # noqa: C901
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
@@ -239,7 +208,11 @@ def ingest_archive(
                     run_config_deltas = delta if delta else None
 
                     sim_create = _map_metadata_to_schema(
-                        metadata, db, machine_id, case.id, execution_id,
+                        metadata,
+                        db,
+                        machine_id,
+                        case.id,
+                        execution_id,
                         run_config_deltas=run_config_deltas,
                     )
                     simulations.append(sim_create)
@@ -274,6 +247,40 @@ def ingest_archive(
         errors=errors,
     )
     return result
+
+
+def _derive_execution_id(exp_dir: str) -> str:
+    """Extract execution_id from the experiment directory path.
+
+    The execution_id is the basename of the experiment directory
+    (e.g. ``1125772.260116-181605``).  Absolute filesystem paths are
+    never stored.
+
+    Raises
+    ------
+    ValueError
+        If the derived execution_id is empty.
+    """
+    execution_id = os.path.basename(exp_dir)
+    if not execution_id:
+        raise ValueError(
+            f"Cannot derive execution_id from experiment directory: '{exp_dir}'"
+        )
+
+    return execution_id
+
+
+def _get_or_create_case(db: Session, case_name: str) -> Case:
+    """Get or create a Case record by name."""
+    case = db.query(Case).filter(Case.name == case_name).first()
+
+    if not case:
+        case = Case(name=case_name)
+        db.add(case)
+        db.flush()
+        logger.info(f"Created new Case: {case_name}")
+
+    return case
 
 
 def _sim_to_metadata(sim: Simulation) -> SimulationMetadata:
@@ -347,11 +354,7 @@ def _resolve_machine_id(metadata: SimulationMetadata, db: Session) -> UUID:
 
 def _find_existing_simulation(db: Session, execution_id: str) -> Simulation | None:
     """Find existing simulation by execution_id."""
-    return (
-        db.query(Simulation)
-        .filter(Simulation.execution_id == execution_id)
-        .first()
-    )
+    return db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
 
 
 def _normalize_git_url(url: str | None) -> str | None:

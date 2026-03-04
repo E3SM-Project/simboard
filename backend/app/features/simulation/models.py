@@ -46,6 +46,8 @@ class Case(Base, IDMixin, TimestampMixin):
         "Simulation",
         back_populates="case",
         foreign_keys="Simulation.case_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     canonical_simulation: Mapped[Simulation | None] = relationship(
         "Simulation",
@@ -61,7 +63,10 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # ~~~~~~~~~~~~~~
     name: Mapped[str] = mapped_column(String(200), index=True)
     case_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id"), index=True, nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     execution_id: Mapped[str] = mapped_column(
         Text, unique=True, index=True, nullable=False
