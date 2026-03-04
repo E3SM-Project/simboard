@@ -159,7 +159,12 @@ def ingest_archive(  # noqa: C901
                     "Ensure env_case.xml contains a CASE_HASH entry."
                 )
 
-            case_name = metadata.get("case_name") or "unknown"
+            case_name = metadata.get("case_name")
+            if not case_name:
+                logger.warning(
+                    f"case_name missing from '{exp_dir}'; using 'unknown'."
+                )
+                case_name = "unknown"
             machine_id = _resolve_machine_id(metadata, db)
 
             # Get or create Case by case_hash (not by name).

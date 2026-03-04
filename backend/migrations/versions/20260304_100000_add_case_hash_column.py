@@ -32,7 +32,9 @@ def upgrade() -> None:
         sa.Column("case_hash", sa.Text(), nullable=True),
     )
 
-    # 2. Backfill: use SHA-256 of name as placeholder for existing rows.
+    # 2. Backfill: use SHA-256 of name as a temporary placeholder for
+    #    existing rows.  Real CASE_HASH values from env_case.xml will
+    #    replace these during subsequent ingestion.
     op.execute(
         sa.text(
             "UPDATE cases SET case_hash = encode("
