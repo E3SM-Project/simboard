@@ -8,10 +8,12 @@ from app.features.machine.schemas import MachineOut
 from app.features.simulation.schemas import (
     ArtifactKind,
     ArtifactOut,
+    CaseOut,
     ExternalLinkKind,
     ExternalLinkOut,
     SimulationCreate,
     SimulationOut,
+    SimulationSummaryOut,
 )
 from app.features.user.schemas import UserPreview
 
@@ -412,3 +414,84 @@ class TestSimulationOutSchema:
         assert len(grouped) == 2, "There should be 2 groups of links."  # type: ignore
         assert len(grouped["diagnostic"]) == 1, "There should be 2 diagnostic links."  # type: ignore
         assert len(grouped["performance"]) == 1, "There should be 2 performance links."  # type: ignore
+
+
+class TestSimulationSummaryOutSchema:
+    def test_valid_summary_fields(self):
+        summary = SimulationSummaryOut(
+            id=uuid4(),
+            execution_id="1081156.251218-200923",
+            status="created",
+            is_canonical=True,
+            change_count=0,
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_end_date=None,
+        )
+        assert summary.is_canonical is True
+        assert summary.change_count == 0
+        assert summary.simulation_end_date is None
+
+    def test_non_canonical_with_changes(self):
+        summary = SimulationSummaryOut(
+            id=uuid4(),
+            execution_id="1081290.251218-211543",
+            status="completed",
+            is_canonical=False,
+            change_count=3,
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+        )
+        assert summary.is_canonical is False
+        assert summary.change_count == 3
+        assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
+
+
+class TestCaseOutSchema:
+    def test_case_out_with_nested_simulations(self):
+        sim_id = uuid4()
+        case_out = CaseOut(
+            id=uuid4(),
+            name="v3.LR.historical_0121",
+            case_hash="abc123hash",
+            canonical_simulation_id=sim_id,
+            simulations=[
+                SimulationSummaryOut(
+                    id=sim_id,
+                    execution_id="1081156.251218-200923",
+                    status="completed",
+                    is_canonical=True,
+                    change_count=0,
+                    simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+                    simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+                ),
+                SimulationSummaryOut(
+                    id=uuid4(),
+                    execution_id="1081290.251218-211543",
+                    status="completed",
+                    is_canonical=False,
+                    change_count=2,
+                    simulation_start_date=datetime(2023, 2, 1, 0, 0, 0),
+                    simulation_end_date=None,
+                ),
+            ],
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+        assert case_out.name == "v3.LR.historical_0121"
+        assert case_out.case_hash == "abc123hash"
+        assert len(case_out.simulations) == 2
+        assert case_out.simulations[0].is_canonical is True
+        assert case_out.simulations[1].change_count == 2
+
+    def test_case_out_empty_simulations(self):
+        case_out = CaseOut(
+            id=uuid4(),
+            name="empty_case",
+            case_hash="emptyhash",
+            canonical_simulation_id=None,
+            simulations=[],
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+        assert case_out.canonical_simulation_id is None
+        assert case_out.simulations == []

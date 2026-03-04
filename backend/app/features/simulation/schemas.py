@@ -283,8 +283,56 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
 
+class SimulationSummaryOut(CamelOutBaseModel):
+    """Lightweight schema for simulation summaries nested inside CaseOut.
+
+    Only includes the fields needed for case-level overview — avoids loading
+    heavy relationships (machine, artifacts, links, user objects).
+    """
+
+    id: Annotated[
+        UUID, Field(..., description="The unique identifier of the simulation.")
+    ]
+    execution_id: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "Unique identifier for this execution, derived from the "
+                "archive directory name"
+            ),
+        ),
+    ]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+    is_canonical: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether this simulation is the canonical baseline for its case",
+        ),
+    ]
+    change_count: Annotated[
+        int,
+        Field(
+            ...,
+            description=(
+                "Number of configuration differences vs the canonical baseline. "
+                "0 for canonical simulations."
+            ),
+        ),
+    ]
+    simulation_start_date: Annotated[
+        datetime, Field(..., description="Start date of the simulation")
+    ]
+    simulation_end_date: Annotated[
+        datetime | None, Field(None, description="Optional end date of the simulation")
+    ]
+
+
 class CaseOut(CamelOutBaseModel):
-    """Schema for representing a Case."""
+    """Schema for representing a Case with nested simulation summaries."""
 
     id: Annotated[UUID, Field(..., description="The unique identifier of the case.")]
     name: Annotated[str, Field(..., description="The case name.")]
@@ -301,6 +349,13 @@ class CaseOut(CamelOutBaseModel):
     canonical_simulation_id: Annotated[
         UUID | None,
         Field(None, description="ID of the canonical simulation for this case."),
+    ]
+    simulations: Annotated[
+        list[SimulationSummaryOut],
+        Field(
+            default_factory=list,
+            description="Simulation executions belonging to this case.",
+        ),
     ]
     created_at: Annotated[
         datetime, Field(..., description="Timestamp when the case was created")

@@ -202,3 +202,220 @@ class TestGetSimulation:
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
         assert res.status_code == 404
         assert res.json() == {"detail": "Simulation not found"}
+
+
+class TestListCases:
+    def test_endpoint_returns_empty_list(self, client):
+        res = client.get(f"{API_BASE}/cases")
+        assert res.status_code == 200
+        assert res.json() == []
+
+    def test_endpoint_returns_cases_with_nested_simulations(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_nested")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_nested",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        # Create two simulations under the same case
+        sim1 = Simulation(
+            case_id=case.id,
+            execution_id="case-nested-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        sim2 = Simulation(
+            case_id=case.id,
+            execution_id="case-nested-exec-2",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-02-01T00:00:00Z",
+            run_config_deltas={"compiler": {"canonical": "gcc-11", "current": "gcc-12"}},
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim1)
+        db.flush()
+        # Set canonical
+        case.canonical_simulation_id = sim1.id
+        db.add(sim2)
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+
+        case_data = data[0]
+        assert case_data["name"] == "test_case_nested"
+        assert case_data["caseHash"] == "hash_test_case_nested"
+        assert case_data["canonicalSimulationId"] == str(sim1.id)
+
+        # Verify nested simulations are SimulationSummaryOut (lightweight)
+        sims = case_data["simulations"]
+        assert len(sims) == 2
+
+        # Each summary should have only lightweight fields
+        for s in sims:
+            assert "id" in s
+            assert "executionId" in s
+            assert "status" in s
+            assert "isCanonical" in s
+            assert "changeCount" in s
+            assert "simulationStartDate" in s
+            # Must NOT include heavy fields
+            assert "machine" not in s
+            assert "artifacts" not in s
+            assert "links" not in s
+            assert "groupedArtifacts" not in s
+            assert "groupedLinks" not in s
+            assert "runConfigDeltas" not in s
+            assert "createdByUser" not in s
+
+        # Verify canonical and change_count derivation
+        exec_ids = {s["executionId"]: s for s in sims}
+        assert exec_ids["case-nested-exec-1"]["isCanonical"] is True
+        assert exec_ids["case-nested-exec-1"]["changeCount"] == 0
+        assert exec_ids["case-nested-exec-2"]["isCanonical"] is False
+        assert exec_ids["case-nested-exec-2"]["changeCount"] == 1
+
+
+class TestGetCase:
+    def test_endpoint_returns_case_with_simulations(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_detail")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_detail",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="case-detail-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+        case.canonical_simulation_id = sim.id
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/{case.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["name"] == "test_case_detail"
+        assert data["caseHash"] == "hash_test_case_detail"
+        assert len(data["simulations"]) == 1
+        assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
+        assert data["simulations"][0]["isCanonical"] is True
+
+    def test_endpoint_raises_404_if_case_not_found(self, client):
+        res = client.get(f"{API_BASE}/cases/{uuid4()}")
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
+
+
+class TestSimulationBrowserIncludesCaseMetadata:
+    def test_simulation_list_includes_case_name_and_id(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        """The flat /simulations endpoint includes case metadata on each row."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_browser")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_sim_browser",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="browser-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.commit()
+
+        res = client.get(f"{API_BASE}/simulations")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+        # Verify case metadata is present on the flat simulation row
+        assert data[0]["caseId"] == str(case.id)
+        assert data[0]["caseName"] == "test_case_browser"
+        assert data[0]["executionId"] == "browser-exec-1"

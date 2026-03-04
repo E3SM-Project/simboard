@@ -9,7 +9,12 @@ from app.core.database import transaction
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
-from app.features.simulation.schemas import CaseOut, SimulationCreate, SimulationOut
+from app.features.simulation.schemas import (
+    CaseOut,
+    SimulationCreate,
+    SimulationOut,
+    SimulationSummaryOut,
+)
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
@@ -221,6 +226,34 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
 
 
+def _case_to_out(case: Case) -> CaseOut:
+    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut."""
+    summaries = []
+    for sim in case.simulations:
+        is_canonical = sim.id == case.canonical_simulation_id
+        change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+        summaries.append(
+            SimulationSummaryOut(
+                id=sim.id,
+                execution_id=sim.execution_id,
+                status=sim.status,
+                is_canonical=is_canonical,
+                change_count=change_count,
+                simulation_start_date=sim.simulation_start_date,
+                simulation_end_date=sim.simulation_end_date,
+            )
+        )
+    return CaseOut(
+        id=case.id,
+        name=case.name,
+        case_hash=case.case_hash,
+        canonical_simulation_id=case.canonical_simulation_id,
+        simulations=summaries,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )
+
+
 @case_router.get(
     "",
     response_model=list[CaseOut],
@@ -230,8 +263,14 @@ case_router = APIRouter(prefix="/cases", tags=["Cases"])
     },
 )
 def list_cases(db: Session = Depends(get_database_session)):
-    """Retrieve all cases ordered by creation date descending."""
-    return db.query(Case).order_by(Case.created_at.desc()).all()
+    """Retrieve all cases with nested simulation summaries."""
+    cases = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .order_by(Case.created_at.desc())
+        .all()
+    )
+    return [_case_to_out(c) for c in cases]
 
 
 @case_router.get(
@@ -245,7 +284,12 @@ def list_cases(db: Session = Depends(get_database_session)):
 )
 def get_case(case_id: UUID, db: Session = Depends(get_database_session)):
     """Retrieve a case by its unique identifier."""
-    case = db.query(Case).filter(Case.id == case_id).first()
+    case = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .filter(Case.id == case_id)
+        .first()
+    )
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    return case
+    return _case_to_out(case)

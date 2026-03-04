@@ -3,15 +3,30 @@ import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
 
 /**
- * API response model for a Case.
+ * API response model for a Case with nested simulation summaries.
  */
 export interface CaseOut {
   id: string;
   name: string;
   caseHash: string;
   canonicalSimulationId: string | null;
+  simulations: SimulationSummaryOut[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Lightweight simulation summary for case-level nesting.
+ * Does NOT include heavy relationships (machine, artifacts, links).
+ */
+export interface SimulationSummaryOut {
+  id: string;
+  executionId: string;
+  status: string;
+  isCanonical: boolean;
+  changeCount: number;
+  simulationStartDate: string;
+  simulationEndDate: string | null;
 }
 
 /**
