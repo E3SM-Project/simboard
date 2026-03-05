@@ -198,54 +198,29 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Reverse the full case-based refactor."""
+    """
+    Downgrade intentionally unsupported.
 
-    # ── 1. Re-add dropped columns ────────────────────────────────────
-    op.add_column(
-        "simulations",
-        sa.Column("group_name", sa.Text(), nullable=True),
-    )
-    op.add_column(
-        "simulations",
-        sa.Column("name", sa.String(200), nullable=True),
-    )
-    op.add_column(
-        "simulations",
-        sa.Column("case_name", sa.String(200), nullable=True),
-    )
+    This migration converts the data model from:
+        - one simulation per (case_name, machine_id, simulation_start_date)
+    to:
+        - multiple executions per case (execution-centric model)
 
-    # ── 2. Backfill from cases ───────────────────────────────────────
-    op.execute(
-        sa.text(
-            "UPDATE simulations SET case_name = c.name, "
-            "name = c.name, group_name = c.case_group "
-            "FROM cases c WHERE simulations.case_id = c.id"
-        )
-    )
-    op.alter_column("simulations", "case_name", nullable=False)
-    op.alter_column("simulations", "name", nullable=False)
-    op.create_index("ix_simulations_name", "simulations", ["name"])
-    op.create_index("ix_simulations_case_name", "simulations", ["case_name"])
-    op.create_unique_constraint(
-        "uq_simulation_case_machine_date",
-        "simulations",
-        ["case_name", "machine_id", "simulation_start_date"],
-    )
+    The legacy schema enforces a uniqueness constraint on:
+        (case_name, machine_id, simulation_start_date)
 
-    # ── 3. Drop new columns and FK ───────────────────────────────────
-    op.drop_constraint(
-        "fk_simulations_case_id_cases", "simulations", type_="foreignkey"
+    If multiple executions now exist for the same triple, a downgrade would
+    require deleting valid execution records, resulting in irreversible data
+    loss.
+
+    Because this migration changes fundamental data semantics, it is
+    forward-only.
+    """
+
+    raise RuntimeError(
+        "Downgrade blocked: migration 20260304_400000 introduces "
+        "multi-execution semantics that cannot be safely reversed. "
+        "Restoring the previous schema would require deleting execution "
+        "records and violating data integrity. If rollback is required, "
+        "restore from a database backup instead."
     )
-    op.drop_constraint("fk_cases_canonical_sim", "cases", type_="foreignkey")
-    op.drop_index("ix_simulations_execution_id", table_name="simulations")
-    op.drop_index("ix_simulations_case_id", table_name="simulations")
-    op.drop_column("simulations", "execution_id")
-    op.drop_column("simulations", "case_id")
-
-    # ── 4. Drop run_config_deltas ────────────────────────────────────
-    op.drop_column("simulations", "run_config_deltas")
-
-    # ── 5. Drop cases table ──────────────────────────────────────────
-    op.drop_index("ix_cases_case_group", table_name="cases")
-    op.drop_index("ix_cases_name", table_name="cases")
-    op.drop_table("cases")
