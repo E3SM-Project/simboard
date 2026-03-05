@@ -227,7 +227,7 @@ def create_simulation(
             selectinload(Simulation.links),
         )
         .filter(Simulation.id == sim.id)
-        .first()
+        .one_or_none()
     )
 
     if sim_loaded is None:

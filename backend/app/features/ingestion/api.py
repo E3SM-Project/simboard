@@ -1,9 +1,9 @@
 import hashlib
 import tempfile
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
@@ -242,7 +242,7 @@ def _process_ingestion(
     ingest_result: IngestArchiveResult,
     source_type: IngestionSourceType,
     source_reference: str,
-    machine_id: uuid.UUID,
+    machine_id: UUID,
     user: User,
     archive_sha256: str | None,
     db: Session,
@@ -267,7 +267,7 @@ def _process_ingestion(
     source_reference : str
         Identifier for the ingestion source, such as a filesystem path
         or uploaded filename.
-    machine_id : uuid.UUID
+    machine_id : UUID
         Identifier of the machine associated with this ingestion.
     user : User
         Authenticated user who initiated the ingestion.
@@ -307,7 +307,7 @@ def _process_ingestion(
         db.flush()
 
         _persist_simulations(
-            cast(uuid.UUID, ingestion.id),
+            cast(UUID, ingestion.id),
             ingest_result.simulations,
             db,
             user,
@@ -334,29 +334,23 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
 
 def _set_canonical_simulations(db: Session, created_sims: list[Simulation]) -> None:
     """Set canonical simulation per case when canonical is not already set."""
-    case_ids: set[uuid.UUID] = {
-        case_id
-        for sim in created_sims
-        if isinstance((case_id := sim.case_id), uuid.UUID)
+    case_ids: set[UUID] = {
+        case_id for sim in created_sims if isinstance((case_id := sim.case_id), UUID)
     }
     cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
 
     for sim in created_sims:
-        if not isinstance(sim.case_id, uuid.UUID):
+        if not isinstance(sim.case_id, UUID):
             continue
 
         case = cases.get(sim.case_id)
-        if (
-            case
-            and case.canonical_simulation_id is None
-            and isinstance(sim.id, uuid.UUID)
-        ):
+        if case and case.canonical_simulation_id is None and isinstance(sim.id, UUID):
             case.canonical_simulation_id = sim.id
             db.add(case)
 
 
 def _persist_simulations(
-    ingestion_id: uuid.UUID,
+    ingestion_id: UUID,
     simulations: list[SimulationCreate],
     db: Session,
     user: User,
