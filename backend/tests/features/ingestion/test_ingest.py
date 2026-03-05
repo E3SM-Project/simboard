@@ -85,20 +85,21 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert isinstance(ingest_result.simulations, list)
-            assert len(ingest_result.simulations) == 1
-            assert isinstance(ingest_result.simulations[0], SimulationCreate)
-            assert ingest_result.simulations[0].execution_id == "1081156.251218-200923"
-            # Verify Case was created
-            case = db.query(Case).filter(Case.name == "case1").first()
-            assert case is not None
-            assert ingest_result.simulations[0].case_id == case.id
+        assert isinstance(ingest_result.simulations, list)
+        assert len(ingest_result.simulations) == 1
+        assert isinstance(ingest_result.simulations[0], SimulationCreate)
+        assert ingest_result.simulations[0].execution_id == "1081156.251218-200923"
+        # Verify Case was created
+        case = db.query(Case).filter(Case.name == "case1").first()
+        assert case is not None
+        assert ingest_result.simulations[0].case_id == case.id
 
     def test_handles_multiple_simulations(self, db: Session) -> None:
         """Test ingesting archive with multiple simulations."""
@@ -154,25 +155,26 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(ingest_result.simulations) == 2
-            exec_ids = {s.execution_id for s in ingest_result.simulations}
-            assert exec_ids == {"1081157.251218-200924", "1081158.251218-200925"}
+        assert len(ingest_result.simulations) == 2
+        exec_ids = {s.execution_id for s in ingest_result.simulations}
+        assert exec_ids == {"1081157.251218-200924", "1081158.251218-200925"}
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
-        with patch("app.features.ingestion.ingest.main_parser", return_value={}):
+        with patch("app.features.ingestion.ingest.main_parser", return_value=({}, 0)):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert isinstance(ingest_result.simulations, list)
-            assert len(ingest_result.simulations) == 0
+        assert isinstance(ingest_result.simulations, list)
+        assert len(ingest_result.simulations) == 0
 
     def test_accepts_string_paths(self, db: Session) -> None:
         """Test that archive_path and output_dir accept strings."""
@@ -205,16 +207,17 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ) as mock_main_parser:
             ingest_result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
-            # Verify main_parser was called with Path objects
-            assert ingest_result.simulations is not None
-            mock_main_parser.assert_called_once()
-            args = mock_main_parser.call_args[0]
-            assert isinstance(args[0], Path)
-            assert isinstance(args[1], Path)
+        # Verify main_parser was called with Path objects
+        assert ingest_result.simulations is not None
+        mock_main_parser.assert_called_once()
+        args = mock_main_parser.call_args[0]
+        assert isinstance(args[0], Path)
+        assert isinstance(args[1], Path)
 
     def test_propagates_mapping_errors(self, db: Session) -> None:
         """Test that mapping errors are collected and ingestion continues."""
@@ -246,16 +249,16 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
-            assert len(ingest_result.errors) == 1
-            assert ingest_result.errors[0]["error_type"] == "LookupError"
-            assert "nonexistent-machine" in ingest_result.errors[0]["error"]
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "LookupError"
+        assert "nonexistent-machine" in ingest_result.errors[0]["error"]
 
     def test_parses_various_datetime_formats_through_public_api(
         self, db: Session
@@ -302,22 +305,17 @@ class TestIngestArchive:
                 }
             }
 
-            with patch(
-                "app.features.ingestion.ingest.main_parser",
-                return_value=mock_simulations,
-            ):
-                ingest_result = ingest_archive(
-                    Path("/tmp/archive.zip"), Path("/tmp/out"), db
-                )
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
 
-                assert len(ingest_result.simulations) == 1
-                assert isinstance(
-                    ingest_result.simulations[0].simulation_start_date, datetime
-                )
-                assert (
-                    ingest_result.simulations[0].simulation_start_date.tzinfo
-                    is not None
-                )
+        assert len(ingest_result.simulations) == 1
+        assert isinstance(ingest_result.simulations[0].simulation_start_date, datetime)
+        assert ingest_result.simulations[0].simulation_start_date.tzinfo is not None
 
     def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
         """Test that missing required fields are captured as errors."""
@@ -350,15 +348,16 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
-            assert len(ingest_result.errors) == 1
-            assert ingest_result.errors[0]["error_type"] == "ValueError"
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "ValueError"
 
     def test_machine_lookup_and_validation_through_public_api(
         self, db: Session
@@ -399,13 +398,14 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=valid_mock
+            "app.features.ingestion.ingest.main_parser", return_value=(valid_mock, 0)
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].machine_id == machine.id
+
+        assert len(ingest_result.simulations) == 1
+        assert ingest_result.simulations[0].machine_id == machine.id
 
         # Test with missing machine
         invalid_mock = {
@@ -435,16 +435,16 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=invalid_mock
+            "app.features.ingestion.ingest.main_parser", return_value=(invalid_mock, 0)
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
-            assert len(ingest_result.errors) == 1
-            assert ingest_result.errors[0]["error_type"] == "LookupError"
-            assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "LookupError"
+        assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
 
 
 class TestIngestArchiveContinued(TestIngestArchive):
@@ -502,7 +502,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -552,7 +553,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -657,7 +659,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -762,7 +765,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -775,7 +779,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
-        with patch("app.features.ingestion.ingest.main_parser", return_value={}):
+        with patch("app.features.ingestion.ingest.main_parser", return_value=({}, 0)):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -821,7 +825,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -879,7 +884,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=mock_simulations,
+                return_value=(mock_simulations, 0),
             ),
             patch(
                 "app.features.ingestion.ingest.dateutil_parser.parse",
@@ -923,7 +928,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -965,7 +971,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1072,7 +1079,8 @@ class TestNormalizeGitUrl:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=mock_simulations
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(mock_simulations, 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1179,7 +1187,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1211,7 +1219,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1245,7 +1253,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1271,7 +1279,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1341,7 +1349,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1399,7 +1407,7 @@ class TestCanonicalRunIngestion:
 
         # Set canonical_simulation_id on the case
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.canonical_simulation_id = sim.id  # type: ignore[assignment]
         db.commit()
 
         # Ingest archive containing the existing run plus a new one
@@ -1416,7 +1424,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1447,7 +1455,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1474,7 +1482,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=mock_simulations,
+            return_value=(mock_simulations, 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 

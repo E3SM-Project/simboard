@@ -87,7 +87,9 @@ FILE_SPECS: dict[str, FileSpec] = {
 }
 
 
-def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulations:
+def main_parser(
+    archive_path: str | Path, output_dir: str | Path
+) -> tuple[AllSimulations, int]:
     """Main entrypoint for parser workflow.
 
     Parses experiment directories from a performance archive, handling
@@ -109,10 +111,10 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
 
     Returns
     -------
-    AllSimulations
+    tuple[AllSimulations, int]
         Dictionary mapping experiment directory paths to their parsed
-        simulations.  Only directories that contain all required
-        metadata files are included.
+        simulations and the count of skipped incomplete runs. Only directories
+        that contain all required metadata files are included.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
@@ -169,7 +171,7 @@ def main_parser(archive_path: str | Path, output_dir: str | Path) -> AllSimulati
 
     logger.info("Completed parsing all experiment directories.")
 
-    return results
+    return results, skipped_count
 
 
 def _extract_archive(archive_path: str, output_dir: str) -> None:

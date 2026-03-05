@@ -177,8 +177,9 @@ class TestMainParser:
 
         # Mock parser functions and verify experiment was found and parsed
         with self._mock_all_parsers():
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
 
     def test_with_tar_gz_archive(self, tmp_path: Path) -> None:
@@ -200,8 +201,9 @@ class TestMainParser:
 
         # Mock parser functions and verify experiment was found and parsed
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "tar_test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("2.5-10" in key for key in result.keys())
 
     def test_with_multiple_experiments(self, tmp_path: Path) -> None:
@@ -228,8 +230,9 @@ class TestMainParser:
 
         # Mock parser functions and verify both experiments were found
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) == 2
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
             assert any("2.0-0" in key for key in result.keys())
 
@@ -257,8 +260,9 @@ class TestMainParser:
 
         # Mock parser functions and verify nested experiment was found
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "nested_test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
 
     def test_missing_required_files_skips_incomplete_run(self, tmp_path: Path) -> None:
@@ -277,8 +281,9 @@ class TestMainParser:
         extract_dir.mkdir()
 
         # Incomplete runs are skipped; result is empty rather than an error
-        result = parser.main_parser(archive_path, extract_dir)
+        result, skipped = parser.main_parser(archive_path, extract_dir)
         assert result == {}
+        assert skipped == 1
 
     def test_multiple_matching_files_raises_error(self, tmp_path: Path) -> None:
         """Test error when multiple files match a pattern."""
@@ -431,7 +436,7 @@ class TestMainParser:
         self._create_experiment_files(exp_dir, "001.001")
 
         with self._mock_all_parsers():
-            result = parser.main_parser(tmp_path, tmp_path / "unused_output")
+            result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
         assert len(result) == 1
         assert any("1.0-0" in key for key in result)
@@ -462,7 +467,7 @@ class TestMainParser:
         extract_dir.mkdir()
 
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "mixed_test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             # Only the valid experiment should be in the result
             assert len(result) == 1
             assert any("1.0-0" in key for key in result.keys())
@@ -489,7 +494,7 @@ class TestMainParser:
         self._create_experiment_files(run2, "002.002")
 
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "v3_hist"}):
-            result = parser.main_parser(casename_dir, tmp_path / "out")
+            result, skipped = parser.main_parser(casename_dir, tmp_path / "out")
             # Both runs should be parsed successfully
             assert len(result) == 2
             assert any("1081156" in key for key in result.keys())

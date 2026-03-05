@@ -123,18 +123,22 @@ def ingest_archive(  # noqa: C901
         Path(output_dir) if isinstance(output_dir, str) else output_dir
     )
 
-    all_simulations = main_parser(archive_path_resolved, output_dir_resolved)
+    all_simulations, skipped_count = main_parser(
+        archive_path_resolved, output_dir_resolved
+    )
 
     if not all_simulations:
         logger.warning(f"No simulations found in archive: {archive_path_resolved}")
 
         return IngestArchiveResult(
-            simulations=[], created_count=0, duplicate_count=0, skipped_count=0
+            simulations=[],
+            created_count=0,
+            duplicate_count=0,
+            skipped_count=skipped_count,
         )
 
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
-    skipped_count = 0
     errors: list[dict[str, str]] = []
 
     # Track canonical metadata per case_name for batch processing.
@@ -249,6 +253,7 @@ def ingest_archive(  # noqa: C901
         skipped_count=skipped_count,
         errors=errors,
     )
+
     return result
 
 
