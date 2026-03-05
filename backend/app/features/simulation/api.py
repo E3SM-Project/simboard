@@ -116,6 +116,7 @@ def _case_to_out(case: Case) -> CaseOut:
     for sim in case.simulations:
         is_canonical = sim.id == case.canonical_simulation_id
         change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+
         summaries.append(
             SimulationSummaryOut(
                 id=sim.id,
@@ -321,7 +322,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
             selectinload(Simulation.links),
         )
         .filter(Simulation.id == sim_id)
-        .first()
+        .one_or_none()
     )
 
     if not sim:

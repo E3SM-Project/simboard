@@ -1,20 +1,21 @@
-"""Module for ingesting simulation archives and mapping to database schemas.
+"""
+Module for ingesting simulation archives and mapping to DB schemas.
 
-Implements canonical run semantics for ``performance_archive`` ingestion:
+Canonical run semantics for performance_archive ingestion:
+  - A run is "successful" only if all required metadata files are present.
+  - case_name (from timing files) is the identity for Case grouping.
+  - The first successful run per case is the canonical baseline.
+  - Each run creates a Simulation linked to a Case via case_id.
+  - Canonical simulation has run_config_deltas = None.
+  - Non-canonical runs store config differences vs canonical.
+  - Incomplete runs are skipped at the parser level.
+  - Re-processing is idempotent due to execution_id uniqueness.
 
-* A run is "successful" only when all required metadata files are present.
-* ``case_name`` (from timing files) is the identity for Case grouping.
-* Within each case, the **first** successful run is the *canonical
-  baseline*.
-* Each successful run creates its own ``Simulation`` record linked to
-  a ``Case`` via ``case_id``.
-* The canonical simulation has ``run_config_deltas = None``.
-* Non-canonical simulations store a single dict of config differences
-  against the canonical baseline.
-* Incomplete runs (missing required files) are skipped at the parser
-  level and never reach ingestion.
-* Re-processing the same archive is idempotent thanks to the
-  ``execution_id`` uniqueness constraint.
+Caching for canonical lookup:
+  - canonical_cache: canonical metadata for new cases in this ingest batch,
+    keyed by case_name.
+  - persisted_canonical_cache: canonical metadata for cases already in DB,
+    keyed by case.id, to avoid repeated DB queries.
 """
 
 import os
@@ -53,7 +54,7 @@ _CONFIG_DELTA_FIELDS: frozenset[str] = frozenset(
         "git_branch",
         "git_repository_url",
         "campaign",
-        "experiment_type",
+        "execution_type",
     }
 )
 
@@ -151,22 +152,19 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-
-    # Track canonical metadata per case_name for batch processing.
-    # Handles the case where multiple runs for the same (new) case
-    # appear in a single archive before any are persisted.
     canonical_cache: dict[str, SimulationMetadata] = {}
     persisted_canonical_cache: dict[UUID, SimulationMetadata | None] = {}
 
-    for exp_dir, metadata in all_simulations.items():
+    for execution_dir, metadata in all_simulations.items():
         try:
             simulation, is_duplicate = _process_simulation_for_ingest(
-                exp_dir=exp_dir,
+                execution_dir=execution_dir,
                 metadata=metadata,
                 db=db,
                 canonical_cache=canonical_cache,
                 persisted_canonical_cache=persisted_canonical_cache,
             )
+
             if is_duplicate:
                 duplicate_count += 1
                 continue
@@ -175,10 +173,11 @@ def ingest_archive(
                 simulations.append(simulation)
 
         except (ValueError, LookupError, ValidationError) as e:
-            logger.error(f"Failed to process simulation from {exp_dir}: {e}")
+            logger.error(f"Failed to process simulation from {execution_dir}: {e}")
+
             errors.append(
                 {
-                    "exp_dir": str(exp_dir),
+                    "execution_dir": str(execution_dir),
                     "error_type": type(e).__name__,
                     "error": str(e),
                 }
@@ -197,7 +196,7 @@ def ingest_archive(
 
 
 def _process_simulation_for_ingest(
-    exp_dir: str,
+    execution_dir: str,
     metadata: SimulationMetadata,
     db: Session,
     canonical_cache: dict[str, SimulationMetadata],
@@ -207,8 +206,8 @@ def _process_simulation_for_ingest(
 
     Parameters
     ----------
-    exp_dir : str
-        Experiment directory name (used to derive execution_id).
+    execution_dir : str
+        Execution directory name (used to derive execution_id).
     metadata : SimulationMetadata
         Parsed metadata dictionary for the simulation.
     db : Session
@@ -225,17 +224,17 @@ def _process_simulation_for_ingest(
         only for new records and ``is_duplicate`` is True when an existing
         ``execution_id`` was found.
     """
-    execution_id = _derive_execution_id(exp_dir)
-    case_name = _require_case_name(metadata, exp_dir)
+    execution_id = _derive_execution_id(execution_dir)
+    case_name = _require_case_name(metadata, execution_dir)
     machine_id = _resolve_machine_id(metadata, db)
     case = _resolve_case(metadata, case_name, db)
 
-    if _is_duplicate_simulation(execution_id, exp_dir, db):
+    if _is_duplicate_simulation(execution_id, execution_dir, db):
         _seed_canonical_cache_from_duplicate(case_name, metadata, canonical_cache)
         return None, True
 
     simulation = _build_simulation_create(
-        exp_dir=exp_dir,
+        execution_dir=execution_dir,
         metadata=metadata,
         execution_id=execution_id,
         machine_id=machine_id,
@@ -248,13 +247,13 @@ def _process_simulation_for_ingest(
     return simulation, False
 
 
-def _require_case_name(metadata: SimulationMetadata, exp_dir: str) -> str:
+def _require_case_name(metadata: SimulationMetadata, execution_dir: str) -> str:
     """Return case_name from metadata or raise a descriptive error."""
     case_name = metadata.get("case_name")
 
     if not case_name:
         raise ValueError(
-            f"case_name is required but missing from '{exp_dir}'. "
+            f"case_name is required but missing from '{execution_dir}'. "
             "Cannot determine Case identity."
         )
 
@@ -270,7 +269,9 @@ def _resolve_case(metadata: SimulationMetadata, case_name: str, db: Session) -> 
     return result
 
 
-def _is_duplicate_simulation(execution_id: str, exp_dir: str, db: Session) -> bool:
+def _is_duplicate_simulation(
+    execution_id: str, execution_dir: str, db: Session
+) -> bool:
     """Return True when a simulation with execution_id already exists."""
     existing_sim = _find_existing_simulation(db, execution_id)
 
@@ -279,7 +280,7 @@ def _is_duplicate_simulation(execution_id: str, exp_dir: str, db: Session) -> bo
 
     logger.info(
         f"Simulation with execution_id='{execution_id}' "
-        f"already exists. Skipping duplicate from {exp_dir}."
+        f"already exists. Skipping duplicate from {execution_dir}."
     )
     return True
 
@@ -295,7 +296,7 @@ def _seed_canonical_cache_from_duplicate(
 
 
 def _build_simulation_create(
-    exp_dir: str,
+    execution_dir: str,
     metadata: SimulationMetadata,
     execution_id: str,
     machine_id: UUID,
@@ -308,12 +309,12 @@ def _build_simulation_create(
 
     Parameters
     ----------
-    exp_dir : str
-        Experiment directory name (used for logging context).
+    execution_dir : str
+        Execution directory name (used for logging context).
     metadata : SimulationMetadata
         Parsed metadata dictionary for the simulation.
     execution_id : str
-        Unique execution identifier derived from the experiment directory.
+        Unique execution identifier derived from the execution directory.
     machine_id : UUID
         Resolved machine ID from the database.
     case : Case
@@ -340,7 +341,7 @@ def _build_simulation_create(
         simulation = _map_metadata_to_schema(
             metadata, machine_id, case.id, execution_id
         )
-        logger.info(f"Mapped canonical simulation from {exp_dir}: {case_name}")
+        logger.info(f"Mapped canonical simulation from {execution_dir}: {case_name}")
 
         return simulation
 
@@ -353,12 +354,12 @@ def _build_simulation_create(
 
     if delta:
         logger.info(
-            f"Non-canonical run in '{exp_dir}' has config differences from "
+            f"Non-canonical run in '{execution_dir}' has config differences from "
             f"canonical: {list(delta.keys())}"
         )
     else:
         logger.info(
-            f"Non-canonical run in '{exp_dir}' has identical configuration to canonical."
+            f"Non-canonical run in '{execution_dir}' has identical configuration to canonical."
         )
 
     return simulation
@@ -414,27 +415,27 @@ def _get_canonical_metadata_for_case(
     return canonical_cache.get(case_name)
 
 
-def _derive_execution_id(exp_dir: str) -> str:
-    """Extract execution_id from the experiment directory path.
+def _derive_execution_id(execution_dir: str) -> str:
+    """Extract execution_id from the execution directory path.
 
-    The execution_id is the basename of the experiment directory
+    The execution_id is the basename of the execution directory
     (e.g. ``1125772.260116-181605``).  Absolute filesystem paths are
     never stored.
 
     Parameters
     ----------
-    exp_dir : str
-        Experiment directory name from the parser output (e.g. from timing files).
+    execution_dir : str
+        Execution directory name from the parser output (e.g. from timing files).
 
     Raises
     ------
     ValueError
         If the derived execution_id is empty.
     """
-    execution_id = os.path.basename(exp_dir)
+    execution_id = os.path.basename(execution_dir)
     if not execution_id:
         raise ValueError(
-            f"Cannot derive execution_id from experiment directory: '{exp_dir}'"
+            f"Cannot derive execution_id from execution directory: '{execution_dir}'"
         )
 
     return execution_id
@@ -448,7 +449,7 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
     db : Session
         Active database session.
     name : str
-        Case name derived from the experiment (e.g. from timing files).
+        Case name derived from the execution (e.g. from timing files).
         Used as the canonical identity for case grouping.
     case_group : str | None
         Optional CASE_GROUP from env_case.xml.  Stored on ``Case``
@@ -573,7 +574,7 @@ def _find_existing_simulation(db: Session, execution_id: str) -> Simulation | No
     db : Session
         Active database session for querying the Simulation table.
     execution_id : str
-        Unique execution identifier derived from the experiment directory.
+        Unique execution identifier derived from the execution directory.
 
     Returns
     -------
@@ -693,13 +694,10 @@ def _map_metadata_to_schema(
             "machineId": machine_id,
             "simulationStartDate": simulation_start_date,
             "simulationEndDate": simulation_end_date,
-            # Optional experiment classification
             "experimentType": metadata.get("experiment_type"),
             "campaign": metadata.get("campaign"),
-            # Optional timing fields
             "runStartDate": run_start_date,
             "runEndDate": run_end_date,
-            # Optional software/environment fields
             "compiler": metadata.get("compiler"),
             "gitRepositoryUrl": git_repository_url,
             "gitBranch": metadata.get("git_branch"),

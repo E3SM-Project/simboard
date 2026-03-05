@@ -53,9 +53,7 @@ class Case(Base, IDMixin, TimestampMixin):
         passive_deletes=True,
     )
     canonical_simulation: Mapped[Simulation | None] = relationship(
-        "Simulation",
-        foreign_keys=[canonical_simulation_id],
-        post_update=True,
+        "Simulation", foreign_keys=[canonical_simulation_id], post_update=True
     )
 
 

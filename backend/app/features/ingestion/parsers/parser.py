@@ -1,4 +1,24 @@
-"""Main parser module for processing experiment upload archives."""
+"""
+Main parser module for processing execution upload archives.
+
+This module extracts and parses case directories from simulation performance
+archives. It handles incomplete or failed runs gracefully skipping directories
+missing required metadata files and logging warning instead of aborting the
+entire ingest.
+
+Key behaviors:
+  - Supports .zip, .tar.gz, and .tgz archive formats, or already-extracted dirs.
+  - Recursively finds case directories matching <digits>.<digits>-<digits> pattern.
+    - Example: v3.LR.historical_0121
+  - Required and optional metadata files are discovered and parsed per execution dir.
+  - Only directories with all required files are included in results.
+  - Skipped/incomplete runs are counted and logged.
+  - Parsing is deterministic: execution subdirectories are sorted to ensure
+    reproducible canonical run selection.
+
+This parser is used by the ingestion workflow to provide a consistent,
+reliable mapping from raw archive contents to structured simulation metadata.
+"""
 
 import os
 import re
@@ -92,33 +112,30 @@ def main_parser(
 ) -> tuple[AllSimulations, int]:
     """Main entrypoint for parser workflow.
 
-    Parses experiment directories from a performance archive, handling
-    incomplete or failed runs gracefully. Directories missing required
-    metadata files are skipped with a warning rather than aborting the
-    entire ingestion.
+    Parses case directories from a performance archive, handling incomplete or
+    failed runs gracefully. Directories missing required metadata files are
+    skipped with a warning rather than aborting the entire ingestion.
 
-    Within each case (parent directory), experiment subdirectories are
-    sorted deterministically so that canonical run selection is
-    reproducible.
+    Within each case (parent directory), execution subdirectories are sorted
+    deterministically so that canonical run selection is reproducible.
 
     Parameters
     ----------
     archive_path : str
-        Path to the archive file (.zip, .tar.gz, .tgz) or an
-        already-extracted directory.
+        Path to the archive file (.zip, .tar.gz, .tgz) or an already-extracted
+        directory.
     output_dir : str
         Directory to extract and process files.
 
     Returns
     -------
     tuple[AllSimulations, int]
-        Dictionary mapping experiment directory paths to their parsed
-        simulations and the count of skipped incomplete runs. Only directories
-        that contain all required metadata files are included.
+        Dictionary mapping execution directory paths to their parsed simulations
+        and the count of skipped incomplete runs. Only directories that contain
+        all required metadata files are included.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
-
     search_root = output_dir
 
     if _is_supported_archive(archive_path):
@@ -129,47 +146,44 @@ def main_parser(
 
         search_root = archive_path
 
-    results: AllSimulations = {}
-
-    exp_dirs = _find_experiment_dirs(search_root)
+    case_dirs = _find_case_dirs(search_root)
     logger.info(
-        f"Found {sum(len(dirs) for dirs in exp_dirs.values())} experiment "
-        f"directories across {len(exp_dirs)} base directories."
+        f"Found {sum(len(dirs) for dirs in case_dirs.values())} case "
+        f"directories across {len(case_dirs)} base directories."
     )
-
-    if not exp_dirs:
+    if not case_dirs:
         raise FileNotFoundError(
-            f"No experiment directories found under '{search_root}'. "
+            f"No case directories found under '{search_root}'. "
             "Expected directory names matching pattern: <digits>.<digits>-<digits>"
         )
 
+    results: AllSimulations = {}
     skipped_count = 0
 
-    for base_dir, subdirs in exp_dirs.items():
-        # Sort subdirectories for deterministic canonical run selection.
-        sorted_subdirs = sorted(subdirs)
+    for base_dir, execution_dirs in case_dirs.items():
+        sorted_execution_dirs = sorted(execution_dirs)
         logger.info(
-            f"Processing base directory: {base_dir} with {len(sorted_subdirs)} "
-            "experiment subdirectories."
+            f"Processing base directory: {base_dir} with {len(sorted_execution_dirs)} "
+            "execution subdirectories."
         )
 
-        for exp_dir in sorted_subdirs:
+        for execution_dir in sorted_execution_dirs:
             try:
-                files = _locate_files(exp_dir)
+                metadata_files = _locate_metadata_files(execution_dir)
             except FileNotFoundError as exc:
-                logger.warning(f"Skipping incomplete run in '{exp_dir}': {exc}")
+                logger.warning(f"Skipping incomplete run in '{execution_dir}': {exc}")
                 skipped_count += 1
 
                 continue
 
-            results[exp_dir] = _parse_experiment_files(files)
+            results[execution_dir] = _parse_all_files(metadata_files)
 
     if skipped_count:
         logger.info(
             f"Skipped {skipped_count} incomplete run(s) missing required files."
         )
 
-    logger.info("Completed parsing all experiment directories.")
+    logger.info("Completed parsing all execution directories.")
 
     return results, skipped_count
 
@@ -209,21 +223,20 @@ def _extract_tar_gz(tar_gz_path: str, extract_to: str) -> None:
         )
 
 
-def _extractall_with_filter(tar_ref, path: str) -> None:
+def _extractall_with_filter(tar_ref: tarfile.TarFile, path: str) -> None:
     """Extract tar members while filtering out unsafe types."""
     tar_ref.extractall(path, filter=_tar_member_filter)
 
 
 def _safe_extract(
-    extract_to: str,
-    member_names: Iterable[str],
-    extract_func: Callable[[str], None],
+    extract_to: str, member_names: Iterable[str], extract_func: Callable[[str], None]
 ) -> None:
     """Validate archive members to prevent path traversal before extraction."""
     base_dir = Path(extract_to).resolve()
 
     for name in member_names:
         target_path = (base_dir / name).resolve()
+
         if not _is_within_directory(base_dir, target_path):
             raise ValueError(
                 "Archive member path escapes extraction directory: "
@@ -251,9 +264,9 @@ def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
     return True
 
 
-def _find_experiment_dirs(root_dir: str) -> dict[str, list[str]]:
+def _find_case_dirs(root_dir: str) -> dict[str, list[str]]:
     """
-    Recursively search for experiment directories matching the pattern:
+    Recursively search for execution directories matching the pattern:
     <digits>.<digits>-<digits>, grouped by their immediate parent directory.
     """
     exp_dir_pattern = re.compile(r"\d+\.\d+-\d+$")
@@ -262,19 +275,21 @@ def _find_experiment_dirs(root_dir: str) -> dict[str, list[str]]:
     for dirpath, dirnames, _ in os.walk(root_dir):
         for dirname in dirnames:
             if exp_dir_pattern.match(dirname):
-                parent_dir = os.path.basename(dirpath)  # Immediate parent directory
+                parent_dir = os.path.basename(dirpath)
                 full_path = os.path.join(dirpath, dirname)
+
                 grouped_matches.setdefault(parent_dir, []).append(full_path)
 
     return grouped_matches
 
 
-def _locate_files(exp_dir: str) -> SimulationFiles:
-    """Locate required and optional files in the experiment directory."""
+def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
+    """Locate required and optional files in the execution directory."""
     files: SimulationFiles = {key: None for key in FILE_SPECS}
 
     files = _find_root_files(exp_dir, files)
     files = _find_casedocs_files(exp_dir, files)
+
     _check_missing_files(files, exp_dir)
 
     return files
@@ -283,7 +298,10 @@ def _locate_files(exp_dir: str) -> SimulationFiles:
 def _find_file_in_dir(directory: str, pattern: str) -> str | None:
     """Find a file matching the pattern in the specified directory.
 
-    Raises ValueError if multiple files match the pattern.
+    Raises
+    ------
+    ValueError
+        If multiple files match the pattern.
     """
     matches = []
     for fname in os.listdir(directory):
@@ -299,7 +317,7 @@ def _find_file_in_dir(directory: str, pattern: str) -> str | None:
 
 
 def _find_root_files(exp_dir: str, files: SimulationFiles) -> SimulationFiles:
-    """Find files located in the root of the experiment directory."""
+    """Find files located in the root of the execution directory."""
     for key, spec in FILE_SPECS.items():
         if spec["location"] == "root":
             pattern = str(spec["pattern"])
@@ -312,10 +330,13 @@ def _find_casedocs_files(exp_dir: str, files: SimulationFiles) -> SimulationFile
     for key, spec in FILE_SPECS.items():
         if spec["location"] == "casedocs":
             pattern = str(spec["pattern"])
+
             for subdir in os.listdir(exp_dir):
                 subdir_path = os.path.join(exp_dir, subdir)
+
                 if os.path.isdir(subdir_path) and subdir.startswith("CaseDocs"):
                     match = _find_file_in_dir(subdir_path, pattern)
+
                     if match:
                         files[key] = match
                         break
@@ -330,7 +351,8 @@ def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
     ]
     if missing_required:
         raise FileNotFoundError(
-            f"Required files not found in experiment directory '{exp_dir}': {', '.join(missing_required)}"
+            "Required files not found in execution directory "
+            f"'{exp_dir}': {', '.join(missing_required)}"
         )
 
     missing_optional = [
@@ -340,11 +362,12 @@ def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
     ]
     if missing_optional:
         logger.warning(
-            f"Optional files missing in experiment directory '{exp_dir}': {', '.join(missing_optional)}"
+            "Optional files missing in execution directory "
+            f"'{exp_dir}': {', '.join(missing_optional)}"
         )
 
 
-def _parse_experiment_files(files: dict[str, str | None]) -> SimulationMetadata:
+def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
     """Pass discovered files to their respective parser functions.
 
     Parameters

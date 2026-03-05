@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
-    _compute_archive_sha256,
     _run_ingest_archive,
     _set_canonical_simulations,
     _validate_archive_path,
@@ -1070,27 +1069,3 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
         assert "must be a file or directory" in exc_info.value.detail
-
-    def test_compute_archive_sha256_success(self, tmp_path):
-        """Covers the happy path of _compute_archive_sha256."""
-        import hashlib
-
-        archive = tmp_path / "test.tar.gz"
-        archive.write_bytes(b"test content")
-
-        result = _compute_archive_sha256(archive)
-
-        expected = hashlib.sha256(b"test content").hexdigest()
-        assert result == expected
-
-    def test_compute_archive_sha256_failure(self, tmp_path):
-        """Covers the exception path of _compute_archive_sha256."""
-        archive = tmp_path / "unreadable.tar.gz"
-        archive.touch()
-
-        with patch.object(Path, "open", side_effect=OSError("cannot read")):
-            with pytest.raises(HTTPException) as exc_info:
-                _compute_archive_sha256(archive)
-
-        assert exc_info.value.status_code == 500
-        assert "Failed to compute checksum" in exc_info.value.detail

@@ -65,11 +65,9 @@ class TestIngestionWithAPIToken:
         # Mock the necessary functions to avoid filesystem/parsing dependencies
         with (
             patch("app.features.ingestion.api._validate_archive_path") as mock_validate,
-            patch("app.features.ingestion.api._compute_archive_sha256") as mock_compute,
             patch("app.features.ingestion.api._run_ingest_archive") as mock_ingest,
         ):
             mock_validate.return_value = None
-            mock_compute.return_value = "a" * 64
 
             # Mock ingest result
             mock_result = MagicMock()
@@ -265,11 +263,9 @@ class TestIngestionWithAPIToken:
         # Mock the necessary functions
         with (
             patch("app.features.ingestion.api._validate_archive_path") as mock_validate,
-            patch("app.features.ingestion.api._compute_archive_sha256") as mock_compute,
             patch("app.features.ingestion.api._run_ingest_archive") as mock_ingest,
         ):
             mock_validate.return_value = None
-            mock_compute.return_value = "a" * 64
 
             mock_sim = SimulationCreate(
                 caseId=case.id,

@@ -202,7 +202,27 @@ def _parse_datetime(value):
 def _seed_simulation(
     db: Session, sim_entry: dict, case: Case, case_name: str, user_id
 ) -> Simulation:
-    """Create a single Simulation, Ingestion, and related entities from seed data."""
+    """Create a single Simulation, Ingestion, and related entities from seed data.
+
+    Parameters
+    ----------
+    db : Session
+        SQLAlchemy database session
+    sim_entry : dict
+        Dictionary containing simulation data from JSON
+    case : Case
+        The Case object this simulation belongs to (must be added to session)
+    case_name : str
+        Name of the case (used for error messages)
+    user_id : int
+        ID of the user to set as createdBy/lastUpdatedBy for the simulation and
+        ingestion
+
+    Returns
+    -------
+    Simulation
+        The created Simulation object (not yet committed to DB)
+    """
     machine_name = sim_entry.get("machine", {}).get("name")
     if not machine_name:
         raise ValueError(

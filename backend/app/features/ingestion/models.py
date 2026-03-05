@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
@@ -24,7 +24,7 @@ class Ingestion(Base):
     __tablename__ = "ingestions"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4, index=True
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4, index=True
     )
 
     source_type: Mapped[IngestionSourceType] = mapped_column(
@@ -39,13 +39,13 @@ class Ingestion(Base):
     )
     source_reference: Mapped[str] = mapped_column(Text, nullable=False)
     machine_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("machines.id"),
         nullable=False,
         index=True,
     )
     triggered_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
