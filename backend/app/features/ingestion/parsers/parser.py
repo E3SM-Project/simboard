@@ -8,8 +8,9 @@ entire ingest.
 
 Key behaviors:
   - Supports .zip, .tar.gz, and .tgz archive formats, or already-extracted dirs.
-  - Recursively finds case directories matching <digits>.<digits>-<digits> pattern.
-    - Example: v3.LR.historical_0121
+  - Recursively loops over each case diretory and finds execution directories
+    matching pattern <digits>.<digits>-<digits>.
+    - Example: v3.LR.historical_101 (case)  -> 1085209.251220-105556 (execution)
   - Required and optional metadata files are discovered and parsed per execution dir.
   - Only directories with all required files are included in results.
   - Skipped/incomplete runs are counted and logged.
@@ -146,37 +147,39 @@ def main_parser(
 
         search_root = archive_path
 
-    case_dirs = _find_case_dirs(search_root)
+    case_to_executions_dirs = _map_case_to_execution_dirs(search_root)
     logger.info(
-        f"Found {sum(len(dirs) for dirs in case_dirs.values())} case "
-        f"directories across {len(case_dirs)} base directories."
+        f"Found {sum(len(dirs) for dirs in case_to_executions_dirs.values())} case "
+        f"directories across {len(case_to_executions_dirs)} base directories."
     )
-    if not case_dirs:
+
+    if not case_to_executions_dirs:
         raise FileNotFoundError(
-            f"No case directories found under '{search_root}'. "
-            "Expected directory names matching pattern: <digits>.<digits>-<digits>"
+            f"No cases or execution directories found under '{search_root}'. "
+            "Expected to find at least one case directory containing execution "
+            "directories matching pattern: <digits>.<digits>-<digits>"
         )
 
     results: AllSimulations = {}
     skipped_count = 0
 
-    for base_dir, execution_dirs in case_dirs.items():
-        sorted_execution_dirs = sorted(execution_dirs)
+    for case_dir, exec_dirs in case_to_executions_dirs.items():
+        sorted_exec_dirs = sorted(exec_dirs)
         logger.info(
-            f"Processing base directory: {base_dir} with {len(sorted_execution_dirs)} "
+            f"Processing case directory: {case_dir} with {len(sorted_exec_dirs)} "
             "execution subdirectories."
         )
 
-        for execution_dir in sorted_execution_dirs:
+        for exec_dir in sorted_exec_dirs:
             try:
-                metadata_files = _locate_metadata_files(execution_dir)
+                metadata_files = _locate_metadata_files(exec_dir)
             except FileNotFoundError as exc:
-                logger.warning(f"Skipping incomplete run in '{execution_dir}': {exc}")
+                logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
                 skipped_count += 1
 
                 continue
 
-            results[execution_dir] = _parse_all_files(metadata_files)
+            results[exec_dir] = _parse_all_files(metadata_files)
 
     if skipped_count:
         logger.info(
@@ -264,10 +267,34 @@ def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
     return True
 
 
-def _find_case_dirs(root_dir: str) -> dict[str, list[str]]:
-    """
-    Recursively search for execution directories matching the pattern:
-    <digits>.<digits>-<digits>, grouped by their immediate parent directory.
+def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
+    """Maps case directories to their execution subdirectories.
+
+    Loops over case directories and search for execution directories matching
+    the pattern <digits>.<digits>-<digits> (<jobid>.<starttime>-<endtime>).
+
+    Parameters
+    ----------
+    root_dir : str
+        Root directory to start searching for case directories. This is typically
+        the output directory where the archive was extracted or the provided
+        directory if it was already extracted.
+
+    Return
+    ------
+    dict[str, list[str]]
+        Mapping of case directory names to lists of full paths for their execution
+        subdirectories.
+
+    Example
+    -------
+        {
+            "v3.LR.historical": [
+                "/path/to/v3.LR.historical/1085209.251220-105556",
+                "/path/to/v3.LR.historical/1085209.251221-105557",
+            ],
+            ...
+        }
     """
     exp_dir_pattern = re.compile(r"\d+\.\d+-\d+$")
     grouped_matches: dict[str, list[str]] = {}

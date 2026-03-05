@@ -37,27 +37,6 @@ from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
 
-# Configuration fields compared when computing deltas between a
-# canonical run and subsequent runs of the same case.  Timeline and
-# status fields are intentionally excluded because they are expected to
-# vary across successive executions of the same case.
-_CONFIG_DELTA_FIELDS: frozenset[str] = frozenset(
-    {
-        "compset",
-        "compset_alias",
-        "grid_name",
-        "grid_resolution",
-        "initialization_type",
-        "compiler",
-        "git_tag",
-        "git_commit_hash",
-        "git_branch",
-        "git_repository_url",
-        "campaign",
-        "execution_type",
-    }
-)
-
 
 @dataclass
 class IngestArchiveResult:
@@ -526,7 +505,7 @@ def _compute_config_delta(
     """
     delta: dict[str, dict[str, str | None]] = {}
 
-    for key in _CONFIG_DELTA_FIELDS:
+    for key in Simulation.CONFIG_DELTA_FIELDS:
         canonical_val = canonical.get(key)
         other_val = other.get(key)
         if canonical_val != other_val:

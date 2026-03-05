@@ -359,7 +359,9 @@ class TestMainParser:
         extract_dir.mkdir()
 
         # Should raise FileNotFoundError when no case directories found
-        with pytest.raises(FileNotFoundError, match="No case directories found"):
+        with pytest.raises(
+            FileNotFoundError, match="No cases or execution directories found"
+        ):
             parser.main_parser(archive_path, extract_dir)
 
     def test_with_optional_files(self, tmp_path):

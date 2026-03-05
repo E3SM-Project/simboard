@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -173,6 +173,26 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"
+    )
+
+    # Fields used to compute configuration deltas relative to canonical execution.
+    # Excludes timeline, status, and provenance fields that are expected to vary.
+    CONFIG_DELTA_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "compset",
+            "compset_alias",
+            "grid_name",
+            "grid_resolution",
+            "initialization_type",
+            "compiler",
+            "git_tag",
+            "git_commit_hash",
+            "git_branch",
+            "git_repository_url",
+            "campaign",
+            "experiment_type",
+            "simulation_type",
+        }
     )
 
 
