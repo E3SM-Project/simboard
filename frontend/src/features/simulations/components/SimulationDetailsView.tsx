@@ -74,7 +74,8 @@ export const SimulationDetailsView = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{simulation.caseName}</h1>
+          <h1 className="text-2xl font-bold">{simulation.executionId}</h1>
+          <p className="text-sm text-muted-foreground">{simulation.caseName}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Type:</span>
             <SimulationTypeBadge simulationType={simulation.simulationType} />
@@ -119,9 +120,6 @@ export const SimulationDetailsView = ({
               <CardContent className="space-y-3">
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
-                </FieldRow>
-                <FieldRow label="Execution ID">
-                  <ReadonlyInput value={simulation.executionId} />
                 </FieldRow>
                 <FieldRow label="Canonical">
                   <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>

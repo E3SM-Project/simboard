@@ -123,24 +123,24 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const columns = useMemo<ColumnDef<SimulationOut>[]>(
     () => [
       {
-        accessorKey: 'caseName',
-        header: 'Case Name',
+        accessorKey: 'executionId',
+        header: 'Execution ID',
         cell: ({ row }) => (
           <Link
             to={`/simulations/${row.original.id}`}
-            className="text-blue-600 hover:underline"
+            className="text-blue-600 hover:underline font-mono text-xs"
             onClick={(e) => e.stopPropagation()}
           >
-            {row.original.caseName}
+            {row.original.executionId}
           </Link>
         ),
         size: 260,
       },
       {
-        accessorKey: 'executionId',
-        header: 'Execution ID',
+        accessorKey: 'caseName',
+        header: 'Case Name',
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.executionId}</span>
+          <span>{row.original.caseName}</span>
         ),
         size: 200,
       },
@@ -444,7 +444,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                   />
                 </TableHead>
                 {headerGroup.headers.map((header) => {
-                  const isName = header.column.id === 'caseName';
+                  const isName = header.column.id === 'executionId';
                   const isAdvanced = header.column.columnDef.meta?.isAdvanced;
                   return (
                     <TableHead
@@ -502,7 +502,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                   />
                 </TableCell>
                 {row.getVisibleCells().map((cell) => {
-                  const isName = cell.column.id === 'caseName';
+                  const isName = cell.column.id === 'executionId';
                   const isAdvanced = cell.column.columnDef.meta?.isAdvanced;
                   return (
                     <TableCell

@@ -52,7 +52,12 @@ export const SimulationResultCard = ({
         />
         <div className="flex-1 w-full min-w-0 max-w-2xl">
           <CardHeader className="p-0 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <span className="font-semibold text-lg break-words">{simulation.caseName}</span>
+            <div>
+              <span className="font-semibold text-lg break-words">{simulation.executionId}</span>
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">Case:</span> {simulation.caseName}
+              </div>
+            </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-medium text-gray-700">Status:</span>
               <SimulationStatusBadge status={simulation.status} />

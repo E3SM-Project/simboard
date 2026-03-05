@@ -35,6 +35,11 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
 
   const tableColumns: ColumnDef<SimulationOut>[] = [
     {
+      accessorKey: 'executionId',
+      header: 'Execution ID',
+      cell: (info) => info.getValue() || 'N/A',
+    },
+    {
       accessorKey: 'caseName',
       header: 'Case Name',
       cell: (info) => info.getValue() || 'N/A',

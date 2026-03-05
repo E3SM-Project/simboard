@@ -49,11 +49,11 @@ export const BrowseToolbar = ({
               key={id}
               className="flex items-center rounded bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
             >
-              {row.caseName}
+              {row.executionId}
               <button
                 type="button"
                 className="ml-1 text-muted-foreground hover:text-destructive focus:outline-none"
-                aria-label={`Remove ${row.caseName}`}
+                aria-label={`Remove ${row.executionId}`}
                 onClick={() =>
                   setSelectedSimulationIds(selectedSimulationIds.filter((rowId) => rowId !== id))
                 }
