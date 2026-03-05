@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
+from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
@@ -37,7 +39,7 @@ class Case(Base, IDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
     canonical_simulation_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("simulations.id", use_alter=True, name="fk_cases_canonical_sim"),
         nullable=True,
     )
@@ -63,7 +65,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Configuration
     # ~~~~~~~~~~~~~~
     case_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("cases.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -77,7 +79,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     grid_name: Mapped[str] = mapped_column(Text)
     grid_resolution: Mapped[str] = mapped_column(Text)
     parent_simulation_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("simulations.id")
+        PG_UUID(as_uuid=True), ForeignKey("simulations.id")
     )
 
     # Model setup/context
@@ -109,7 +111,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Model timeline
     # ~~~~~~~~~~~~~~
     machine_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("machines.id"), index=True
+        PG_UUID(as_uuid=True), ForeignKey("machines.id"), index=True
     )
     simulation_start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     simulation_end_date: Mapped[datetime | None] = mapped_column(
@@ -135,13 +137,13 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
     created_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
     last_updated_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
     ingestion_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("ingestions.id"), index=True, nullable=False
+        PG_UUID(as_uuid=True), ForeignKey("ingestions.id"), index=True, nullable=False
     )
     hpc_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
@@ -180,7 +182,7 @@ class Artifact(Base, IDMixin, TimestampMixin):
     __tablename__ = "artifacts"
 
     simulation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("simulations.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -212,7 +214,7 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     __tablename__ = "external_links"
 
     simulation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE")
+        PG_UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE")
     )
 
     kind: Mapped[ExternalLinkKind] = mapped_column(

@@ -212,6 +212,11 @@ def create_simulation(
         db.add(sim)
         db.flush()
 
+        if case.canonical_simulation_id is None:
+            sim.run_config_deltas = None
+            case.canonical_simulation_id = sim.id
+            db.add(case)
+
     # Re-query with relationships loaded
     sim_loaded = (
         db.query(Simulation)

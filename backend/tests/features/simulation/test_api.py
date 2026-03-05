@@ -283,6 +283,39 @@ class TestCreateSimulation:
         assert res.status_code == 400
         assert "not found" in res.json()["detail"].lower()
 
+    def test_first_manual_create_sets_canonical_on_case(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_first_manual_canonical")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+        assert res.status_code == 201
+        data = res.json()
+
+        assert data["isCanonical"] is True
+        assert data["runConfigDeltas"] is None
+
+        db.refresh(case)
+        assert case.canonical_simulation_id is not None
+        assert str(case.canonical_simulation_id) == data["id"]
+
 
 class TestListSimulations:
     def test_endpoint_returns_empty_list(self, client):

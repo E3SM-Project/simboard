@@ -1407,7 +1407,7 @@ class TestCanonicalRunIngestion:
 
         # Set canonical_simulation_id on the case
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id  # type: ignore[assignment]
+        case.canonical_simulation_id = sim.id
         db.commit()
 
         # Ingest archive containing the existing run plus a new one
