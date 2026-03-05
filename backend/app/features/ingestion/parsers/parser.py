@@ -8,7 +8,7 @@ entire ingest.
 
 Key behaviors:
   - Supports .zip, .tar.gz, and .tgz archive formats, or already-extracted dirs.
-  - Recursively loops over each case diretory and finds execution directories
+  - Recursively loops over each case directories and finds execution directories
     matching pattern <digits>.<digits>-<digits>.
     - Example: v3.LR.historical_101 (case)  -> 1085209.251220-105556 (execution)
   - Required and optional metadata files are discovered and parsed per execution dir.
