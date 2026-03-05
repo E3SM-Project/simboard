@@ -208,7 +208,9 @@ export const ComparePage = ({
 
   useEffect(() => {
     setHeaders(
-      selectedSimulationIds.map((id) => selectedSimulations.find((s) => s.id === id)?.caseName || id),
+      selectedSimulationIds.map(
+        (id) => selectedSimulations.find((s) => s.id === id)?.executionId || id,
+      ),
     );
     setOrder(selectedSimulationIds.map((_, i) => i));
   }, [selectedSimulationIds, selectedSimulations]);
