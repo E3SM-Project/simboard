@@ -340,13 +340,16 @@ def _set_canonical_simulations(db: Session, created_sims: list[Simulation]) -> N
     cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
 
     for sim in created_sims:
-        if not isinstance(sim.case_id, UUID):
-            continue
+        if isinstance(sim.case_id, UUID):
+            case = cases.get(sim.case_id)
 
-        case = cases.get(sim.case_id)
-        if case and case.canonical_simulation_id is None and isinstance(sim.id, UUID):
-            case.canonical_simulation_id = sim.id
-            db.add(case)
+            if (
+                case
+                and case.canonical_simulation_id is None
+                and isinstance(sim.id, UUID)
+            ):
+                case.canonical_simulation_id = sim.id
+                db.add(case)
 
 
 def _persist_simulations(

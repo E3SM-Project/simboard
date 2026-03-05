@@ -18,6 +18,7 @@ from app.api.version import API_BASE
 from app.features.ingestion.api import (
     _compute_archive_sha256,
     _run_ingest_archive,
+    _set_canonical_simulations,
     _validate_archive_path,
     _validate_upload_file,
     ingest_from_upload,
@@ -996,6 +997,17 @@ class TestIngestFromUploadEndpoint:
 
 
 class TestIngestionApiCoverage:
+    def test_set_canonical_simulations_skips_non_uuid_case_id(self):
+        """Covers defensive skip when a created simulation has a non-UUID case_id."""
+        db = MagicMock(spec=Session)
+        db.query.return_value.filter.return_value.all.return_value = []
+
+        sim = Simulation(case_id="not-a-uuid", id=uuid.uuid4())
+
+        _set_canonical_simulations(db, [sim])
+
+        db.add.assert_not_called()
+
     def test_run_ingest_archive_handles_validation_error(self, db: Session):
         """Covers ValidationError branch in _run_ingest_archive."""
 

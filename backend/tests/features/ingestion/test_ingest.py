@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
 from dateutil import parser as real_dateutil_parser
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
     _derive_execution_id,
+    _get_canonical_metadata_for_case,
     _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
@@ -1521,3 +1522,107 @@ class TestIngestHelpers:
         assert updated.id == case.id
         assert updated.case_group == "groupA"
         mock_warning.assert_called_once()
+
+    def test_get_canonical_metadata_caches_missing_persisted_canonical(self) -> None:
+        case = MagicMock(spec=Case)
+        case.id = uuid4()
+        case.canonical_simulation_id = uuid4()
+
+        db = MagicMock(spec=Session)
+        db.query.return_value.filter.return_value.first.return_value = None
+
+        canonical_cache: dict[str, dict[str, str | None]] = {}
+        persisted_canonical_cache: dict[UUID, dict[str, str | None] | None] = {}
+
+        result = _get_canonical_metadata_for_case(
+            case=case,
+            case_name="missing_canonical_case",
+            canonical_cache=canonical_cache,
+            persisted_canonical_cache=persisted_canonical_cache,
+            db=db,
+        )
+
+        assert result is None
+        assert case.id in persisted_canonical_cache
+        assert persisted_canonical_cache[case.id] is None
+
+    def test_get_canonical_metadata_uses_persisted_cache_on_second_lookup(
+        self, db: Session
+    ) -> None:
+        machine = Machine(
+            name="cache-test-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+
+        user = User(
+            email="cache-test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="canonical_cache_case")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1082000.260305-120000",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-11",
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.canonical_simulation_id = sim.id
+        db.commit()
+
+        canonical_cache: dict[str, dict[str, str | None]] = {}
+        persisted_canonical_cache: dict[UUID, dict[str, str | None] | None] = {}
+
+        first = _get_canonical_metadata_for_case(
+            case=case,
+            case_name=case.name,
+            canonical_cache=canonical_cache,
+            persisted_canonical_cache=persisted_canonical_cache,
+            db=db,
+        )
+        assert first is not None
+        assert first["compiler"] == "gcc-11"
+
+        with patch.object(db, "query", side_effect=AssertionError):
+            second = _get_canonical_metadata_for_case(
+                case=case,
+                case_name=case.name,
+                canonical_cache=canonical_cache,
+                persisted_canonical_cache=persisted_canonical_cache,
+                db=db,
+            )
+        assert second == first

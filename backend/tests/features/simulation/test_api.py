@@ -1,13 +1,18 @@
+from contextlib import nullcontext
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
+from app.features.simulation.api import create_simulation
 from app.features.simulation.models import Case, Simulation
+from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -315,6 +320,57 @@ class TestCreateSimulation:
         db.refresh(case)
         assert case.canonical_simulation_id is not None
         assert str(case.canonical_simulation_id) == data["id"]
+
+    def test_create_simulation_raises_500_when_reload_fails(self) -> None:
+        case_id = uuid4()
+        machine_id = uuid4()
+        user_id = uuid4()
+
+        payload = SimulationCreate.model_validate(
+            {
+                "caseId": str(case_id),
+                "executionId": "reload-missing-exec-1",
+                "compset": "AQUAPLANET",
+                "compsetAlias": "QPC4",
+                "gridName": "f19_f19",
+                "gridResolution": "1.9x2.5",
+                "initializationType": "startup",
+                "simulationType": "experimental",
+                "status": "created",
+                "machineId": str(machine_id),
+                "simulationStartDate": "2023-01-01T00:00:00Z",
+            }
+        )
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+
+        case = Case(id=case_id, name="reload_fail_case")
+
+        db = MagicMock(spec=Session)
+        case_query = MagicMock()
+        case_query.filter.return_value.first.return_value = case
+
+        sim_query = MagicMock()
+        sim_query.options.return_value.filter.return_value.one_or_none.return_value = (
+            None
+        )
+
+        db.query.side_effect = [case_query, sim_query]
+
+        with patch(
+            "app.features.simulation.api.transaction", return_value=nullcontext()
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                create_simulation(payload=payload, db=db, user=user)
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load newly created simulation."
 
 
 class TestListSimulations:
