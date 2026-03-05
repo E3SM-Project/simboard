@@ -31,16 +31,6 @@ done
 echo "✅ Database is ready"
 
 # -----------------------------------------------------------
-# Run Alembic migrations
-# -----------------------------------------------------------
-echo "🔄 Running Alembic migrations..."
-if ! uv run alembic upgrade head; then
-    echo "❌ Alembic migrations failed"
-    exit 1
-fi
-echo "✅ Alembic migrations complete"
-
-# -----------------------------------------------------------
 # Start application
 # -----------------------------------------------------------
 if [ "$ENV" = "production" ]; then
