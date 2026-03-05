@@ -3,7 +3,7 @@
 Squashed migration that applies the full case-based refactor in one step.
 
 Changes to ``simulations``:
-- Add ``run_config_deltas`` JSONB column (migrated from ``extra``)
+- Add ``run_config_deltas`` JSONB column
 - Add ``case_id`` FK → ``cases.id`` (non-null, CASCADE, indexed)
 - Add ``execution_id`` (non-null, unique, indexed)
 - Drop ``case_name`` column and ``uq_simulation_case_machine_date`` constraint
@@ -243,7 +243,6 @@ def downgrade() -> None:
     op.drop_column("simulations", "case_id")
 
     # ── 4. Drop run_config_deltas ────────────────────────────────────
-    # Move non-null column data back into extra['run_config_deltas']
     op.drop_column("simulations", "run_config_deltas")
 
     # ── 5. Drop cases table ──────────────────────────────────────────
