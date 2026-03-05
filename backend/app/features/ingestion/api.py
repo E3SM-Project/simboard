@@ -1,9 +1,8 @@
 import hashlib
 import tempfile
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
@@ -20,7 +19,7 @@ from app.features.ingestion.schemas import (
     IngestionStatus,
 )
 from app.features.machine.models import Machine
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
@@ -45,19 +44,33 @@ def ingest_from_path(
     payload: IngestFromPathRequest,
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
-):
-    """
-    Ingest an archive from a filesystem path and persist simulations.
+) -> IngestionResponse:
+    """Ingest an archive from a filesystem path and persist simulations.
 
-    NOTE:
-    Arbitrary filesystem paths are currently permitted to support HPC
-    ingestion workflows (e.g., NERSC). This endpoint is restricted to
-    users with the ADMIN or SERVICE_ACCOUNT role.
+    NOTE: Arbitrary filesystem paths are currently permitted to support HPC
+    ingestion workflows (e.g., NERSC). This endpoint is restricted to users with
+    the ADMIN or SERVICE_ACCOUNT role.
 
-    TODO:
-    Consider enforcing that archive_path must reside within a configured
+    TODO: Consider enforcing that archive_path must reside within a configured
     base directory (e.g., a designated HPC storage or ingestion directory)
     before exposing this endpoint beyond a trusted environment.
+
+    Parameters
+    ----------
+    payload : IngestFromPathRequest
+        Request payload containing the archive path, machine name, and optional
+        HPC username for provenance.
+    db : Session
+        Active SQLAlchemy database session used for persistence.
+    user : User
+        Authenticated user who initiated the ingestion, used for permission
+        checks and recorded as the trigger of the ingestion.
+
+    Returns
+    -------
+    IngestionResponse
+        Response model summarizing ingestion results, including counts,
+        created simulations, and any recorded errors.
     """
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
@@ -107,14 +120,37 @@ def ingest_from_path(
         500: {"description": "Internal server error."},
     },
 )
-def ingest_from_upload(  # noqa: C901
+def ingest_from_upload(
     file: UploadFile = File(...),
     machine_name: str = Form(...),
     hpc_username: str | None = Form(None),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
-):
-    """Ingest an archive via file upload and persist simulations."""
+) -> IngestionResponse:
+    """Ingest an archive via file upload and persist simulations.
+
+    Parameters
+    ----------
+    file : UploadFile
+        Uploaded archive file, expected to be .zip, .tar.gz, or .tgz
+    machine_name : str
+        Name of the machine associated with this ingestion, used to look up the
+        corresponding Machine record in the database.
+    hpc_username : str, optional
+        HPC username for provenance (trusted, informational only), included in
+        the created Simulation records if provided.
+    db : Session
+        Active SQLAlchemy database session used for persistence.
+    user : User
+        Authenticated user who initiated the ingestion, used for recorded as the
+        trigger of the ingestion.
+
+    Returns
+    -------
+    IngestionResponse
+        Response model summarizing ingestion results, including counts,
+        created simulations, and any recorded errors.
+    """
     machine = db.query(Machine).filter(Machine.name == machine_name).first()
 
     if not machine:
@@ -164,22 +200,6 @@ def _validate_archive_path(archive_path: Path) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(f"Archive path '{archive_path}' must be a file or directory."),
         )
-
-
-def _compute_archive_sha256(archive_path: Path) -> str:
-    sha256_hash = hashlib.sha256()
-
-    try:
-        with archive_path.open("rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                sha256_hash.update(chunk)
-
-        return sha256_hash.hexdigest()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to compute checksum",
-        ) from exc
 
 
 def _validate_upload_file(file: UploadFile) -> None:
@@ -242,32 +262,31 @@ def _process_ingestion(
     ingest_result: IngestArchiveResult,
     source_type: IngestionSourceType,
     source_reference: str,
-    machine_id: uuid.UUID,
+    machine_id: UUID,
     user: User,
     archive_sha256: str | None,
     db: Session,
     hpc_username: str | None = None,
 ) -> IngestionResponse:
-    """
-    Finalize and persist an ingestion operation.
+    """Finalize and persist an ingestion operation.
 
-    This function completes the ingestion workflow after archive parsing
-    has succeeded. It determines ingestion status, persists simulation
-    records and ingestion metadata within a transactional boundary, and
-    returns a structured response model.
+    This function completes the ingestion workflow after archive parsing has
+    succeeded. It determines ingestion status, persists simulation records and
+    ingestion metadata within a transactional boundary, and returns a structured
+    response model.
 
     Parameters
     ----------
     ingest_result : IngestArchiveResult
         Structured result produced by the archive ingestion step, including
-        parsed simulations, duplicate counts, and per-experiment errors.
+        parsed simulations, duplicate counts, and per-execution errors.
     source_type : IngestionSourceType
         Enumeration indicating the ingestion source (e.g., HPC_PATH,
         HPC_UPLOAD).
     source_reference : str
         Identifier for the ingestion source, such as a filesystem path
         or uploaded filename.
-    machine_id : uuid.UUID
+    machine_id : UUID
         Identifier of the machine associated with this ingestion.
     user : User
         Authenticated user who initiated the ingestion.
@@ -307,11 +326,7 @@ def _process_ingestion(
         db.flush()
 
         _persist_simulations(
-            cast(uuid.UUID, ingestion.id),
-            ingest_result.simulations,
-            db,
-            user,
-            hpc_username,
+            ingestion.id, ingest_result.simulations, db, user, hpc_username
         )
 
     return IngestionResponse(
@@ -332,16 +347,57 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
     return IngestionStatus.FAILED.value
 
 
+def _set_canonical_simulations(db: Session, created_sims: list[Simulation]) -> None:
+    """Set canonical simulation per case when canonical is not already set."""
+    case_ids: set[UUID] = {
+        case_id for sim in created_sims if isinstance((case_id := sim.case_id), UUID)
+    }
+    cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()}
+
+    for sim in created_sims:
+        if isinstance(sim.case_id, UUID):
+            case = cases.get(sim.case_id)
+
+            if (
+                case
+                and case.canonical_simulation_id is None
+                and isinstance(sim.id, UUID)
+            ):
+                case.canonical_simulation_id = sim.id
+                db.add(case)
+
+
 def _persist_simulations(
-    ingestion_id: uuid.UUID,
+    ingestion_id: UUID,
     simulations: list[SimulationCreate],
     db: Session,
     user: User,
     hpc_username: str | None = None,
 ) -> None:
-    """Persist simulation records with artifacts and links to the database."""
+    """Persist simulation records with artifacts and links to the database.
 
+    After all simulations are flushed, sets the canonical simulation on
+    each Case that does not yet have one.  The first simulation per Case
+    (in insertion order) becomes canonical.
+
+    Parameters
+    ----------
+    ingestion_id : UUID
+        Identifier of the parent ingestion record to associate with each
+        simulation.
+    simulations : list[SimulationCreate]
+        List of simulation data to persist, including nested artifacts and
+        links.
+    db : Session
+        Active SQLAlchemy database session used for persistence.
+    user : User
+        Authenticated user who initiated the ingestion, set as creator and
+        last updater of each simulation record.
+    hpc_username : str | None, optional
+        HPC username for provenance (trusted, informational only)
+    """
     now = datetime.now(timezone.utc)
+    created_sims: list[Simulation] = []
 
     for sim_create in simulations:
         data = sim_create.model_dump(
@@ -350,11 +406,9 @@ def _persist_simulations(
             exclude_unset=True,
         )
 
-        # Normalize URL
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
 
-        # Set hpc_username if provided
         if hpc_username is not None:
             data["hpc_username"] = hpc_username
 
@@ -386,5 +440,10 @@ def _persist_simulations(
                 sim.links.append(ExternalLink(**link_data))
 
         db.add(sim)
+        created_sims.append(sim)
+
+    db.flush()
+
+    _set_canonical_simulations(db, created_sims)
 
     db.flush()

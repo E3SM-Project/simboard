@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
-    _compute_archive_sha256,
     _run_ingest_archive,
+    _set_canonical_simulations,
     _validate_archive_path,
     _validate_upload_file,
     ingest_from_upload,
@@ -25,7 +25,7 @@ from app.features.ingestion.api import (
 from app.features.ingestion.ingest import IngestArchiveResult
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
@@ -102,11 +102,15 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case = Case(name="test_case")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-summary-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -137,7 +141,6 @@ class TestIngestFromPathEndpoint:
         data = res.json()
         assert data["created_count"] == 1
         assert data["duplicate_count"] == 0
-        assert data["simulations"][0]["name"] == "Test Simulation"
 
     def test_endpoint_returns_409_on_conflict(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
@@ -162,11 +165,16 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case1 = Case(name="test_case_errors")
+        case2 = Case(name="case2_errors")
+        db.add_all([case1, case2])
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Sim1",
-                    "caseName": "test_case",
+                    "caseId": str(case1.id),
+                    "executionId": "exec-errors-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -182,8 +190,8 @@ class TestIngestFromPathEndpoint:
             ),
             SimulationCreate.model_validate(
                 {
-                    "name": "Sim2",
-                    "caseName": "case2",
+                    "caseId": str(case2.id),
+                    "executionId": "exec-errors-2",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -220,8 +228,6 @@ class TestIngestFromPathEndpoint:
         assert data["errors"] == mock_errors
 
         assert len(data["simulations"]) == 2
-        assert data["simulations"][0]["name"] == "Sim1"
-        assert data["simulations"][1]["name"] == "Sim2"
 
     def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""
@@ -234,11 +240,15 @@ class TestIngestFromPathEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case = Case(name="test_case_audit")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-audit-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -343,11 +353,15 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"  # ZIP file magic bytes
         file = BytesIO(file_content)
 
+        case = Case(name="test_case_zip")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-zip-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -391,11 +405,15 @@ class TestIngestFromUploadEndpoint:
         file_content = b"\x1f\x8b\x08"  # GZIP magic bytes
         file = BytesIO(file_content)
 
+        case = Case(name="test_case_targz")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-targz-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -466,11 +484,15 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04test content"
         file = BytesIO(file_content)
 
+        case = Case(name="test_case_sha256")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-sha256-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -524,11 +546,15 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
 
+        case = Case(name="test_case_partial")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Test Simulation",
-                    "caseName": "test_case",
+                    "caseId": str(case.id),
+                    "executionId": "exec-partial-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -786,11 +812,15 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case = Case(name="test_case_artifacts")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Artifacts",
-                    "caseName": "test_case_artifacts",
+                    "caseId": str(case.id),
+                    "executionId": "exec-artifacts-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -826,11 +856,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_name == "test_case_artifacts")
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert len(simulation.artifacts) == 1
@@ -845,11 +871,15 @@ class TestIngestFromUploadEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive_with_links.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case = Case(name="test_case_links")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Links",
-                    "caseName": "test_case_links",
+                    "caseId": str(case.id),
+                    "executionId": "exec-links-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -885,11 +915,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_name == "test_case_links")
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert len(simulation.links) == 1
@@ -923,11 +949,15 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
+        case = Case(name="test_case_git_url")
+        db.add(case)
+        db.flush()
+
         mock_simulations = [
             SimulationCreate.model_validate(
                 {
-                    "name": "Simulation with Git URL",
-                    "caseName": "test_case_git_url",
+                    "caseId": str(case.id),
+                    "executionId": "exec-git-url-1",
                     "compset": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
@@ -957,11 +987,7 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = (
-            db.query(Simulation)
-            .filter(Simulation.case_name == "test_case_git_url")
-            .first()
-        )
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
         assert (
@@ -970,6 +996,17 @@ class TestIngestFromUploadEndpoint:
 
 
 class TestIngestionApiCoverage:
+    def test_set_canonical_simulations_skips_non_uuid_case_id(self):
+        """Covers defensive skip when a created simulation has a non-UUID case_id."""
+        db = MagicMock(spec=Session)
+        db.query.return_value.filter.return_value.all.return_value = []
+
+        sim = Simulation(case_id="not-a-uuid", id=uuid.uuid4())
+
+        _set_canonical_simulations(db, [sim])
+
+        db.add.assert_not_called()
+
     def test_run_ingest_archive_handles_validation_error(self, db: Session):
         """Covers ValidationError branch in _run_ingest_archive."""
 
@@ -1032,27 +1069,3 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
         assert "must be a file or directory" in exc_info.value.detail
-
-    def test_compute_archive_sha256_success(self, tmp_path):
-        """Covers the happy path of _compute_archive_sha256."""
-        import hashlib
-
-        archive = tmp_path / "test.tar.gz"
-        archive.write_bytes(b"test content")
-
-        result = _compute_archive_sha256(archive)
-
-        expected = hashlib.sha256(b"test content").hexdigest()
-        assert result == expected
-
-    def test_compute_archive_sha256_failure(self, tmp_path):
-        """Covers the exception path of _compute_archive_sha256."""
-        archive = tmp_path / "unreadable.tar.gz"
-        archive.touch()
-
-        with patch.object(Path, "open", side_effect=OSError("cannot read")):
-            with pytest.raises(HTTPException) as exc_info:
-                _compute_archive_sha256(archive)
-
-        assert exc_info.value.status_code == 500
-        assert "Failed to compute checksum" in exc_info.value.detail

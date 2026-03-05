@@ -8,15 +8,141 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationOut
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.schemas import (
+    CaseOut,
+    SimulationCreate,
+    SimulationOut,
+    SimulationSummaryOut,
+)
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
-router = APIRouter(prefix="/simulations", tags=["Simulations"])
+simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
+case_router = APIRouter(prefix="/cases", tags=["Cases"])
 
 
-@router.post(
+@case_router.get(
+    "",
+    response_model=list[CaseOut],
+    responses={
+        200: {"description": "List all cases."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
+    """Retrieve all cases with nested simulation summaries.
+
+    Parameters
+    ----------
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    list[CaseOut]
+        A list of cases, each with nested summaries of their associated
+        simulations.
+    """
+    cases = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .order_by(Case.created_at.desc())
+        .all()
+    )
+
+    resp = [_case_to_out(c) for c in cases]
+
+    return resp
+
+
+@case_router.get(
+    "/{case_id}",
+    response_model=CaseOut,
+    responses={
+        200: {"description": "Case found."},
+        404: {"description": "Case not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> CaseOut:
+    """Retrieve a case by its unique identifier.
+
+    Parameters
+    ----------
+    case_id : UUID
+        The unique identifier of the case to retrieve.
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    CaseOut
+        The case object with nested simulation summaries if found.
+    """
+    case = (
+        db.query(Case)
+        .options(selectinload(Case.simulations))
+        .filter(Case.id == case_id)
+        .first()
+    )
+
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    resp = _case_to_out(case)
+
+    return resp
+
+
+def _case_to_out(case: Case) -> CaseOut:
+    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
+
+    Parameters
+    ----------
+    case : Case
+        The Case ORM instance to convert.
+
+    Returns
+    -------
+    CaseOut
+        The corresponding CaseOut schema instance with nested
+        SimulationSummaryOut
+    """
+    summaries = []
+
+    for sim in case.simulations:
+        is_canonical = sim.id == case.canonical_simulation_id
+        change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+
+        summaries.append(
+            SimulationSummaryOut(
+                id=sim.id,
+                execution_id=sim.execution_id,
+                status=sim.status,
+                is_canonical=is_canonical,
+                change_count=change_count,
+                simulation_start_date=sim.simulation_start_date,
+                simulation_end_date=sim.simulation_end_date,
+            )
+        )
+
+    result = CaseOut(
+        id=case.id,
+        name=case.name,
+        case_group=case.case_group,
+        canonical_simulation_id=case.canonical_simulation_id,
+        simulations=summaries,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )
+
+    return result
+
+
+@simulation_router.post(
     "",
     response_model=SimulationOut,
     status_code=status.HTTP_201_CREATED,
@@ -35,6 +161,14 @@ def create_simulation(
 ):
     """Create a new simulation record in the database."""
     now = datetime.now(timezone.utc)
+
+    # Verify the case exists
+    case = db.query(Case).filter(Case.id == payload.case_id).first()
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Case '{payload.case_id}' not found.",
+        )
 
     sim = Simulation(
         **payload.model_dump(
@@ -79,10 +213,36 @@ def create_simulation(
         db.add(sim)
         db.flush()
 
-    return SimulationOut.model_validate(sim, from_attributes=True)
+        if case.canonical_simulation_id is None:
+            sim.run_config_deltas = None
+            case.canonical_simulation_id = sim.id
+            db.add(case)
+
+    # Re-query with relationships loaded
+    sim_loaded = (
+        db.query(Simulation)
+        .options(
+            joinedload(Simulation.case),
+            joinedload(Simulation.machine),
+            selectinload(Simulation.artifacts),
+            selectinload(Simulation.links),
+        )
+        .filter(Simulation.id == sim.id)
+        .one_or_none()
+    )
+
+    if sim_loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load newly created simulation.",
+        )
+
+    result = _simulation_to_out(sim_loaded)
+
+    return result
 
 
-@router.get(
+@simulation_router.get(
     "",
     response_model=list[SimulationOut],
     responses={
@@ -111,6 +271,7 @@ def list_simulations(db: Session = Depends(get_database_session)):
     sims = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.case),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -118,10 +279,10 @@ def list_simulations(db: Session = Depends(get_database_session)):
         .order_by(Simulation.created_at.desc())
         .all()
     )
-    return sims
+    return [_simulation_to_out(s) for s in sims]
 
 
-@router.get(
+@simulation_router.get(
     "/{sim_id}",
     response_model=SimulationOut,
     responses={
@@ -155,15 +316,51 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     sim = (
         db.query(Simulation)
         .options(
+            joinedload(Simulation.case),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )
         .filter(Simulation.id == sim_id)
-        .first()
+        .one_or_none()
     )
 
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    return sim
+    return _simulation_to_out(sim)
+
+
+def _simulation_to_out(sim: Simulation) -> SimulationOut:
+    """Convert a Simulation ORM instance to a SimulationOut schema.
+
+    Derives ``case_name``, ``is_canonical``, and ``change_count`` from
+    the associated Case relationship.
+
+    Parameters
+    ----------
+    sim : Simulation
+        The Simulation ORM instance to convert.
+
+    Returns
+    -------
+    SimulationOut
+        The corresponding SimulationOut schema instance with additional derived
+        fields.
+    """
+    case = sim.case
+    is_canonical = sim.id == case.canonical_simulation_id
+    change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+
+    result = SimulationOut.model_validate(
+        {
+            **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
+            "case_name": case.name,
+            "case_group": case.case_group,
+            "is_canonical": is_canonical,
+            "change_count": change_count,
+        },
+        from_attributes=True,
+    )
+
+    return result

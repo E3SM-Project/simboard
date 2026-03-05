@@ -91,3 +91,4 @@ dmypy.json
 # Ignore experiment directories
 exp_archive
 qa
+frontend/package-lock.json

@@ -3,14 +3,41 @@ import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
 
 /**
+ * API response model for a Case with nested simulation summaries.
+ */
+export interface CaseOut {
+  id: string;
+  name: string;
+  caseGroup: string | null;
+  canonicalSimulationId: string | null;
+  simulations: SimulationSummaryOut[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Lightweight simulation summary for case-level nesting.
+ * Does NOT include heavy relationships (machine, artifacts, links).
+ */
+export interface SimulationSummaryOut {
+  id: string;
+  executionId: string;
+  status: string;
+  isCanonical: boolean;
+  changeCount: number;
+  simulationStartDate: string;
+  simulationEndDate: string | null;
+}
+
+/**
  * Request payload for creating a new simulation.
  * Equivalent to FastAPI SimulationCreate schema.
  */
 export interface SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
-  name: string;
-  caseName: string;
+  caseId: string; // UUID
+  executionId: string;
   description: string | null;
   compset: string;
   compsetAlias: string;
@@ -25,7 +52,6 @@ export interface SimulationCreate {
   campaign?: string | null;
   experimentType?: string | null;
   initializationType: string;
-  groupName?: string | null;
 
   // Model timeline
   // ~~~~~~~~~~~~~~
@@ -57,6 +83,7 @@ export interface SimulationCreate {
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
   extra?: Record<string, unknown>;
+  runConfigDeltas?: Record<string, { canonical: unknown; current: unknown }> | null;
 
   // Relationships
   // ~~~~~~~~~~~~~~
@@ -79,6 +106,10 @@ export interface SimulationOut extends SimulationCreate {
   // Configuration
   // ~~~~~~~~~~~~~~
   id: string;
+  caseName: string;
+  caseGroup: string | null;
+  isCanonical: boolean;
+  changeCount: number;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~

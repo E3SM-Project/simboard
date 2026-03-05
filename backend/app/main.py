@@ -9,7 +9,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logger import _setup_root_logger
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
-from app.features.simulation.api import router as simulations_router
+from app.features.simulation.api import case_router, simulation_router
 from app.features.user.api.oauth import auth_router, user_router
 from app.features.user.api.token import router as token_router
 
@@ -33,7 +33,8 @@ def create_app() -> FastAPI:
     )
 
     # Register routers.
-    app.include_router(simulations_router, prefix=API_BASE)
+    app.include_router(simulation_router, prefix=API_BASE)
+    app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)
     app.include_router(user_router, prefix=API_BASE)
     app.include_router(auth_router, prefix=API_BASE)

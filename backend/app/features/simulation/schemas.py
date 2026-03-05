@@ -101,9 +101,18 @@ class SimulationCreate(CamelInBaseModel):
 
     # Configuration
     # --------------
-    name: Annotated[str, Field(..., description="Name of the simulation")]
-    case_name: Annotated[
-        str, Field(..., description="Case name associated with the simulation")
+    case_id: Annotated[
+        UUID, Field(..., description="ID of the Case this simulation belongs to")
+    ]
+    execution_id: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "Unique identifier for this execution, derived from the "
+                "archive directory name (e.g. 1125772.260116-181605)"
+            ),
+        ),
     ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
@@ -149,11 +158,6 @@ class SimulationCreate(CamelInBaseModel):
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
     ]
-    group_name: Annotated[
-        str | None,
-        Field(None, description="Optional group name associated with the simulation"),
-    ]
-
     # Model timeline
     # --------------
     machine_id: Annotated[
@@ -244,6 +248,17 @@ class SimulationCreate(CamelInBaseModel):
             description="Optional extra metadata in flexible dictionary/JSON format",
         ),
     ]
+    run_config_deltas: Annotated[
+        dict[str, Any] | None,
+        Field(
+            None,
+            description=(
+                "Configuration differences between this simulation and the "
+                "canonical baseline for the same case. None for canonical "
+                "simulations or when no differences exist."
+            ),
+        ),
+    ]
 
     # Relationships
     # --------------
@@ -263,6 +278,88 @@ class SimulationCreate(CamelInBaseModel):
     ]
 
 
+class SimulationSummaryOut(CamelOutBaseModel):
+    """Lightweight schema for simulation summaries nested inside CaseOut.
+
+    Only includes the fields needed for case-level overview — avoids loading
+    heavy relationships (machine, artifacts, links, user objects).
+    """
+
+    id: Annotated[
+        UUID, Field(..., description="The unique identifier of the simulation.")
+    ]
+    execution_id: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "Unique identifier for this execution, derived from the "
+                "archive directory name"
+            ),
+        ),
+    ]
+    status: Annotated[
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+    is_canonical: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether this simulation is the canonical baseline for its case",
+        ),
+    ]
+    change_count: Annotated[
+        int,
+        Field(
+            ...,
+            description=(
+                "Number of configuration differences vs the canonical baseline. "
+                "0 for canonical simulations."
+            ),
+        ),
+    ]
+    simulation_start_date: Annotated[
+        datetime, Field(..., description="Start date of the simulation")
+    ]
+    simulation_end_date: Annotated[
+        datetime | None, Field(None, description="Optional end date of the simulation")
+    ]
+
+
+class CaseOut(CamelOutBaseModel):
+    """Schema for representing a Case with nested simulation summaries."""
+
+    id: Annotated[UUID, Field(..., description="The unique identifier of the case.")]
+    name: Annotated[str, Field(..., description="The case name.")]
+    case_group: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional case group (CASE_GROUP from env_case.xml). "
+                "Groups related cases (e.g. ensemble members) together."
+            ),
+        ),
+    ]
+    canonical_simulation_id: Annotated[
+        UUID | None,
+        Field(None, description="ID of the canonical simulation for this case."),
+    ]
+    simulations: Annotated[
+        list[SimulationSummaryOut],
+        Field(
+            default_factory=list,
+            description="Simulation executions belonging to this case.",
+        ),
+    ]
+    created_at: Annotated[
+        datetime, Field(..., description="Timestamp when the case was created")
+    ]
+    updated_at: Annotated[
+        datetime, Field(..., description="Timestamp when the case was last updated")
+    ]
+
+
 class SimulationOut(CamelOutBaseModel):
     """Schema for representing a Simulation with related entities."""
 
@@ -272,9 +369,48 @@ class SimulationOut(CamelOutBaseModel):
 
     # Configuration
     # --------------
-    name: Annotated[str, Field(..., description="Name of the simulation")]
+    case_id: Annotated[
+        UUID, Field(..., description="ID of the Case this simulation belongs to")
+    ]
     case_name: Annotated[
-        str, Field(..., description="Case name associated with the simulation")
+        str, Field(..., description="Case name (derived from the associated Case)")
+    ]
+    case_group: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Case group (CASE_GROUP from env_case.xml, derived from Case). "
+                "Groups related cases together."
+            ),
+        ),
+    ]
+    execution_id: Annotated[
+        str,
+        Field(
+            ...,
+            description=(
+                "Unique identifier for this execution, derived from the "
+                "archive directory name"
+            ),
+        ),
+    ]
+    is_canonical: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether this simulation is the canonical baseline for its case",
+        ),
+    ]
+    change_count: Annotated[
+        int,
+        Field(
+            ...,
+            description=(
+                "Number of configuration differences vs the canonical baseline. "
+                "0 for canonical simulations."
+            ),
+        ),
     ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
@@ -320,11 +456,6 @@ class SimulationOut(CamelOutBaseModel):
     initialization_type: Annotated[
         str, Field(..., description="Initialization type for the simulation")
     ]
-    group_name: Annotated[
-        str | None,
-        Field(None, description="Optional group name associated with the simulation"),
-    ]
-
     # Model timeline
     # --------------
     machine_id: Annotated[
@@ -414,6 +545,17 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             default_factory=dict,
             description="Optional extra metadata in flexible dictionary/JSON format",
+        ),
+    ]
+    run_config_deltas: Annotated[
+        dict[str, Any] | None,
+        Field(
+            None,
+            description=(
+                "Configuration differences between this simulation and the "
+                "canonical baseline for the same case. None for canonical "
+                "simulations or when no differences exist."
+            ),
         ),
     ]
 

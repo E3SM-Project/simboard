@@ -74,7 +74,7 @@ export const SimulationDetailsView = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{simulation.name}</h1>
+          <h1 className="text-2xl font-bold">{simulation.caseName}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Type:</span>
             <SimulationTypeBadge simulationType={simulation.simulationType} />
@@ -117,11 +117,14 @@ export const SimulationDetailsView = ({
                 <CardTitle className="text-base">Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <FieldRow label="Simulation Name">
-                  <ReadonlyInput value={simulation.name} />
-                </FieldRow>
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
+                </FieldRow>
+                <FieldRow label="Execution ID">
+                  <ReadonlyInput value={simulation.executionId} />
+                </FieldRow>
+                <FieldRow label="Canonical">
+                  <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>
                 </FieldRow>
                 <FieldRow label="Model Version">
                   <ReadonlyInput value={simulation.gitTag ?? undefined} />
@@ -169,6 +172,42 @@ export const SimulationDetailsView = ({
               </CardContent>
             </Card>
           </div>
+
+          {/* Config diff section for non-canonical simulations */}
+          {!simulation.isCanonical && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Configuration Differences</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {simulation.runConfigDeltas &&
+                Object.keys(simulation.runConfigDeltas).length > 0 ? (
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2 font-medium">Field</th>
+                        <th className="text-left p-2 font-medium">Canonical</th>
+                        <th className="text-left p-2 font-medium">Current</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => (
+                        <tr key={field} className="border-b">
+                          <td className="p-2 font-mono text-xs">{field}</td>
+                          <td className="p-2">{String((diff as Record<string, unknown>).canonical ?? '—')}</td>
+                          <td className="p-2">{String((diff as Record<string, unknown>).current ?? '—')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No configuration differences.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>

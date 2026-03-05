@@ -17,50 +17,58 @@ from app.features.ingestion.parsers import parser
 
 class TestMainParser:
     @staticmethod
-    def _create_experiment_files(exp_dir: Path, version: str) -> None:
-        """Create standard experiment files for testing.
+    def _create_execution_metadata_files(execution_dir: Path, version: str) -> None:
+        """Create standard execution files for testing.
 
         Parameters
         ----------
-        exp_dir : Path
-            Directory where experiment files will be created.
+        execution_dir : Path
+            Directory where execution files will be created.
         version : str
             Version string for file naming (e.g., "001.001").
         """
         # Create required e3sm_timing file
-        timing_file = exp_dir / f"e3sm_timing.{version}"
+        timing_file = execution_dir / f"e3sm_timing.{version}"
         timing_file.write_text("timing data")
 
         # Create required CaseStatus file
-        with gzip.open(exp_dir / f"CaseStatus.{version.split('.')[0]}.gz", "wt") as f:
+        with gzip.open(
+            execution_dir / f"CaseStatus.{version.split('.')[0]}.gz", "wt"
+        ) as f:
             f.write("case status")
 
-        # Create required CaseDocs/README
-        casedocs = exp_dir / "CaseDocs"
+        # Create required CaseDocs/README and env_case.xml
+        casedocs = execution_dir / "CaseDocs"
         casedocs.mkdir(exist_ok=True)
         with gzip.open(casedocs / f"README.case.{version.split('.')[0]}.gz", "wt") as f:
             f.write("readme content")
+        with gzip.open(
+            casedocs / f"env_case.xml.{version.split('.')[0]}.gz", "wt"
+        ) as f:
+            f.write('<config><entry id="CASE_HASH" value="testhash123" /></config>')
 
         # Create required GIT_DESCRIBE file
-        with gzip.open(exp_dir / f"GIT_DESCRIBE.{version.split('.')[0]}.gz", "wt") as f:
+        with gzip.open(
+            execution_dir / f"GIT_DESCRIBE.{version.split('.')[0]}.gz", "wt"
+        ) as f:
             f.write("describe content")
 
     @staticmethod
-    def _create_optional_files(exp_dir: Path, version: str) -> None:
+    def _create_optional_files(execution_dir: Path, version: str) -> None:
         """Create optional git configuration files for testing.
 
         Parameters
         ----------
-        exp_dir : Path
+        execution_dir : Path
             Directory where git files will be created.
         version : str
             Version string for file naming (e.g., "001").
         """
         version_base = version.split(".")[0] if "." in version else version
 
-        with gzip.open(exp_dir / f"GIT_CONFIG.{version_base}.gz", "wt") as f:
+        with gzip.open(execution_dir / f"GIT_CONFIG.{version_base}.gz", "wt") as f:
             f.write("https://github.com/test/repo")
-        with gzip.open(exp_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
+        with gzip.open(execution_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
             f.write("main")
 
     @staticmethod
@@ -155,14 +163,14 @@ class TestMainParser:
             yield
 
     def test_with_valid_zip_archive(self, tmp_path: Path) -> None:
-        """Test processing a valid ZIP archive with experiments."""
-        # Create experiment directory structure
+        """Test processing a valid ZIP archive with executions."""
+        # Create execution directory structure
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "1.0-0"
-        exp_dir.mkdir(parents=True)
+        execution_dir = archive_base / "1.0-0"
+        execution_dir.mkdir(parents=True)
 
         # Create standard required files
-        self._create_experiment_files(exp_dir, "001.001")
+        self._create_execution_metadata_files(execution_dir, "001.001")
 
         # Create ZIP archive
         archive_path = tmp_path / "archive.zip"
@@ -171,21 +179,22 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Mock parser functions and verify experiment was found and parsed
+        # Mock parser functions and verify execution was found and parsed
         with self._mock_all_parsers():
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
 
     def test_with_tar_gz_archive(self, tmp_path: Path) -> None:
         """Test processing a TAR.GZ archive."""
-        # Create experiment directory
+        # Create execution directory
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "2.5-10"
-        exp_dir.mkdir(parents=True)
+        execution_dir = archive_base / "2.5-10"
+        execution_dir.mkdir(parents=True)
 
         # Create standard required files
-        self._create_experiment_files(exp_dir, "002.002")
+        self._create_execution_metadata_files(execution_dir, "002.002")
 
         # Create TAR.GZ archive
         archive_path = tmp_path / "archive.tar.gz"
@@ -194,26 +203,27 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Mock parser functions and verify experiment was found and parsed
+        # Mock parser functions and verify execution was found and parsed
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "tar_test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("2.5-10" in key for key in result.keys())
 
-    def test_with_multiple_experiments(self, tmp_path: Path) -> None:
-        """Test processing archive with multiple experiments."""
+    def test_with_multiple_executions(self, tmp_path: Path) -> None:
+        """Test processing archive with multiple executions."""
         archive_base = tmp_path / "archive_extract"
         archive_base.mkdir()
 
-        # Create first experiment
-        exp_dir1 = archive_base / "1.0-0"
-        exp_dir1.mkdir(parents=True)
-        self._create_experiment_files(exp_dir1, "001.001")
+        # Create first execution
+        exec_dir1 = archive_base / "1.0-0"
+        exec_dir1.mkdir(parents=True)
+        self._create_execution_metadata_files(exec_dir1, "001.001")
 
-        # Create second experiment
-        exp_dir2 = archive_base / "2.0-0"
-        exp_dir2.mkdir(parents=True)
-        self._create_experiment_files(exp_dir2, "002.002")
+        # Create second execution
+        exec_dir2 = archive_base / "2.0-0"
+        exec_dir2.mkdir(parents=True)
+        self._create_execution_metadata_files(exec_dir2, "002.002")
 
         # Create ZIP archive
         archive_path = tmp_path / "multi_archive.zip"
@@ -222,15 +232,16 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Mock parser functions and verify both experiments were found
+        # Mock parser functions and verify both executions were found
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) == 2
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
             assert any("2.0-0" in key for key in result.keys())
 
-    def test_with_nested_experiments(self, tmp_path: Path) -> None:
-        """Test finding experiments in nested directories.
+    def test_with_nested_executions(self, tmp_path: Path) -> None:
+        """Test finding executions in nested directories.
 
         Parameters
         ----------
@@ -238,11 +249,11 @@ class TestMainParser:
             Temporary directory provided by pytest.
         """
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "parent" / "1.0-0"
-        exp_dir.mkdir(parents=True)
+        execution_dir = archive_base / "parent" / "1.0-0"
+        execution_dir.mkdir(parents=True)
 
         # Create standard required files
-        self._create_experiment_files(exp_dir, "001.001")
+        self._create_execution_metadata_files(execution_dir, "001.001")
 
         # Create ZIP archive
         archive_path = tmp_path / "nested_archive.zip"
@@ -251,19 +262,20 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Mock parser functions and verify nested experiment was found
+        # Mock parser functions and verify nested execution was found
         with self._mock_all_parsers(parse_e3sm_timing={"case_name": "nested_test"}):
-            result = parser.main_parser(archive_path, extract_dir)
+            result, skipped = parser.main_parser(archive_path, extract_dir)
             assert len(result) > 0
+            assert skipped == 0
             assert any("1.0-0" in key for key in result.keys())
 
-    def test_missing_required_files_raises_error(self, tmp_path: Path) -> None:
-        """Test error when required files are missing."""
-        # Create experiment directory WITHOUT required files
+    def test_missing_required_files_skips_incomplete_run(self, tmp_path: Path) -> None:
+        """Test that incomplete runs (missing required files) are skipped."""
+        # Create execution directory WITHOUT required files
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "1.0-0"
-        exp_dir.mkdir(parents=True)
-        (exp_dir / "dummy.txt").write_text("dummy")
+        execution_dir = archive_base / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        (execution_dir / "dummy.txt").write_text("dummy")
 
         # Create ZIP archive
         archive_path = tmp_path / "bad_archive.zip"
@@ -272,29 +284,30 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Should raise FileNotFoundError for missing required files
-        with pytest.raises(FileNotFoundError, match="Required files not found"):
-            parser.main_parser(archive_path, extract_dir)
+        # Incomplete runs are skipped; result is empty rather than an error
+        result, skipped = parser.main_parser(archive_path, extract_dir)
+        assert result == {}
+        assert skipped == 1
 
     def test_multiple_matching_files_raises_error(self, tmp_path: Path) -> None:
         """Test error when multiple files match a pattern."""
-        # Create experiment with duplicate files
+        # Create execution with duplicate files
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "1.0-0"
-        exp_dir.mkdir(parents=True)
+        execution_dir = archive_base / "1.0-0"
+        execution_dir.mkdir(parents=True)
 
         # Create duplicate e3sm_timing files (violates single-file requirement)
-        (exp_dir / "e3sm_timing.001.001").write_text("timing1")
-        (exp_dir / "e3sm_timing.002.002").write_text("timing2")
+        (execution_dir / "e3sm_timing.001.001").write_text("timing1")
+        (execution_dir / "e3sm_timing.002.002").write_text("timing2")
 
         # Create other required files
-        with gzip.open(exp_dir / "CaseStatus.001.gz", "wt") as f:
+        with gzip.open(execution_dir / "CaseStatus.001.gz", "wt") as f:
             f.write("status")
-        casedocs = exp_dir / "CaseDocs"
+        casedocs = execution_dir / "CaseDocs"
         casedocs.mkdir()
         with gzip.open(casedocs / "README.case.001.gz", "wt") as f:
             f.write("readme")
-        with gzip.open(exp_dir / "GIT_DESCRIBE.001.gz", "wt") as f:
+        with gzip.open(execution_dir / "GIT_DESCRIBE.001.gz", "wt") as f:
             f.write("describe")
 
         # Create ZIP archive
@@ -319,8 +332,8 @@ class TestMainParser:
         with pytest.raises(ValueError, match="Unsupported archive format"):
             parser.main_parser(str(archive_path), extract_dir)
 
-    def test_no_experiment_directories_raises_error(self, tmp_path: Path) -> None:
-        """Test error when no experiment directories are found.
+    def test_no_case_directories_raises_error(self, tmp_path: Path) -> None:
+        """Test error when no case directories are found.
 
         Parameters
         ----------
@@ -330,9 +343,9 @@ class TestMainParser:
         Raises
         ------
         FileNotFoundError
-            Expected when no valid experiment directories are discovered.
+            Expected when no valid case directories are discovered.
         """
-        # Create a ZIP archive with no experiment directories
+        # Create a ZIP archive with no case directories
         archive_base = tmp_path / "archive_extract"
         archive_base.mkdir()
         (archive_base / "some_other_dir").mkdir()
@@ -345,22 +358,24 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        # Should raise FileNotFoundError when no experiments found
-        with pytest.raises(FileNotFoundError, match="No experiment directories found"):
+        # Should raise FileNotFoundError when no case directories found
+        with pytest.raises(
+            FileNotFoundError, match="No cases or execution directories found"
+        ):
             parser.main_parser(archive_path, extract_dir)
 
     def test_with_optional_files(self, tmp_path):
         """Test handling optional files properly."""
-        # Create experiment with optional files
+        # Create execution with optional files
         archive_base = tmp_path / "archive_extract"
-        exp_dir = archive_base / "1.0-0"
-        exp_dir.mkdir(parents=True)
+        execution_dir = archive_base / "1.0-0"
+        execution_dir.mkdir(parents=True)
 
         # Create required files
-        self._create_experiment_files(exp_dir, "001.001")
+        self._create_execution_metadata_files(execution_dir, "001.001")
 
         # Create optional git files
-        self._create_optional_files(exp_dir, "001")
+        self._create_optional_files(execution_dir, "001")
 
         # Create ZIP archive
         archive_path = tmp_path / "with_optional.zip"
@@ -422,12 +437,12 @@ class TestMainParser:
         self, tmp_path: Path
     ) -> None:
         """Test non-archive directory input path branch in main_parser."""
-        exp_dir = tmp_path / "1.0-0"
-        exp_dir.mkdir(parents=True)
-        self._create_experiment_files(exp_dir, "001.001")
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
 
         with self._mock_all_parsers():
-            result = parser.main_parser(tmp_path, tmp_path / "unused_output")
+            result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
         assert len(result) == 1
         assert any("1.0-0" in key for key in result)
@@ -437,23 +452,87 @@ class TestMainParser:
         with pytest.raises(ValueError, match="Unsupported archive format"):
             parser._extract_archive("/tmp/archive.7z", "/tmp/output")
 
-    def test_parse_experiment_files_supports_single_value_spec(self) -> None:
-        """Test single_value parser path in _parse_experiment_files."""
-        original_specs = parser.FILE_SPECS.copy()
-        try:
-            parser.FILE_SPECS["single_value_test"] = {
-                "pattern": r"dummy",
-                "location": "root",
-                "parser": lambda _path: "single-output",
-                "required": False,
-                "single_value": "campaign",
-            }
-            files: dict[str, str | None] = {key: None for key in parser.FILE_SPECS}
-            files["single_value_test"] = "/tmp/dummy"
+    def test_incomplete_run_among_valid_runs(self, tmp_path: Path) -> None:
+        """Test that an incomplete run is skipped while valid runs are parsed."""
+        archive_base = tmp_path / "archive_extract"
 
-            result = parser._parse_experiment_files(files)
+        # Create a valid execution directory
+        execution_dir_valid = archive_base / "1.0-0"
+        execution_dir_valid.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir_valid, "001.001")
 
-            assert result["campaign"] == "single-output"
-        finally:
-            parser.FILE_SPECS.clear()
-            parser.FILE_SPECS.update(original_specs)
+        # Create an incomplete execution directory (missing required files)
+        execution_dir_incomplete = archive_base / "2.0-0"
+        execution_dir_incomplete.mkdir(parents=True)
+        (execution_dir_incomplete / "dummy.txt").write_text("no required files")
+
+        archive_path = tmp_path / "mixed.zip"
+        self._create_zip_archive(archive_base, archive_path)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with self._mock_all_parsers(parse_e3sm_timing={"case_name": "mixed_test"}):
+            result, skipped = parser.main_parser(archive_path, extract_dir)
+            # Only the valid execution should be in the result
+            assert len(result) == 1
+            assert any("1.0-0" in key for key in result.keys())
+            assert not any("2.0-0" in key for key in result.keys())
+
+    def test_multiple_runs_under_same_casename(self, tmp_path: Path) -> None:
+        """Test multiple <jobID>.<timestamp> dirs under the same casename.
+
+        Simulates the performance_archive structure where a casename
+        directory contains multiple runs, each represented by a
+        subdirectory matching the <jobID>.<timestamp> pattern.
+        """
+        # Simulate: casename/1081156.251218-200923, casename/1081290.251218-211543
+        archive_base = tmp_path / "archive_extract"
+        casename_dir = archive_base / "v3.LR.historical_0121"
+        casename_dir.mkdir(parents=True)
+
+        run1 = casename_dir / "1081156.251218-200923"
+        run1.mkdir()
+        self._create_execution_metadata_files(run1, "001.001")
+
+        run2 = casename_dir / "1081290.251218-211543"
+        run2.mkdir()
+        self._create_execution_metadata_files(run2, "002.002")
+
+        with self._mock_all_parsers(parse_e3sm_timing={"case_name": "v3_hist"}):
+            result, skipped = parser.main_parser(casename_dir, tmp_path / "out")
+            # Both runs should be parsed successfully
+            assert len(result) == 2
+            assert any("1081156" in key for key in result.keys())
+            assert any("1081290" in key for key in result.keys())
+
+    def test_deterministic_sort_order(self, tmp_path: Path) -> None:
+        """Test that execution dirs are sorted for deterministic processing."""
+        archive_base = tmp_path / "archive_extract"
+        casename_dir = archive_base / "case1"
+        casename_dir.mkdir(parents=True)
+
+        # Create dirs in reverse order
+        for name in ["3.0-0", "1.0-0", "2.0-0"]:
+            d = casename_dir / name
+            d.mkdir()
+            self._create_execution_metadata_files(d, "001.001")
+
+        call_order: list[str] = []
+        original_locate = parser._locate_metadata_files
+
+        def tracking_locate(execution_dir: str) -> Any:
+            call_order.append(os.path.basename(execution_dir))
+            return original_locate(execution_dir)
+
+        with (
+            self._mock_all_parsers(),
+            patch(
+                "app.features.ingestion.parsers.parser._locate_metadata_files",
+                side_effect=tracking_locate,
+            ),
+        ):
+            parser.main_parser(casename_dir, tmp_path / "out")
+
+        # Should be processed in sorted order
+        assert call_order == sorted(call_order)

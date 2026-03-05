@@ -8,10 +8,12 @@ from app.features.machine.schemas import MachineOut
 from app.features.simulation.schemas import (
     ArtifactKind,
     ArtifactOut,
+    CaseOut,
     ExternalLinkKind,
     ExternalLinkOut,
     SimulationCreate,
     SimulationOut,
+    SimulationSummaryOut,
 )
 from app.features.user.schemas import UserPreview
 
@@ -19,8 +21,8 @@ from app.features.user.schemas import UserPreview
 class TestSimulationCreateSchema:
     def test_valid_simulation_create_required_fields(self):
         payload = {
-            "name": "Test Simulation",
-            "caseName": "test_case",
+            "caseId": uuid4(),
+            "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -41,8 +43,8 @@ class TestSimulationCreateSchema:
 
     def test_valid_simulation_create_optional_fields(self):
         payload = {
-            "name": "Test Simulation",
-            "caseName": "test_case",
+            "caseId": uuid4(),
+            "executionId": "1081156.251218-200923",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -57,7 +59,6 @@ class TestSimulationCreateSchema:
             "parentSimulationId": uuid4(),
             "campaign": "campaign1",
             "experimentType": "exp1",
-            "groupName": "group1",
             "simulationEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
@@ -69,6 +70,9 @@ class TestSimulationCreateSchema:
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
+            "runConfigDeltas": {
+                "compiler": {"canonical": "gcc-11", "current": "gcc-12"}
+            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -104,10 +108,14 @@ class TestSimulationCreateSchema:
 class TestSimulationOutSchema:
     def test_valid_simulation_out_required_fields(self):
         # Arrange: Define the required fields
+        case_id = uuid4()
         fields = {
             "id": uuid4(),
-            "name": "Test Simulation",
+            "case_id": case_id,
             "case_name": "test_case",
+            "execution_id": "1081156.251218-200923",
+            "is_canonical": True,
+            "change_count": 0,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -154,7 +162,7 @@ class TestSimulationOutSchema:
             "parent_simulation_id",
             "campaign",
             "experiment_type",
-            "group_name",
+            "case_group",
             "simulation_end_date",
             "run_start_date",
             "run_end_date",
@@ -180,10 +188,14 @@ class TestSimulationOutSchema:
         )
 
     def test_valid_simulation_out_optional_fields(self):
+        case_id = uuid4()
         required_fields = {
             "id": uuid4(),
-            "name": "Test Simulation",
+            "case_id": case_id,
             "case_name": "test_case",
+            "execution_id": "1081156.251218-200923",
+            "is_canonical": False,
+            "change_count": 2,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -220,7 +232,7 @@ class TestSimulationOutSchema:
             "parent_simulation_id": uuid4(),
             "campaign": "campaign1",
             "experiment_type": "exp1",
-            "group_name": "group1",
+            "case_group": "group1",
             "simulation_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
@@ -232,6 +244,9 @@ class TestSimulationOutSchema:
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
             "extra": {"key": "value"},
+            "run_config_deltas": {
+                "compiler": {"canonical": "gcc-11", "current": "gcc-12"}
+            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -272,8 +287,11 @@ class TestSimulationOutSchema:
     def test_grouped_artifacts_computed_field(self):
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
-            name="Test Simulation",
+            case_id=uuid4(),
             case_name="test_case",
+            execution_id="1081156.251218-200923",
+            is_canonical=True,
+            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -340,8 +358,11 @@ class TestSimulationOutSchema:
     def test_grouped_links_computed_field(self):
         simulation_out = SimulationOut(  # type: ignore[call-arg]
             id=uuid4(),
-            name="Test Simulation",
+            case_id=uuid4(),
             case_name="test_case",
+            execution_id="1081156.251218-200923",
+            is_canonical=True,
+            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -396,3 +417,84 @@ class TestSimulationOutSchema:
         assert len(grouped) == 2, "There should be 2 groups of links."  # type: ignore
         assert len(grouped["diagnostic"]) == 1, "There should be 2 diagnostic links."  # type: ignore
         assert len(grouped["performance"]) == 1, "There should be 2 performance links."  # type: ignore
+
+
+class TestSimulationSummaryOutSchema:
+    def test_valid_summary_fields(self):
+        summary = SimulationSummaryOut(
+            id=uuid4(),
+            execution_id="1081156.251218-200923",
+            status="created",
+            is_canonical=True,
+            change_count=0,
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_end_date=None,
+        )
+        assert summary.is_canonical is True
+        assert summary.change_count == 0
+        assert summary.simulation_end_date is None
+
+    def test_non_canonical_with_changes(self):
+        summary = SimulationSummaryOut(
+            id=uuid4(),
+            execution_id="1081290.251218-211543",
+            status="completed",
+            is_canonical=False,
+            change_count=3,
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+        )
+        assert summary.is_canonical is False
+        assert summary.change_count == 3
+        assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
+
+
+class TestCaseOutSchema:
+    def test_case_out_with_nested_simulations(self):
+        sim_id = uuid4()
+        case_out = CaseOut(
+            id=uuid4(),
+            name="v3.LR.historical_0121",
+            case_group="ensemble_v3",
+            canonical_simulation_id=sim_id,
+            simulations=[
+                SimulationSummaryOut(
+                    id=sim_id,
+                    execution_id="1081156.251218-200923",
+                    status="completed",
+                    is_canonical=True,
+                    change_count=0,
+                    simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+                    simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+                ),
+                SimulationSummaryOut(
+                    id=uuid4(),
+                    execution_id="1081290.251218-211543",
+                    status="completed",
+                    is_canonical=False,
+                    change_count=2,
+                    simulation_start_date=datetime(2023, 2, 1, 0, 0, 0),
+                    simulation_end_date=None,
+                ),
+            ],
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+        assert case_out.name == "v3.LR.historical_0121"
+        assert case_out.case_group == "ensemble_v3"
+        assert len(case_out.simulations) == 2
+        assert case_out.simulations[0].is_canonical is True
+        assert case_out.simulations[1].change_count == 2
+
+    def test_case_out_empty_simulations(self):
+        case_out = CaseOut(
+            id=uuid4(),
+            name="empty_case",
+            case_group=None,
+            canonical_simulation_id=None,
+            simulations=[],
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+        assert case_out.canonical_simulation_id is None
+        assert case_out.simulations == []

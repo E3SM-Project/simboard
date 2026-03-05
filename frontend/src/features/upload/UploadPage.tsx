@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,8 +33,8 @@ type OpenKey =
 // -------------------- Initial Form State --------------------
 const initialState: SimulationCreateForm = {
   // --- Configuration ---
-  name: '', // required
-  caseName: '', // required
+  caseId: '', // required (UUID of the Case)
+  executionId: '', // required
   description: null,
   compset: '', // required
   compsetAlias: '', // required
@@ -100,18 +100,18 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   const configFields = useMemo(
     (): RenderableField[] => [
       {
-        name: 'name',
-        label: 'Simulation Name',
-        type: 'text',
+        label: 'Case ID',
+        name: 'caseId',
         required: true,
-        placeholder: 'e.g., E3SM v3 LR Control 20190815',
+        type: 'text',
+        placeholder: 'UUID of the Case this simulation belongs to',
       },
       {
-        label: 'Simulation Case Name',
-        name: 'caseName',
+        label: 'Execution ID',
+        name: 'executionId',
         required: true,
         type: 'text',
-        placeholder: 'e.g., 20190815.ne30_oECv3_ICG.A_WCYCL1850S_CMIP6.piControl',
+        placeholder: 'e.g., 1125772.260116-181605',
       },
       {
         label: 'Description',
@@ -658,7 +658,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             description:
               typeof data?.detail === 'string'
                 ? data.detail
-                : 'A simulation with the same name or case already exists.',
+                : 'A simulation with the same execution ID already exists.',
             variant: 'destructive',
           });
 
@@ -781,6 +781,14 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
           <p className="text-sm text-muted-foreground mt-1">
             Provide configuration and context. You can save a draft at any time.
           </p>
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              Archive uploads require <code className="font-mono text-xs bg-blue-100 px-1 rounded">env_case.xml</code> for
+              case metadata extraction (e.g. <code className="font-mono text-xs bg-blue-100 px-1 rounded">CASE_GROUP</code>).
+              Simulations missing required metadata files will be skipped during ingestion.
+            </p>
+          </div>
         </header>
 
         <FormSection
