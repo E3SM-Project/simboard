@@ -63,7 +63,6 @@ const DiffCell = ({ value, className }: { value: unknown; className?: string }) 
     </div>
   );
 };
-
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
