@@ -8,8 +8,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
@@ -33,6 +47,26 @@ const FieldRow = ({ label, children }: { label: string; children: React.ReactNod
 const ReadonlyInput = ({ value, className }: { value?: string | null; className?: string }) => (
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
+
+const TruncatedCell = ({ value }: { value: string }) => {
+  const displayValue = value || '—';
+  const needsTruncation = displayValue.length > 50;
+
+  if (!needsTruncation) {
+    return <span>{displayValue}</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block truncate max-w-[300px] cursor-help">{displayValue}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[600px] break-words">
+        <p className="whitespace-pre-wrap">{displayValue}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
@@ -180,24 +214,36 @@ export const SimulationDetailsView = ({
               <CardContent>
                 {simulation.runConfigDeltas &&
                 Object.keys(simulation.runConfigDeltas).length > 0 ? (
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2 font-medium">Field</th>
-                        <th className="text-left p-2 font-medium">Canonical</th>
-                        <th className="text-left p-2 font-medium">Current</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => (
-                        <tr key={field} className="border-b">
-                          <td className="p-2 font-mono text-xs">{field}</td>
-                          <td className="p-2">{String((diff as Record<string, unknown>).canonical ?? '—')}</td>
-                          <td className="p-2">{String((diff as Record<string, unknown>).current ?? '—')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <TooltipProvider>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="font-medium">Field</TableHead>
+                          <TableHead className="font-medium">Canonical</TableHead>
+                          <TableHead className="font-medium">Current</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => (
+                          <TableRow key={field}>
+                            <TableCell className="font-mono text-xs">
+                              <TruncatedCell value={field} />
+                            </TableCell>
+                            <TableCell>
+                              <TruncatedCell
+                                value={String((diff as Record<string, unknown>).canonical ?? '—')}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TruncatedCell
+                                value={String((diff as Record<string, unknown>).current ?? '—')}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TooltipProvider>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     No configuration differences.
