@@ -41,6 +41,18 @@ const ReadonlyInput = ({ value, className }: { value?: string | null; className?
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
 
+const UserDisplay = ({
+  user,
+  fallbackId,
+}: {
+  user?: { fullName?: string | null; email: string } | null;
+  fallbackId?: string | null;
+}) => {
+  if (user) return <span className="text-sm">by {user.fullName ?? user.email}</span>;
+  if (fallbackId) return <span className="text-sm">by {fallbackId}</span>;
+  return null;
+};
+
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
@@ -286,15 +298,10 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
                   </span>
-                  {simulation.createdByUser ? (
-                    <span className="text-sm">
-                      by {simulation.createdByUser.fullName ?? simulation.createdByUser.email}
-                    </span>
-                  ) : (
-                    simulation.createdBy && (
-                      <span className="text-sm">by {simulation.createdBy}</span>
-                    )
-                  )}
+                  <UserDisplay
+                    user={simulation.createdByUser}
+                    fallbackId={simulation.createdBy}
+                  />
                 </div>
                 {/* Last edited row */}
                 <div className="flex items-center gap-2">
@@ -304,15 +311,10 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
                   </span>
-                  {simulation.lastUpdatedByUser ? (
-                    <span className="text-sm">
-                      by {simulation.lastUpdatedByUser.fullName ?? simulation.lastUpdatedByUser.email}
-                    </span>
-                  ) : (
-                    simulation.lastUpdatedBy && (
-                      <span className="text-sm">by {simulation.lastUpdatedBy}</span>
-                    )
-                  )}
+                  <UserDisplay
+                    user={simulation.lastUpdatedByUser}
+                    fallbackId={simulation.lastUpdatedBy}
+                  />
                 </div>
                 {/* Simulation UUID row */}
                 <div className="flex items-center gap-2">
