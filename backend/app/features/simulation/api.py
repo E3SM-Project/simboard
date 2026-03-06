@@ -284,21 +284,19 @@ def list_simulations(
         A list of `Simulation` objects, ordered by their `created_at` timestamp
         in descending order.
     """
-    query = (
-        db.query(Simulation)
-        .join(Simulation.case)
-        .options(
-            joinedload(Simulation.case),
-            joinedload(Simulation.machine),
-            selectinload(Simulation.artifacts),
-            selectinload(Simulation.links),
-        )
+    query = db.query(Simulation).options(
+        joinedload(Simulation.case),
+        joinedload(Simulation.machine),
+        selectinload(Simulation.artifacts),
+        selectinload(Simulation.links),
     )
 
-    if case_name is not None:
-        query = query.filter(Case.name == case_name)
-    if case_group is not None:
-        query = query.filter(Case.case_group == case_group)
+    if case_name is not None or case_group is not None:
+        query = query.join(Simulation.case)
+        if case_name is not None:
+            query = query.filter(Case.name == case_name)
+        if case_group is not None:
+            query = query.filter(Case.case_group == case_group)
 
     sims = query.order_by(Simulation.created_at.desc()).all()
     return [_simulation_to_out(s) for s in sims]

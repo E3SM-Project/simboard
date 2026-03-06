@@ -86,7 +86,7 @@ const formatDate = (d?: string) => {
 
 export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [globalFilter, setGlobalFilter] = useState(searchParams.get('search') ?? '');
+  const [globalFilter, setGlobalFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
