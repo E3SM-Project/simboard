@@ -429,6 +429,173 @@ class TestListSimulations:
         assert data[0]["caseName"] == "test_case_list"
         assert data[0]["executionId"] == "list-test-exec-1"
 
+    def test_filter_by_case_name(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case_a = _create_case(db, "case_alpha")
+        case_b = _create_case(db, "case_beta")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_case_name",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for case, exec_id in [(case_a, "exec-a"), (case_b, "exec-b")]:
+            db.add(
+                Simulation(
+                    case_id=case.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    machine_id=machine.id,
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        # No filter returns both
+        res = client.get(f"{API_BASE}/simulations")
+        assert res.status_code == 200
+        assert len(res.json()) == 2
+
+        # Filter by case_name=case_alpha returns only one
+        res = client.get(f"{API_BASE}/simulations", params={"case_name": "case_alpha"})
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+        assert data[0]["caseName"] == "case_alpha"
+
+        # Non-matching filter returns empty
+        res = client.get(f"{API_BASE}/simulations", params={"case_name": "nonexistent"})
+        assert res.status_code == 200
+        assert len(res.json()) == 0
+
+    def test_filter_by_case_group(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case_g1 = Case(name="case_group1", case_group="ensemble_A")
+        case_g2 = Case(name="case_group2", case_group="ensemble_B")
+        db.add_all([case_g1, case_g2])
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_case_group",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for case, exec_id in [(case_g1, "exec-g1"), (case_g2, "exec-g2")]:
+            db.add(
+                Simulation(
+                    case_id=case.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    machine_id=machine.id,
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/simulations", params={"case_group": "ensemble_A"})
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+        assert data[0]["caseGroup"] == "ensemble_A"
+
+    def test_filter_by_case_name_and_case_group(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = Case(name="combo_case", case_group="combo_group")
+        case_other = Case(name="other_case", case_group="combo_group")
+        db.add_all([case, case_other])
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_combo",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for c, exec_id in [(case, "exec-combo"), (case_other, "exec-other")]:
+            db.add(
+                Simulation(
+                    case_id=c.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    machine_id=machine.id,
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        # Both share same group, but filtering by both narrows to one
+        res = client.get(
+            f"{API_BASE}/simulations",
+            params={"case_name": "combo_case", "case_group": "combo_group"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+        assert data[0]["caseName"] == "combo_case"
+        assert data[0]["caseGroup"] == "combo_group"
+
 
 class TestGetSimulation:
     def test_endpoint_succeeds_with_valid_id(

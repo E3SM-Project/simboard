@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-table';
 import { format } from 'date-fns';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -85,9 +85,8 @@ const formatDate = (d?: string) => {
 };
 
 export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
-  const [globalFilter, setGlobalFilter] = useState('');
-  const [caseNameFilter, setCaseNameFilter] = useState<string>('');
-  const [caseGroupFilter, setCaseGroupFilter] = useState<string>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [globalFilter, setGlobalFilter] = useState(searchParams.get('search') ?? '');
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -97,6 +96,32 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
 
+  // Read filter state from URL query parameters.
+  const caseNameFilter = searchParams.get('caseName') ?? '';
+  const caseGroupFilter = searchParams.get('caseGroup') ?? '';
+
+  /**
+   * Update a single filter value and persist it in the URL query params.
+   * Empty values remove the parameter from the URL.
+   */
+  const setFilter = (key: string, value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set(key, value);
+        } else {
+          next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const setCaseNameFilter = (v: string) => setFilter('caseName', v);
+  const setCaseGroupFilter = (v: string) => setFilter('caseGroup', v);
+
   // Derive unique case names and case groups for filter dropdowns.
   const caseNames = useMemo(
     () => [...new Set(simulations.map((s) => s.caseName))].sort(),
@@ -104,7 +129,9 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   );
   const caseGroups = useMemo(
     () =>
-      [...new Set(simulations.map((s) => s.caseGroup).filter((g): g is string => g != null))].sort(),
+      [
+        ...new Set(simulations.map((s) => s.caseGroup).filter((g): g is string => g != null)),
+      ].sort(),
     [simulations],
   );
 
@@ -139,9 +166,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       {
         accessorKey: 'caseName',
         header: 'Case Name',
-        cell: ({ row }) => (
-          <span>{row.original.caseName}</span>
-        ),
+        cell: ({ row }) => <span>{row.original.caseName}</span>,
         size: 200,
       },
       {
@@ -334,7 +359,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         />
 
         {/* Case Name filter */}
-        <Select value={caseNameFilter} onValueChange={(v) => setCaseNameFilter(v === '__all__' ? '' : v)}>
+        <Select
+          value={caseNameFilter}
+          onValueChange={(v) => setCaseNameFilter(v === '__all__' ? '' : v)}
+        >
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="All case names" />
           </SelectTrigger>
@@ -350,7 +378,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
 
         {/* Case Group filter */}
         {caseGroups.length > 0 && (
-          <Select value={caseGroupFilter} onValueChange={(v) => setCaseGroupFilter(v === '__all__' ? '' : v)}>
+          <Select
+            value={caseGroupFilter}
+            onValueChange={(v) => setCaseGroupFilter(v === '__all__' ? '' : v)}
+          >
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="All case groups" />
             </SelectTrigger>
