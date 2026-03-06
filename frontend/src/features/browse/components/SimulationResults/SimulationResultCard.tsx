@@ -127,6 +127,17 @@ export const SimulationResultCard = ({
                 <span className="text-xs px-1 py-1 ml-1">{simulation.gitTag}</span>
               </Badge>
               <Badge
+                variant="secondary"
+                className="flex items-center gap-1 text-sm px-2 py-1 border border-gray-300"
+              >
+                Canonical: {simulation.isCanonical ? 'Yes' : 'No'}
+                {!simulation.isCanonical && simulation.changeCount > 0 && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    (Changes: {simulation.changeCount})
+                  </span>
+                )}
+              </Badge>
+              <Badge
                 className={`text-xs px-2 py-1 ${
                   simulation.simulationType === 'production'
                     ? 'bg-green-600 text-white'

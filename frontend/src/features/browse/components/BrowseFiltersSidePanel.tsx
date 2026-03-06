@@ -158,6 +158,31 @@ export const BrowseFiltersSidePanel = ({
               : option.label
           }
         />
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Canonical Status</label>
+          <div className="space-y-2">
+            {[
+              { value: '', label: 'All' },
+              { value: 'canonical', label: 'Canonical Only' },
+              { value: 'non-canonical', label: 'Non-Canonical Only' },
+            ].map((opt) => (
+              <div key={opt.value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id={`canonical-${opt.value || 'all'}`}
+                  name="canonicalStatus"
+                  checked={appliedFilters.canonicalStatus === opt.value}
+                  onChange={() => handleChange('canonicalStatus', opt.value)}
+                  className="h-4 w-4"
+                />
+                <label htmlFor={`canonical-${opt.value || 'all'}`} className="text-sm">
+                  {opt.label}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
       </CollapsibleGroup>
 
       {/* Provenance*/}
