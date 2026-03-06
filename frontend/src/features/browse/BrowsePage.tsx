@@ -27,6 +27,9 @@ export interface FilterState {
   compiler: string[];
   status: string[];
 
+  // Canonical Status
+  canonicalStatus: string;
+
   // Metadata & Provenance
   gitTag: string[];
   createdBy: string[];
@@ -56,6 +59,9 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
+  // Canonical Status
+  canonicalStatus: '',
+
   // Metadata & Provenance
   gitTag: [],
   createdBy: [],
@@ -79,17 +85,21 @@ export const BrowsePage = ({
     // Start with empty filter options.
     const filters = createEmptyFilters();
 
+    // Array-based filter keys that correspond to SimulationOut properties.
+    const arrayKeys = Object.keys(createEmptyFilters()).filter(
+      (k) => k !== 'canonicalStatus',
+    ) as (keyof SimulationOut)[];
+
     // Populate filter options based on available simulations.
     for (const sim of simulations) {
-      const keys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-
-      for (const key of keys) {
-        const value = (sim as SimulationOut)[key];
+      for (const key of arrayKeys) {
+        const value = sim[key];
 
         // Handle both string and string[] fields.
         if (Array.isArray(value)) {
           value.forEach((v) => {
-            const filterValues = filters[key] as string[];
+            if (typeof v !== 'string') return;
+            const filterValues = filters[key as keyof FilterState] as string[];
             const isValueValid = v && !filterValues.includes(v);
 
             if (isValueValid) {
@@ -97,7 +107,7 @@ export const BrowsePage = ({
             }
           });
         } else if (typeof value === 'string' && value) {
-          const filterValues = filters[key] as string[];
+          const filterValues = filters[key as keyof FilterState] as string[];
           const isValueValid = !filterValues.includes(value);
 
           if (isValueValid) {
@@ -149,9 +159,11 @@ export const BrowsePage = ({
   }, [simulations]);
 
   const filteredData = useMemo(() => {
-    const arrayFilterGetters: Record<
-      keyof FilterState,
-      (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
+    const arrayFilterGetters: Partial<
+      Record<
+        keyof FilterState,
+        (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
+      >
     > = {
       machineId: (rec) => simMachineId(rec) ?? '',
       campaign: (rec) => rec.campaign ?? [],
@@ -169,14 +181,22 @@ export const BrowsePage = ({
 
     return simulations.filter((record) => {
       for (const key of Object.keys(arrayFilterGetters) as (keyof FilterState)[]) {
-        if (Array.isArray(appliedFilters[key]) && (appliedFilters[key] as string[]).length > 0) {
-          const raw = arrayFilterGetters[key](record);
+        const getter = arrayFilterGetters[key];
+        if (
+          getter &&
+          Array.isArray(appliedFilters[key]) &&
+          (appliedFilters[key] as string[]).length > 0
+        ) {
+          const raw = getter(record);
           const recVals = Array.isArray(raw) ? raw : ([raw].filter(Boolean) as string[]);
           if (!recVals.some((v) => (appliedFilters[key] as string[]).includes(v as string))) {
             return false;
           }
         }
       }
+
+      if (appliedFilters.canonicalStatus === 'canonical' && !record.isCanonical) return false;
+      if (appliedFilters.canonicalStatus === 'non-canonical' && record.isCanonical) return false;
 
       return true;
     });
@@ -206,6 +226,11 @@ export const BrowsePage = ({
         next[key] = arrayKeys.includes(key) ? (value.split(',') as string[]) : value;
       }
     });
+
+    const canonicalStatus = params.get('canonicalStatus');
+    if (canonicalStatus !== null) {
+      next.canonicalStatus = canonicalStatus;
+    }
 
     setAppliedFilters((prev) => ({ ...prev, ...next }));
   }, [location.search]);
