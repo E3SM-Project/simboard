@@ -1,10 +1,17 @@
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import Markdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -33,6 +40,18 @@ const FieldRow = ({ label, children }: { label: string; children: React.ReactNod
 const ReadonlyInput = ({ value, className }: { value?: string | null; className?: string }) => (
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
+
+const UserDisplay = ({
+  user,
+  fallbackId,
+}: {
+  user?: { fullName?: string | null; email: string } | null;
+  fallbackId?: string | null;
+}) => {
+  if (user) return <span className="text-sm">by {user.fullName ?? user.email}</span>;
+  if (fallbackId) return <span className="text-sm">by {fallbackId}</span>;
+  return null;
+};
 
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
@@ -121,6 +140,11 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>
+                {simulation.caseGroup && (
+                  <FieldRow label="Case Group">
+                    <ReadonlyInput value={simulation.caseGroup} />
+                  </FieldRow>
+                )}
                 <FieldRow label="Canonical">
                   <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>
                 </FieldRow>
@@ -129,6 +153,9 @@ export const SimulationDetailsView = ({
                 </FieldRow>
                 <FieldRow label="Compset">
                   <ReadonlyInput value={simulation.compset ?? undefined} />
+                </FieldRow>
+                <FieldRow label="Compset Alias">
+                  <ReadonlyInput value={simulation.compsetAlias ?? undefined} />
                 </FieldRow>
                 <FieldRow label="Grid Name">
                   <ReadonlyInput value={simulation.gridName ?? undefined} />
@@ -145,6 +172,18 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Parent Simulation ID">
                   <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
                 </FieldRow>
+                {simulation.description && (
+                  <div className="pt-2">
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Description
+                    </Label>
+                    <Textarea
+                      value={simulation.description}
+                      readOnly
+                      className="min-h-[80px] text-sm resize-none"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -259,9 +298,10 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
                   </span>
-                  {simulation.createdBy && (
-                    <span className="text-sm">by {simulation.createdBy}</span>
-                  )}
+                  <UserDisplay
+                    user={simulation.createdByUser}
+                    fallbackId={simulation.createdBy}
+                  />
                 </div>
                 {/* Last edited row */}
                 <div className="flex items-center gap-2">
@@ -271,9 +311,10 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
                   </span>
-                  {simulation.lastUpdatedBy && (
-                    <span className="text-sm">by {simulation.lastUpdatedBy}</span>
-                  )}
+                  <UserDisplay
+                    user={simulation.lastUpdatedByUser}
+                    fallbackId={simulation.lastUpdatedBy}
+                  />
                 </div>
                 {/* Simulation UUID row */}
                 <div className="flex items-center gap-2">
@@ -334,6 +375,59 @@ export const SimulationDetailsView = ({
               </CardContent>
             </Card>
           </div>
+
+          {/* Scientific Metadata */}
+          {(simulation.keyFeatures || simulation.knownIssues) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Scientific Metadata</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {simulation.keyFeatures && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Key Features
+                    </Label>
+                    <div className="prose prose-sm max-w-none text-sm">
+                      <Markdown>{simulation.keyFeatures}</Markdown>
+                    </div>
+                  </div>
+                )}
+                {simulation.knownIssues && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Known Issues
+                    </Label>
+                    <div className="prose prose-sm max-w-none text-sm">
+                      <Markdown>{simulation.knownIssues}</Markdown>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Advanced Metadata (Collapsible) */}
+          {simulation.extra && Object.keys(simulation.extra).length > 0 && (
+            <Collapsible>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between">
+                    <CardTitle className="text-base">Advanced Metadata</CardTitle>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [&[data-state=open]]:rotate-180" />
+                  </CollapsibleTrigger>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent>
+                    <pre className="rounded-md bg-muted p-4 text-xs overflow-auto max-h-[400px]">
+                      {JSON.stringify(simulation.extra, null, 2)}
+                    </pre>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">

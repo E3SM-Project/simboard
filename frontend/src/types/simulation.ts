@@ -3,6 +3,17 @@ import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
 
 /**
+ * Minimal user info used for display purposes only.
+ * Equivalent to FastAPI UserPreview schema.
+ */
+export interface UserPreview {
+  id: string;
+  email: string;
+  role: string;
+  fullName?: string | null;
+}
+
+/**
  * API response model for a Case with nested simulation summaries.
  */
 export interface CaseOut {
@@ -114,7 +125,9 @@ export interface SimulationOut extends SimulationCreate {
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdAt: string; // Server-managed field
+  createdByUser?: UserPreview | null;
   updatedAt: string; // Server-managed field
+  lastUpdatedByUser?: UserPreview | null;
 
   // Relationships
   // ~~~~~~~~~~~~~~
