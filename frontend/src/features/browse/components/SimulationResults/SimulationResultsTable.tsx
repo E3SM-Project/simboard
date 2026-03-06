@@ -75,6 +75,28 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { sticky: true, width: 200, position: 'left' },
   },
   {
+    accessorKey: 'isCanonical',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting()}>
+        Canonical
+        <ArrowUpDown />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const isCanonical = row.original.isCanonical;
+      const changeCount = row.original.changeCount;
+      return (
+        <div>
+          {isCanonical ? 'Yes' : 'No'}
+          {!isCanonical && changeCount > 0 && (
+            <span className="text-muted-foreground ml-1">({changeCount})</span>
+          )}
+        </div>
+      );
+    },
+    enableSorting: true,
+  },
+  {
     accessorKey: 'campaign',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>

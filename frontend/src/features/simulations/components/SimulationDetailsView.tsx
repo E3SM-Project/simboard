@@ -133,6 +133,9 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Canonical">
                   <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>
                 </FieldRow>
+                <FieldRow label="Changes vs canonical">
+                  <span className="text-sm">{simulation.changeCount}</span>
+                </FieldRow>
                 <FieldRow label="Model Version">
                   <ReadonlyInput value={simulation.gitTag ?? undefined} />
                 </FieldRow>
