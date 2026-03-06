@@ -16,7 +16,9 @@ interface SimulationPathCard {
 const titleIconMap: Record<string, JSX.Element> = {
   output: <Package size={16} />,
   archive: <Archive size={16} />,
+  run_script: <FileText size={16} />,
   runScript: <FileText size={16} />,
+  postprocessing_script: <ClipboardList size={16} />,
   batchLog: <ClipboardList size={16} />,
 };
 

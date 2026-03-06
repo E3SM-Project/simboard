@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleHelp } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CircleHelp } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -6,6 +6,11 @@ import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -45,10 +50,51 @@ const ReadonlyInput = ({ value, className }: { value?: string | null; className?
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
 
+const UserDisplay = ({
+  user,
+  fallbackId,
+}: {
+  user?: { full_name?: string | null; email: string } | null;
+  fallbackId?: string | null;
+}) => {
+  if (user) return <span className="text-sm">by {user.full_name ?? user.email}</span>;
+  if (fallbackId) return <span className="text-sm">by {fallbackId}</span>;
+  return null;
+};
+
+const formatDisplayValue = (value: unknown) => {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const ReadonlyTextBlock = ({
+  value,
+  className,
+}: {
+  value?: string | null;
+  className?: string;
+}) => (
+  <div
+    className={cn(
+      'min-h-[80px] whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-sm break-words',
+      className,
+    )}
+  >
+    {value?.trim() ? value : '—'}
+  </div>
+);
+
 const DiffCell = ({ value, className }: { value: unknown; className?: string }) => {
-  const text = value === null || value === undefined ? '—' : String(value);
+  const text = formatDisplayValue(value);
   return (
-    <div className={cn('truncate', className)} title={text}>
+    <div className={cn('whitespace-pre-wrap break-words', className)} title={text}>
       {text}
     </div>
   );
@@ -65,8 +111,29 @@ export const SimulationDetailsView = ({
   showPaceFallbackInfo = false,
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
+  const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
   const performanceLinks = simulation.groupedLinks.performance ?? [];
+  const outputArtifacts =
+    simulation.groupedArtifacts.output?.map((artifact) => ({
+      url: artifact.uri,
+      label: artifact.label?.trim() || artifact.uri,
+    })) ?? [];
+  const archiveArtifacts =
+    simulation.groupedArtifacts.archive?.map((artifact) => ({
+      url: artifact.uri,
+      label: artifact.label?.trim() || artifact.uri,
+    })) ?? [];
+  const runScriptArtifacts =
+    simulation.groupedArtifacts.run_script?.map((artifact) => ({
+      url: artifact.uri,
+      label: artifact.label?.trim() || artifact.uri,
+    })) ?? [];
+  const postprocessingScriptArtifacts =
+    simulation.groupedArtifacts.postprocessing_script?.map((artifact) => ({
+      url: artifact.uri,
+      label: artifact.label?.trim() || artifact.uri,
+    })) ?? [];
 
   // Temporary local-only comments
   const [newComment, setNewComment] = useState('');
@@ -149,6 +216,11 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>
+                {simulation.caseGroup && (
+                  <FieldRow label="Case Group">
+                    <ReadonlyInput value={simulation.caseGroup} />
+                  </FieldRow>
+                )}
                 <FieldRow label="Reference">
                   <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
                 </FieldRow>
@@ -163,6 +235,9 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Compset">
                   <ReadonlyInput value={simulation.compset ?? undefined} />
                 </FieldRow>
+                <FieldRow label="Compset Alias">
+                  <ReadonlyInput value={simulation.compsetAlias ?? undefined} />
+                </FieldRow>
                 <FieldRow label="Grid Name">
                   <ReadonlyInput value={simulation.gridName ?? undefined} />
                 </FieldRow>
@@ -175,6 +250,14 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Compiler">
                   <ReadonlyInput value={simulation.compiler ?? undefined} />
                 </FieldRow>
+                {simulation.description && (
+                  <div className="pt-2">
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Description
+                    </Label>
+                    <ReadonlyTextBlock value={simulation.description} />
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -310,9 +393,7 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.createdAt ? formatDate(simulation.createdAt) : '—'}
                   </span>
-                  {simulation.createdBy && (
-                    <span className="text-sm">by {simulation.createdBy}</span>
-                  )}
+                  <UserDisplay user={simulation.createdByUser} fallbackId={simulation.createdBy} />
                 </div>
                 {/* Last edited row */}
                 <div className="flex items-center gap-2">
@@ -322,9 +403,10 @@ export const SimulationDetailsView = ({
                   <span className="text-sm">
                     {simulation.updatedAt ? formatDate(simulation.updatedAt) : '—'}
                   </span>
-                  {simulation.lastUpdatedBy && (
-                    <span className="text-sm">by {simulation.lastUpdatedBy}</span>
-                  )}
+                  <UserDisplay
+                    user={simulation.lastUpdatedByUser}
+                    fallbackId={simulation.lastUpdatedBy}
+                  />
                 </div>
                 {/* Simulation UUID row */}
                 <div className="flex items-center gap-2">
@@ -345,6 +427,50 @@ export const SimulationDetailsView = ({
                       type="button"
                       onClick={() => navigator.clipboard.writeText(simulation.id)}
                       title="Copy full Simulation ID"
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Case ID:</Label>
+                  <ReadonlyInput
+                    value={
+                      simulation.caseId
+                        ? `${simulation.caseId.slice(0, 8)}…${simulation.caseId.slice(-6)}`
+                        : undefined
+                    }
+                  />
+                  {simulation.caseId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(simulation.caseId)}
+                      title="Copy full Case ID"
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    Machine ID:
+                  </Label>
+                  <ReadonlyInput
+                    value={
+                      simulation.machineId
+                        ? `${simulation.machineId.slice(0, 8)}…${simulation.machineId.slice(-6)}`
+                        : undefined
+                    }
+                  />
+                  {simulation.machineId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(simulation.machineId)}
+                      title="Copy full Machine ID"
                     >
                       Copy
                     </Button>
@@ -391,6 +517,60 @@ export const SimulationDetailsView = ({
               </CardContent>
             </Card>
           </div>
+
+          {/* Scientific Metadata */}
+          {(simulation.keyFeatures || simulation.knownIssues) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Scientific Metadata</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {simulation.keyFeatures && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Key Features
+                    </Label>
+                    <ReadonlyTextBlock value={simulation.keyFeatures} />
+                  </div>
+                )}
+                {simulation.knownIssues && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">
+                      Known Issues
+                    </Label>
+                    <ReadonlyTextBlock value={simulation.knownIssues} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Advanced Metadata (Collapsible) */}
+          {simulation.extra && Object.keys(simulation.extra).length > 0 && (
+            <Collapsible
+              open={isAdvancedMetadataOpen}
+              onOpenChange={setIsAdvancedMetadataOpen}
+            >
+              <Card>
+                <CardHeader className="pb-2">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between [&[data-state=open]>svg]:rotate-180">
+                    <CardTitle className="text-base">Advanced Metadata</CardTitle>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
+                  </CollapsibleTrigger>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent>
+                    {isAdvancedMetadataOpen && (
+                      <pre className="max-h-[400px] overflow-auto rounded-md bg-muted p-4 text-xs">
+                        {JSON.stringify(simulation.extra, null, 2)}
+                      </pre>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -597,6 +777,7 @@ export const SimulationDetailsView = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-[120px]"
+                readOnly={!canEdit}
               />
               {!canEdit && (
                 <p className="text-xs text-muted-foreground">
@@ -643,8 +824,9 @@ export const SimulationDetailsView = ({
                   className="min-h-[80px]"
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
+                  readOnly={!canEdit}
                 />
-                <Button onClick={addComment} className="shrink-0">
+                <Button onClick={addComment} className="shrink-0" disabled={!canEdit}>
                   Post
                 </Button>
               </div>
@@ -658,29 +840,29 @@ export const SimulationDetailsView = ({
             kind="output"
             title="Output Paths"
             description="These are the primary output files generated by the simulation."
-            paths={simulation.groupedArtifacts.output?.map((a) => a.uri) || []}
+            paths={outputArtifacts}
             emptyText="No output paths available."
           />
           <SimulationPathCard
             kind="archive"
             title="Archive Paths"
             description="These paths contain archived data files from the simulation."
-            paths={simulation.groupedArtifacts.archive?.map((a) => a.uri) || []}
+            paths={archiveArtifacts}
             emptyText="No archive artifacts available."
           />
           <SimulationPathCard
-            kind="runScript"
+            kind="run_script"
             title="Run Script Paths"
             description="Scripts used to run the simulation."
-            paths={simulation.groupedArtifacts.runScript?.map((a) => a.uri) || []}
+            paths={runScriptArtifacts}
             emptyText="No run script artifacts available."
           />
           <SimulationPathCard
-            kind="batchLog"
-            title="Batch Log Paths"
-            description="Log files generated during the batch processing of the simulation."
-            paths={simulation.groupedArtifacts.batchLog?.map((a) => a.uri) || []}
-            emptyText="No batch log artifacts available."
+            kind="postprocessing_script"
+            title="Post-processing Script Paths"
+            description="Scripts used after the main run to transform or analyze outputs."
+            paths={postprocessingScriptArtifacts}
+            emptyText="No post-processing script artifacts available."
           />
         </TabsContent>
       </Tabs>
