@@ -1,12 +1,13 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { LayoutGrid, Table } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
+import { listCases, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
@@ -33,7 +34,6 @@ export interface FilterState {
 }
 
 interface BrowsePageProps {
-  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
 }
@@ -62,15 +62,18 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 export const BrowsePage = ({
-  simulations,
   selectedSimulationIds,
   setSelectedSimulationIds,
 }: BrowsePageProps) => {
   // -------------------- Router --------------------
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedCaseName = searchParams.get('caseName') ?? '';
 
   // -------------------- Local State --------------------
+  const [simulations, setSimulations] = useState<SimulationOut[]>([]);
+  const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -184,6 +187,52 @@ export const BrowsePage = ({
 
   // -------------------- Effects --------------------
   useEffect(() => {
+    let cancelled = false;
+
+    listCases()
+      .then((cases) => {
+        if (!cancelled) {
+          const options = cases
+            .map((item) => ({ value: item.name, label: item.name }))
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+          setCaseOptions(options);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCaseOptions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+
+    if (selectedCaseName) {
+      params.set('case_name', selectedCaseName);
+    }
+
+    const simulationsUrl = params.toString()
+      ? `${SIMULATIONS_URL}?${params.toString()}`
+      : SIMULATIONS_URL;
+
+    listSimulations(simulationsUrl)
+      .then((res) => {
+        if (!cancelled) setSimulations(res);
+      })
+      .catch(() => {
+        if (!cancelled) setSimulations([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCaseName]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const next: Partial<FilterState> = {};
     const arrayKeys: (keyof FilterState)[] = [
@@ -213,6 +262,10 @@ export const BrowsePage = ({
   useEffect(() => {
     const params = new URLSearchParams();
 
+    if (selectedCaseName) {
+      params.set('caseName', selectedCaseName);
+    }
+
     Object.entries(appliedFilters).forEach(([key, value]) => {
       if (Array.isArray(value) && value.length) {
         params.set(key, value.join(','));
@@ -222,9 +275,19 @@ export const BrowsePage = ({
     });
 
     navigate({ search: params.toString() }, { replace: true });
-  }, [appliedFilters, navigate]);
+  }, [appliedFilters, navigate, selectedCaseName]);
 
   // -------------------- Handlers --------------------
+  const handleCaseNameChange = (caseName: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (caseName) {
+      params.set('caseName', caseName);
+    } else {
+      params.delete('caseName');
+    }
+    setSearchParams(params, { replace: true });
+  };
+
   const handleResetFilters = () => {
     setAppliedFilters(createEmptyFilters());
   };
@@ -240,13 +303,16 @@ export const BrowsePage = ({
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex flex-row w-full gap-6">
             <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
-              <BrowseFiltersSidePanel
-                appliedFilters={appliedFilters}
-                availableFilters={availableFilters}
-                onChange={setAppliedFilters}
-                machineOptions={machineOptions}
-              />
-            </div>
+                <BrowseFiltersSidePanel
+                  appliedFilters={appliedFilters}
+                  availableFilters={availableFilters}
+                  onChange={setAppliedFilters}
+                  machineOptions={machineOptions}
+                  caseOptions={caseOptions}
+                  selectedCaseName={selectedCaseName}
+                  onCaseNameChange={handleCaseNameChange}
+                />
+              </div>
             <div className="flex-1 flex flex-col min-w-0">
               <header className="mb-3 px-2 mt-4 flex items-center justify-between">
                 <div>

@@ -10,6 +10,9 @@ interface FilterPanelProps {
   availableFilters: FilterState;
   onChange: (next: FilterState) => void;
   machineOptions: { value: string; label: string }[];
+  caseOptions: { value: string; label: string }[];
+  selectedCaseName: string;
+  onCaseNameChange: (caseName: string) => void;
 }
 
 export const BrowseFiltersSidePanel = ({
@@ -17,6 +20,9 @@ export const BrowseFiltersSidePanel = ({
   availableFilters,
   onChange,
   machineOptions,
+  caseOptions,
+  selectedCaseName,
+  onCaseNameChange,
 }: FilterPanelProps) => {
   // -------------------- Handlers --------------------
   const handleChange = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
@@ -36,6 +42,17 @@ export const BrowseFiltersSidePanel = ({
           Use the filters below to refine your search results.
         </p>
       </div>
+
+      <label className="block text-sm font-medium text-gray-700">Case</label>
+      <MultiSelect
+        options={caseOptions}
+        defaultValue={selectedCaseName ? [selectedCaseName] : []}
+        onValueChange={(next) => onCaseNameChange(next[next.length - 1] ?? '')}
+        placeholder="Select case"
+        hideSelectAll={true}
+        closeOnSelect={true}
+        resetOnDefaultValueChange={true}
+      />
 
       {/* Scientific Goal */}
       <CollapsibleGroup
