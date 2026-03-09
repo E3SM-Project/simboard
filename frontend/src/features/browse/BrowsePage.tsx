@@ -104,9 +104,6 @@ export const BrowsePage = ({
     PAGE_SIZE_OPTIONS.includes(initPageSize) ? initPageSize : 25,
   );
 
-  // Track previous filter values to detect changes and reset page.
-  const prevFiltersRef = useRef(appliedFilters);
-
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
     // Start with empty filter options.
@@ -297,9 +294,11 @@ export const BrowsePage = ({
   }, [searchParams]);
 
   // Reset page to 1 when filters change.
+  const prevFiltersJson = useRef(JSON.stringify(appliedFilters));
   useEffect(() => {
-    if (prevFiltersRef.current !== appliedFilters) {
-      prevFiltersRef.current = appliedFilters;
+    const currentJson = JSON.stringify(appliedFilters);
+    if (prevFiltersJson.current !== currentJson) {
+      prevFiltersJson.current = currentJson;
       setPage(1);
     }
   }, [appliedFilters]);
