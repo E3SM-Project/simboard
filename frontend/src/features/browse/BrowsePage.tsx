@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { LayoutGrid, Table } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
@@ -66,7 +66,6 @@ export const BrowsePage = ({
   setSelectedSimulationIds,
 }: BrowsePageProps) => {
   // -------------------- Router --------------------
-  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedCaseName = searchParams.get('caseName') ?? '';
@@ -233,7 +232,6 @@ export const BrowsePage = ({
   }, [selectedCaseName]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
     const next: Partial<FilterState> = {};
     const arrayKeys: (keyof FilterState)[] = [
       'campaign',
@@ -247,7 +245,7 @@ export const BrowsePage = ({
     ];
 
     arrayKeys.forEach((key) => {
-      const value = params.get(key);
+      const value = searchParams.get(key);
       if (value !== null) {
         // FIXME: Fix below eslint error with any (TS is being difficult).
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -257,35 +255,56 @@ export const BrowsePage = ({
     });
 
     setAppliedFilters((prev) => ({ ...prev, ...next }));
-  }, [location.search]);
+  }, [searchParams]);
 
+  // Sync applied filters to URL via setSearchParams (single writer).
+  // Use a ref to avoid re-running this effect on every searchParams change.
+  const isInitialFilterSync = useRef(true);
   useEffect(() => {
-    const params = new URLSearchParams();
-
-    if (selectedCaseName) {
-      params.set('caseName', selectedCaseName);
+    // Skip the initial render — filters are read FROM the URL on mount.
+    if (isInitialFilterSync.current) {
+      isInitialFilterSync.current = false;
+      return;
     }
 
-    Object.entries(appliedFilters).forEach(([key, value]) => {
-      if (Array.isArray(value) && value.length) {
-        params.set(key, value.join(','));
-      } else if (typeof value === 'string' && value) {
-        params.set(key, value);
-      }
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
 
-    navigate({ search: params.toString() }, { replace: true });
-  }, [appliedFilters, navigate, selectedCaseName]);
+        // Preserve caseName (managed by handleCaseNameChange).
+        const filterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+
+        for (const key of filterKeys) {
+          const value = appliedFilters[key];
+          if (Array.isArray(value) && value.length) {
+            next.set(key, value.join(','));
+          } else if (typeof value === 'string' && value) {
+            next.set(key, value);
+          } else {
+            next.delete(key);
+          }
+        }
+
+        return next;
+      },
+      { replace: true },
+    );
+  }, [appliedFilters, setSearchParams]);
 
   // -------------------- Handlers --------------------
   const handleCaseNameChange = (caseName: string) => {
-    const params = new URLSearchParams(searchParams);
-    if (caseName) {
-      params.set('caseName', caseName);
-    } else {
-      params.delete('caseName');
-    }
-    setSearchParams(params, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (caseName) {
+          next.set('caseName', caseName);
+        } else {
+          next.delete('caseName');
+        }
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const handleResetFilters = () => {

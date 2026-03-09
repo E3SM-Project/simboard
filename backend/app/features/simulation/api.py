@@ -291,12 +291,10 @@ def list_simulations(
         selectinload(Simulation.links),
     )
 
-    if case_name is not None or case_group is not None:
-        query = query.join(Simulation.case)
-        if case_name is not None:
-            query = query.filter(Case.name == case_name)
-        if case_group is not None:
-            query = query.filter(Case.case_group == case_group)
+    if case_name is not None:
+        query = query.filter(Simulation.case.has(name=case_name))
+    if case_group is not None:
+        query = query.filter(Simulation.case.has(case_group=case_group))
 
     sims = query.order_by(Simulation.created_at.desc()).all()
     return [_simulation_to_out(s) for s in sims]
