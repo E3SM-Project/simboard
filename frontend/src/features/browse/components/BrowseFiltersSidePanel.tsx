@@ -45,7 +45,11 @@ export const BrowseFiltersSidePanel = ({
 
       <label className="block text-sm font-medium text-gray-700">Case</label>
       <MultiSelect
-        options={caseOptions}
+        options={
+          selectedCaseName && !caseOptions.some((o) => o.value === selectedCaseName)
+            ? [...caseOptions, { value: selectedCaseName, label: selectedCaseName }]
+            : caseOptions
+        }
         defaultValue={selectedCaseName ? [selectedCaseName] : []}
         onValueChange={(next) => onCaseNameChange(next[next.length - 1] ?? '')}
         placeholder="Select case"
