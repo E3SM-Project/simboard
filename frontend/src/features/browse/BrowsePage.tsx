@@ -1,14 +1,24 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { LayoutGrid, Table } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
 import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
 import type { SimulationOut } from '@/types/index';
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
@@ -80,7 +90,22 @@ export const BrowsePage = ({
   const [simulations, setSimulations] = useState<SimulationOut[]>([]);
   const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  // Read initial view, page, pageSize from URL (run once)
+  const initView = searchParams.get('view');
+  const initPage = Number(searchParams.get('page'));
+  const initPageSize = Number(searchParams.get('pageSize'));
+
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(
+    initView === 'grid' ? 'grid' : 'table',
+  );
+  const [page, setPage] = useState(initPage >= 1 ? initPage : 1);
+  const [pageSize, setPageSize] = useState(
+    PAGE_SIZE_OPTIONS.includes(initPageSize) ? initPageSize : 25,
+  );
+
+  // Track previous filter values to detect changes and reset page.
+  const prevFiltersRef = useRef(appliedFilters);
 
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
@@ -263,13 +288,21 @@ export const BrowsePage = ({
       }
     });
 
-    const canonicalStatus = params.get('canonicalStatus');
+    const canonicalStatus = searchParams.get('canonicalStatus');
     if (canonicalStatus !== null) {
       next.canonicalStatus = canonicalStatus;
     }
 
     setAppliedFilters((prev) => ({ ...prev, ...next }));
   }, [searchParams]);
+
+  // Reset page to 1 when filters change.
+  useEffect(() => {
+    if (prevFiltersRef.current !== appliedFilters) {
+      prevFiltersRef.current = appliedFilters;
+      setPage(1);
+    }
+  }, [appliedFilters]);
 
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
@@ -299,11 +332,27 @@ export const BrowsePage = ({
           }
         }
 
+        if (viewMode === 'grid') {
+          next.set('view', 'grid');
+        } else {
+          next.delete('view');
+        }
+        if (page > 1) {
+          next.set('page', String(page));
+        } else {
+          next.delete('page');
+        }
+        if (pageSize !== 25) {
+          next.set('pageSize', String(pageSize));
+        } else {
+          next.delete('pageSize');
+        }
+
         return next;
       },
       { replace: true },
     );
-  }, [appliedFilters, setSearchParams]);
+  }, [appliedFilters, viewMode, page, pageSize, setSearchParams]);
 
   // -------------------- Handlers --------------------
   const handleCaseNameChange = (caseName: string) => {
@@ -336,6 +385,23 @@ export const BrowsePage = ({
   const handleCompareButtonClick = () => {
     navigate('/compare');
   };
+
+  const handlePageSizeChange = useCallback(
+    (newSize: string) => {
+      setPageSize(Number(newSize));
+      setPage(1);
+    },
+    [],
+  );
+
+  // -------------------- Pagination --------------------
+  const totalItems = filteredData.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedData = useMemo(
+    () => filteredData.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredData, safePage, pageSize],
+  );
 
   // -------------------- Render --------------------
   return (
@@ -514,7 +580,7 @@ export const BrowsePage = ({
                 {viewMode === 'table' ? (
                   <SimulationResultsTable
                     simulations={simulations}
-                    filteredData={filteredData}
+                    filteredData={paginatedData}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
@@ -522,12 +588,56 @@ export const BrowsePage = ({
                 ) : (
                   <SimulationResultCards
                     simulations={simulations}
-                    filteredData={filteredData}
+                    filteredData={paginatedData}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
                   />
                 )}
+
+                {/* Shared pagination controls */}
+                <div className="flex items-center justify-between py-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span>Rows per page:</span>
+                    <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                      <SelectTrigger className="w-[70px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <SelectItem key={size} value={String(size)}>
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="ml-2">
+                      Showing {totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1}–
+                      {Math.min(safePage * pageSize, totalItems)} of {totalItems}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      Page {safePage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
