@@ -34,6 +34,15 @@ const ReadonlyInput = ({ value, className }: { value?: string | null; className?
   <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
 );
 
+const DiffCell = ({ value, className }: { value: unknown; className?: string }) => {
+  const text = value === null || value === undefined ? '—' : String(value);
+  return (
+    <div className={cn('truncate', className)} title={text}>
+      {text}
+    </div>
+  );
+};
+
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
@@ -180,24 +189,45 @@ export const SimulationDetailsView = ({
               <CardContent>
                 {simulation.runConfigDeltas &&
                 Object.keys(simulation.runConfigDeltas).length > 0 ? (
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2 font-medium">Field</th>
-                        <th className="text-left p-2 font-medium">Canonical</th>
-                        <th className="text-left p-2 font-medium">Current</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => (
-                        <tr key={field} className="border-b">
-                          <td className="p-2 font-mono text-xs">{field}</td>
-                          <td className="p-2">{String((diff as Record<string, unknown>).canonical ?? '—')}</td>
-                          <td className="p-2">{String((diff as Record<string, unknown>).current ?? '—')}</td>
+                  <div className="overflow-hidden rounded-md border">
+                    <table className="w-full table-fixed text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Field
+                          </th>
+                          <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Canonical
+                          </th>
+                          <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Current
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => {
+                          const canonical = (diff as Record<string, unknown>).canonical;
+                          const current = (diff as Record<string, unknown>).current;
+                          return (
+                            <tr key={field} className="border-b last:border-0">
+                              <td className="p-2 align-top">
+                                <DiffCell
+                                  value={field}
+                                  className="max-w-[180px] font-mono text-xs text-muted-foreground"
+                                />
+                              </td>
+                              <td className="p-2 align-top">
+                                <DiffCell value={canonical} className="max-w-[240px]" />
+                              </td>
+                              <td className="p-2 align-top">
+                                <DiffCell value={current} className="max-w-[240px]" />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     No configuration differences.
