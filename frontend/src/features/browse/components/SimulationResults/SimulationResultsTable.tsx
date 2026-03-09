@@ -75,6 +75,17 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { sticky: true, width: 200, position: 'left' },
   },
   {
+    accessorKey: 'executionId',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting()}>
+        Execution ID
+        <ArrowUpDown />
+      </Button>
+    ),
+    cell: ({ row }) => <div>{row.getValue('executionId')}</div>,
+    enableSorting: true,
+  },
+  {
     accessorKey: 'isCanonical',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
