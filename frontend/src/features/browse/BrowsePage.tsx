@@ -77,6 +77,19 @@ const createEmptyFilters = (): FilterState => ({
   createdBy: [],
 });
 
+const parseViewMode = (params: URLSearchParams): 'grid' | 'table' =>
+  params.get('view') === 'grid' ? 'grid' : 'table';
+
+const parsePage = (params: URLSearchParams): number => {
+  const p = Number(params.get('page'));
+  return p >= 1 ? p : 1;
+};
+
+const parsePageSize = (params: URLSearchParams): number => {
+  const ps = Number(params.get('pageSize'));
+  return PAGE_SIZE_OPTIONS.includes(ps) ? ps : 25;
+};
+
 export const BrowsePage = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
@@ -91,17 +104,9 @@ export const BrowsePage = ({
   const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
 
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() =>
-    searchParams.get('view') === 'grid' ? 'grid' : 'table',
-  );
-  const [page, setPage] = useState(() => {
-    const p = Number(searchParams.get('page'));
-    return p >= 1 ? p : 1;
-  });
-  const [pageSize, setPageSize] = useState(() => {
-    const ps = Number(searchParams.get('pageSize'));
-    return PAGE_SIZE_OPTIONS.includes(ps) ? ps : 25;
-  });
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => parseViewMode(searchParams));
+  const [page, setPage] = useState(() => parsePage(searchParams));
+  const [pageSize, setPageSize] = useState(() => parsePageSize(searchParams));
 
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
@@ -292,13 +297,9 @@ export const BrowsePage = ({
     setAppliedFilters((prev) => ({ ...prev, ...next }));
 
     // Sync view, page, pageSize from URL (handles back/forward navigation).
-    const viewParam = searchParams.get('view');
-    const pageParam = Number(searchParams.get('page'));
-    const pageSizeParam = Number(searchParams.get('pageSize'));
-
-    setViewMode(viewParam === 'grid' ? 'grid' : 'table');
-    setPage(pageParam >= 1 ? pageParam : 1);
-    setPageSize(PAGE_SIZE_OPTIONS.includes(pageSizeParam) ? pageSizeParam : 25);
+    setViewMode(parseViewMode(searchParams));
+    setPage(parsePage(searchParams));
+    setPageSize(parsePageSize(searchParams));
   }, [searchParams]);
 
   // Reset page to 1 when filters change (skip the initial URL→state sync).
@@ -409,10 +410,8 @@ export const BrowsePage = ({
 
   // Clamp page state when totalPages shrinks (e.g. after filtering).
   useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
+    setPage((p) => (p > totalPages ? totalPages : p));
+  }, [totalPages]);
 
   const paginatedData = useMemo(
     () => filteredData.slice((page - 1) * pageSize, page * pageSize),
