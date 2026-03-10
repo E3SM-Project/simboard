@@ -156,6 +156,25 @@ class TestListCases:
         assert exec_ids["case-nested-exec-2"]["changeCount"] == 1
 
 
+class TestListCaseNames:
+    def test_endpoint_returns_empty_list(self, client):
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == []
+
+    def test_endpoint_returns_case_names_sorted_alphabetically(
+        self, client, db: Session
+    ):
+        _create_case(db, "zeta_case")
+        _create_case(db, "alpha_case")
+        _create_case(db, "beta_case")
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == ["alpha_case", "beta_case", "zeta_case"]
+
+
 class TestGetCase:
     def test_endpoint_returns_case_with_simulations(
         self, client, db: Session, normal_user_sync, admin_user_sync
