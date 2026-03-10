@@ -41,6 +41,8 @@ const MAX_SELECTION = 5;
 interface SimulationResultsTable {
   simulations: SimulationOut[];
   filteredData: SimulationOut[];
+  page: number;
+  pageSize: number;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
@@ -307,6 +309,8 @@ const getStickyLeftOffset = (
 export const SimulationResultsTable = ({
   simulations,
   filteredData,
+  page,
+  pageSize,
   selectedSimulationIds,
   setSelectedSimulationIds,
   handleCompareButtonClick,
@@ -382,6 +386,10 @@ export const SimulationResultsTable = ({
     },
   });
 
+  const sortedFilteredRows = table.getRowModel().rows;
+  const pageStart = (page - 1) * pageSize;
+  const paginatedRows = sortedFilteredRows.slice(pageStart, pageStart + pageSize);
+
   return (
     <div className="w-full">
       {/* Top controls */}
@@ -455,7 +463,7 @@ export const SimulationResultsTable = ({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map((row) => (
+          {paginatedRows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => {
                 const meta = cell.column.columnDef.meta;

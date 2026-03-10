@@ -82,7 +82,11 @@ const parseViewMode = (params: URLSearchParams): 'grid' | 'table' =>
 
 const parsePage = (params: URLSearchParams): number => {
   const p = Number(params.get('page'));
-  return p >= 1 ? p : 1;
+  if (!Number.isFinite(p) || p < 1) {
+    return 1;
+  }
+
+  return Math.floor(p);
 };
 
 const parsePageSize = (params: URLSearchParams): number => {
@@ -278,23 +282,25 @@ export const BrowsePage = ({
   }, [selectedCaseName]);
 
   useEffect(() => {
-    const next: Partial<FilterState> = {};
-    const allFilterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+    const next = createEmptyFilters();
+    const multiSelectFilterKeys = (
+      Object.keys(createEmptyFilters()) as (keyof FilterState)[]
+    ).filter((key) => key !== 'canonicalStatus');
 
-    allFilterKeys.forEach((key) => {
+    multiSelectFilterKeys.forEach((key) => {
       const value = searchParams.get(key);
       if (value !== null) {
-        // All FilterState values are string arrays.
-        next[key] = value.split(',') as string[];
+        next[key] = value.split(',').filter(Boolean) as FilterState[typeof key];
       }
     });
 
     const canonicalStatus = searchParams.get('canonicalStatus');
-    if (canonicalStatus !== null) {
-      next.canonicalStatus = canonicalStatus;
-    }
+    next.canonicalStatus =
+      canonicalStatus !== null && ['', 'canonical', 'non-canonical'].includes(canonicalStatus)
+        ? canonicalStatus
+        : '';
 
-    setAppliedFilters((prev) => ({ ...prev, ...next }));
+    setAppliedFilters(next);
 
     // Sync view, page, pageSize from URL (handles back/forward navigation).
     setViewMode(parseViewMode(searchParams));
@@ -302,20 +308,25 @@ export const BrowsePage = ({
     setPageSize(parsePageSize(searchParams));
   }, [searchParams]);
 
-  // Reset page to 1 when filters change (skip the initial URL→state sync).
-  const prevFiltersJson = useRef<string | null>(null);
+  // Reset page to 1 when filters/case change (skip the initial URL→state sync).
+  const prevPageResetSignature = useRef<string | null>(null);
   useEffect(() => {
-    const currentJson = JSON.stringify(appliedFilters);
-    if (prevFiltersJson.current === null) {
+    const currentSignature = JSON.stringify({
+      selectedCaseName,
+      appliedFilters,
+    });
+
+    if (prevPageResetSignature.current === null) {
       // First render — record baseline without resetting page.
-      prevFiltersJson.current = currentJson;
+      prevPageResetSignature.current = currentSignature;
       return;
     }
-    if (prevFiltersJson.current !== currentJson) {
-      prevFiltersJson.current = currentJson;
+
+    if (prevPageResetSignature.current !== currentSignature) {
+      prevPageResetSignature.current = currentSignature;
       setPage(1);
     }
-  }, [appliedFilters]);
+  }, [appliedFilters, selectedCaseName]);
 
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
@@ -595,7 +606,9 @@ export const BrowsePage = ({
                 {viewMode === 'table' ? (
                   <SimulationResultsTable
                     simulations={simulations}
-                    filteredData={paginatedData}
+                    filteredData={filteredData}
+                    page={page}
+                    pageSize={pageSize}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
