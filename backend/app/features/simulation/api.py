@@ -58,6 +58,36 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
 
 
 @case_router.get(
+    "/names",
+    response_model=list[str],
+    responses={
+        200: {"description": "List all case names."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
+    """Return a sorted list of all case names.
+
+    This lightweight endpoint avoids loading nested simulation data,
+    making it suitable for populating filter dropdowns.
+
+    Parameters
+    ----------
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    list[str]
+        Alphabetically sorted case names.
+    """
+    names = db.query(Case.name).order_by(Case.name).all()
+
+    return [n[0] for n in names]
+
+
+@case_router.get(
     "/{case_id}",
     response_model=CaseOut,
     responses={

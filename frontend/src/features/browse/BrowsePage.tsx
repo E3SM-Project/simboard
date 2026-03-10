@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
-import { listCases, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
+import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
@@ -188,11 +188,11 @@ export const BrowsePage = ({
   useEffect(() => {
     let cancelled = false;
 
-    listCases()
-      .then((cases) => {
+    listCaseNames()
+      .then((names) => {
         if (!cancelled) {
-          const options = cases
-            .map((item) => ({ value: item.name, label: item.name }))
+          const options = names
+            .map((name) => ({ value: name, label: name }))
             .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
           setCaseOptions(options);
         }
@@ -233,24 +233,13 @@ export const BrowsePage = ({
 
   useEffect(() => {
     const next: Partial<FilterState> = {};
-    const arrayKeys: (keyof FilterState)[] = [
-      'campaign',
-      'experimentType',
-      'machineId',
-      'compset',
-      'gridName',
-      'simulationType',
-      'gitTag',
-      'status',
-    ];
+    const allFilterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
 
-    arrayKeys.forEach((key) => {
+    allFilterKeys.forEach((key) => {
       const value = searchParams.get(key);
       if (value !== null) {
-        // FIXME: Fix below eslint error with any (TS is being difficult).
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore: Type 'string | string[]' is not assignable to type '(string[] & string) | undefined'.
-        next[key] = arrayKeys.includes(key) ? (value.split(',') as string[]) : value;
+        // All FilterState values are string arrays.
+        next[key] = value.split(',') as string[];
       }
     });
 
@@ -309,6 +298,14 @@ export const BrowsePage = ({
 
   const handleResetFilters = () => {
     setAppliedFilters(createEmptyFilters());
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('caseName');
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const handleCompareButtonClick = () => {
@@ -465,9 +462,10 @@ export const BrowsePage = ({
                     }
                     return [];
                   })}
-                  {Object.values(appliedFilters).some((v) =>
-                    Array.isArray(v) ? v.length > 0 : !!v,
-                  ) && (
+                  {(selectedCaseName ||
+                    Object.values(appliedFilters).some((v) =>
+                      Array.isArray(v) ? v.length > 0 : !!v,
+                    )) && (
                     <button
                       type="button"
                       className="inline-flex items-center px-3 py-1 rounded-full bg-red-100 text-sm text-red-700 border border-red-300 ml-2"

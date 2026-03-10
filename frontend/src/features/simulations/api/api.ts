@@ -33,3 +33,11 @@ export const listCases = async (url: string = CASES_URL): Promise<CaseOut[]> => 
 
   return res.data;
 };
+
+export const listCaseNames = async (): Promise<string[]> => {
+  const res = await api.get<string[]>(`${CASES_URL}/names`, {
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+
+  return res.data;
+};
