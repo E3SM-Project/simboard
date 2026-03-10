@@ -129,28 +129,6 @@ const columns: ColumnDef<SimulationOut>[] = [
     enableSorting: true,
   },
   {
-    accessorKey: 'variables',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Variables
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const variables = row.getValue('variables') as string[];
-      return (
-        <div>
-          {Array.isArray(variables) && variables.length > 0 ? (
-            variables.join(', ')
-          ) : (
-            <span className="text-muted-foreground italic">None</span>
-          )}
-        </div>
-      );
-    },
-    enableSorting: true,
-  },
-  {
     accessorKey: 'gitTag',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
