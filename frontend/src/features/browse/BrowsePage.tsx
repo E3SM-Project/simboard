@@ -385,13 +385,10 @@ export const BrowsePage = ({
     navigate('/compare');
   };
 
-  const handlePageSizeChange = useCallback(
-    (newSize: string) => {
-      setPageSize(Number(newSize));
-      setPage(1);
-    },
-    [],
-  );
+  const handlePageSizeChange = useCallback((newSize: string) => {
+    setPageSize(Number(newSize));
+    setPage(1);
+  }, []);
 
   // -------------------- Pagination --------------------
   const totalItems = filteredData.length;
@@ -409,16 +406,16 @@ export const BrowsePage = ({
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex flex-row w-full gap-6">
             <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
-                <BrowseFiltersSidePanel
-                  appliedFilters={appliedFilters}
-                  availableFilters={availableFilters}
-                  onChange={setAppliedFilters}
-                  machineOptions={machineOptions}
-                  caseOptions={caseOptions}
-                  selectedCaseName={selectedCaseName}
-                  onCaseNameChange={handleCaseNameChange}
-                />
-              </div>
+              <BrowseFiltersSidePanel
+                appliedFilters={appliedFilters}
+                availableFilters={availableFilters}
+                onChange={setAppliedFilters}
+                machineOptions={machineOptions}
+                caseOptions={caseOptions}
+                selectedCaseName={selectedCaseName}
+                onCaseNameChange={handleCaseNameChange}
+              />
+            </div>
             <div className="flex-1 flex flex-col min-w-0">
               <header className="mb-3 px-2 mt-4 flex items-center justify-between">
                 <div>
@@ -447,18 +444,6 @@ export const BrowsePage = ({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
-                            aria-label="Grid view"
-                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-200' : ''}`}
-                            onClick={() => setViewMode('grid')}
-                          >
-                            <LayoutGrid size={24} strokeWidth={2} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Show simulations as cards</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
                             aria-label="Table view"
                             className={`p-2 rounded ${viewMode === 'table' ? 'bg-gray-200' : ''}`}
                             onClick={() => setViewMode('table')}
@@ -467,6 +452,18 @@ export const BrowsePage = ({
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Show simulations in a table</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            aria-label="Grid view"
+                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-200' : ''}`}
+                            onClick={() => setViewMode('grid')}
+                          >
+                            <LayoutGrid size={24} strokeWidth={2} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Show simulations as cards</TooltipContent>
                       </Tooltip>
                     </div>
                   </TooltipProvider>
