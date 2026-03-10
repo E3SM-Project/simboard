@@ -91,18 +91,17 @@ export const BrowsePage = ({
   const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
 
-  // Read initial view, page, pageSize from URL (run once)
-  const initView = searchParams.get('view');
-  const initPage = Number(searchParams.get('page'));
-  const initPageSize = Number(searchParams.get('pageSize'));
-
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>(
-    initView === 'grid' ? 'grid' : 'table',
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() =>
+    searchParams.get('view') === 'grid' ? 'grid' : 'table',
   );
-  const [page, setPage] = useState(initPage >= 1 ? initPage : 1);
-  const [pageSize, setPageSize] = useState(
-    PAGE_SIZE_OPTIONS.includes(initPageSize) ? initPageSize : 25,
-  );
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get('page'));
+    return p >= 1 ? p : 1;
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const ps = Number(searchParams.get('pageSize'));
+    return PAGE_SIZE_OPTIONS.includes(ps) ? ps : 25;
+  });
 
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
@@ -291,12 +290,26 @@ export const BrowsePage = ({
     }
 
     setAppliedFilters((prev) => ({ ...prev, ...next }));
+
+    // Sync view, page, pageSize from URL (handles back/forward navigation).
+    const viewParam = searchParams.get('view');
+    const pageParam = Number(searchParams.get('page'));
+    const pageSizeParam = Number(searchParams.get('pageSize'));
+
+    setViewMode(viewParam === 'grid' ? 'grid' : 'table');
+    setPage(pageParam >= 1 ? pageParam : 1);
+    setPageSize(PAGE_SIZE_OPTIONS.includes(pageSizeParam) ? pageSizeParam : 25);
   }, [searchParams]);
 
-  // Reset page to 1 when filters change.
-  const prevFiltersJson = useRef(JSON.stringify(appliedFilters));
+  // Reset page to 1 when filters change (skip the initial URL→state sync).
+  const prevFiltersJson = useRef<string | null>(null);
   useEffect(() => {
     const currentJson = JSON.stringify(appliedFilters);
+    if (prevFiltersJson.current === null) {
+      // First render — record baseline without resetting page.
+      prevFiltersJson.current = currentJson;
+      return;
+    }
     if (prevFiltersJson.current !== currentJson) {
       prevFiltersJson.current = currentJson;
       setPage(1);
@@ -393,10 +406,17 @@ export const BrowsePage = ({
   // -------------------- Pagination --------------------
   const totalItems = filteredData.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(page, totalPages);
+
+  // Clamp page state when totalPages shrinks (e.g. after filtering).
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const paginatedData = useMemo(
-    () => filteredData.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [filteredData, safePage, pageSize],
+    () => filteredData.slice((page - 1) * pageSize, page * pageSize),
+    [filteredData, page, pageSize],
   );
 
   // -------------------- Render --------------------
@@ -608,8 +628,8 @@ export const BrowsePage = ({
                       </SelectContent>
                     </Select>
                     <span className="ml-2">
-                      Showing {totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1}–
-                      {Math.min(safePage * pageSize, totalItems)} of {totalItems}
+                      Showing {totalItems === 0 ? 0 : (page - 1) * pageSize + 1}–
+                      {Math.min(page * pageSize, totalItems)} of {totalItems}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -617,18 +637,18 @@ export const BrowsePage = ({
                       variant="outline"
                       size="sm"
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage <= 1}
+                      disabled={page <= 1}
                     >
                       Previous
                     </Button>
                     <span>
-                      Page {safePage} of {totalPages}
+                      Page {page} of {totalPages}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage >= totalPages}
+                      disabled={page >= totalPages}
                     >
                       Next
                     </Button>
