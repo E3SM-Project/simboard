@@ -527,8 +527,29 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
 
       {/* Footer / Pagination */}
       <div className="flex items-center justify-between py-2 text-sm text-muted-foreground">
-        <div>
-          Showing {table.getRowModel().rows.length} of {filteredSimulations.length}
+        <div className="flex items-center gap-2">
+          <span>Rows per page:</span>
+          <Select
+            value={String(table.getState().pagination.pageSize)}
+            onValueChange={(v) => {
+              table.setPageSize(Number(v));
+              table.setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[70px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[10, 25, 50, 100].map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="ml-2">
+            Showing {table.getRowModel().rows.length} of {filteredSimulations.length}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <Button

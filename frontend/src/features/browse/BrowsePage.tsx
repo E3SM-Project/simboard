@@ -1,14 +1,24 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { LayoutGrid, Table } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
 import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
 import type { SimulationOut } from '@/types/index';
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
@@ -27,6 +37,9 @@ export interface FilterState {
   machineId: string[];
   compiler: string[];
   status: string[];
+
+  // Canonical Status
+  canonicalStatus: string;
 
   // Metadata & Provenance
   gitTag: string[];
@@ -56,10 +69,30 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
+  // Canonical Status
+  canonicalStatus: '',
+
   // Metadata & Provenance
   gitTag: [],
   createdBy: [],
 });
+
+const parseViewMode = (params: URLSearchParams): 'grid' | 'table' =>
+  params.get('view') === 'grid' ? 'grid' : 'table';
+
+const parsePage = (params: URLSearchParams): number => {
+  const p = Number(params.get('page'));
+  if (!Number.isFinite(p) || p < 1) {
+    return 1;
+  }
+
+  return Math.floor(p);
+};
+
+const parsePageSize = (params: URLSearchParams): number => {
+  const ps = Number(params.get('pageSize'));
+  return PAGE_SIZE_OPTIONS.includes(ps) ? ps : 25;
+};
 
 export const BrowsePage = ({
   selectedSimulationIds,
@@ -74,24 +107,31 @@ export const BrowsePage = ({
   const [simulations, setSimulations] = useState<SimulationOut[]>([]);
   const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => parseViewMode(searchParams));
+  const [page, setPage] = useState(() => parsePage(searchParams));
+  const [pageSize, setPageSize] = useState(() => parsePageSize(searchParams));
 
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
     // Start with empty filter options.
     const filters = createEmptyFilters();
 
+    // Array-based filter keys that correspond to SimulationOut properties.
+    const arrayKeys = Object.keys(createEmptyFilters()).filter(
+      (k) => k !== 'canonicalStatus',
+    ) as (keyof SimulationOut)[];
+
     // Populate filter options based on available simulations.
     for (const sim of simulations) {
-      const keys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-
-      for (const key of keys) {
-        const value = (sim as SimulationOut)[key];
+      for (const key of arrayKeys) {
+        const value = sim[key];
 
         // Handle both string and string[] fields.
         if (Array.isArray(value)) {
           value.forEach((v) => {
-            const filterValues = filters[key] as string[];
+            if (typeof v !== 'string') return;
+            const filterValues = filters[key as keyof FilterState] as string[];
             const isValueValid = v && !filterValues.includes(v);
 
             if (isValueValid) {
@@ -99,7 +139,7 @@ export const BrowsePage = ({
             }
           });
         } else if (typeof value === 'string' && value) {
-          const filterValues = filters[key] as string[];
+          const filterValues = filters[key as keyof FilterState] as string[];
           const isValueValid = !filterValues.includes(value);
 
           if (isValueValid) {
@@ -151,9 +191,11 @@ export const BrowsePage = ({
   }, [simulations]);
 
   const filteredData = useMemo(() => {
-    const arrayFilterGetters: Record<
-      keyof FilterState,
-      (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
+    const arrayFilterGetters: Partial<
+      Record<
+        keyof FilterState,
+        (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
+      >
     > = {
       machineId: (rec) => simMachineId(rec) ?? '',
       campaign: (rec) => rec.campaign ?? [],
@@ -171,14 +213,22 @@ export const BrowsePage = ({
 
     return simulations.filter((record) => {
       for (const key of Object.keys(arrayFilterGetters) as (keyof FilterState)[]) {
-        if (Array.isArray(appliedFilters[key]) && (appliedFilters[key] as string[]).length > 0) {
-          const raw = arrayFilterGetters[key](record);
+        const getter = arrayFilterGetters[key];
+        if (
+          getter &&
+          Array.isArray(appliedFilters[key]) &&
+          (appliedFilters[key] as string[]).length > 0
+        ) {
+          const raw = getter(record);
           const recVals = Array.isArray(raw) ? raw : ([raw].filter(Boolean) as string[]);
           if (!recVals.some((v) => (appliedFilters[key] as string[]).includes(v as string))) {
             return false;
           }
         }
       }
+
+      if (appliedFilters.canonicalStatus === 'canonical' && !record.isCanonical) return false;
+      if (appliedFilters.canonicalStatus === 'non-canonical' && record.isCanonical) return false;
 
       return true;
     });
@@ -232,19 +282,51 @@ export const BrowsePage = ({
   }, [selectedCaseName]);
 
   useEffect(() => {
-    const next: Partial<FilterState> = {};
-    const allFilterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+    const next = createEmptyFilters();
+    const multiSelectFilterKeys = (
+      Object.keys(createEmptyFilters()) as (keyof FilterState)[]
+    ).filter((key) => key !== 'canonicalStatus');
 
-    allFilterKeys.forEach((key) => {
+    multiSelectFilterKeys.forEach((key) => {
       const value = searchParams.get(key);
       if (value !== null) {
-        // All FilterState values are string arrays.
-        next[key] = value.split(',') as string[];
+        next[key] = value.split(',').filter(Boolean) as FilterState[typeof key];
       }
     });
 
-    setAppliedFilters((prev) => ({ ...prev, ...next }));
+    const canonicalStatus = searchParams.get('canonicalStatus');
+    next.canonicalStatus =
+      canonicalStatus !== null && ['', 'canonical', 'non-canonical'].includes(canonicalStatus)
+        ? canonicalStatus
+        : '';
+
+    setAppliedFilters(next);
+
+    // Sync view, page, pageSize from URL (handles back/forward navigation).
+    setViewMode(parseViewMode(searchParams));
+    setPage(parsePage(searchParams));
+    setPageSize(parsePageSize(searchParams));
   }, [searchParams]);
+
+  // Reset page to 1 when filters/case change (skip the initial URL→state sync).
+  const prevPageResetSignature = useRef<string | null>(null);
+  useEffect(() => {
+    const currentSignature = JSON.stringify({
+      selectedCaseName,
+      appliedFilters,
+    });
+
+    if (prevPageResetSignature.current === null) {
+      // First render — record baseline without resetting page.
+      prevPageResetSignature.current = currentSignature;
+      return;
+    }
+
+    if (prevPageResetSignature.current !== currentSignature) {
+      prevPageResetSignature.current = currentSignature;
+      setPage(1);
+    }
+  }, [appliedFilters, selectedCaseName]);
 
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
@@ -274,11 +356,27 @@ export const BrowsePage = ({
           }
         }
 
+        if (viewMode === 'grid') {
+          next.set('view', 'grid');
+        } else {
+          next.delete('view');
+        }
+        if (page > 1) {
+          next.set('page', String(page));
+        } else {
+          next.delete('page');
+        }
+        if (pageSize !== 25) {
+          next.set('pageSize', String(pageSize));
+        } else {
+          next.delete('pageSize');
+        }
+
         return next;
       },
       { replace: true },
     );
-  }, [appliedFilters, setSearchParams]);
+  }, [appliedFilters, viewMode, page, pageSize, setSearchParams]);
 
   // -------------------- Handlers --------------------
   const handleCaseNameChange = (caseName: string) => {
@@ -312,6 +410,25 @@ export const BrowsePage = ({
     navigate('/compare');
   };
 
+  const handlePageSizeChange = useCallback((newSize: string) => {
+    setPageSize(Number(newSize));
+    setPage(1);
+  }, []);
+
+  // -------------------- Pagination --------------------
+  const totalItems = filteredData.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  // Clamp page state when totalPages shrinks (e.g. after filtering).
+  useEffect(() => {
+    setPage((p) => (p > totalPages ? totalPages : p));
+  }, [totalPages]);
+
+  const paginatedData = useMemo(
+    () => filteredData.slice((page - 1) * pageSize, page * pageSize),
+    [filteredData, page, pageSize],
+  );
+
   // -------------------- Render --------------------
   return (
     <div className="w-full bg-white">
@@ -319,16 +436,16 @@ export const BrowsePage = ({
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex flex-row w-full gap-6">
             <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
-                <BrowseFiltersSidePanel
-                  appliedFilters={appliedFilters}
-                  availableFilters={availableFilters}
-                  onChange={setAppliedFilters}
-                  machineOptions={machineOptions}
-                  caseOptions={caseOptions}
-                  selectedCaseName={selectedCaseName}
-                  onCaseNameChange={handleCaseNameChange}
-                />
-              </div>
+              <BrowseFiltersSidePanel
+                appliedFilters={appliedFilters}
+                availableFilters={availableFilters}
+                onChange={setAppliedFilters}
+                machineOptions={machineOptions}
+                caseOptions={caseOptions}
+                selectedCaseName={selectedCaseName}
+                onCaseNameChange={handleCaseNameChange}
+              />
+            </div>
             <div className="flex-1 flex flex-col min-w-0">
               <header className="mb-3 px-2 mt-4 flex items-center justify-between">
                 <div>
@@ -357,18 +474,6 @@ export const BrowsePage = ({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
-                            aria-label="Grid view"
-                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-200' : ''}`}
-                            onClick={() => setViewMode('grid')}
-                          >
-                            <LayoutGrid size={24} strokeWidth={2} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Show simulations as cards</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
                             aria-label="Table view"
                             className={`p-2 rounded ${viewMode === 'table' ? 'bg-gray-200' : ''}`}
                             onClick={() => setViewMode('table')}
@@ -377,6 +482,18 @@ export const BrowsePage = ({
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>Show simulations in a table</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            aria-label="Grid view"
+                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-200' : ''}`}
+                            onClick={() => setViewMode('grid')}
+                          >
+                            <LayoutGrid size={24} strokeWidth={2} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Show simulations as cards</TooltipContent>
                       </Tooltip>
                     </div>
                   </TooltipProvider>
@@ -490,6 +607,8 @@ export const BrowsePage = ({
                   <SimulationResultsTable
                     simulations={simulations}
                     filteredData={filteredData}
+                    page={page}
+                    pageSize={pageSize}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
@@ -497,12 +616,56 @@ export const BrowsePage = ({
                 ) : (
                   <SimulationResultCards
                     simulations={simulations}
-                    filteredData={filteredData}
+                    filteredData={paginatedData}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
                   />
                 )}
+
+                {/* Shared pagination controls */}
+                <div className="flex items-center justify-between py-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span>Rows per page:</span>
+                    <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                      <SelectTrigger className="w-[70px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                          <SelectItem key={size} value={String(size)}>
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="ml-2">
+                      Showing {totalItems === 0 ? 0 : (page - 1) * pageSize + 1}–
+                      {Math.min(page * pageSize, totalItems)} of {totalItems}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

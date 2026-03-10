@@ -10,7 +10,6 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -42,6 +41,8 @@ const MAX_SELECTION = 5;
 interface SimulationResultsTable {
   simulations: SimulationOut[];
   filteredData: SimulationOut[];
+  page: number;
+  pageSize: number;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
@@ -75,6 +76,39 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { sticky: true, width: 200, position: 'left' },
   },
   {
+    accessorKey: 'executionId',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting()}>
+        Execution ID
+        <ArrowUpDown />
+      </Button>
+    ),
+    cell: ({ row }) => <div>{row.getValue('executionId')}</div>,
+    enableSorting: true,
+  },
+  {
+    accessorKey: 'isCanonical',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting()}>
+        Canonical
+        <ArrowUpDown />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const isCanonical = row.original.isCanonical;
+      const changeCount = row.original.changeCount;
+      return (
+        <div>
+          {isCanonical ? 'Yes' : 'No'}
+          {!isCanonical && changeCount > 0 && (
+            <span className="text-muted-foreground ml-1">({changeCount})</span>
+          )}
+        </div>
+      );
+    },
+    enableSorting: true,
+  },
+  {
     accessorKey: 'campaign',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting()}>
@@ -94,28 +128,6 @@ const columns: ColumnDef<SimulationOut>[] = [
       </Button>
     ),
     cell: ({ row }) => <div>{row.getValue('experimentType')}</div>,
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'variables',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Variables
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const variables = row.getValue('variables') as string[];
-      return (
-        <div>
-          {Array.isArray(variables) && variables.length > 0 ? (
-            variables.join(', ')
-          ) : (
-            <span className="text-muted-foreground italic">None</span>
-          )}
-        </div>
-      );
-    },
     enableSorting: true,
   },
   {
@@ -297,6 +309,8 @@ const getStickyLeftOffset = (
 export const SimulationResultsTable = ({
   simulations,
   filteredData,
+  page,
+  pageSize,
   selectedSimulationIds,
   setSelectedSimulationIds,
   handleCompareButtonClick,
@@ -360,7 +374,6 @@ export const SimulationResultsTable = ({
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
@@ -372,6 +385,10 @@ export const SimulationResultsTable = ({
       rowSelection,
     },
   });
+
+  const sortedFilteredRows = table.getRowModel().rows;
+  const pageStart = (page - 1) * pageSize;
+  const paginatedRows = sortedFilteredRows.slice(pageStart, pageStart + pageSize);
 
   return (
     <div className="w-full">
@@ -446,7 +463,7 @@ export const SimulationResultsTable = ({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map((row) => (
+          {paginatedRows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => {
                 const meta = cell.column.columnDef.meta;
@@ -478,26 +495,7 @@ export const SimulationResultsTable = ({
 
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-muted-foreground flex-1 text-sm">
-          {table.getFilteredSelectedRowModel().rows.length} of{' '}
-          {table.getFilteredRowModel().rows.length} row(s) selected.
-        </div>
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
+          {selectedSimulationIds.length} of {filteredData.length} row(s) selected.
         </div>
       </div>
     </div>
