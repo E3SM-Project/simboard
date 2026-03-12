@@ -13,6 +13,7 @@ No workload manifests are versioned under `deploy/spin/`.
 ## Prerequisites (Create First)
 
 Create these resources before configuring workloads in Rancher.
+Create `simboard-ingestion-env` later in **Workload 3 setup**, after generating the ingestion service-account token.
 
 | Secret                 | Type                | Required | Example/Allowed Value       | Used By                                           |
 | ---------------------- | ------------------- | -------- | --------------------------- | ------------------------------------------------- |
@@ -93,7 +94,7 @@ Workloads -> Deployments -> Create (top-right)
 
 | Rancher field     | Value                                        |
 | ----------------- | -------------------------------------------- |
-| Run as User ID    | Required: set numeric NERSC UID (check Iris) |
+| Run as User       | Required: set numeric NERSC UID (check Iris) |
 | Add Capabilities  | `CHOWN,DAC_OVERRIDE,FOWNER,SETGID,SETUID`    |
 | Drop Capabilities | `ALL`                                        |
 
@@ -154,7 +155,7 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 | Rancher field     | Value                                        |
 | ----------------- | -------------------------------------------- |
-| Run as User ID    | Required: set numeric NERSC UID (check Iris) |
+| Run as User       | Required: set numeric NERSC UID (check Iris) |
 | Add Capabilities  | leave empty                                  |
 | Drop Capabilities | `ALL`                                        |
 
@@ -184,7 +185,7 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 | Rancher field            | Value                           |
 | ------------------------ | ------------------------------- |
-| Run as User ID           | Required: set numeric NERSC UID |
+| Run as User              | Required: set numeric NERSC UID |
 | allowPrivilegeEscalation | `false`                         |
 | privileged               | `false`                         |
 | capabilities             | add `DAC_OVERRIDE`, drop `ALL`  |
@@ -233,32 +234,49 @@ Key table for step 2 (`simboard-ingestion-env`):
 | `STATE_PATH`            | Yes      | `/var/lib/simboard-ingestion/state.json`                   | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-archive-ingestor` |
 
-3. **Create/update CronJob `nersc-archive-ingestor`**
+3. **Create PersistentVolumeClaim (PVC) for ingestion state**
+   - In Rancher, open target namespace -> **Storage** -> **PersistentVolumeClaims** -> **Create**.
+   - Volume Claim settings:
+     - Name: `simboard-ingestion-state`
+     - Source: `Use a Storage Class to provision a new Persistent Volume`
+     - Storage class: default class (or your namespace standard)
+     - Request storage: `1Gi` (or larger per policy)
+   - Customize:
+     - Access Modes: Single Node Read/Write
+
+4. **Create/update CronJob `nersc-archive-ingestor`**
    - Use the values in the **Configuration Reference** section below.
    - Configure secret-backed environment variables from `simboard-ingestion-env`.
+   - Configure **Pod -> Storage** and **Container -> Storage** exactly as shown in the tables below (including PVC claim `simboard-ingestion-state` and state mount path).
 
-4. **Validate once with dry run**
+5. **Validate once with dry run**
    - Set `DRY_RUN=true` in `simboard-ingestion-env`.
    - Trigger a one-off job from the CronJob.
    - Confirm logs include `scan_completed` and candidate discovery.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
-5. **Verify steady-state behavior**
+6. **Verify steady-state behavior**
    - Confirm the CronJob runs every 15 minutes.
    - Confirm `state.json` is written/updated and unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
 
 #### Configuration Reference
 
+`Top-level configuration`:
+
+| Rancher field     | Value                    |
+| ----------------- | ------------------------ |
+| Namespace         | `simboard`               |
+| Name              | `nersc-archive-ingestor` |
+| Schedule          | `*/15 * * * *`           |
+| Image pull secret | `registry-nersc`         |
+
 ##### 1. CronJob tab
 
-`Top-level configuration`:
+`Scaling and Upgrade Policy`:
 
 | Rancher field                 | Value                                          |
 | ----------------------------- | ---------------------------------------------- |
-| Namespace                     | `simboard`                                     |
-| Name                          | `nersc-archive-ingestor`                       |
-| Schedule                      | `*/15 * * * *`                                 |
 | Concurrency policy            | `Skip next run if current run hasn't finished` |
 | Successful jobs history limit | `3`                                            |
 | Failed jobs history limit     | `3`                                            |
@@ -273,15 +291,21 @@ Key table for step 2 (`simboard-ingestion-env`):
 
 `Pod`:
 
-| Rancher field                | Value                                                  |
-| ---------------------------- | ------------------------------------------------------ |
-| Restart policy               | `OnFailure`                                            |
-| Run as User ID               | Required: set to a numeric NERSC UID for this workload |
-| Volume type                  | `Bind-Mount`                                           |
-| Volume name                  | `performance-archive`                                  |
-| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive`           |
-| The Path on the Node must be | `An existing directory`                                |
-| State volume                 | Writable volume for `/var/lib/simboard-ingestion`      |
+| Rancher field  | Value       |
+| -------------- | ----------- |
+| Restart policy | `OnFailure` |
+
+`Storage`:
+
+| Rancher field                | Value                                          |
+| ---------------------------- | ---------------------------------------------- |
+| Volume type                  | `Bind-Mount`                                   |
+| Volume name                  | `performance-archive`                          |
+| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive`   |
+| The Path on the Node must be | `An existing directory`                        |
+| State volume type            | `PersistentVolumeClaim`                        |
+| State volume name            | `ingestion-state`                              |
+| State claim name             | `simboard-ingestion-state` (or existing claim) |
 
 ##### 3. Container tab (`nersc-archive-ingestor`)
 
@@ -298,20 +322,24 @@ Key table for step 2 (`simboard-ingestion-env`):
 
 `Security Context`:
 
-| Rancher field            | Value      |
-| ------------------------ | ---------- |
-| allowPrivilegeEscalation | `false`    |
-| privileged               | `false`    |
-| capabilities             | drop `ALL` |
+| Rancher field            | Value                                                  |
+| ------------------------ | ------------------------------------------------------ |
+| Run as User              | Required: set to a numeric NERSC UID for this workload |
+| allowPrivilegeEscalation | `false`                                                |
+| privileged               | `false`                                                |
+| capabilities             | drop `ALL`                                             |
 
 `Storage`:
 
-| Rancher field | Value                         |
-| ------------- | ----------------------------- |
-| Volume        | `performance-archive`         |
-| Mount path    | `/performance_archive`        |
-| Read only     | `true` (recommended)          |
-| State mount   | `/var/lib/simboard-ingestion` |
+| Rancher field      | Value                                                     |
+| ------------------ | --------------------------------------------------------- |
+| Archive volume     | `performance-archive`                                     |
+| Archive mount path | `/performance_archive`                                    |
+| Archive read only  | `true` (recommended)                                      |
+| State volume       | `ingestion-state`                                         |
+| State source claim | `simboard-ingestion-state` (through Pod volume mapping)   |
+| State mount path   | `/var/lib/simboard-ingestion`                             |
+| State read only    | `false` (required; must be writable across runs)          |
 
 Notes:
 
@@ -335,8 +363,8 @@ clarity and to highlight security context requirements.
 
 Security context requirements for NERSC global file system (NGF/CFS) mounts:
 
-- Set numeric `Run as User ID` at pod/container level.
-- If `Run as Group ID` is set, also set `Run as User ID`.
+- Set numeric `Run as User` at pod/container level.
+- If `Run as Group ID` is set, also set `Run as User`.
 - Set `Run as Group ID` to the appropriate numeric group ID (`62756` for E3SM)
 - Keep Linux capabilities minimal (`drop: ALL`; only add what is required).
 
@@ -435,8 +463,9 @@ Service Discovery -> Ingresses -> Create
 5. Verify backend deployment health and pod status under **Workloads → Pods**.
 6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
 7. Provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
-8. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
-9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
+8. Create PersistentVolumeClaim `simboard-ingestion-state` for CronJob state.
+9. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
+10. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling
 
