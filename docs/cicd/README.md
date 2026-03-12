@@ -104,6 +104,7 @@ Frontend and backend are released independently using component-scoped tags.
    - Only the matching component workflow will trigger
 
 4. **Deploy to NERSC Spin:**
+   - Backend migrations run automatically in the backend initContainer via `/app/migrate.sh` during rollout
    - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
    - Navigate to **Workloads → Deployments** in the prod namespace
    - Edit the deployment's image tag to the new version (e.g., `1.0.0`)

@@ -262,8 +262,8 @@ Database migrations are executed by a backend Deployment initContainer during ro
 ### Runtime Behavior
 
 - Backend container starts the API directly and does not run migrations at startup.
-- InitContainer runs before backend container start and executes:
-  - `test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head`
+- InitContainer runs before backend container start and executes `/app/migrate.sh`.
+- `migrate.sh` validates `DATABASE_URL`, waits for DB readiness, then runs `alembic upgrade head` by default.
 
 ### Spin Workloads
 
