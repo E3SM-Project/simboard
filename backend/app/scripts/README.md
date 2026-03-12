@@ -12,6 +12,8 @@ Scripts are organized by domain:
 
 ```
 scripts/
+├── ingestion/
+│   └── nersc_archive_ingestor.py
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
@@ -23,6 +25,7 @@ scripts/
 
 ### Domains
 
+- **ingestion/** — Scheduled ingestion runners for HPC/performance archive workflows
 - **db/** — Database migration, seeding, and rollback utilities
 - **users/** — Administrative and service account management
 
@@ -38,6 +41,7 @@ Example:
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
+python -m app.scripts.ingestion.nersc_archive_ingestor --dry-run
 ```
 
 Do not execute scripts directly by file path:
@@ -95,3 +99,35 @@ These scripts are intended for:
 - Environment setup tasks
 
 If operational complexity increases, these scripts may later be consolidated into a structured CLI entrypoint.
+
+---
+
+## NERSC Archive Ingestor
+
+The NERSC archive ingestor scans a bind-mounted performance archive directory,
+detects new parseable execution directories, and calls the SimBoard
+`/api/v1/ingestions/from-path` API for changed cases.
+
+Default archive mount path:
+
+- `/performance_archive`
+
+Example:
+
+```bash
+uv run python -m app.scripts.ingestion.nersc_archive_ingestor \
+  --api-base-url http://backend:8000 \
+  --machine-name perlmutter
+```
+
+Configuration surface (CLI flags map 1:1 to env vars):
+
+- `SIMBOARD_API_BASE_URL` (`--api-base-url`)
+- `SIMBOARD_API_TOKEN` (`--api-token`)
+- `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive`)
+- `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
+- `STATE_PATH` (`--state-path`)
+- `DRY_RUN` (`--dry-run`)
+- `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
+- `MAX_ATTEMPTS` (`--max-attempts`)
+- `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)

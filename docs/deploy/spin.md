@@ -68,7 +68,7 @@ Then mount that volume into the backend container (and only other containers tha
 | Scope                    | Backend container (`backend`)                |
 | Section                  | `Storage`                                    |
 | Volume                   | `performance-archive`                        |
-| Mount path (recommended) | `/global/cfs/cdirs/e3sm/performance_archive` |
+| Mount path (recommended) | `/performance_archive`                       |
 | Read only                | `true` (recommended)                         |
 
 Security context requirements for NERSC global file system (NGF/CFS) mounts:
@@ -79,6 +79,38 @@ Security context requirements for NERSC global file system (NGF/CFS) mounts:
 - Keep Linux capabilities minimal (`drop: ALL`; only add what is required).
 
 Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/services/spin/storage/#nersc-global-file-systems).
+
+### NERSC Archive Ingestion CronJob (`nersc-archive-ingestor`)
+
+Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
+
+| Rancher field                   | Value                                                     |
+| ------------------------------- | --------------------------------------------------------- |
+| Workload type                   | `CronJob`                                                 |
+| Name                            | `nersc-archive-ingestor`                                  |
+| Schedule                        | `*/15 * * * *`                                            |
+| Concurrency policy              | `Forbid`                                                  |
+| Suspend                         | `false`                                                   |
+| Successful jobs history limit   | `3`                                                       |
+| Failed jobs history limit       | `3`                                                       |
+| Job restart policy              | `OnFailure`                                               |
+| Container image                 | `registry.nersc.gov/e3sm/simboard/backend:<tag>`          |
+| Command                         | `python`                                                  |
+| Args                            | `-m app.scripts.ingestion.nersc_archive_ingestor`         |
+| Env: `SIMBOARD_API_BASE_URL`    | `http://backend:8000`                                     |
+| Env: `PERF_ARCHIVE_ROOT`        | `/performance_archive`                                    |
+| Env: `MACHINE_NAME`             | `perlmutter`                                              |
+| Env: `STATE_PATH`               | `/var/lib/simboard-ingestion/state.json`                  |
+| EnvFrom Secret                  | Secret containing `SIMBOARD_API_TOKEN`                    |
+| Archive volume mount            | `performance-archive` -> `/performance_archive` (readOnly) |
+| State volume mount              | writable path for state file (`/var/lib/simboard-ingestion`) |
+
+Notes:
+
+- Keep `SIMBOARD_API_TOKEN` in a dedicated Secret and mount as env var.
+- The state volume must be writable across job runs so deduplication persists.
+- Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
+- Non-zero CronJob exits indicate at least one case ingestion failure in that run.
 
 ### Frontend Deployment (`frontend`)
 
@@ -174,6 +206,10 @@ Create a TLS secret (example: `simboard-tls-cert`) with:
 
 - `tls.crt`: TLS certificate in PEM format
 - `tls.key`: TLS private key in PEM format
+
+Create an ingestion token secret (example: `simboard-ingestion-token`) with:
+
+- `SIMBOARD_API_TOKEN`: service-account bearer token used by `nersc-archive-ingestor`
 
 ## Deploy Order
 
