@@ -6,19 +6,20 @@ This runbook uses the Rancher UI as the primary deployment workflow.
 ## Rancher UI Configs
 
 This document is the source of truth for Spin workload settings managed in Rancher UI.
+If a setting is not listed, leave it at Rancher defaults unless it affects
+security context, networking, storage, secrets, or image pull behavior.
 No workload manifests are versioned under `deploy/spin/`.
 
 ## Prerequisites (Create First)
 
 Create these resources before configuring workloads in Rancher.
 
-| Secret                   | Type                | Required | Example/Allowed Value       | Used By                                           |
-| ------------------------ | ------------------- | -------- | --------------------------- | ------------------------------------------------- |
-| `simboard-backend-env`   | `Opaque`            | Yes      | Backend runtime env vars    | `backend` app container, `migrate` init container |
-| `simboard-db`            | `Opaque`            | Yes      | PostgreSQL runtime env vars | `db` container                                    |
-| `simboard-ingestion-env` | `Opaque`            | Yes      | Ingestor runtime env vars   | `nersc-archive-ingestor` container                |
-| `simboard-tls-cert`      | `kubernetes.io/tls` | Yes      | `tls.crt`, `tls.key` (PEM)  | `lb` ingress                                      |
-| `registry-nersc`         | Image pull secret   | Yes      | NERSC registry credentials  | `backend`, `frontend`, CronJob workloads          |
+| Secret                 | Type                | Required | Example/Allowed Value       | Used By                                           |
+| ---------------------- | ------------------- | -------- | --------------------------- | ------------------------------------------------- |
+| `simboard-backend-env` | `Opaque`            | Yes      | Backend runtime env vars    | `backend` app container, `migrate` init container |
+| `simboard-db`          | `Opaque`            | Yes      | PostgreSQL runtime env vars | `db` container                                    |
+| `simboard-tls-cert`    | `kubernetes.io/tls` | Yes      | `tls.crt`, `tls.key` (PEM)  | `lb` ingress                                      |
+| `registry-nersc`       | Image pull secret   | Yes      | NERSC registry credentials  | `backend`, `frontend`, CronJob workloads          |
 
 Environment variable keys:
 
@@ -56,18 +57,49 @@ Environment variable keys:
 | `PGDATA`            | Yes      | Postgres data dir     | `db`    |
 | `PGTZ`              | Yes      | timezone string       | `db`    |
 
-`simboard-ingestion-env`:
+### Workload 1: Database Deployment (`db`)
 
-| Key                     | Required | Example/Allowed Value                    | Used By                  |
-| ----------------------- | -------- | ---------------------------------------- | ------------------------ |
-| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token             | `nersc-archive-ingestor` |
-| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                    | `nersc-archive-ingestor` |
-| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                   | `nersc-archive-ingestor` |
-| `MACHINE_NAME`          | Yes      | `perlmutter`                             | `nersc-archive-ingestor` |
-| `STATE_PATH`            | Yes      | `/var/lib/simboard-ingestion/state.json` | `nersc-archive-ingestor` |
-| `DRY_RUN`               | No       | `true` or `false`                        | `nersc-archive-ingestor` |
+Workloads -> Deployments -> Create (top-right)
 
-### Backend Deployment (`backend`)
+#### 1. Top-level configuration
+
+| Rancher field | Value      |
+| ------------- | ---------- |
+| Namespace     | `simboard` |
+| Name          | `db`       |
+| Replicas      | `1`        |
+
+#### 2. Container tab (`db`)
+
+`General`:
+
+| Rancher field         | Value                                 |
+| --------------------- | ------------------------------------- |
+| Container Name        | `db`                                  |
+| Container image       | `postgres:17`                         |
+| Pull policy           | `Always`                              |
+| Environment Variables | Type: `Secret`, Secret: `simboard-db` |
+
+`General -> Networking`:
+
+| Rancher field          | Value       |
+| ---------------------- | ----------- |
+| Service type           | `ClusterIP` |
+| Name                   | `db`        |
+| Private Container Port | `5432`      |
+| Protocol               | `TCP`       |
+
+`Security Context`:
+
+| Rancher field     | Value                                        |
+| ----------------- | -------------------------------------------- |
+| Run as User ID    | Required: set numeric NERSC UID (check Iris) |
+| Add Capabilities  | `CHOWN,DAC_OVERRIDE,FOWNER,SETGID,SETUID`    |
+| Drop Capabilities | `ALL`                                        |
+
+### Workload 2: Backend Deployment (`backend`)
+
+Workloads -> Deployments -> Create (top-right)
 
 #### Top-level configuration
 
@@ -157,11 +189,68 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | privileged               | `false`                         |
 | capabilities             | add `DAC_OVERRIDE`, drop `ALL`  |
 
-### NERSC Archive Ingestion CronJob (`nersc-archive-ingestor`)
+### Workload 3: NERSC Archive Ingestion CronJob (`nersc-archive-ingestor`)
 
 Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 
-#### 1. CronJob tab
+Prerequisites for this section:
+
+- Backend service must be up and reachable from within the cluster (`http://backend:8000`).
+- Ingestion service account token must be provisioned (see setup step 1 below).
+
+#### Setup Procedure (New Ingestion Script)
+
+1. **Provision ingestion service-account token**
+   - Run this from your local machine (recommended), or any trusted environment
+     with `uv` and network access to the target SimBoard API base URL.
+   - Execute:
+
+     ```bash
+     cd backend
+     uv run python -m app.scripts.users.provision_service_account \
+       --service-name nersc-archive-ingestor \
+       --base-url <simboard-api-base-url> \
+       --admin-email <admin-email> \
+       --expires-in-days 365
+     ```
+
+   - Example (dev environment): `--base-url https://simboard-dev-api.e3sm.org`
+
+2. **Create/update secret `simboard-ingestion-env`**
+   - In Rancher, open target namespace -> **Storage** -> **Secrets** -> **Create**.
+   - Name: `simboard-ingestion-env`
+   - Secret type: `Opaque`
+   - Populate keys from the table below.
+
+Key table for step 2 (`simboard-ingestion-env`):
+
+| Key                     | Required | Example/Allowed Value                                      | Used By                  |
+| ----------------------- | -------- | ---------------------------------------------------------- | ------------------------ |
+| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 1) | `nersc-archive-ingestor` |
+| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-archive-ingestor` |
+| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-archive-ingestor` |
+| `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-archive-ingestor` |
+| `STATE_PATH`            | Yes      | `/var/lib/simboard-ingestion/state.json`                   | `nersc-archive-ingestor` |
+| `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-archive-ingestor` |
+
+3. **Create/update CronJob `nersc-archive-ingestor`**
+   - Use the values in the **Configuration Reference** section below.
+   - Configure secret-backed environment variables from `simboard-ingestion-env`.
+
+4. **Validate once with dry run**
+   - Set `DRY_RUN=true` in `simboard-ingestion-env`.
+   - Trigger a one-off job from the CronJob.
+   - Confirm logs include `scan_completed` and candidate discovery.
+   - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
+
+5. **Verify steady-state behavior**
+   - Confirm the CronJob runs every 15 minutes.
+   - Confirm `state.json` is written/updated and unchanged cases are not re-ingested.
+   - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
+
+#### Configuration Reference
+
+##### 1. CronJob tab
 
 `Top-level configuration`:
 
@@ -174,7 +263,7 @@ Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 | Successful jobs history limit | `3`                                            |
 | Failed jobs history limit     | `3`                                            |
 
-#### 2. Pod tab
+##### 2. Pod tab
 
 `Security Context`:
 
@@ -194,7 +283,7 @@ Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 | The Path on the Node must be | `An existing directory`                                |
 | State volume                 | Writable volume for `/var/lib/simboard-ingestion`      |
 
-#### 3. Container tab (`nersc-archive-ingestor`)
+##### 3. Container tab (`nersc-archive-ingestor`)
 
 `General`:
 
@@ -231,56 +320,6 @@ Notes:
 - Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
 - Non-zero CronJob exits indicate at least one case ingestion failure in that run.
 
-#### Setup Procedure (New Ingestion Script)
-
-1. Provision a service account token for ingestion.
-   Run this from your local machine (recommended), or any trusted environment
-   with `uv` and network access to the target SimBoard API base URL:
-
-   ```bash
-   cd backend
-   uv run python -m app.scripts.users.provision_service_account \
-     --service-name nersc-archive-ingestor \
-     --base-url <simboard-api-base-url> \
-     --admin-email <admin-email> \
-     --expires-in-days 365
-   ```
-
-   Example (dev environment):
-   `--base-url https://simboard-dev-api.e3sm.org`
-
-2. Create/update an Opaque Spin secret for ingestor env vars in the Rancher UI:
-   Open Rancher and select the target namespace.
-   Go to **Storage** -> **Secrets**.
-   Click **Create** and set name to `simboard-ingestion-env`.
-   Set secret type to **Opaque**.
-   Add these keys:
-   `SIMBOARD_API_TOKEN=<TOKEN>`
-   `SIMBOARD_API_BASE_URL=http://backend:8000`
-   `PERF_ARCHIVE_ROOT=/performance_archive`
-   `MACHINE_NAME=perlmutter`
-   `STATE_PATH=/var/lib/simboard-ingestion/state.json`
-   `DRY_RUN=true|false` (optional)
-   Save the secret.
-
-3. Create/update the `nersc-archive-ingestor` CronJob in Rancher using the
-   configuration values listed in the table above, including secret-backed
-   environment variables from `simboard-ingestion-env`.
-
-4. Configure storage mounts for the CronJob pod:
-   Mount the existing `performance-archive` bind mount read-only at `/performance_archive`.
-   Mount a writable volume at `/var/lib/simboard-ingestion` for persistent state.
-
-5. Validate once with a dry run before enabling schedule:
-   Add `DRY_RUN=true` to the `simboard-ingestion-env` secret, run a one-off job
-   from CronJob, and confirm logs show `scan_completed` and candidate discovery.
-   Remove `DRY_RUN` (or set to `false`) in the secret after successful validation.
-
-6. Verify operational behavior:
-   Confirm job runs every 15 minutes.
-   Confirm successful runs write/update `state.json` and do not repeatedly ingest unchanged cases.
-   Confirm failures are visible in CronJob failed runs and `case_ingestion_failed` log events.
-
 ### Mounting NERSC E3SM Performance Archive
 
 Canonical values for all workloads that mount the E3SM performance archive:
@@ -303,7 +342,9 @@ Security context requirements for NERSC global file system (NGF/CFS) mounts:
 
 Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/services/spin/storage/#nersc-global-file-systems).
 
-### Frontend Deployment (`frontend`)
+### Workload 4: Frontend Deployment (`frontend`)
+
+Workloads -> Deployments -> Create (top-right)
 
 #### 1. Top-level configuration
 
@@ -341,43 +382,7 @@ Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/
 | Add Capabilities  | `CHOWN,SETGID,SETUID,NET_BIND_SERVICE` |
 | Drop Capabilities | `ALL`                                  |
 
-### DB Deployment (`db`)
-
-#### 1. Top-level configuration
-
-| Rancher field | Value      |
-| ------------- | ---------- |
-| Namespace     | `simboard` |
-| Name          | `db`       |
-| Replicas      | `1`        |
-
-#### 2. Container tab (`db`)
-
-`General`:
-
-| Rancher field         | Value                                 |
-| --------------------- | ------------------------------------- |
-| Container Name        | `db`                                  |
-| Container image       | `postgres:17`                         |
-| Pull policy           | `Always`                              |
-| Environment Variables | Type: `Secret`, Secret: `simboard-db` |
-
-`General -> Networking`:
-
-| Rancher field          | Value       |
-| ---------------------- | ----------- |
-| Service type           | `ClusterIP` |
-| Name                   | `db`        |
-| Private Container Port | `5432`      |
-| Protocol               | `TCP`       |
-
-`Security Context`:
-
-| Rancher field              | Value                                                                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Container security context | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `CHOWN,DAC_OVERRIDE,FOWNER,SETGID,SETUID`, drop `ALL` |
-
-### TLS Secret (`simboard-tls-cert`)
+### Workload 5: TLS Secret (`simboard-tls-cert`)
 
 #### General tab
 
@@ -394,7 +399,9 @@ Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/
 | Data key      | `tls.crt` (certificate PEM) |
 | Data key      | `tls.key` (private key PEM) |
 
-### Ingress (`lb`)
+### Workload 6: Ingress (`lb`)
+
+Service Discovery -> Ingresses -> Create
 
 #### General tab
 
@@ -426,9 +433,10 @@ Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/
 3. Update/redeploy backend deployment with the target backend image tag.
 4. Watch backend pod init container logs (`migrate`) in Rancher to confirm migration success.
 5. Verify backend deployment health and pod status under **Workloads → Pods**.
-6. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
-
-Frontend deploys independently from backend migration initContainer. For frontend releases, update/redeploy the `frontend` deployment in **Workloads → Deployments** with the target frontend image tag.
+6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
+7. Provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
+8. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
+9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling
 
