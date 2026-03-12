@@ -95,19 +95,17 @@ Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 | Failed jobs history limit       | `3`                                                       |
 | Job restart policy              | `OnFailure`                                               |
 | Container image                 | `registry.nersc.gov/e3sm/simboard/backend:<tag>`          |
+| Image pull policy               | `IfNotPresent`                                            |
 | Command                         | `python`                                                  |
 | Args                            | `-m app.scripts.ingestion.nersc_archive_ingestor`         |
-| Env: `SIMBOARD_API_BASE_URL`    | `http://backend:8000`                                     |
-| Env: `PERF_ARCHIVE_ROOT`        | `/performance_archive`                                    |
-| Env: `MACHINE_NAME`             | `perlmutter`                                              |
-| Env: `STATE_PATH`               | `/var/lib/simboard-ingestion/state.json`                  |
-| EnvFrom Secret                  | Secret containing `SIMBOARD_API_TOKEN`                    |
+| Container security context      | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `NET_BIND_SERVICE`, drop `ALL` |
+| EnvFrom Secret                  | `simboard-ingestion-env` (Opaque secret containing ingestor env vars) |
 | Archive volume mount            | `performance-archive` -> `/performance_archive` (readOnly) |
 | State volume mount              | writable path for state file (`/var/lib/simboard-ingestion`) |
 
 Notes:
 
-- Keep `SIMBOARD_API_TOKEN` in a dedicated Secret and mount as env var.
+- Manage ingestion configuration via one Opaque secret (`simboard-ingestion-env`) and mount it with `envFrom`.
 - The state volume must be writable across job runs so deduplication persists.
 - Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
 - Non-zero CronJob exits indicate at least one case ingestion failure in that run.
@@ -127,23 +125,31 @@ Notes:
      --expires-in-days 365
    ```
 
-2. Create/update a Spin secret containing the token in the Rancher UI:
+2. Create/update an Opaque Spin secret for ingestor env vars in the Rancher UI:
    Open Rancher and select the target namespace.
    Go to **Storage** -> **Secrets**.
-   Click **Create** and set name to `simboard-ingestion-token`.
-   Add key `SIMBOARD_API_TOKEN` with value `<TOKEN>`.
+   Click **Create** and set name to `simboard-ingestion-env`.
+   Set secret type to **Opaque**.
+   Add these keys:
+   `SIMBOARD_API_TOKEN=<TOKEN>`
+   `SIMBOARD_API_BASE_URL=http://backend:8000`
+   `PERF_ARCHIVE_ROOT=/performance_archive`
+   `MACHINE_NAME=perlmutter`
+   `STATE_PATH=/var/lib/simboard-ingestion/state.json`
    Save the secret.
 
 3. Create/update the `nersc-archive-ingestor` CronJob in Rancher using the
-   configuration values listed in the table above.
+   configuration values listed in the table above, including `envFrom` with
+   `simboard-ingestion-env`.
 
 4. Configure storage mounts for the CronJob pod:
    Mount the existing `performance-archive` bind mount read-only at `/performance_archive`.
    Mount a writable volume at `/var/lib/simboard-ingestion` for persistent state.
 
 5. Validate once with a dry run before enabling schedule:
-   Set `DRY_RUN=true`, run a one-off job from CronJob, and confirm logs show `scan_completed` and candidate discovery.
-   Remove `DRY_RUN` (or set to `false`) after successful validation.
+   Add `DRY_RUN=true` to the `simboard-ingestion-env` secret, run a one-off job
+   from CronJob, and confirm logs show `scan_completed` and candidate discovery.
+   Remove `DRY_RUN` (or set to `false`) in the secret after successful validation.
 
 6. Verify operational behavior:
    Confirm job runs every 15 minutes.
@@ -245,9 +251,15 @@ Create a TLS secret (example: `simboard-tls-cert`) with:
 - `tls.crt`: TLS certificate in PEM format
 - `tls.key`: TLS private key in PEM format
 
-Create an ingestion token secret (example: `simboard-ingestion-token`) with:
+Create an ingestion env secret (example: `simboard-ingestion-env`) as type
+`Opaque` with:
 
 - `SIMBOARD_API_TOKEN`: service-account bearer token used by `nersc-archive-ingestor`
+- `SIMBOARD_API_BASE_URL`: in-cluster backend URL (`http://backend:8000`)
+- `PERF_ARCHIVE_ROOT`: bind mount path (`/performance_archive`)
+- `MACHINE_NAME`: ingestion machine name (`perlmutter`)
+- `STATE_PATH`: writable state file path (`/var/lib/simboard-ingestion/state.json`)
+- `DRY_RUN` (optional): set to `true` for discovery-only validation runs
 
 ## Deploy Order
 
