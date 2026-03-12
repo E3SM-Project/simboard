@@ -197,44 +197,74 @@ Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 Prerequisites for this section:
 
 - Backend service must be up and reachable from within the cluster (`http://backend:8000`).
-- Ingestion service account token must be provisioned (see setup step 1 below).
+- At least one admin account must exist (see setup step 1 below).
+- Ingestion service account token must be provisioned (see setup step 2 below).
 
 #### Setup Procedure (New Ingestion Script)
 
-1. **Provision ingestion service-account token**
-   - Run this from your local machine (recommended), or any trusted environment
-     with `uv` and network access to the target SimBoard API base URL.
-   - Execute:
+1. **Create admin account (if one does not already exist)**
+   - This script must run in the deployed backend environment (so it has the correct DB connection and app settings).
+   - In Rancher UI, open target namespace -> **Workloads** -> **Pods** -> backend pod -> **Execute Shell** (`backend` container).
+   - Run:
+
+     ```bash
+     python -m app.scripts.users.create_admin_account
+     ```
+
+   - Enter admin email/password when prompted.
+   - Use this admin account in step 2 for service-account provisioning.
+
+2. **Provision ingestion service-account token**
+   - Service accounts are required when non-interactive systems (for example, this CronJob) authenticate to the SimBoard API.
+   - Run from your local machine (recommended), or any trusted environment with `uv` and network access to the target SimBoard API base URL.
+   - Execute (example for dev):
 
      ```bash
      cd backend
      uv run python -m app.scripts.users.provision_service_account \
        --service-name nersc-archive-ingestor \
-       --base-url <simboard-api-base-url> \
-       --admin-email <admin-email> \
+       --base-url https://simboard-dev-api.e3sm.org \
+       --admin-email admin@simboard.org \
        --expires-in-days 365
      ```
 
-   - Example (dev environment): `--base-url https://simboard-dev-api.e3sm.org`
+   - Enter admin password when prompted.
+   - Copy the generated token immediately; it is shown once.
+   - Store and rotate the token per your org policy.
+   - Use this token as `SIMBOARD_API_TOKEN` in `simboard-ingestion-env` (step 3).
 
-2. **Create/update secret `simboard-ingestion-env`**
+   Optional: quick token validation call
+
+   ```bash
+   export SIMBOARD_API_TOKEN=<TOKEN>
+   curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestions/from-path \
+     -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+           "machine_name": "perlmutter",
+           "hpc_username": "<your_hpc_username>"
+         }'
+   ```
+
+3. **Create/update secret `simboard-ingestion-env`**
    - In Rancher, open target namespace -> **Storage** -> **Secrets** -> **Create**.
    - Name: `simboard-ingestion-env`
    - Secret type: `Opaque`
    - Populate keys from the table below.
 
-Key table for step 2 (`simboard-ingestion-env`):
+Key table for step 3 (`simboard-ingestion-env`):
 
 | Key                     | Required | Example/Allowed Value                                      | Used By                  |
 | ----------------------- | -------- | ---------------------------------------------------------- | ------------------------ |
-| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 1) | `nersc-archive-ingestor` |
+| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 2) | `nersc-archive-ingestor` |
 | `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-archive-ingestor` |
 | `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-archive-ingestor` |
 | `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-archive-ingestor` |
 | `STATE_PATH`            | Yes      | `/var/lib/simboard-ingestion/state.json`                   | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-archive-ingestor` |
 
-3. **Create PersistentVolumeClaim (PVC) for ingestion state**
+4. **Create PersistentVolumeClaim (PVC) for ingestion state**
    - In Rancher, open target namespace -> **Storage** -> **PersistentVolumeClaims** -> **Create**.
    - Volume Claim settings:
      - Name: `simboard-ingestion-state`
@@ -244,18 +274,18 @@ Key table for step 2 (`simboard-ingestion-env`):
    - Customize:
      - Access Modes: Single Node Read/Write
 
-4. **Create/update CronJob `nersc-archive-ingestor`**
+5. **Create/update CronJob `nersc-archive-ingestor`**
    - Use the values in the **Configuration Reference** section below.
    - Configure secret-backed environment variables from `simboard-ingestion-env`.
    - Configure **Pod -> Storage** and **Container -> Storage** exactly as shown in the tables below (including PVC claim `simboard-ingestion-state` and state mount path).
 
-5. **Validate once with dry run**
+6. **Validate once with dry run**
    - Set `DRY_RUN=true` in `simboard-ingestion-env`.
    - Trigger a one-off job from the CronJob.
    - Confirm logs include `scan_completed` and candidate discovery.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
-6. **Verify steady-state behavior**
+7. **Verify steady-state behavior**
    - Confirm the CronJob runs every 15 minutes.
    - Confirm `state.json` is written/updated and unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
@@ -462,7 +492,7 @@ Service Discovery -> Ingresses -> Create
 4. Watch backend pod init container logs (`migrate`) in Rancher to confirm migration success.
 5. Verify backend deployment health and pod status under **Workloads → Pods**.
 6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
-7. Provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
+7. Create/confirm an admin account (Rancher pod shell), then provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
 8. Create PersistentVolumeClaim `simboard-ingestion-state` for CronJob state.
 9. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
 10. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
