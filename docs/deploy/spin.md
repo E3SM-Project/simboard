@@ -19,9 +19,9 @@ No workload manifests are versioned under `deploy/spin/`.
 | Image pull secret          | `registry-nersc`                                                                                      |
 | Init container name        | `migrate`                                                                                             |
 | Init container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                                      |
-| Init container command     | `sh`                                                                                                  |
-| Init container args        | `-c`                                                                                                  |
-| Init container script      | `test -n "$DATABASE_URL" \|\| { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head` |
+| Init container command     | `/app/migrate.sh`                                                                                     |
+| Init container args        | leave empty                                                                                           |
+| Init container script      | handled by `/app/migrate.sh` (checks `DATABASE_URL`, waits for DB, runs `alembic upgrade head`)     |
 | Init envFrom secret        | `simboard-backend-env`                                                                                |
 | App container name         | `backend`                                                                                             |
 | App container image        | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                                      |
@@ -35,9 +35,8 @@ No workload manifests are versioned under `deploy/spin/`.
 Canonical init container command/args to copy into Rancher:
 
 ```sh
-Command: sh
-Args[0]: -c
-Args[1]: test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head
+Command: /app/migrate.sh
+Args: leave empty
 ```
 
 ### Backend Service (`backend`)
