@@ -100,7 +100,8 @@ Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
 | Args                            | `-m app.scripts.ingestion.nersc_archive_ingestor`         |
 | Container security context      | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `NET_BIND_SERVICE`, drop `ALL` |
 | EnvFrom Secret                  | `simboard-ingestion-env` (Opaque secret containing ingestor env vars) |
-| Archive volume mount            | `performance-archive` -> `/performance_archive` (readOnly) |
+| Archive path on node (CFS)      | `/global/cfs/cdirs/e3sm/performance_archive`              |
+| Archive volume mount            | `performance-archive` bind-mount -> `/performance_archive` (readOnly) |
 | State volume mount              | writable path for state file (`/var/lib/simboard-ingestion`) |
 
 Notes:
