@@ -58,6 +58,8 @@ Environment variable keys:
 | `PGDATA`            | Yes      | Postgres data dir     | `db`    |
 | `PGTZ`              | Yes      | timezone string       | `db`    |
 
+## Workload Configurations
+
 ### Workload 1: Database Deployment (`db`)
 
 Workloads -> Deployments -> Create (top-right)
@@ -361,15 +363,15 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `Storage`:
 
-| Rancher field      | Value                                                     |
-| ------------------ | --------------------------------------------------------- |
-| Archive volume     | `performance-archive`                                     |
-| Archive mount path | `/performance_archive`                                    |
-| Archive read only  | `true` (recommended)                                      |
-| State volume       | `ingestion-state`                                         |
-| State source claim | `simboard-ingestion-state` (through Pod volume mapping)   |
-| State mount path   | `/var/lib/simboard-ingestion`                             |
-| State read only    | `false` (required; must be writable across runs)          |
+| Rancher field      | Value                                                   |
+| ------------------ | ------------------------------------------------------- |
+| Archive volume     | `performance-archive`                                   |
+| Archive mount path | `/performance_archive`                                  |
+| Archive read only  | `true` (recommended)                                    |
+| State volume       | `ingestion-state`                                       |
+| State source claim | `simboard-ingestion-state` (through Pod volume mapping) |
+| State mount path   | `/var/lib/simboard-ingestion`                           |
+| State read only    | `false` (required; must be writable across runs)        |
 
 Notes:
 
@@ -440,7 +442,9 @@ Workloads -> Deployments -> Create (top-right)
 | Add Capabilities  | `CHOWN,SETGID,SETUID,NET_BIND_SERVICE` |
 | Drop Capabilities | `ALL`                                  |
 
-### Workload 5: TLS Secret (`simboard-tls-cert`)
+## Additional Configurations
+
+### TLS Secret (`simboard-tls-cert`)
 
 #### General tab
 
@@ -457,7 +461,7 @@ Workloads -> Deployments -> Create (top-right)
 | Data key      | `tls.crt` (certificate PEM) |
 | Data key      | `tls.key` (private key PEM) |
 
-### Workload 6: Ingress (`lb`)
+### Ingress (`lb`)
 
 Service Discovery -> Ingresses -> Create
 
