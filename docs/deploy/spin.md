@@ -210,6 +210,7 @@ Prerequisites for this section:
    - Run:
 
      ```bash
+     cd /app
      python -m app.scripts.users.create_admin_account
      ```
 
@@ -218,14 +219,14 @@ Prerequisites for this section:
 
 2. **Provision ingestion service-account token**
    - Service accounts are required when non-interactive systems (for example, this CronJob) authenticate to the SimBoard API.
-   - Run from your local machine (recommended), or any trusted environment with `uv` and network access to the target SimBoard API base URL.
-   - Execute (example for dev):
+   - Run this in the same backend pod shell opened in step 1 (no `kubectl` required).
+   - Execute:
 
      ```bash
-     cd backend
-     uv run python -m app.scripts.users.provision_service_account \
+     cd /app
+     python -m app.scripts.users.provision_service_account \
        --service-name nersc-archive-ingestor \
-       --base-url https://simboard-dev-api.e3sm.org \
+       --base-url http://backend:8000 \
        --admin-email admin@simboard.org \
        --expires-in-days 365
      ```
@@ -239,7 +240,7 @@ Prerequisites for this section:
 
    ```bash
    export SIMBOARD_API_TOKEN=<TOKEN>
-   curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestions/from-path \
+   curl -X POST http://backend:8000/api/v1/ingestions/from-path \
      -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{
