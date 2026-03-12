@@ -112,6 +112,44 @@ Notes:
 - Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
 - Non-zero CronJob exits indicate at least one case ingestion failure in that run.
 
+#### Setup Procedure (New Ingestion Script)
+
+1. Provision a service account token for ingestion.
+   Run this from your local machine (recommended), or any trusted environment
+   that can reach `https://simboard-dev-api.e3sm.org` and has `uv` available:
+
+   ```bash
+   cd backend
+   uv run python -m app.scripts.users.provision_service_account \
+     --service-name nersc-archive-ingestor \
+     --base-url https://simboard-dev-api.e3sm.org \
+     --admin-email admin@simboard.org \
+     --expires-in-days 365
+   ```
+
+2. Create/update a Spin secret containing the token in the Rancher UI:
+   Open Rancher and select the target namespace.
+   Go to **Storage** -> **Secrets**.
+   Click **Create** and set name to `simboard-ingestion-token`.
+   Add key `SIMBOARD_API_TOKEN` with value `<TOKEN>`.
+   Save the secret.
+
+3. Create/update the `nersc-archive-ingestor` CronJob in Rancher using the
+   configuration values listed in the table above.
+
+4. Configure storage mounts for the CronJob pod:
+   Mount the existing `performance-archive` bind mount read-only at `/performance_archive`.
+   Mount a writable volume at `/var/lib/simboard-ingestion` for persistent state.
+
+5. Validate once with a dry run before enabling schedule:
+   Set `DRY_RUN=true`, run a one-off job from CronJob, and confirm logs show `scan_completed` and candidate discovery.
+   Remove `DRY_RUN` (or set to `false`) after successful validation.
+
+6. Verify operational behavior:
+   Confirm job runs every 15 minutes.
+   Confirm successful runs write/update `state.json` and do not repeatedly ingest unchanged cases.
+   Confirm failures are visible in CronJob failed runs and `case_ingestion_failed` log events.
+
 ### Frontend Deployment (`frontend`)
 
 | Rancher field              | Value                                                                                                                     |
