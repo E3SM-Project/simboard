@@ -1235,7 +1235,7 @@ def _log_startup_configuration(config: IngestorConfig, endpoint_url: str) -> Non
 
 
 def _log_summary_table(title: str, rows: list[tuple[str, Any]]) -> None:
-    """Emit an ASCII summary table as multiple log lines.
+    """Emit a summary table as one log line.
 
     Parameters
     ----------
@@ -1244,22 +1244,15 @@ def _log_summary_table(title: str, rows: list[tuple[str, Any]]) -> None:
     rows : list[tuple[str, Any]]
         Ordered list of ``(metric, value)`` summary rows.
     """
-    metric_width = max([len("metric"), *(len(metric) for metric, _ in rows)])
-    value_strings = [_render_log_value(value) for _, value in rows]
-    value_width = max([len("value"), *(len(value) for value in value_strings)])
-    border = f"+-{'-' * metric_width}-+-{'-' * value_width}-+"
-
-    logger.info("summary_table[%s]:", title)
-    logger.info(border)
-    logger.info(f"| {'metric'.ljust(metric_width)} | {'value'.ljust(value_width)} |")
-    logger.info(border)
-
-    for (metric, _), value_string in zip(rows, value_strings, strict=True):
-        logger.info(
-            f"| {metric.ljust(metric_width)} | {value_string.ljust(value_width)} |"
-        )
-
-    logger.info(border)
+    row_pairs = [f"{metric}={_render_log_value(value)}" for metric, value in rows]
+    _log_event(
+        "summary_table",
+        {
+            "title": title,
+            "rows": " | ".join(row_pairs),
+            "row_count": len(rows),
+        },
+    )
 
 
 def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
