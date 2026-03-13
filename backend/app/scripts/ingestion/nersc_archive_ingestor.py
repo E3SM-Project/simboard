@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -32,6 +33,7 @@ from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 
 logger = _setup_custom_logger(__name__)
+logger.setLevel(logging.INFO)
 
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
 TRANSIENT_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -429,19 +431,24 @@ def run_ingestor(
         Process exit code (``0`` success, ``1`` failure).
     """
     if not config.archive_root.is_dir():
+        endpoint_url = (
+            f"{_normalized_api_base_url(config.api_base_url)}/ingestions/from-path"
+        )
+        _log_startup_configuration(config, endpoint_url=endpoint_url)
         _log_event(
             "archive_root_missing",
             archive_root=str(config.archive_root),
         )
         return 1
 
-    if not config.dry_run and not config.api_token:
-        _log_event("configuration_error", error="SIMBOARD_API_TOKEN is required")
-        return 1
-
     endpoint_url = (
         f"{_normalized_api_base_url(config.api_base_url)}/ingestions/from-path"
     )
+    _log_startup_configuration(config, endpoint_url=endpoint_url)
+
+    if not config.dry_run and not config.api_token:
+        _log_event("configuration_error", error="SIMBOARD_API_TOKEN is required")
+        return 1
 
     state = _load_state(config.state_path)
     grouped_executions = discover_case_executions(
@@ -569,6 +576,31 @@ def _log_event(event: str, **fields: Any) -> None:
     """
     payload = {"ts": _utc_now_iso(), "event": event, **fields}
     logger.info(json.dumps(payload, sort_keys=True))
+
+
+def _log_startup_configuration(config: IngestorConfig, *, endpoint_url: str) -> None:
+    """Log sanitized runtime configuration for one ingestor run.
+
+    Parameters
+    ----------
+    config : IngestorConfig
+        Runtime configuration values.
+    endpoint_url : str
+        Fully qualified ingestion endpoint URL.
+    """
+    _log_event(
+        "startup_configuration",
+        api_base_url=config.api_base_url,
+        endpoint_url=endpoint_url,
+        archive_root=str(config.archive_root),
+        machine_name=config.machine_name,
+        state_path=str(config.state_path),
+        dry_run=config.dry_run,
+        max_cases_per_run=config.max_cases_per_run,
+        max_attempts=config.max_attempts,
+        request_timeout_seconds=config.request_timeout_seconds,
+        has_api_token=bool(config.api_token),
+    )
 
 
 def _parse_bool(value: str | None, *, default: bool = False) -> bool:
