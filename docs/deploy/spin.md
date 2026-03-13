@@ -137,12 +137,12 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 `General`:
 
-| Rancher field         | Value                                            |
-| --------------------- | ------------------------------------------------ |
-| Container Name        | `backend`, Standard Container                    |
-| Container Image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
-| Pull policy           | `Always`                                         |
-| Environment Variables | Type: Secret, Secret: `simboard-backend-env`     |
+| Rancher field         | Value                                                  |
+| --------------------- | ------------------------------------------------------ |
+| Container Name        | `backend`, Standard Container                          |
+| Container Image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
+| Environment Variables | Type: Secret, Secret: `simboard-backend-env`           |
 
 `General -> Networking`:
 
@@ -297,12 +297,11 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `Top-level configuration`:
 
-| Rancher field     | Value                    |
-| ----------------- | ------------------------ |
-| Namespace         | `simboard`               |
-| Name              | `nersc-archive-ingestor` |
-| Schedule          | `*/15 * * * *`           |
-| Image pull secret | `registry-nersc`         |
+| Rancher field | Value                    |
+| ------------- | ------------------------ |
+| Namespace     | `simboard`               |
+| Name          | `nersc-archive-ingestor` |
+| Schedule      | `*/15 * * * *`           |
 
 ##### 1. CronJob tab
 
@@ -344,14 +343,15 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `General`:
 
-| Rancher field         | Value                                             |
-| --------------------- | ------------------------------------------------- |
-| Container Name        | `nersc-archive-ingestor`                          |
-| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`  |
-| Image pull policy     | `IfNotPresent`                                    |
-| Command               | `python`                                          |
-| Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor` |
-| Environment Variables | Type: Secret, Secret: `simboard-ingestion-env`    |
+| Rancher field         | Value                                                  |
+| --------------------- | ------------------------------------------------------ |
+| Container Name        | `nersc-archive-ingestor`                               |
+| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
+| Image pull secret     | `registry-nersc`                                       |
+| Command               | `python`                                               |
+| Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor`      |
+| Environment Variables | Type: Secret, Secret: `simboard-ingestion-env`         |
 
 `Security Context`:
 
