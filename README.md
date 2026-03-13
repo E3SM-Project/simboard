@@ -24,9 +24,8 @@ AI-assisted capabilities are being explored to supplement these features, includ
 - [Development Notes](#development-notes)
   - [Pre-commit Hooks](#pre-commit-hooks)
 - [Staging and Production Environments](#staging-and-production-environments)
+  - [Deployment Guide (CI/CD)](#deployment-guide-cicd)
   - [NERSC Spin Runbook (Rancher UI)](#nersc-spin-runbook-rancher-ui)
-  - [Manual Builds (for testing)](#manual-builds-for-testing)
-  - [Helpful Docker Commands](#helpful-docker-commands)
 - [License](#license)
 
 ---
@@ -292,23 +291,11 @@ Use only when absolutely necessary.
 
 ## Staging and Production Environments
 
-### Quick Links
+### Deployment Guide (CI/CD)
 
-- **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
-- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
-- **Full Deployment Guide:** [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
+Complete CI/CD pipelines, release process, rollback guidance, troubleshooting, and manual image build instructions are documented in:
 
-### Deployment & CI/CD
-
-SimBoard uses **automated CI/CD pipelines** to build and deploy containers to NERSC Spin.
-
-### Automated Builds (GitHub Actions)
-
-- **Development Backend:** Automatically built and pushed to NERSC registry on every push to `main`
-- **Development Frontend:** Automatically built and pushed to NERSC registry on every push to `main`
-- **Production Backend & Frontend:** Automatically built and pushed on GitHub Releases or version tags (e.g., `v0.3.0`)
-
-**Registry:** `registry.nersc.gov/e3sm/simboard/`
+- [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ### NERSC Spin Runbook (Rancher UI)
 
@@ -321,50 +308,6 @@ Use this runbook for:
 - Rancher workload setup (`db`, `backend`, `frontend`, ingress, TLS, CronJob)
 - Ingestion service-account provisioning and `simboard-ingestion-env` secret setup
 - NERSC archive mount and ingestion PVC configuration
-
-### Manual Builds (for testing)
-
-If you need to manually build and push images:
-
-**Login to registry:**
-
-```bash
-docker login registry.nersc.gov
-```
-
-**Backend:**
-
-```bash
-cd backend
-docker buildx build \
-  --platform=linux/amd64,linux/arm64 \
-  --build-arg ENV=production \
-  -t registry.nersc.gov/e3sm/simboard/backend:manual \
-  --push \
-  .
-```
-
-**Frontend:**
-
-```bash
-cd frontend
-docker buildx build \
-  --platform=linux/amd64,linux/arm64 \
-  --build-arg VITE_API_BASE_URL=https://simboard-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
-  --push \
-  .
-```
-
-### Helpful Docker Commands
-
-```bash
-docker container ls      # List running containers
-docker image ls          # List local images
-docker tag <src> <dest>  # Tag an image
-```
-
-For complete deployment instructions, release process, and troubleshooting, see [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
 ---
 

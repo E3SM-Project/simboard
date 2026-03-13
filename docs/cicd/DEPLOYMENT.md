@@ -5,6 +5,7 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 ## Table of Contents
 
 - [Overview](#overview)
+- [Quick Links](#quick-links)
 - [Environment Architecture](#environment-architecture)
 - [CI/CD Workflows](#cicd-workflows)
 - [GitHub Secrets Setup](#github-secrets-setup)
@@ -29,6 +30,13 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 - ✅ Semantic versioning for production
 - ✅ Docker Buildx with layer caching
 - ✅ Separation via image tags and K8s namespaces
+
+## Quick Links
+
+- **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
+- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
+- **GitHub Actions:** <https://github.com/E3SM-Project/simboard/actions>
+- **NERSC Spin Runbook (Rancher UI):** [docs/deploy/spin.md](../deploy/spin.md)
 
 ## Environment Architecture
 
