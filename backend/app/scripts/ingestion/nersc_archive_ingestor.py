@@ -45,6 +45,7 @@ DEFAULT_MACHINE_NAME = "perlmutter"
 DEFAULT_STATE_PATH = "/tmp/simboard-ingestion/state.json"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
+MAX_SKIP_DETAIL_LOGS = 50
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,8 @@ class IngestionRequestError(Exception):
 def discover_case_executions(
     archive_root: Path,
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
+    *,
+    stats: dict[str, int] | None = None,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -109,6 +112,10 @@ def discover_case_executions(
     metadata_locator : Callable[[str], object], optional
         Callable used to validate that an execution directory contains
         the required metadata files.
+    stats : dict[str, int] | None, optional
+        Mutable counter dictionary populated with discovery metrics:
+        ``execution_dirs_scanned``, ``execution_dirs_accepted``,
+        ``skipped_incomplete``, and ``skipped_invalid``.
 
     Returns
     -------
@@ -116,36 +123,134 @@ def discover_case_executions(
         Mapping of absolute case directory paths to sorted execution IDs.
     """
     grouped: dict[str, set[str]] = {}
+    skip_log_state = {"logged": 0, "suppressed": 0}
+    if stats is not None:
+        stats.setdefault("execution_dirs_scanned", 0)
+        stats.setdefault("execution_dirs_accepted", 0)
+        stats.setdefault("skipped_incomplete", 0)
+        stats.setdefault("skipped_invalid", 0)
 
     for dirpath, dirnames, _ in os.walk(archive_root):
         for dirname in dirnames:
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
                 continue
+            if stats is not None:
+                stats["execution_dirs_scanned"] += 1
 
             case_dir = Path(dirpath)
-            execution_dir = case_dir / dirname
-            try:
-                metadata_locator(str(execution_dir))
-            except FileNotFoundError as exc:
-                _log_event(
-                    "execution_skipped_incomplete",
-                    case_path=str(case_dir.resolve()),
-                    execution_id=dirname,
-                    error=str(exc),
-                )
-                continue
-            except ValueError as exc:
-                _log_event(
-                    "execution_skipped_invalid",
-                    case_path=str(case_dir.resolve()),
-                    execution_id=dirname,
-                    error=str(exc),
-                )
+            if not _validate_execution_dir(
+                case_dir,
+                dirname,
+                metadata_locator=metadata_locator,
+                stats=stats,
+                skip_log_state=skip_log_state,
+            ):
                 continue
 
+            if stats is not None:
+                stats["execution_dirs_accepted"] += 1
             grouped.setdefault(str(case_dir.resolve()), set()).add(dirname)
 
+    if skip_log_state["suppressed"]:
+        _log_event(
+            "execution_skip_logs_suppressed",
+            suppressed_count=skip_log_state["suppressed"],
+            detail_log_limit=MAX_SKIP_DETAIL_LOGS,
+        )
+
     return {case_path: sorted(exec_ids) for case_path, exec_ids in grouped.items()}
+
+
+def _validate_execution_dir(
+    case_dir: Path,
+    execution_id: str,
+    *,
+    metadata_locator: Callable[[str], object],
+    stats: dict[str, int] | None,
+    skip_log_state: dict[str, int],
+) -> bool:
+    """Validate execution directory metadata presence and log skips.
+
+    Parameters
+    ----------
+    case_dir : Path
+        Case directory containing the execution subdirectory.
+    execution_id : str
+        Execution directory name.
+    metadata_locator : Callable[[str], object]
+        Callable used to validate execution metadata files.
+    stats : dict[str, int] | None
+        Optional discovery stats accumulator.
+    skip_log_state : dict[str, int]
+        Mutable counters tracking logged and suppressed skip detail events.
+
+    Returns
+    -------
+    bool
+        ``True`` when execution metadata is valid; otherwise ``False``.
+    """
+    execution_dir = case_dir / execution_id
+    try:
+        metadata_locator(str(execution_dir))
+        return True
+    except FileNotFoundError as exc:
+        if stats is not None:
+            stats["skipped_incomplete"] += 1
+        _log_execution_skip_detail(
+            "execution_skipped_incomplete",
+            case_path=str(case_dir.resolve()),
+            execution_id=execution_id,
+            error=str(exc),
+            skip_log_state=skip_log_state,
+        )
+    except ValueError as exc:
+        if stats is not None:
+            stats["skipped_invalid"] += 1
+        _log_execution_skip_detail(
+            "execution_skipped_invalid",
+            case_path=str(case_dir.resolve()),
+            execution_id=execution_id,
+            error=str(exc),
+            skip_log_state=skip_log_state,
+        )
+
+    return False
+
+
+def _log_execution_skip_detail(
+    event: str,
+    *,
+    case_path: str,
+    execution_id: str,
+    error: str,
+    skip_log_state: dict[str, int],
+) -> None:
+    """Log one execution skip detail or increment suppressed counter.
+
+    Parameters
+    ----------
+    event : str
+        Skip event name.
+    case_path : str
+        Absolute case path.
+    execution_id : str
+        Execution identifier.
+    error : str
+        Skip reason message.
+    skip_log_state : dict[str, int]
+        Mutable counters for emitted and suppressed detail logs.
+    """
+    if skip_log_state["logged"] < MAX_SKIP_DETAIL_LOGS:
+        _log_event(
+            event,
+            case_path=case_path,
+            execution_id=execution_id,
+            error=error,
+        )
+        skip_log_state["logged"] += 1
+        return
+
+    skip_log_state["suppressed"] += 1
 
 
 def build_case_scan_results(
@@ -451,9 +556,11 @@ def run_ingestor(
         return 1
 
     state = _load_state(config.state_path)
+    discovery_stats: dict[str, int] = {}
     grouped_executions = discover_case_executions(
         config.archive_root,
         metadata_locator=metadata_locator,
+        stats=discovery_stats,
     )
     scan_results = build_case_scan_results(grouped_executions)
     candidates = build_ingestion_candidates(
@@ -467,6 +574,10 @@ def run_ingestor(
         archive_root=str(config.archive_root),
         discovered_cases=len(scan_results),
         candidate_cases=len(candidates),
+        execution_dirs_scanned=discovery_stats.get("execution_dirs_scanned"),
+        execution_dirs_accepted=discovery_stats.get("execution_dirs_accepted"),
+        skipped_incomplete=discovery_stats.get("skipped_incomplete"),
+        skipped_invalid=discovery_stats.get("skipped_invalid"),
     )
 
     if config.dry_run:
@@ -477,6 +588,15 @@ def run_ingestor(
                 execution_count=len(candidate.execution_ids),
                 new_execution_count=len(candidate.new_execution_ids),
             )
+        _log_event(
+            "dry_run_completed",
+            discovered_cases=len(scan_results),
+            candidate_cases=len(candidates),
+            execution_dirs_scanned=discovery_stats.get("execution_dirs_scanned"),
+            execution_dirs_accepted=discovery_stats.get("execution_dirs_accepted"),
+            skipped_incomplete=discovery_stats.get("skipped_incomplete"),
+            skipped_invalid=discovery_stats.get("skipped_invalid"),
+        )
         return 0
 
     success_count = 0
@@ -527,6 +647,10 @@ def run_ingestor(
         candidate_cases=len(candidates),
         success_count=success_count,
         failure_count=failure_count,
+        execution_dirs_scanned=discovery_stats.get("execution_dirs_scanned"),
+        execution_dirs_accepted=discovery_stats.get("execution_dirs_accepted"),
+        skipped_incomplete=discovery_stats.get("skipped_incomplete"),
+        skipped_invalid=discovery_stats.get("skipped_invalid"),
         state_path=str(config.state_path),
     )
 
@@ -574,8 +698,34 @@ def _log_event(event: str, **fields: Any) -> None:
     **fields : Any
         Additional event fields serialized into the JSON payload.
     """
-    payload = {"ts": _utc_now_iso(), "event": event, **fields}
-    logger.info(json.dumps(payload, sort_keys=True))
+    parts = [f"ts={_utc_now_iso()}", f"event={event}"]
+    for key in sorted(fields):
+        parts.append(f"{key}={_render_log_value(fields[key])}")
+    logger.info(" ".join(parts))
+
+
+def _render_log_value(value: Any) -> str:
+    """Render one log field value as a readable scalar string.
+
+    Parameters
+    ----------
+    value : Any
+        Field value to serialize.
+
+    Returns
+    -------
+    str
+        Human-readable value string suitable for key-value log output.
+    """
+    if isinstance(value, (int, float, bool)) or value is None:
+        return json.dumps(value)
+
+    if isinstance(value, str):
+        if re.fullmatch(r"[A-Za-z0-9._:/+\-@]+", value):
+            return value
+        return json.dumps(value)
+
+    return json.dumps(value, sort_keys=True)
 
 
 def _log_startup_configuration(config: IngestorConfig, *, endpoint_url: str) -> None:
