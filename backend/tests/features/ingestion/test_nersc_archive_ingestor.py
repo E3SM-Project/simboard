@@ -39,6 +39,37 @@ def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
     assert list(grouped.values()) == [["100.1-1"]]
 
 
+def test_discover_case_executions_skips_unreadable_execution_dirs(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_dir = archive_root / "case_a"
+    complete_exec = case_dir / "100.1-1"
+    unreadable_exec = case_dir / "101.1-1"
+
+    complete_exec.mkdir(parents=True)
+    unreadable_exec.mkdir(parents=True)
+
+    stats = ingestor_module._new_discovery_stats()
+
+    def fake_locator(execution_dir: str) -> dict[str, str]:
+        if execution_dir.endswith("101.1-1"):
+            raise PermissionError("permission denied")
+        return {}
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=fake_locator,
+        stats=stats,
+    )
+
+    assert list(grouped.values()) == [["100.1-1"]]
+    assert stats["execution_dirs_scanned"] == 2
+    assert stats["execution_dirs_accepted"] == 1
+    assert stats["skipped_incomplete"] == 0
+    assert stats["skipped_invalid"] == 1
+
+
 def test_build_ingestion_candidates_is_idempotent() -> None:
     scan_results = [
         CaseScanResult(

@@ -120,7 +120,7 @@ uv run python -m app.scripts.ingestion.nersc_archive_ingestor \
   --machine-name perlmutter
 ```
 
-Configuration surface (CLI flags map 1:1 to env vars):
+Configuration surface (via env vars):
 
 - `SIMBOARD_API_BASE_URL` (`--api-base-url`)
 - `SIMBOARD_API_TOKEN` (`--api-token`)

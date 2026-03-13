@@ -475,12 +475,15 @@ def _validate_execution_dir(
         ``True`` when execution metadata is valid; otherwise ``False``.
     """
     execution_dir = case_dir / execution_id
+
     try:
         metadata_locator(str(execution_dir))
+
         return True
     except FileNotFoundError as exc:
         if stats is not None:
             stats["skipped_incomplete"] += 1
+
         _log_execution_skip_detail(
             "execution_skipped_incomplete",
             case_path=str(case_dir.resolve()),
@@ -491,11 +494,23 @@ def _validate_execution_dir(
     except ValueError as exc:
         if stats is not None:
             stats["skipped_invalid"] += 1
+
         _log_execution_skip_detail(
             "execution_skipped_invalid",
             case_path=str(case_dir.resolve()),
             execution_id=execution_id,
             error=str(exc),
+            skip_log_state=skip_log_state,
+        )
+    except OSError as exc:
+        if stats is not None:
+            stats["skipped_invalid"] += 1
+
+        _log_execution_skip_detail(
+            "execution_skipped_invalid",
+            case_path=str(case_dir.resolve()),
+            execution_id=execution_id,
+            error=f"{exc.__class__.__name__}: {exc}",
             skip_log_state=skip_log_state,
         )
 
@@ -534,6 +549,7 @@ def _log_execution_skip_detail(
             },
         )
         skip_log_state["logged"] += 1
+
         return
 
     skip_log_state["suppressed"] += 1
@@ -601,6 +617,7 @@ def _build_ingestion_candidates(
 
     for scan in sorted(scan_results, key=lambda item: item.case_path):
         current_case_state = case_state.get(scan.case_path, {})
+
         if not isinstance(current_case_state, dict):
             current_case_state = {}
 
@@ -648,6 +665,7 @@ def _handle_dry_run(
     """
     logged_candidates = 0
     suppressed_candidates = 0
+
     for candidate in candidates:
         if logged_candidates < MAX_DRY_RUN_CANDIDATE_LOGS:
             _log_event(
@@ -750,6 +768,7 @@ def _handle_ingest_run(
         if result["ok"]:
             success_count += 1
             body = result["body"] or {}
+
             _log_event(
                 "case_ingested",
                 {
@@ -762,7 +781,9 @@ def _handle_ingest_run(
                     else None,
                 },
             )
+
             _record_successful_case(state, candidate)
+
             continue
 
         failure_count += 1
@@ -869,6 +890,7 @@ def _ingest_case_with_retries(
                 timeout_seconds=timeout_seconds,
             )
             body = response.get("body")
+
             if not isinstance(body, dict):
                 body = {}
 
@@ -881,6 +903,7 @@ def _ingest_case_with_retries(
             }
         except IngestionRequestError as exc:
             should_retry = exc.transient and attempt < max_attempts
+
             _log_event(
                 "case_ingestion_request_failed",
                 {
@@ -973,6 +996,7 @@ def _post_ingestion_request(
             }
     except urllib.error.HTTPError as exc:
         response_text = exc.read().decode("utf-8", errors="replace")
+
         raise IngestionRequestError(
             f"HTTP {exc.code}: {response_text}",
             status_code=exc.code,
