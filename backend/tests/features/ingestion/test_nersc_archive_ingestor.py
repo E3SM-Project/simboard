@@ -1,19 +1,22 @@
 """Tests for the NERSC archive ingestion runner script."""
 
 from pathlib import Path
+from typing import Any
 
+from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.nersc_archive_ingestor import (
     CaseScanResult,
     IngestionCandidate,
     IngestionRequestError,
+    IngestionRequestResponse,
     IngestorConfig,
+    _build_case_scan_results,
+    _build_ingestion_candidates,
+    _discover_case_executions,
     _fresh_state,
+    _ingest_case_with_retries,
     _record_successful_case,
-    build_case_scan_results,
-    build_ingestion_candidates,
-    discover_case_executions,
-    ingest_case_with_retries,
-    run_ingestor,
+    _run_ingestor,
 )
 
 
@@ -31,7 +34,7 @@ def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
             raise FileNotFoundError("missing required files")
         return {}
 
-    grouped = discover_case_executions(archive_root, metadata_locator=fake_locator)
+    grouped = _discover_case_executions(archive_root, metadata_locator=fake_locator)
 
     assert list(grouped.values()) == [["100.1-1"]]
 
@@ -46,7 +49,7 @@ def test_build_ingestion_candidates_is_idempotent() -> None:
     ]
     state = _fresh_state()
 
-    first_candidates = build_ingestion_candidates(
+    first_candidates = _build_ingestion_candidates(
         scan_results,
         state,
         max_cases_per_run=None,
@@ -56,7 +59,7 @@ def test_build_ingestion_candidates_is_idempotent() -> None:
 
     _record_successful_case(state, first_candidates[0])
 
-    second_candidates = build_ingestion_candidates(
+    second_candidates = _build_ingestion_candidates(
         scan_results,
         state,
         max_cases_per_run=None,
@@ -71,7 +74,7 @@ def test_build_ingestion_candidates_is_idempotent() -> None:
         )
     ]
 
-    third_candidates = build_ingestion_candidates(
+    third_candidates = _build_ingestion_candidates(
         updated_scan_results,
         state,
         max_cases_per_run=None,
@@ -100,7 +103,7 @@ def test_ingest_case_with_retries_retries_transient_errors() -> None:
             )
         return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
 
-    result = ingest_case_with_retries(
+    result = _ingest_case_with_retries(
         candidate,
         endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
         api_token="token",
@@ -134,7 +137,7 @@ def test_ingest_case_with_retries_does_not_retry_non_transient_errors() -> None:
             transient=False,
         )
 
-    result = ingest_case_with_retries(
+    result = _ingest_case_with_retries(
         candidate,
         endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
         api_token="token",
@@ -167,7 +170,7 @@ def test_run_ingestor_persists_state_and_builds_expected_payload(
         machine_name: str,
         *,
         timeout_seconds: int,
-    ) -> dict[str, object]:
+    ) -> IngestionRequestResponse:
         captured_calls.append(
             {
                 "endpoint_url": endpoint_url,
@@ -194,13 +197,13 @@ def test_run_ingestor_persists_state_and_builds_expected_payload(
         request_timeout_seconds=30,
     )
 
-    exit_code_first = run_ingestor(
+    exit_code_first = _run_ingestor(
         config,
         metadata_locator=lambda *_: {},
         sleep_fn=lambda *_: None,
         post_request_fn=fake_post_request,
     )
-    exit_code_second = run_ingestor(
+    exit_code_second = _run_ingestor(
         config,
         metadata_locator=lambda *_: {},
         sleep_fn=lambda *_: None,
@@ -231,9 +234,228 @@ def test_build_case_scan_results_is_deterministic() -> None:
         "/performance_archive/case_a": ["100.1-1", "101.1-1"],
     }
 
-    results = build_case_scan_results(grouped)
+    results = _build_case_scan_results(grouped)
 
     assert [result.case_path for result in results] == [
         "/performance_archive/case_a",
         "/performance_archive/case_b",
     ]
+
+
+def test_run_ingestor_dry_run_without_token_succeeds(tmp_path: Path) -> None:
+    archive_root = tmp_path / "archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    call_count = 0
+
+    def fake_post_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        state_path=tmp_path / "state.json",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert exit_code == 0
+    assert call_count == 0
+
+
+def test_run_ingestor_non_dry_run_without_token_returns_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        state_path=tmp_path / "state.json",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "configuration_error" for event, _ in logged_events)
+    assert not any(event == "scan_completed" for event, _ in logged_events)
+
+
+def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    missing_archive_root = tmp_path / "missing-archive"
+    post_calls = 0
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_post_request(*args, **kwargs):
+        nonlocal post_calls
+        post_calls += 1
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=missing_archive_root,
+        machine_name="perlmutter",
+        state_path=tmp_path / "state.json",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        post_request_fn=fake_post_request,
+        sleep_fn=lambda *_: None,
+    )
+
+    assert exit_code == 1
+    assert post_calls == 0
+    assert any(event == "archive_root_missing" for event, _ in logged_events)
+
+
+def test_dry_run_candidate_suppression_event_emitted_once(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    total_cases = ingestor_module.MAX_DRY_RUN_CANDIDATE_LOGS + 5
+    for index in range(total_cases):
+        (archive_root / f"case_{index:03d}" / "100.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        state_path=tmp_path / "state.json",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    suppression_events = [
+        fields
+        for event, fields in logged_events
+        if event == "dry_run_candidate_logs_suppressed"
+    ]
+    assert exit_code == 0
+    assert len(suppression_events) == 1
+    assert suppression_events[0]["suppressed_count"] == 5
+    assert (
+        suppression_events[0]["detail_log_limit"]
+        == ingestor_module.MAX_DRY_RUN_CANDIDATE_LOGS
+    )
+
+
+def test_completion_events_include_summary_counters(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dry_archive = tmp_path / "dry_archive"
+    ingest_archive = tmp_path / "ingest_archive"
+    (dry_archive / "case_dry" / "100.1-1").mkdir(parents=True)
+    (ingest_archive / "case_ingest" / "100.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    dry_run_config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="",
+        archive_root=dry_archive,
+        machine_name="perlmutter",
+        state_path=tmp_path / "dry_state.json",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    ingest_config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=ingest_archive,
+        machine_name="perlmutter",
+        state_path=tmp_path / "ingest_state.json",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    _run_ingestor(dry_run_config, metadata_locator=lambda *_: {})
+
+    def fake_ingest_post_request(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        return {
+            "status_code": 201,
+            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+        }
+
+    _run_ingestor(
+        ingest_config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_ingest_post_request,
+    )
+
+    dry_run_completed = [
+        fields for event, fields in logged_events if event == "dry_run_completed"
+    ][0]
+    run_completed = [
+        fields for event, fields in logged_events if event == "run_completed"
+    ][0]
+
+    for payload in (dry_run_completed, run_completed):
+        assert isinstance(payload["execution_dirs_scanned"], int)
+        assert isinstance(payload["execution_dirs_accepted"], int)
+        assert isinstance(payload["skipped_incomplete"], int)
+        assert isinstance(payload["skipped_invalid"], int)
