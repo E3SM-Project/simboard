@@ -29,8 +29,12 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
-from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.case_docs import (
+    parse_env_build,
+    parse_env_case,
+    parse_env_run,
+    parse_run_artifacts,
+)
 from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
     parse_git_config,
@@ -57,24 +61,6 @@ class FileSpec(TypedDict, total=False):
 
 
 FILE_SPECS: dict[str, FileSpec] = {
-    "e3sm_timing": {
-        "pattern": r"e3sm_timing\..*\..*",
-        "location": "root",
-        "parser": parse_e3sm_timing,
-        "required": True,
-    },
-    "readme_case": {
-        "pattern": r"README\.case\..*\.gz",
-        "location": "casedocs",
-        "parser": parse_readme_case,
-        "required": True,
-    },
-    "case_status": {
-        "pattern": r"CaseStatus\..*\.gz",
-        "location": "root",
-        "parser": parse_case_status,
-        "required": True,
-    },
     "case_docs_env_case": {
         "pattern": r"env_case\.xml\..*\.gz",
         "location": "casedocs",
@@ -85,7 +71,25 @@ FILE_SPECS: dict[str, FileSpec] = {
         "pattern": r"env_build\.xml\..*\.gz",
         "location": "casedocs",
         "parser": parse_env_build,
-        "required": False,
+        "required": True,
+    },
+    "case_docs_env_run": {
+        "pattern": r"env_run\.xml\..*",
+        "location": "casedocs",
+        "parser": parse_env_run,
+        "required": True,
+    },
+    "readme_case": {
+        "pattern": r"README\.case\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_readme_case,
+        "required": True,
+    },
+    "e3sm_timing": {
+        "pattern": r"e3sm_timing\..*",
+        "location": "root",
+        "parser": parse_e3sm_timing,
+        "required": True,
     },
     "git_describe": {
         "pattern": r"GIT_DESCRIBE\..*\.gz",
@@ -179,7 +183,7 @@ def main_parser(
 
                 continue
 
-            results[exec_dir] = _parse_all_files(metadata_files)
+            results[exec_dir] = _parse_all_files(exec_dir, metadata_files)
 
     if skipped_count:
         logger.info(
@@ -394,7 +398,7 @@ def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
         )
 
 
-def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
+def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationMetadata:
     """Pass discovered files to their respective parser functions.
 
     Parameters
@@ -417,7 +421,10 @@ def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
         parser: Callable = spec["parser"]
         metadata.update(parser(path))
 
+    metadata.update(parse_run_artifacts(exec_dir))
+
     populated_fields: SimulationMetadata = {
+        "execution_id": metadata.get("execution_id"),
         "case_name": metadata.get("case_name"),
         "compset": metadata.get("compset"),
         "compset_alias": metadata.get("compset_alias"),
