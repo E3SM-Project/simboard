@@ -333,6 +333,63 @@ class TestIngestFromPathEndpoint:
         assert res.status_code == 404
         assert res.json()["detail"] == "Machine 'does-not-exist-machine' not found."
 
+    @pytest.mark.parametrize("machine_alias", ["pm", "pm-cpu", "pm-gpu"])
+    def test_endpoint_accepts_perlmutter_aliases(
+        self, client, db: Session, tmp_path, machine_alias: str
+    ):
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").first()
+        if machine is None:
+            machine = Machine(
+                name="perlmutter",
+                site="NERSC",
+                architecture="AMD EPYC + NVIDIA A100",
+                scheduler="slurm",
+                gpu=True,
+            )
+            db.add(machine)
+            db.commit()
+            db.refresh(machine)
+
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {"archive_path": str(archive_path), "machine_name": machine_alias}
+
+        case = Case(name=f"test_case_alias_{machine_alias}")
+        db.add(case)
+        db.flush()
+
+        mock_simulations = [
+            SimulationCreate.model_validate(
+                {
+                    "caseId": str(case.id),
+                    "executionId": f"exec-{machine_alias}",
+                    "compset": "AQUAPLANET",
+                    "compsetAlias": "QPC4",
+                    "gridName": "f19_f19",
+                    "gridResolution": "1.9x2.5",
+                    "initializationType": "startup",
+                    "simulationType": "experimental",
+                    "status": "created",
+                    "machineId": str(machine.id),
+                    "simulationStartDate": "2023-01-01T00:00:00Z",
+                    "gitTag": "v1.0",
+                    "gitCommitHash": "abc123",
+                }
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 201
+
 
 class TestIngestFromUploadEndpoint:
     @staticmethod

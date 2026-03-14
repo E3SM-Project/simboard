@@ -1,14 +1,13 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.features.ingestion.parsers.utils import _open_text
-from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
 
 
 def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
-    """Parse an E3SM timing file and extract metadata fields.
+    """Parse an E3SM timing file and extract run metadata.
 
     Parameters
     ----------
@@ -18,122 +17,57 @@ def parse_e3sm_timing(path: str | Path) -> dict[str, Any]:
     Returns
     -------
     dict
-        Dictionary with all relevant fields, including nested run config.
+        Dictionary with execution and run timing metadata.
     """
     path = Path(path)
-    text = _open_text(path)
+    result: dict[str, str | None] = {
+        "execution_id": None,
+        "run_start_date": None,
+        "run_end_date": None,
+    }
+
+    try:
+        text = _open_text(path)
+    except (OSError, UnicodeDecodeError):
+        return result
+
     lines = text.splitlines()
 
-    metadata_fields = {
-        "case_name": r"Case\s*[:=]\s*(.+)",
-        "machine": r"Machine\s*[:=]\s*(.+)",
-        "user": r"User\s*[:=]\s*(.+)",
-        "lid": r"LID\s*[:=]\s*(.+)",
-        "simulation_start_date": r"Curr Date\s*[:=]\s*(.+)",
-        "grid_resolution": r"grid\s*[:=]\s*(.+)",
-        "compset_alias": r"compset\s*[:=]\s*(.+)",
-        "initialization_type": r"run type\s*[:=]\s*([^,]+)",
-        "run_length": r"run length\s*[:=]\s*(.+)",
-    }
+    execution_id = _extract(lines, r"LID\s*[:=]\s*(.+)")
+    curr_date = _parse_curr_date(_extract(lines, r"Curr Date\s*[:=]\s*(.+)"))
+    init_time = _parse_seconds(_extract(lines, r"Init Time\s*[:=]\s*(.+)"))
+    run_time = _parse_seconds(_extract(lines, r"Run Time\s*[:=]\s*(.+)"))
+    final_time = _parse_seconds(_extract(lines, r"Final Time\s*[:=]\s*(.+)"))
 
-    metadata = {
-        key: _extract(lines, pattern) for key, pattern in metadata_fields.items()
-    }
+    result["execution_id"] = execution_id
+    if curr_date is not None:
+        result["run_end_date"] = curr_date.isoformat(timespec="seconds")
 
-    # Extract metadata that requires special handling
-    campaign, experiment_type = _extract_campaign_and_experiment_type(
-        metadata.get("case_name")
-    )
-    simulation_start_date = _parse_simulation_start_date(
-        metadata["simulation_start_date"]
-    )
-    stop_option, stop_n = _extract_stop_option_and_stop_n(lines)
-
-    result = {
-        "case_name": metadata["case_name"],
-        "campaign": campaign,
-        "experiment_type": experiment_type,
-        "machine": metadata["machine"],
-        "user": metadata["user"],
-        "lid": metadata["lid"],
-        "simulation_start_date": simulation_start_date,
-        "grid_resolution": metadata["grid_resolution"],
-        "compset_alias": metadata["compset_alias"],
-        "initialization_type": metadata["initialization_type"],
-        "run_config": {
-            "stop_option": stop_option,
-            "stop_n": stop_n,
-            "run_length": metadata["run_length"],
-        },
-    }
+    if (
+        curr_date is not None
+        and init_time is not None
+        and run_time is not None
+        and final_time is not None
+    ):
+        total_seconds = init_time + run_time + final_time
+        run_start_date = curr_date - timedelta(seconds=total_seconds)
+        result["run_start_date"] = run_start_date.replace(microsecond=0).isoformat()
 
     return result
 
 
-def _extract_campaign_and_experiment_type(
-    case_name: Optional[str],
-) -> tuple[Optional[str], Optional[str]]:
-    """Extract campaign and experiment type from case name.
-
-    Parameters
-    ----------
-    case_name : str or None
-        The case name to parse.
-
-    Returns
-    -------
-    tuple of (str or None, str or None)
-        campaign and experiment_type values.
-    """
-    campaign = None
-    experiment_type = None
-
-    # Example: v3.LR.historical
-    if case_name:
-        # Remove trailing instance suffix like _0121
-        base = re.sub(r"_\d+$", "", case_name)
-
-        # Only infer campaign for dot-delimited case names.
-        # Timing files sometimes use short case names (e.g., e3sm_v1_ne30)
-        # that do not encode campaign/experiment type.
-        if "." not in base:
-            return None, None
-
-        # Campaign is the base case name without the trailing instance suffix
-        campaign = base
-
-        # Candidate experiment type = last dot token
-        candidate = campaign.split(".")[-1]
-
-        if candidate in KNOWN_EXPERIMENT_TYPES:
-            experiment_type = candidate
-
-    return campaign, experiment_type
-
-
-def _parse_simulation_start_date(date_str: Optional[str]) -> Optional[str]:
-    """Parse simulation start date string to ISO format.
-
-    Parameters
-    ----------
-    date_str : str or None
-        The date string to parse (e.g., "Tue Jan 10 12:34:56 2023").
-
-    Returns
-    -------
-    str or None
-        ISO formatted date string, or the original string if parsing fails.
-    """
+def _parse_curr_date(date_str: str | None) -> datetime | None:
+    """Parse a timing-file date string."""
     if not date_str:
         return None
 
     try:
-        return datetime.strptime(date_str, "%a %b %d %H:%M:%S %Y").isoformat()
+        return datetime.strptime(date_str, "%a %b %d %H:%M:%S %Y")
     except ValueError:
-        return date_str
+        return None
 
 
-def _extract(lines: list[str], pattern: str, group: int = 1) -> Optional[str]:
+def _extract(lines: list[str], pattern: str, group: int = 1) -> str | None:
     """Extract the first regex group matching a pattern from a list of lines.
 
     Parameters
@@ -159,39 +93,16 @@ def _extract(lines: list[str], pattern: str, group: int = 1) -> Optional[str]:
     return None
 
 
-def _extract_stop_option_and_stop_n(
-    lines: list[str],
-) -> tuple[Optional[str], Optional[str]]:
-    """
-    Extract stop_option and stop_n from lines, handling both same-line and
-    separate-line cases.
+def _parse_seconds(value: str | None) -> float | None:
+    """Extract a floating-point seconds value from a timing line."""
+    if not value:
+        return None
 
-    Parameters
-    ----------
-    lines : list of str
-        Lines to search.
+    match = re.search(r"(-?\d+(?:\.\d+)?)", value)
+    if not match:
+        return None
 
-    Returns
-    -------
-    tuple of (str or None, str or None)
-        stop_option and stop_n values.
-    """
-    stop_option: str | None = None
-    stop_n: str | None = None
-
-    for line in lines:
-        m = re.match(r"stop option\s*[:=]\s*([^,]+)", line.strip())
-
-        if m:
-            stop_option = m.group(1).strip()
-            m2 = re.search(r"stop_n\s*[=:]\s*(\d+)", line)
-
-            if m2:
-                stop_n = m2.group(1).strip()
-
-            break
-
-    if stop_n is None:
-        stop_n = _extract(lines, r"stop_n\s*[=:]\s*(.+)")
-
-    return stop_option, stop_n
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
