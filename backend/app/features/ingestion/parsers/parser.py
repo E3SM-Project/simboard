@@ -423,7 +423,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationM
 
     metadata.update(parse_run_artifacts(exec_dir))
 
-    populated_fields: SimulationMetadata = {
+    simulation: SimulationMetadata = {
         "execution_id": metadata.get("execution_id"),
         "case_name": metadata.get("case_name"),
         "compset": metadata.get("compset"),
@@ -439,16 +439,13 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationM
         "run_start_date": metadata.get("run_start_date"),
         "run_end_date": metadata.get("run_end_date"),
         "compiler": metadata.get("compiler"),
+        "machine": metadata.get("machine"),
+        "hpc_username": metadata.get("user"),
         "git_repository_url": metadata.get("git_repository_url"),
         "git_branch": metadata.get("git_branch"),
         "git_tag": metadata.get("git_tag"),
         "git_commit_hash": metadata.get("git_commit_hash"),
-        "machine": metadata.get("machine"),
-        "hpc_username": metadata.get("user"),
         "status": metadata.get("status", SimulationStatus.UNKNOWN.value),
-    }
-
-    placeholder_fields: SimulationMetadata = {
         # TODO: Skip this for MVP, not required. We can add it later if we find
         # a way to determine it from the parsed files.
         "parent_simulation_id": None,
@@ -460,7 +457,5 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationM
         "artifacts": None,
         "links": None,
     }
-
-    simulation: SimulationMetadata = {**populated_fields, **placeholder_fields}
 
     return simulation
