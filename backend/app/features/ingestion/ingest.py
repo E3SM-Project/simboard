@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
-from app.features.machine.models import Machine
+from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
@@ -540,7 +540,7 @@ def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
     if not machine_name:
         raise ValueError("Machine name is required but not found in metadata")
 
-    machine = db.query(Machine).filter(Machine.name == machine_name).first()
+    machine = resolve_machine_by_name(db, machine_name)
     if not machine:
         raise LookupError(
             f"Machine '{machine_name}' not found in database. "

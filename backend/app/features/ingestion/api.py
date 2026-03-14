@@ -18,7 +18,7 @@ from app.features.ingestion.schemas import (
     IngestionResponse,
     IngestionStatus,
 )
-from app.features.machine.models import Machine
+from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
@@ -78,7 +78,7 @@ def ingest_from_path(
             detail="Only administrators and service accounts may ingest from filesystem paths.",
         )
 
-    machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()
+    machine = resolve_machine_by_name(db, payload.machine_name)
 
     if not machine:
         raise HTTPException(
@@ -151,7 +151,7 @@ def ingest_from_upload(
         Response model summarizing ingestion results, including counts,
         created simulations, and any recorded errors.
     """
-    machine = db.query(Machine).filter(Machine.name == machine_name).first()
+    machine = resolve_machine_by_name(db, machine_name)
 
     if not machine:
         raise HTTPException(
