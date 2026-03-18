@@ -1860,9 +1860,6 @@ class TestIngestHelpers:
             )
         assert second == first
 
-    def test_snapshot_field_names_match_config_delta_fields(self) -> None:
-        assert SimulationConfigSnapshot.field_names() == Simulation.CONFIG_DELTA_FIELDS
-
     def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(
             execution_dir="/path/to/1082001.260305-120001",
@@ -1955,7 +1952,6 @@ class TestIngestHelpers:
         snapshot = _build_config_snapshot(sim)
 
         assert snapshot.simulation_type == SimulationType.TEST.value
-        assert set(snapshot.field_names()) == Simulation.CONFIG_DELTA_FIELDS
 
     def test_snapshot_normalizes_ssh_git_url_for_equality(self, db: Session) -> None:
         parsed = ParsedSimulation(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -14,7 +14,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
-from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import (
     ArtifactKind,
     ExternalLinkKind,
@@ -174,12 +173,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"
-    )
-
-    # Fields used to compute configuration deltas relative to canonical execution.
-    # Excludes timeline, status, and provenance fields that are expected to vary.
-    CONFIG_DELTA_FIELDS: ClassVar[frozenset[str]] = (
-        SimulationConfigSnapshot.field_names()
     )
 
 
