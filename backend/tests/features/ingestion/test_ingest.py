@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
+import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
