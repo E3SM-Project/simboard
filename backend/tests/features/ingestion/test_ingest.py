@@ -520,6 +520,7 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
+                "execution_id": "1081175.251218-200935",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -546,7 +547,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
