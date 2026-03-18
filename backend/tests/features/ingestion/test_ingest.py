@@ -7,13 +7,15 @@ from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
+    SimulationCreateDraft,
+    _build_config_snapshot,
+    _build_simulation_create_draft,
     _get_canonical_metadata_for_case,
     _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
-    _parsed_simulation_to_config_projection,
-    _simulation_to_config_projection,
+    _validate_simulation_create,
     ingest_archive,
 )
 from app.features.ingestion.models import (
@@ -23,6 +25,7 @@ from app.features.ingestion.models import (
 )
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
+from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
@@ -1761,8 +1764,8 @@ class TestIngestHelpers:
         db = MagicMock(spec=Session)
         db.query.return_value.filter.return_value.first.return_value = None
 
-        canonical_cache: dict[str, dict[str, str | None]] = {}
-        persisted_canonical_cache: dict[UUID, dict[str, str | None] | None] = {}
+        canonical_cache: dict[str, SimulationConfigSnapshot] = {}
+        persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
         result = _get_canonical_metadata_for_case(
             case=case,
@@ -1834,8 +1837,8 @@ class TestIngestHelpers:
         case.canonical_simulation_id = sim.id
         db.commit()
 
-        canonical_cache: dict[str, dict[str, str | None]] = {}
-        persisted_canonical_cache: dict[UUID, dict[str, str | None] | None] = {}
+        canonical_cache: dict[str, SimulationConfigSnapshot] = {}
+        persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
         first = _get_canonical_metadata_for_case(
             case=case,
@@ -1845,7 +1848,7 @@ class TestIngestHelpers:
             db=db,
         )
         assert first is not None
-        assert first["compiler"] == "gcc-11"
+        assert first.compiler == "gcc-11"
 
         with patch.object(db, "query", side_effect=AssertionError):
             second = _get_canonical_metadata_for_case(
@@ -1857,7 +1860,10 @@ class TestIngestHelpers:
             )
         assert second == first
 
-    def test_parsed_projection_keys_match_config_delta_fields(self) -> None:
+    def test_snapshot_field_names_match_config_delta_fields(self) -> None:
+        assert SimulationConfigSnapshot.field_names() == Simulation.CONFIG_DELTA_FIELDS
+
+    def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(
             execution_dir="/path/to/1082001.260305-120001",
             execution_id="1082001.260305-120001",
@@ -1884,14 +1890,11 @@ class TestIngestHelpers:
             status="completed",
         )
 
-        projection = _parsed_simulation_to_config_projection(parsed)
+        snapshot = _build_config_snapshot(parsed)
 
-        assert set(projection) == Simulation.CONFIG_DELTA_FIELDS
-        assert projection["simulation_type"] == SimulationType.UNKNOWN.value
+        assert snapshot.simulation_type == SimulationType.UNKNOWN.value
 
-    def test_simulation_projection_keys_match_config_delta_fields(
-        self, db: Session
-    ) -> None:
+    def test_persisted_snapshot_matches_config_delta_fields(self, db: Session) -> None:
         machine = Machine(
             name="projection-machine",
             site="Test Site",
@@ -1949,7 +1952,213 @@ class TestIngestHelpers:
         db.add(sim)
         db.commit()
 
-        projection = _simulation_to_config_projection(sim)
+        snapshot = _build_config_snapshot(sim)
 
-        assert set(projection) == Simulation.CONFIG_DELTA_FIELDS
-        assert projection["simulation_type"] == SimulationType.TEST.value
+        assert snapshot.simulation_type == SimulationType.TEST.value
+        assert set(snapshot.field_names()) == Simulation.CONFIG_DELTA_FIELDS
+
+    def test_snapshot_normalizes_ssh_git_url_for_equality(self, db: Session) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082003.260305-120003",
+            execution_id="1082003.260305-120003",
+            case_name="case1",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign="campaign",
+            experiment_type="historical",
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler="gcc",
+            git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            status="completed",
+        )
+
+        machine = Machine(
+            name="snapshot-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+
+        user = User(
+            email="snapshot@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="snapshot_case")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1082004.260305-120004",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            campaign="campaign",
+            experiment_type="historical",
+            compiler="gcc",
+            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+        )
+        db.add(sim)
+        db.commit()
+
+        parsed_snapshot = _build_config_snapshot(parsed)
+        persisted_snapshot = _build_config_snapshot(sim)
+
+        assert parsed_snapshot == persisted_snapshot
+        assert parsed_snapshot.diff(persisted_snapshot) == {}
+
+    def test_snapshot_diff_returns_only_changed_fields(self) -> None:
+        canonical = SimulationConfigSnapshot(
+            compset="FHIST",
+            compset_alias="alias1",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            initialization_type="initial",
+            compiler="gcc-11",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            git_branch="main",
+            git_repository_url="https://example.com/repo.git",
+            campaign="campaign1",
+            experiment_type="historical",
+            simulation_type=SimulationType.UNKNOWN.value,
+        )
+        current = SimulationConfigSnapshot(
+            compset="FHIST",
+            compset_alias="alias1",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            initialization_type="initial",
+            compiler="gcc-12",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            git_branch="feature",
+            git_repository_url="https://example.com/repo.git",
+            campaign="campaign1",
+            experiment_type="historical",
+            simulation_type=SimulationType.UNKNOWN.value,
+        )
+
+        delta = canonical.diff(current)
+
+        assert delta == {
+            "compiler": {"canonical": "gcc-11", "current": "gcc-12"},
+            "git_branch": {"canonical": "main", "current": "feature"},
+        }
+
+    def test_simulation_create_draft_validates_by_field_name(self) -> None:
+        draft = SimulationCreateDraft(
+            case_id=uuid4(),
+            execution_id="1082005.260305-120005",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            simulation_type=SimulationType.UNKNOWN,
+            status=SimulationStatus.CREATED,
+            campaign="campaign",
+            experiment_type="historical",
+            initialization_type="test",
+            machine_id=uuid4(),
+            simulation_start_date=datetime(2020, 1, 1),
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler="gcc",
+            git_repository_url="https://example.com/repo.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            created_by=None,
+            last_updated_by=None,
+            hpc_username="test-user",
+            run_config_deltas=None,
+        )
+
+        schema = _validate_simulation_create(draft)
+
+        assert isinstance(schema, SimulationCreate)
+        assert schema.execution_id == draft.execution_id
+        assert schema.extra == {}
+        assert schema.artifacts == []
+        assert schema.links == []
+        assert schema.run_config_deltas is None
+
+    def test_build_simulation_create_draft_normalizes_values(self) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082006.260305-120006",
+            execution_id="1082006.260305-120006",
+            case_name="case1",
+            case_group=None,
+            machine="machine",
+            hpc_username="test-user",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign="campaign",
+            experiment_type="historical",
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date="2020-01-02T03:04:05Z",
+            run_end_date=None,
+            compiler="gcc",
+            git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            status="completed",
+        )
+
+        draft = _build_simulation_create_draft(
+            parsed_simulation=parsed,
+            machine_id=uuid4(),
+            case_id=uuid4(),
+        )
+
+        assert draft.simulation_type == SimulationType.UNKNOWN
+        assert draft.status == SimulationStatus.COMPLETED
+        assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
+        assert draft.simulation_start_date is not None
+        assert draft.run_start_date is not None

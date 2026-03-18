@@ -31,12 +31,12 @@ from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
+from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
-ConfigProjection = dict[str, str | None]
 
 
 @dataclass
@@ -64,6 +64,37 @@ class IngestArchiveResult:
     duplicate_count: int
     skipped_count: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SimulationCreateDraft:
+    """Normalized internal payload validated into ``SimulationCreate``."""
+
+    case_id: UUID
+    execution_id: str
+    compset: str | None
+    compset_alias: str | None
+    grid_name: str | None
+    grid_resolution: str | None
+    simulation_type: SimulationType
+    status: SimulationStatus
+    campaign: str | None
+    experiment_type: str | None
+    initialization_type: str | None
+    machine_id: UUID
+    simulation_start_date: datetime | None
+    simulation_end_date: datetime | None
+    run_start_date: datetime | None
+    run_end_date: datetime | None
+    compiler: str | None
+    git_repository_url: str | None
+    git_branch: str | None
+    git_tag: str | None
+    git_commit_hash: str | None
+    created_by: UUID | None
+    last_updated_by: UUID | None
+    hpc_username: str | None
+    run_config_deltas: dict[str, dict[str, str | None]] | None = None
 
 
 def ingest_archive(
@@ -132,8 +163,8 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-    canonical_cache: dict[str, ConfigProjection] = {}
-    persisted_canonical_cache: dict[UUID, ConfigProjection | None] = {}
+    canonical_cache: dict[str, SimulationConfigSnapshot] = {}
+    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
     for parsed_simulation in parsed_simulations:
         try:
@@ -181,8 +212,8 @@ def ingest_archive(
 def _process_simulation_for_ingest(
     parsed_simulation: ParsedSimulation,
     db: Session,
-    canonical_cache: dict[str, ConfigProjection],
-    persisted_canonical_cache: dict[UUID, ConfigProjection | None],
+    canonical_cache: dict[str, SimulationConfigSnapshot],
+    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
 ) -> tuple[SimulationCreate | None, bool]:
     """Process one parsed simulation entry.
 
@@ -192,9 +223,9 @@ def _process_simulation_for_ingest(
         Parsed archive-derived metadata for the simulation.
     db : Session
         Active database session for lookups and case resolution.
-    canonical_cache : dict[str, ConfigProjection]
+    canonical_cache : dict[str, SimulationConfigSnapshot]
         In-memory cache of canonical config values per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, ConfigProjection | None]
+    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
         Cache of canonical metadata loaded from the database by case_id.
 
     Returns
@@ -270,21 +301,19 @@ def _is_duplicate_simulation(
 def _seed_canonical_cache_from_duplicate(
     case_name: str,
     parsed_simulation: ParsedSimulation,
-    canonical_cache: dict[str, ConfigProjection],
+    canonical_cache: dict[str, SimulationConfigSnapshot],
 ) -> None:
     """Seed per-case canonical cache using duplicate metadata when needed."""
     if case_name not in canonical_cache:
-        canonical_cache[case_name] = _parsed_simulation_to_config_projection(
-            parsed_simulation
-        )
+        canonical_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
 
 def _build_simulation_create(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case: Case,
-    canonical_cache: dict[str, ConfigProjection],
-    persisted_canonical_cache: dict[UUID, ConfigProjection | None],
+    canonical_cache: dict[str, SimulationConfigSnapshot],
+    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
 ) -> SimulationCreate:
     """Create a SimulationCreate using canonical baseline semantics.
@@ -297,15 +326,15 @@ def _build_simulation_create(
         Resolved machine ID from the database.
     case : Case
         Resolved Case object for this simulation.
-    canonical_cache : dict[str, ConfigProjection]
+    canonical_cache : dict[str, SimulationConfigSnapshot]
         In-memory cache of canonical metadata per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, ConfigProjection | None]
+    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
         Cache of canonical metadata loaded from the database by case_id.
     db : Session
         Active database session for lookups and case resolution.
     """
     case_name = case.name
-    canonical_metadata = _get_canonical_metadata_for_case(
+    canonical_snapshot = _get_canonical_metadata_for_case(
         case=case,
         case_name=case_name,
         canonical_cache=canonical_cache,
@@ -313,13 +342,15 @@ def _build_simulation_create(
         db=db,
     )
 
-    if canonical_metadata is None:
-        canonical_cache[case_name] = _parsed_simulation_to_config_projection(
-            parsed_simulation
-        )
+    if canonical_snapshot is None:
+        canonical_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
-        simulation = _map_parsed_simulation_to_schema(
-            parsed_simulation, machine_id, case.id
+        simulation = _validate_simulation_create(
+            _build_simulation_create_draft(
+                parsed_simulation=parsed_simulation,
+                machine_id=machine_id,
+                case_id=case.id,
+            )
         )
         logger.info(
             "Mapped canonical simulation from %s: %s",
@@ -329,18 +360,15 @@ def _build_simulation_create(
 
         return simulation
 
-    delta = _compute_config_delta(
-        canonical_metadata,
-        _parsed_simulation_to_config_projection(parsed_simulation),
-    )
+    delta = canonical_snapshot.diff(_build_config_snapshot(parsed_simulation))
     run_config_deltas = delta if delta else None
-
-    simulation = _map_parsed_simulation_to_schema(
-        parsed_simulation,
-        machine_id,
-        case.id,
+    simulation_draft = _build_simulation_create_draft(
+        parsed_simulation=parsed_simulation,
+        machine_id=machine_id,
+        case_id=case.id,
         run_config_deltas=run_config_deltas,
     )
+    simulation = _validate_simulation_create(simulation_draft)
 
     if delta:
         logger.info(
@@ -360,10 +388,10 @@ def _build_simulation_create(
 def _get_canonical_metadata_for_case(
     case: Case,
     case_name: str,
-    canonical_cache: dict[str, ConfigProjection],
-    persisted_canonical_cache: dict[UUID, ConfigProjection | None],
+    canonical_cache: dict[str, SimulationConfigSnapshot],
+    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
-) -> ConfigProjection | None:
+) -> SimulationConfigSnapshot | None:
     """Resolve canonical metadata from persisted canonical or batch cache.
 
     This function is useful for ensuring that all simulations of the same case
@@ -375,15 +403,15 @@ def _get_canonical_metadata_for_case(
         The Case object for which to retrieve canonical metadata.
     case_name : str
         The name of the case, used for in-memory cache lookup.
-    canonical_cache : dict[str, ConfigProjection]
+    canonical_cache : dict[str, SimulationConfigSnapshot]
         In-memory cache of canonical metadata per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, ConfigProjection | None]
+    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
         Cache of canonical metadata loaded from the database by case_id.
 
     Returns
     -------
-    ConfigProjection | None
-        The canonical metadata for the case, or None if no canonical run exists.
+    SimulationConfigSnapshot | None
+        The canonical config snapshot for the case, or None if no canonical run exists.
     """
     if case.canonical_simulation_id is not None:
         if case.id in persisted_canonical_cache:
@@ -396,10 +424,10 @@ def _get_canonical_metadata_for_case(
         )
 
         if canonical_sim:
-            canonical_metadata = _simulation_to_config_projection(canonical_sim)
-            persisted_canonical_cache[case.id] = canonical_metadata
+            canonical_snapshot = _build_config_snapshot(canonical_sim)
+            persisted_canonical_cache[case.id] = canonical_snapshot
 
-            return canonical_metadata
+            return canonical_snapshot
 
         persisted_canonical_cache[case.id] = None
         return None
@@ -449,44 +477,30 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
     return case
 
 
-def _parsed_simulation_to_config_projection(
-    parsed_simulation: ParsedSimulation,
-) -> ConfigProjection:
-    """Return config-comparison fields from a parsed simulation."""
-    return {
-        "compset": parsed_simulation.compset,
-        "compset_alias": parsed_simulation.compset_alias,
-        "grid_name": parsed_simulation.grid_name,
-        "grid_resolution": parsed_simulation.grid_resolution,
-        "initialization_type": parsed_simulation.initialization_type,
-        "compiler": parsed_simulation.compiler,
-        "git_tag": parsed_simulation.git_tag,
-        "git_commit_hash": parsed_simulation.git_commit_hash,
-        "git_branch": parsed_simulation.git_branch,
-        "git_repository_url": _normalize_git_url(parsed_simulation.git_repository_url),
-        "campaign": parsed_simulation.campaign,
-        "experiment_type": parsed_simulation.experiment_type,
-        "simulation_type": SimulationType.UNKNOWN.value,
-    }
+def _build_config_snapshot(
+    source: ParsedSimulation | Simulation,
+) -> SimulationConfigSnapshot:
+    """Return a normalized config snapshot for canonical delta comparison."""
+    snapshot_values: dict[str, str | None] = {}
 
+    for field_name in SimulationConfigSnapshot.field_names():
+        if field_name == "simulation_type" and isinstance(source, ParsedSimulation):
+            snapshot_values[field_name] = SimulationType.UNKNOWN.value
+            continue
 
-def _simulation_to_config_projection(sim: Simulation) -> ConfigProjection:
-    """Return config-comparison fields from a persisted Simulation."""
-    return {
-        "compset": sim.compset,
-        "compset_alias": sim.compset_alias,
-        "grid_name": sim.grid_name,
-        "grid_resolution": sim.grid_resolution,
-        "initialization_type": sim.initialization_type,
-        "compiler": sim.compiler,
-        "git_tag": sim.git_tag,
-        "git_commit_hash": sim.git_commit_hash,
-        "git_branch": sim.git_branch,
-        "git_repository_url": _stringify_config_value(sim.git_repository_url),
-        "campaign": sim.campaign,
-        "experiment_type": _stringify_config_value(sim.experiment_type),
-        "simulation_type": _stringify_config_value(sim.simulation_type),
-    }
+        value = getattr(source, field_name)
+
+        if isinstance(source, ParsedSimulation):
+            normalized_value = value
+        else:
+            normalized_value = _stringify_config_value(value)
+
+        if field_name == "git_repository_url":
+            normalized_value = _normalize_git_url(normalized_value)
+
+        snapshot_values[field_name] = normalized_value
+
+    return SimulationConfigSnapshot(**snapshot_values)
 
 
 def _stringify_config_value(value: object) -> str | None:
@@ -502,39 +516,6 @@ def _stringify_config_value(value: object) -> str | None:
         return value
 
     return str(value)
-
-
-def _compute_config_delta(
-    canonical: ConfigProjection,
-    other: ConfigProjection,
-) -> dict[str, dict[str, str | None]]:
-    """Compare two run metadata dicts and return configuration differences.
-
-    Only the fields in :data:`_CONFIG_DELTA_FIELDS` are compared.
-
-    Parameters
-    ----------
-    canonical : ConfigProjection
-        The canonical run metadata to compare against.
-    other : ConfigProjection
-        The other run metadata to compare.
-
-    Returns
-    -------
-    dict[str, dict[str, str | None]]
-        Mapping of field name → ``{"canonical": ..., "current": ...}``
-        for every field that differs.  Empty dict when runs are
-        identical.
-    """
-    delta: dict[str, dict[str, str | None]] = {}
-
-    for key in Simulation.CONFIG_DELTA_FIELDS:
-        canonical_val = canonical.get(key)
-        other_val = other.get(key)
-        if canonical_val != other_val:
-            delta[key] = {"canonical": canonical_val, "current": other_val}
-
-    return delta
 
 
 def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
@@ -638,13 +619,13 @@ def _normalize_git_url(url: str | None) -> str | None:
     return url
 
 
-def _map_parsed_simulation_to_schema(
+def _build_simulation_create_draft(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case_id: UUID,
     run_config_deltas: dict[str, dict[str, str | None]] | None = None,
-) -> SimulationCreate:
-    """Map parser metadata to SimulationCreate schema with type conversions.
+) -> SimulationCreateDraft:
+    """Build a normalized internal draft for ``SimulationCreate`` validation.
 
     Parameters
     ----------
@@ -659,11 +640,10 @@ def _map_parsed_simulation_to_schema(
 
     Returns
     -------
-    SimulationCreate
-        Schema object ready for database insertion.
+    SimulationCreateDraft
+        Typed ingest draft ready for schema validation.
     """
-    # Parse datetime fields using the shared utility function
-    # Note: simulation_start_date is already validated in _extract_simulation_key()
+    # Parse datetime fields using the shared utility function.
     simulation_start_date = _parse_datetime_field(
         parsed_simulation.simulation_start_date
     )
@@ -676,47 +656,44 @@ def _map_parsed_simulation_to_schema(
     simulation_type = _normalize_simulation_type(None)
     status = _normalize_simulation_status(parsed_simulation.status)
 
-    # Map metadata to schema; Pydantic will validate required fields
-    # Note: SimulationCreate uses CamelInBaseModel which expects camelCase field names
-    result = SimulationCreate.model_validate(
-        {
-            # Required identification fields
-            "caseId": case_id,
-            "executionId": parsed_simulation.execution_id,
-            # Required configuration fields
-            "compset": parsed_simulation.compset,
-            "compsetAlias": parsed_simulation.compset_alias,
-            "gridName": parsed_simulation.grid_name,
-            "gridResolution": parsed_simulation.grid_resolution,
-            # Required status fields with sensible defaults
-            "simulationType": simulation_type,
-            "status": status,
-            "initializationType": parsed_simulation.initialization_type,
-            "machineId": machine_id,
-            "simulationStartDate": simulation_start_date,
-            "simulationEndDate": simulation_end_date,
-            "experimentType": parsed_simulation.experiment_type,
-            "campaign": parsed_simulation.campaign,
-            "runStartDate": run_start_date,
-            "runEndDate": run_end_date,
-            "compiler": parsed_simulation.compiler,
-            "gitRepositoryUrl": git_repository_url,
-            "gitBranch": parsed_simulation.git_branch,
-            "gitTag": parsed_simulation.git_tag,
-            "gitCommitHash": parsed_simulation.git_commit_hash,
-            # Note: created_by and last_updated_by are set to None since archive
-            # metadata contains local usernames that cannot be reliably mapped to
-            # database user UUIDs. The API endpoint will set these values based on
-            # the authenticated user who uploaded the archive.
-            "createdBy": None,
-            "lastUpdatedBy": None,
-            "hpcUsername": parsed_simulation.hpc_username,
-            # Canonical run semantics
-            "runConfigDeltas": run_config_deltas,
-        }
+    simulation_draft = SimulationCreateDraft(
+        case_id=case_id,
+        execution_id=parsed_simulation.execution_id,
+        compset=parsed_simulation.compset,
+        compset_alias=parsed_simulation.compset_alias,
+        grid_name=parsed_simulation.grid_name,
+        grid_resolution=parsed_simulation.grid_resolution,
+        simulation_type=simulation_type,
+        status=status,
+        campaign=parsed_simulation.campaign,
+        experiment_type=parsed_simulation.experiment_type,
+        initialization_type=parsed_simulation.initialization_type,
+        machine_id=machine_id,
+        simulation_start_date=simulation_start_date,
+        simulation_end_date=simulation_end_date,
+        run_start_date=run_start_date,
+        run_end_date=run_end_date,
+        compiler=parsed_simulation.compiler,
+        git_repository_url=git_repository_url,
+        git_branch=parsed_simulation.git_branch,
+        git_tag=parsed_simulation.git_tag,
+        git_commit_hash=parsed_simulation.git_commit_hash,
+        created_by=None,
+        last_updated_by=None,
+        hpc_username=parsed_simulation.hpc_username,
+        run_config_deltas=run_config_deltas,
     )
 
-    return result
+    return simulation_draft
+
+
+def _validate_simulation_create(draft: SimulationCreateDraft) -> SimulationCreate:
+    """Validate a typed ingest draft into ``SimulationCreate``."""
+    return SimulationCreate.model_validate(
+        draft,
+        by_name=True,
+        from_attributes=True,
+    )
 
 
 def _normalize_simulation_type(value: str | None) -> SimulationType:

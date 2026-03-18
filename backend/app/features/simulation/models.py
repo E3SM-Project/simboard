@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
+from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import (
     ArtifactKind,
     ExternalLinkKind,
@@ -177,22 +178,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Fields used to compute configuration deltas relative to canonical execution.
     # Excludes timeline, status, and provenance fields that are expected to vary.
-    CONFIG_DELTA_FIELDS: ClassVar[frozenset[str]] = frozenset(
-        {
-            "compset",
-            "compset_alias",
-            "grid_name",
-            "grid_resolution",
-            "initialization_type",
-            "compiler",
-            "git_tag",
-            "git_commit_hash",
-            "git_branch",
-            "git_repository_url",
-            "campaign",
-            "experiment_type",
-            "simulation_type",
-        }
+    CONFIG_DELTA_FIELDS: ClassVar[frozenset[str]] = (
+        SimulationConfigSnapshot.field_names()
     )
 
 
