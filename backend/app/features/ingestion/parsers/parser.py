@@ -437,8 +437,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
     if case_status_metadata is not None:
         metadata.update(case_status_metadata)
 
-    execution_id = _require_execution_id(metadata.get("execution_id"), exec_dir)
-    _warn_on_execution_id_mismatch(exec_dir, execution_id)
+    execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
 
     return ParsedSimulation(
         execution_dir=exec_dir,
@@ -467,8 +466,8 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
     )
 
 
-def _require_execution_id(execution_id: str | None, exec_dir: str) -> str:
-    """Return timing-file LID or treat the run as incomplete."""
+def _resolve_execution_id(execution_id: str | None, exec_dir: str) -> str:
+    """Return a stable execution_id or treat the run as incomplete."""
     if execution_id is None:
         raise FileNotFoundError(
             f"Required timing-file LID missing for execution directory '{exec_dir}'"
@@ -480,17 +479,15 @@ def _require_execution_id(execution_id: str | None, exec_dir: str) -> str:
             f"Required timing-file LID missing for execution directory '{exec_dir}'"
         )
 
-    return normalized
-
-
-def _warn_on_execution_id_mismatch(exec_dir: str, execution_id: str) -> None:
-    """Log when timing-file LID disagrees with the execution directory basename."""
     exec_dir_basename = os.path.basename(exec_dir)
-
-    if exec_dir_basename and exec_dir_basename != execution_id:
+    if exec_dir_basename and exec_dir_basename != normalized:
         logger.warning(
             "Timing-file LID '%s' does not match execution directory '%s'. "
-            "Using timing-file LID as execution_id.",
-            execution_id,
+            "Using execution directory basename as execution_id.",
+            normalized,
             exec_dir_basename,
         )
+
+        return exec_dir_basename
+
+    return normalized

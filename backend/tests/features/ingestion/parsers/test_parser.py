@@ -436,7 +436,9 @@ class TestMainParser:
         assert result == []
         assert skipped == 1
 
-    def test_mismatched_timing_lid_logs_warning(self, tmp_path: Path) -> None:
+    def test_mismatched_timing_lid_falls_back_to_directory_basename(
+        self, tmp_path: Path
+    ) -> None:
         execution_dir = tmp_path / "1.0-0"
         execution_dir.mkdir(parents=True)
         self._create_execution_metadata_files(execution_dir, "001.001")
@@ -456,13 +458,36 @@ class TestMainParser:
             result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
         assert skipped == 0
-        assert result[0].execution_id == "different-lid"
+        assert result[0].execution_id == "1.0-0"
         mock_warning.assert_any_call(
             "Timing-file LID '%s' does not match execution directory '%s'. "
-            "Using timing-file LID as execution_id.",
+            "Using execution directory basename as execution_id.",
             "different-lid",
             "1.0-0",
         )
+
+    def test_mismatched_timing_lid_preserves_distinct_execution_directories(
+        self, tmp_path: Path
+    ) -> None:
+        first_execution_dir = tmp_path / "1.0-0"
+        first_execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(first_execution_dir, "001.001")
+
+        second_execution_dir = tmp_path / "1.0-1"
+        second_execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(second_execution_dir, "002.002")
+
+        with self._mock_all_parsers(
+            parse_e3sm_timing={
+                "execution_id": "stale-lid",
+                "run_start_date": "2025-12-18T20:09:33",
+                "run_end_date": "2025-12-18T20:54:58",
+            }
+        ):
+            result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
+
+        assert skipped == 0
+        assert [parsed.execution_id for parsed in result] == ["1.0-0", "1.0-1"]
 
     def test_missing_timing_skips_incomplete_run(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"
