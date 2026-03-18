@@ -3,17 +3,17 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
-import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
-    _derive_execution_id,
     _get_canonical_metadata_for_case,
     _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
+    _parsed_simulation_to_config_projection,
+    _simulation_to_config_projection,
     ingest_archive,
 )
 from app.features.ingestion.models import (
@@ -21,11 +21,59 @@ from app.features.ingestion.models import (
     IngestionSourceType,
     IngestionStatus,
 )
+from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import User
+
+
+def _parsed_simulations_from_mapping(
+    simulations_by_dir: dict[str, dict[str, str | None]],
+) -> list[ParsedSimulation]:
+    parsed_simulations: list[ParsedSimulation] = []
+
+    for execution_dir, metadata in simulations_by_dir.items():
+        parsed_simulations.append(
+            ParsedSimulation(
+                execution_dir=execution_dir,
+                execution_id=_require_execution_id(metadata, execution_dir),
+                case_name=metadata.get("case_name"),
+                case_group=metadata.get("case_group"),
+                machine=metadata.get("machine"),
+                hpc_username=metadata.get("hpc_username") or metadata.get("user"),
+                compset=metadata.get("compset"),
+                compset_alias=metadata.get("compset_alias"),
+                grid_name=metadata.get("grid_name"),
+                grid_resolution=metadata.get("grid_resolution"),
+                campaign=metadata.get("campaign"),
+                experiment_type=metadata.get("experiment_type"),
+                initialization_type=metadata.get("initialization_type"),
+                simulation_start_date=metadata.get("simulation_start_date"),
+                simulation_end_date=metadata.get("simulation_end_date"),
+                run_start_date=metadata.get("run_start_date"),
+                run_end_date=metadata.get("run_end_date"),
+                compiler=metadata.get("compiler"),
+                git_repository_url=metadata.get("git_repository_url"),
+                git_branch=metadata.get("git_branch"),
+                git_tag=metadata.get("git_tag"),
+                git_commit_hash=metadata.get("git_commit_hash"),
+                status=metadata.get("status"),
+            )
+        )
+
+    return parsed_simulations
+
+
+def _require_execution_id(metadata: dict[str, str | None], execution_dir: str) -> str:
+    execution_id = metadata.get("execution_id")
+    if not execution_id:
+        raise AssertionError(
+            f"Mocked ParsedSimulation for '{execution_dir}' must define execution_id"
+        )
+
+    return execution_id
 
 
 class TestIngestArchive:
@@ -61,6 +109,7 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081156.251218-200923": {
+                "execution_id": "1081156.251218-200923",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -87,7 +136,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -108,6 +157,7 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081157.251218-200924": {
+                "execution_id": "1081157.251218-200924",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -131,6 +181,7 @@ class TestIngestArchive:
                 "last_updated_by": None,
             },
             "/path/to/1081158.251218-200925": {
+                "execution_id": "1081158.251218-200925",
                 "case_name": "case2",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -157,7 +208,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -169,7 +220,7 @@ class TestIngestArchive:
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
         """Test that empty archive returns empty list."""
-        with patch("app.features.ingestion.ingest.main_parser", return_value=({}, 0)):
+        with patch("app.features.ingestion.ingest.main_parser", return_value=([], 0)):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -183,6 +234,7 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081159.251218-200926": {
+                "execution_id": "1081159.251218-200926",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -209,7 +261,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ) as mock_main_parser:
             ingest_result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
@@ -224,6 +276,7 @@ class TestIngestArchive:
         """Test that mapping errors are collected and ingestion continues."""
         mock_simulations = {
             "/path/to/1081160.251218-200927": {
+                "execution_id": "1081160.251218-200927",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -250,7 +303,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -282,6 +335,7 @@ class TestIngestArchive:
         for idx, date_str in enumerate(test_cases):
             mock_simulations = {
                 f"/path/to/108200{idx}.251218-200900": {
+                    "execution_id": f"108200{idx}.251218-200900",
                     "case_name": f"case1_{date_str}",
                     "compset": "test",
                     "compset_alias": "test_alias",
@@ -308,7 +362,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -324,6 +378,7 @@ class TestIngestArchive:
 
         mock_simulations = {
             "/path/to/1081170.251218-200930": {
+                "execution_id": "1081170.251218-200930",
                 "case_name": None,
                 "compset": None,
                 "compset_alias": "test_alias",
@@ -350,7 +405,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -374,6 +429,7 @@ class TestIngestArchive:
         # Create valid simulation
         valid_mock = {
             "/path/to/1081171.251218-200931": {
+                "execution_id": "1081171.251218-200931",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -399,7 +455,8 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=(valid_mock, 0)
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(valid_mock), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -411,6 +468,7 @@ class TestIngestArchive:
         # Test with missing machine
         invalid_mock = {
             "/path/to/1081172.251218-200932": {
+                "execution_id": "1081172.251218-200932",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -436,7 +494,8 @@ class TestIngestArchive:
         }
 
         with patch(
-            "app.features.ingestion.ingest.main_parser", return_value=(invalid_mock, 0)
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(invalid_mock), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -478,6 +537,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081173.251218-200933": {
+                "execution_id": "1081173.251218-200933",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -504,7 +564,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -528,6 +588,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081174.251218-200934": {
+                "execution_id": "1081174.251218-200934",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
@@ -555,7 +616,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -635,6 +696,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # Try to ingest a simulation with the same execution_id
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
+                "execution_id": "1081175.251218-200935",
                 "case_name": "existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -661,7 +723,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -718,6 +780,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081176.251218-200936": {
+                "execution_id": "1081176.251218-200936",
                 "case_name": "existing_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -741,6 +804,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "last_updated_by": None,
             },
             "/path/to/1081177.251218-200937": {
+                "execution_id": "1081177.251218-200937",
                 "case_name": "new_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -767,7 +831,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -780,7 +844,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
-        with patch("app.features.ingestion.ingest.main_parser", return_value=({}, 0)):
+        with patch("app.features.ingestion.ingest.main_parser", return_value=([], 0)):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
@@ -801,6 +865,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # This will be parsed but not raise an error
         mock_simulations = {
             "/path/to/1081178.251218-200938": {
+                "execution_id": "1081178.251218-200938",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -827,7 +892,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -850,6 +915,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # This ensures we exercise the except block in _parse_datetime_field
         mock_simulations = {
             "/path/to/1081179.251218-200939": {
+                "execution_id": "1081179.251218-200939",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -885,7 +951,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(mock_simulations, 0),
+                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
             ),
             patch(
                 "app.features.ingestion.ingest.dateutil_parser.parse",
@@ -904,6 +970,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """Test error handling when machine name is missing from metadata."""
         mock_simulations = {
             "/path/to/1081180.251218-200940": {
+                "execution_id": "1081180.251218-200940",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -930,7 +997,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -947,6 +1014,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         mock_simulations = {
             "/path/to/1081181.251218-200941": {
+                "execution_id": "1081181.251218-200941",
                 "case_name": "case1",
                 "compset": "test",
                 "compset_alias": "test_alias",
@@ -973,7 +1041,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1055,6 +1123,7 @@ class TestNormalizeGitUrl:
         # SSH URL in metadata
         mock_simulations = {
             "/path/to/1081182.251218-200942": {
+                "execution_id": "1081182.251218-200942",
                 "case_name": "case1",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -1081,7 +1150,7 @@ class TestNormalizeGitUrl:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1137,6 +1206,7 @@ class TestCanonicalRunIngestion:
 
     @staticmethod
     def _make_metadata(
+        execution_id: str,
         case_name: str = "case1",
         machine: str = "test-machine",
         simulation_start_date: str = "2020-01-01",
@@ -1144,6 +1214,7 @@ class TestCanonicalRunIngestion:
     ) -> dict[str, str | None]:
         """Build a complete simulation metadata dict with sensible defaults."""
         base: dict[str, str | None] = {
+            "execution_id": execution_id,
             "case_name": case_name,
             "compset": "FHIST",
             "compset_alias": "test_alias",
@@ -1177,10 +1248,12 @@ class TestCanonicalRunIngestion:
         # Two runs with the same case_name but different compilers
         mock_simulations = {
             "/path/to/1081183.251218-200943": self._make_metadata(
+                execution_id="1081183.251218-200943",
                 simulation_start_date="2020-01-01",
                 compiler="gcc-11",
             ),
             "/path/to/1081184.251218-200944": self._make_metadata(
+                execution_id="1081184.251218-200944",
                 simulation_start_date="2020-06-01",
                 compiler="gcc-12",
             ),
@@ -1188,7 +1261,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1209,10 +1282,12 @@ class TestCanonicalRunIngestion:
 
         mock_simulations = {
             "/path/to/1081185.251218-200945": self._make_metadata(
+                execution_id="1081185.251218-200945",
                 simulation_start_date="2020-01-01",
                 compiler="gcc-11",
             ),
             "/path/to/1081186.251218-200946": self._make_metadata(
+                execution_id="1081186.251218-200946",
                 simulation_start_date="2020-06-01",
                 compiler="gcc-12",
             ),
@@ -1220,7 +1295,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1245,16 +1320,18 @@ class TestCanonicalRunIngestion:
 
         mock_simulations = {
             "/path/to/1081187.251218-200947": self._make_metadata(
+                execution_id="1081187.251218-200947",
                 simulation_start_date="2020-01-01",
             ),
             "/path/to/1081188.251218-200948": self._make_metadata(
+                execution_id="1081188.251218-200948",
                 simulation_start_date="2020-06-01",
             ),
         }
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1271,16 +1348,18 @@ class TestCanonicalRunIngestion:
 
         mock_simulations = {
             "/path/to/1081189.251218-200949": self._make_metadata(
+                execution_id="1081189.251218-200949",
                 case_name="case_alpha",
             ),
             "/path/to/1081190.251218-200950": self._make_metadata(
+                execution_id="1081190.251218-200950",
                 case_name="case_beta",
             ),
         }
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1344,13 +1423,14 @@ class TestCanonicalRunIngestion:
         # Now re-ingest with the same execution_id
         mock_simulations = {
             "/path/to/1081191.251218-200951": self._make_metadata(
+                execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
             ),
         }
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1414,10 +1494,12 @@ class TestCanonicalRunIngestion:
         # Ingest archive containing the existing run plus a new one
         mock_simulations = {
             "/path/to/1081192.251218-200952": self._make_metadata(
+                execution_id="1081192.251218-200952",
                 simulation_start_date="2020-01-01",
                 compiler="gcc-11",
             ),
             "/path/to/1081193.251218-200953": self._make_metadata(
+                execution_id="1081193.251218-200953",
                 simulation_start_date="2020-06-01",
                 compiler="gcc-12",
             ),
@@ -1425,7 +1507,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1440,15 +1522,165 @@ class TestCanonicalRunIngestion:
         assert new_sim.run_config_deltas["compiler"]["canonical"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
 
+    def test_incremental_ingestion_normalizes_git_url_for_delta(
+        self, db: Session
+    ) -> None:
+        """Equivalent SSH/HTTPS git URLs should not produce a config delta."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081194.251218-200953",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.canonical_simulation_id = sim.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081194.251218-200956": self._make_metadata(
+                execution_id="1081194.251218-200956",
+                simulation_start_date="2020-06-01",
+                git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert len(result.simulations) == 1
+        assert result.simulations[0].run_config_deltas is None
+
+    def test_incremental_ingestion_persisted_simulation_type_adds_delta(
+        self, db: Session
+    ) -> None:
+        """Persisted canonical simulation_type differences are reflected in deltas."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081194.251218-200954",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.PRODUCTION,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.canonical_simulation_id = sim.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081194.251218-200954": self._make_metadata(
+                execution_id="1081194.251218-200954",
+                simulation_start_date="2020-01-01",
+            ),
+            "/path/to/1081194.251218-200955": self._make_metadata(
+                execution_id="1081194.251218-200955",
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.duplicate_count == 1
+        assert result.created_count == 1
+        assert len(result.simulations) == 1
+        assert result.simulations[0].run_config_deltas is not None
+        assert "simulation_type" in result.simulations[0].run_config_deltas
+        assert result.simulations[0].run_config_deltas["simulation_type"] == {
+            "canonical": SimulationType.PRODUCTION.value,
+            "current": SimulationType.UNKNOWN.value,
+        }
+
     def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
         """Runs with the same case_name belong to the same Case."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081195.251218-200955": self._make_metadata(
+                execution_id="1081195.251218-200955",
                 case_name="case1",
             ),
             "/path/to/1081196.251218-200956": self._make_metadata(
+                execution_id="1081196.251218-200956",
                 case_name="case1",
                 simulation_start_date="2020-06-01",
             ),
@@ -1456,7 +1688,7 @@ class TestCanonicalRunIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1474,16 +1706,18 @@ class TestCanonicalRunIngestion:
 
         mock_simulations = {
             "/path/to/1081197.251218-200957": self._make_metadata(
+                execution_id="1081197.251218-200957",
                 case_name="case_X",
             ),
             "/path/to/1081198.251218-200958": self._make_metadata(
+                execution_id="1081198.251218-200958",
                 case_name="case_Y",
             ),
         }
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(mock_simulations, 0),
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1493,10 +1727,6 @@ class TestCanonicalRunIngestion:
 
 
 class TestIngestHelpers:
-    def test_derive_execution_id_raises_on_empty_path(self) -> None:
-        with pytest.raises(ValueError, match="Cannot derive execution_id"):
-            _derive_execution_id("")
-
     def test_get_or_create_case_sets_missing_case_group(self, db: Session) -> None:
         case = Case(name="case_group_test", case_group=None)
         db.add(case)
@@ -1626,3 +1856,100 @@ class TestIngestHelpers:
                 db=db,
             )
         assert second == first
+
+    def test_parsed_projection_keys_match_config_delta_fields(self) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082001.260305-120001",
+            execution_id="1082001.260305-120001",
+            case_name="case1",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign="campaign",
+            experiment_type="historical",
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler="gcc",
+            git_repository_url="https://example.com/repo.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            status="completed",
+        )
+
+        projection = _parsed_simulation_to_config_projection(parsed)
+
+        assert set(projection) == Simulation.CONFIG_DELTA_FIELDS
+        assert projection["simulation_type"] == SimulationType.UNKNOWN.value
+
+    def test_simulation_projection_keys_match_config_delta_fields(
+        self, db: Session
+    ) -> None:
+        machine = Machine(
+            name="projection-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+
+        user = User(
+            email="projection@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="projection_case")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1082002.260305-120002",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.TEST,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            campaign="campaign",
+            experiment_type="historical",
+            compiler="gcc",
+            git_repository_url="https://example.com/repo.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+        )
+        db.add(sim)
+        db.commit()
+
+        projection = _simulation_to_config_projection(sim)
+
+        assert set(projection) == Simulation.CONFIG_DELTA_FIELDS
+        assert projection["simulation_type"] == SimulationType.TEST.value

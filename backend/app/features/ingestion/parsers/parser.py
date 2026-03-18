@@ -42,11 +42,10 @@ from app.features.ingestion.parsers.git_info import (
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
-from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.simulation.enums import SimulationStatus
 
 SimulationFiles = dict[str, str | None]
-SimulationMetadata = dict[str, str | None]
-AllSimulations = dict[str, SimulationMetadata]
 
 logger = _setup_custom_logger(__name__)
 
@@ -114,7 +113,7 @@ FILE_SPECS: dict[str, FileSpec] = {
 
 def main_parser(
     archive_path: str | Path, output_dir: str | Path
-) -> tuple[AllSimulations, int]:
+) -> tuple[list[ParsedSimulation], int]:
     """Main entrypoint for parser workflow.
 
     Parses case directories from a performance archive, handling incomplete or
@@ -134,10 +133,10 @@ def main_parser(
 
     Returns
     -------
-    tuple[AllSimulations, int]
-        Dictionary mapping execution directory paths to their parsed simulations
-        and the count of skipped incomplete runs. Only directories that contain
-        all required metadata files are included.
+    tuple[list[ParsedSimulation], int]
+        Parsed simulations in deterministic execution-directory order and the
+        count of skipped incomplete runs. Only directories that contain all
+        required metadata files and a timing-file LID are included.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
@@ -164,7 +163,7 @@ def main_parser(
             "directories matching pattern: <digits>.<digits>-<digits>"
         )
 
-    results: AllSimulations = {}
+    results: list[ParsedSimulation] = []
     skipped_count = 0
 
     for case_dir, exec_dirs in case_to_executions_dirs.items():
@@ -177,13 +176,12 @@ def main_parser(
         for exec_dir in sorted_exec_dirs:
             try:
                 metadata_files = _locate_metadata_files(exec_dir)
+                results.append(_parse_all_files(exec_dir, metadata_files))
             except FileNotFoundError as exc:
                 logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
                 skipped_count += 1
 
                 continue
-
-            results[exec_dir] = _parse_all_files(exec_dir, metadata_files)
 
     if skipped_count:
         logger.info(
@@ -398,7 +396,7 @@ def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
         )
 
 
-def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationMetadata:
+def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:
     """Pass discovered files to their respective parser functions.
 
     Parameters
@@ -408,10 +406,10 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationM
 
     Returns
     -------
-    SimulationMetadata
-        Dictionary with parsed results from each file type.
+    ParsedSimulation
+        Typed archive-derived metadata for one execution directory.
     """
-    metadata: SimulationMetadata = {}
+    metadata: dict[str, str | None] = {}
 
     for key, spec in FILE_SPECS.items():
         path = files.get(key)
@@ -423,39 +421,60 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> SimulationM
 
     metadata.update(parse_run_artifacts(exec_dir))
 
-    simulation: SimulationMetadata = {
-        "execution_id": metadata.get("execution_id"),
-        "case_name": metadata.get("case_name"),
-        "compset": metadata.get("compset"),
-        "compset_alias": metadata.get("compset_alias"),
-        "grid_name": metadata.get("grid_name"),
-        "grid_resolution": metadata.get("grid_resolution"),
-        "campaign": metadata.get("campaign"),
-        "experiment_type": metadata.get("experiment_type"),
-        "initialization_type": metadata.get("initialization_type"),
-        "case_group": metadata.get("case_group"),
-        "simulation_start_date": metadata.get("simulation_start_date"),
-        "simulation_end_date": metadata.get("simulation_end_date"),
-        "run_start_date": metadata.get("run_start_date"),
-        "run_end_date": metadata.get("run_end_date"),
-        "compiler": metadata.get("compiler"),
-        "machine": metadata.get("machine"),
-        "hpc_username": metadata.get("user"),
-        "git_repository_url": metadata.get("git_repository_url"),
-        "git_branch": metadata.get("git_branch"),
-        "git_tag": metadata.get("git_tag"),
-        "git_commit_hash": metadata.get("git_commit_hash"),
-        "status": metadata.get("status", SimulationStatus.UNKNOWN.value),
-        # TODO: Skip this for MVP, not required. We can add it later if we find
-        # a way to determine it from the parsed files.
-        "parent_simulation_id": None,
-        # TODO: This is a required field, but we don't have a way to determine
-        # the simulation type from the parsed files yet. Default to UNKNOWN
-        # for now and manually update on the UI if needed.
-        "simulation_type": SimulationType.UNKNOWN.value,
-        "extra": None,
-        "artifacts": None,
-        "links": None,
-    }
+    execution_id = _require_execution_id(metadata.get("execution_id"), exec_dir)
+    _warn_on_execution_id_mismatch(exec_dir, execution_id)
 
-    return simulation
+    return ParsedSimulation(
+        execution_dir=exec_dir,
+        execution_id=execution_id,
+        case_name=metadata.get("case_name"),
+        case_group=metadata.get("case_group"),
+        machine=metadata.get("machine"),
+        hpc_username=metadata.get("user"),
+        compset=metadata.get("compset"),
+        compset_alias=metadata.get("compset_alias"),
+        grid_name=metadata.get("grid_name"),
+        grid_resolution=metadata.get("grid_resolution"),
+        campaign=metadata.get("campaign"),
+        experiment_type=metadata.get("experiment_type"),
+        initialization_type=metadata.get("initialization_type"),
+        simulation_start_date=metadata.get("simulation_start_date"),
+        simulation_end_date=metadata.get("simulation_end_date"),
+        run_start_date=metadata.get("run_start_date"),
+        run_end_date=metadata.get("run_end_date"),
+        compiler=metadata.get("compiler"),
+        git_repository_url=metadata.get("git_repository_url"),
+        git_branch=metadata.get("git_branch"),
+        git_tag=metadata.get("git_tag"),
+        git_commit_hash=metadata.get("git_commit_hash"),
+        status=metadata.get("status", SimulationStatus.UNKNOWN.value),
+    )
+
+
+def _require_execution_id(execution_id: str | None, exec_dir: str) -> str:
+    """Return timing-file LID or treat the run as incomplete."""
+    if execution_id is None:
+        raise FileNotFoundError(
+            f"Required timing-file LID missing for execution directory '{exec_dir}'"
+        )
+
+    normalized = execution_id.strip()
+    if not normalized:
+        raise FileNotFoundError(
+            f"Required timing-file LID missing for execution directory '{exec_dir}'"
+        )
+
+    return normalized
+
+
+def _warn_on_execution_id_mismatch(exec_dir: str, execution_id: str) -> None:
+    """Log when timing-file LID disagrees with the execution directory basename."""
+    exec_dir_basename = os.path.basename(exec_dir)
+
+    if exec_dir_basename and exec_dir_basename != execution_id:
+        logger.warning(
+            "Timing-file LID '%s' does not match execution directory '%s'. "
+            "Using timing-file LID as execution_id.",
+            execution_id,
+            exec_dir_basename,
+        )

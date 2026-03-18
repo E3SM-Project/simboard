@@ -6,6 +6,7 @@ import os
 import tarfile
 import zipfile
 from contextlib import contextmanager
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Generator
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from app.features.ingestion.parsers import parser
+from app.features.ingestion.parsers.types import ParsedSimulation
 
 
 class TestMainParser:
@@ -104,27 +106,54 @@ class TestMainParser:
         }
         defaults.update(kwargs)
 
-        with (
-            patch("app.features.ingestion.parsers.parser.parse_env_case") as m1,
-            patch("app.features.ingestion.parsers.parser.parse_env_build") as m2,
-            patch("app.features.ingestion.parsers.parser.parse_env_run") as m3,
-            patch("app.features.ingestion.parsers.parser.parse_readme_case") as m4,
-            patch("app.features.ingestion.parsers.parser.parse_e3sm_timing") as m5,
-            patch("app.features.ingestion.parsers.parser.parse_run_artifacts") as m6,
-            patch("app.features.ingestion.parsers.parser.parse_git_describe") as m7,
-            patch("app.features.ingestion.parsers.parser.parse_git_config") as m8,
-            patch("app.features.ingestion.parsers.parser.parse_git_status") as m9,
-        ):
-            m1.return_value = defaults["parse_env_case"]
-            m2.return_value = defaults["parse_env_build"]
-            m3.return_value = defaults["parse_env_run"]
-            m4.return_value = defaults["parse_readme_case"]
-            m5.return_value = defaults["parse_e3sm_timing"]
-            m6.return_value = defaults["parse_run_artifacts"]
-            m7.return_value = defaults["parse_git_describe"]
-            m8.return_value = defaults["parse_git_config"]
-            m9.return_value = defaults["parse_git_status"]
-            yield
+        original_file_specs = deepcopy(parser.FILE_SPECS)
+
+        try:
+            parser.FILE_SPECS["case_docs_env_case"]["parser"] = lambda _path: defaults[
+                "parse_env_case"
+            ]
+            parser.FILE_SPECS["case_docs_env_build"]["parser"] = lambda _path: defaults[
+                "parse_env_build"
+            ]
+            parser.FILE_SPECS["case_docs_env_run"]["parser"] = lambda _path: defaults[
+                "parse_env_run"
+            ]
+            parser.FILE_SPECS["readme_case"]["parser"] = lambda _path: defaults[
+                "parse_readme_case"
+            ]
+            parser.FILE_SPECS["e3sm_timing"]["parser"] = lambda _path: defaults[
+                "parse_e3sm_timing"
+            ]
+            parser.FILE_SPECS["git_describe"]["parser"] = lambda _path: defaults[
+                "parse_git_describe"
+            ]
+            parser.FILE_SPECS["git_config"]["parser"] = lambda _path: (
+                defaults["parse_git_config"]
+                if isinstance(defaults["parse_git_config"], dict)
+                else (
+                    {"git_repository_url": defaults["parse_git_config"]}
+                    if defaults["parse_git_config"]
+                    else {}
+                )
+            )
+            parser.FILE_SPECS["git_status"]["parser"] = lambda _path: (
+                defaults["parse_git_status"]
+                if isinstance(defaults["parse_git_status"], dict)
+                else (
+                    {"git_branch": defaults["parse_git_status"]}
+                    if defaults["parse_git_status"]
+                    else {}
+                )
+            )
+
+            with patch(
+                "app.features.ingestion.parsers.parser.parse_run_artifacts",
+                return_value=defaults["parse_run_artifacts"],
+            ):
+                yield
+        finally:
+            parser.FILE_SPECS.clear()
+            parser.FILE_SPECS.update(original_file_specs)
 
     def test_file_specs_remove_case_status_and_add_env_run(self) -> None:
         assert "case_status" not in parser.FILE_SPECS
@@ -150,7 +179,8 @@ class TestMainParser:
 
         assert len(result) > 0
         assert skipped == 0
-        assert any("1.0-0" in key for key in result.keys())
+        assert isinstance(result[0], ParsedSimulation)
+        assert any("1.0-0" in parsed.execution_dir for parsed in result)
 
     def test_with_tar_gz_archive(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
@@ -169,7 +199,7 @@ class TestMainParser:
 
         assert len(result) > 0
         assert skipped == 0
-        assert any("2.5-10" in key for key in result.keys())
+        assert any("2.5-10" in parsed.execution_dir for parsed in result)
 
     def test_with_multiple_executions(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
@@ -227,7 +257,7 @@ class TestMainParser:
 
         result, skipped = parser.main_parser(archive_path, extract_dir)
 
-        assert result == {}
+        assert result == []
         assert skipped == 1
 
     def test_multiple_matching_timing_files_raises_error(self, tmp_path: Path) -> None:
@@ -325,7 +355,7 @@ class TestMainParser:
 
         result, skipped = parser.main_parser(archive_path, extract_dir)
 
-        assert result == {}
+        assert result == []
         assert skipped == 1
 
     def test_completed_status_is_merged(self, tmp_path: Path) -> None:
@@ -337,7 +367,52 @@ class TestMainParser:
             result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
         assert skipped == 0
-        assert next(iter(result.values()))["status"] == "completed"
+        assert result[0].status == "completed"
+
+    def test_missing_timing_lid_skips_incomplete_run(self, tmp_path: Path) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
+
+        with self._mock_all_parsers(
+            parse_e3sm_timing={
+                "execution_id": None,
+                "run_start_date": "2025-12-18T20:09:33",
+                "run_end_date": "2025-12-18T20:54:58",
+            }
+        ):
+            result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
+
+        assert result == []
+        assert skipped == 1
+
+    def test_mismatched_timing_lid_logs_warning(self, tmp_path: Path) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
+
+        with (
+            self._mock_all_parsers(
+                parse_e3sm_timing={
+                    "execution_id": "different-lid",
+                    "run_start_date": "2025-12-18T20:09:33",
+                    "run_end_date": "2025-12-18T20:54:58",
+                }
+            ),
+            patch(
+                "app.features.ingestion.parsers.parser.logger.warning"
+            ) as mock_warning,
+        ):
+            result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
+
+        assert skipped == 0
+        assert result[0].execution_id == "different-lid"
+        mock_warning.assert_any_call(
+            "Timing-file LID '%s' does not match execution directory '%s'. "
+            "Using timing-file LID as execution_id.",
+            "different-lid",
+            "1.0-0",
+        )
 
     def test_missing_timing_skips_incomplete_run(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"
@@ -350,7 +425,7 @@ class TestMainParser:
 
         result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
-        assert result == {}
+        assert result == []
         assert skipped == 1
 
     def test_zip_path_traversal_rejected(self, tmp_path: Path) -> None:

@@ -110,7 +110,7 @@ class SimulationCreate(CamelInBaseModel):
             ...,
             description=(
                 "Unique identifier for this execution, derived from the "
-                "archive directory name (e.g. 1125772.260116-181605)"
+                "timing-file LID (e.g. 1125772.260116-181605)"
             ),
         ),
     ]
@@ -293,8 +293,7 @@ class SimulationSummaryOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the "
-                "archive directory name"
+                "Unique identifier for this execution, derived from the timing-file LID"
             ),
         ),
     ]
@@ -390,8 +389,7 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the "
-                "archive directory name"
+                "Unique identifier for this execution, derived from the timing-file LID"
             ),
         ),
     ]
