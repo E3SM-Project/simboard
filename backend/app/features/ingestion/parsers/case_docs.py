@@ -11,7 +11,7 @@ from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
 
 
 def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
-    """Parse env_case.xml (plain or gzipped) to extract case_group.
+    """Parse env_case.xml (plain or gzipped) to extract case metadata.
 
     Parameters
     ----------
@@ -21,7 +21,16 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with key 'case_group' (str or None)
+        Dictionary with case metadata (values are str or None), including:
+
+        - ``case_name``: Case name (``CASE``)
+        - ``case_group``: Case group (``CASE_GROUP``)
+        - ``machine``: Machine name (``MACH``)
+        - ``user``: Real user (``REALUSER``)
+        - ``campaign``: Derived campaign identifier from the case name
+        - ``experiment_type``: Derived experiment type, constrained to
+          KNOWN_EXPERIMENT_TYPES when possible
+        - ``compset_alias``: Compset alias (``COMPSET``)
     """
     env_case_path = Path(env_case_path)
 
