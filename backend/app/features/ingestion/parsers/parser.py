@@ -33,8 +33,8 @@ from app.features.ingestion.parsers.case_docs import (
     parse_env_build,
     parse_env_case,
     parse_env_run,
-    parse_run_artifacts,
 )
+from app.features.ingestion.parsers.case_status import parse_case_status
 from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
     parse_git_config,
@@ -83,6 +83,12 @@ FILE_SPECS: dict[str, FileSpec] = {
         "location": "casedocs",
         "parser": parse_readme_case,
         "required": True,
+    },
+    "case_status": {
+        "pattern": r"CaseStatus\..*\.gz",
+        "location": "root",
+        "parser": parse_case_status,
+        "required": False,
     },
     "e3sm_timing": {
         "pattern": r"e3sm_timing\..*",
@@ -410,6 +416,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
         Typed archive-derived metadata for one execution directory.
     """
     metadata: dict[str, str | None] = {}
+    case_status_metadata: dict[str, str | None] | None = None
 
     for key, spec in FILE_SPECS.items():
         path = files.get(key)
@@ -417,9 +424,18 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
             continue
 
         parser: Callable = spec["parser"]
-        metadata.update(parser(path))
+        parsed_metadata = parser(path)
 
-    metadata.update(parse_run_artifacts(exec_dir))
+        if key == "case_status":
+            case_status_metadata = parsed_metadata
+            continue
+
+        metadata.update(parsed_metadata)
+
+    # CaseStatus reflects the latest case.run attempt, so its status and run
+    # timestamps should override timing-file values when the artifact exists.
+    if case_status_metadata is not None:
+        metadata.update(case_status_metadata)
 
     execution_id = _require_execution_id(metadata.get("execution_id"), exec_dir)
     _warn_on_execution_id_mismatch(exec_dir, execution_id)
@@ -447,7 +463,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
         git_branch=metadata.get("git_branch"),
         git_tag=metadata.get("git_tag"),
         git_commit_hash=metadata.get("git_commit_hash"),
-        status=metadata.get("status", SimulationStatus.UNKNOWN.value),
+        status=metadata.get("status") or SimulationStatus.UNKNOWN.value,
     )
 
 

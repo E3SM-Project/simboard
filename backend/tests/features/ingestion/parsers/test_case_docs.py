@@ -5,7 +5,6 @@ from app.features.ingestion.parsers.case_docs import (
     parse_env_build,
     parse_env_case,
     parse_env_run,
-    parse_run_artifacts,
 )
 
 
@@ -324,23 +323,3 @@ class TestParseEnvRun:
         result = parse_env_run(tmp_run)
 
         assert result["simulation_end_date"] is None
-
-
-class TestParseRunArtifacts:
-    def test_completed_status_when_timing_exists(self, tmp_path):
-        (tmp_path / "e3sm_timing.test").write_text("timing data")
-
-        result = parse_run_artifacts(tmp_path)
-
-        assert result["status"] == "completed"
-
-    def test_unknown_status_when_timing_missing(self, tmp_path):
-        result = parse_run_artifacts(tmp_path)
-
-        assert result["status"] == "unknown"
-
-    def test_unknown_status_when_directory_read_fails(self):
-        with patch.object(Path, "iterdir", side_effect=OSError("boom")):
-            result = parse_run_artifacts("/tmp/missing")
-
-        assert result["status"] == "unknown"

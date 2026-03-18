@@ -6,7 +6,6 @@ from pathlib import Path
 from dateutil.relativedelta import relativedelta
 
 from app.features.ingestion.parsers.utils import _open_text
-from app.features.simulation.enums import SimulationStatus
 from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
 
 
@@ -111,19 +110,6 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         "initialization_type": initialization_type,
         "simulation_start_date": simulation_start_date,
         "simulation_end_date": simulation_end_date,
-    }
-
-
-def parse_run_artifacts(run_dir: str | Path) -> dict[str, str | None]:
-    """Inspect execution-root artifacts and derive status metadata."""
-    run_dir = Path(run_dir)
-
-    return {
-        "status": (
-            SimulationStatus.COMPLETED.value
-            if _has_timing_file(run_dir)
-            else SimulationStatus.UNKNOWN.value
-        )
     }
 
 
@@ -269,13 +255,3 @@ def _parse_stop_date(stop_date: str | None) -> str | None:
         return datetime.strptime(stop_date, "%Y%m%d").strftime("%Y-%m-%d")
     except ValueError:
         return None
-
-
-def _has_timing_file(run_dir: Path) -> bool:
-    try:
-        return any(
-            child.is_file() and re.match(r"^e3sm_timing\..*", child.name)
-            for child in run_dir.iterdir()
-        )
-    except OSError:
-        return False
