@@ -11,7 +11,7 @@ from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
 
 
 def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
-    """Parse env_case.xml (plain or gzipped) to extract case metadata.
+    """Parse env_case.xml (plain or gzipped).
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
 
 
 def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
-    """Parse env_build.xml (plain or gzipped) to extract compiler and mpilib.
+    """Parse env_build.xml (plain or gzipped).
 
     Parameters
     ----------
@@ -231,11 +231,14 @@ def _calculate_simulation_end_date(
     stop_n: str | None,
     stop_date: str | None,
 ) -> str | None:
-    if not simulation_start_date or not stop_option:
+    if not stop_option:
         return None
 
     if stop_option == "date":
         return _parse_stop_date(stop_date)
+
+    if not simulation_start_date:
+        return None
 
     if stop_n is None:
         return None
