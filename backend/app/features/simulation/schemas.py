@@ -535,6 +535,13 @@ class SimulationOut(CamelOutBaseModel):
         UserPreview | None,
         Field(description="Full user info of who last updated the simulation."),
     ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ]
 
     # Miscellaneous
     # -----------------

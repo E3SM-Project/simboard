@@ -44,6 +44,7 @@ export interface FilterState {
   // Metadata & Provenance
   gitTag: string[];
   createdBy: string[];
+  hpcUsername: string[];
 }
 
 interface BrowsePageProps {
@@ -75,6 +76,7 @@ const createEmptyFilters = (): FilterState => ({
   // Metadata & Provenance
   gitTag: [],
   createdBy: [],
+  hpcUsername: [],
 });
 
 const parseViewMode = (params: URLSearchParams): 'grid' | 'table' =>
@@ -190,6 +192,20 @@ export const BrowsePage = ({
     return sortedMachines;
   }, [simulations]);
 
+  const creatorOptions = useMemo(() => {
+    const creators = new Map<string, string>();
+
+    for (const simulation of simulations) {
+      if (!simulation.createdBy) continue;
+
+      creators.set(simulation.createdBy, simulation.createdByUser?.email ?? simulation.createdBy);
+    }
+
+    return Array.from(creators, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+    );
+  }, [simulations]);
+
   const filteredData = useMemo(() => {
     const arrayFilterGetters: Partial<
       Record<
@@ -209,6 +225,7 @@ export const BrowsePage = ({
       status: (rec) => rec.status ?? [],
       gitTag: (rec) => rec.gitTag ?? [],
       createdBy: (rec) => rec.createdBy ?? [],
+      hpcUsername: (rec) => rec.hpcUsername ?? [],
     };
 
     return simulations.filter((record) => {
@@ -441,6 +458,7 @@ export const BrowsePage = ({
                 availableFilters={availableFilters}
                 onChange={setAppliedFilters}
                 machineOptions={machineOptions}
+                creatorOptions={creatorOptions}
                 caseOptions={caseOptions}
                 selectedCaseName={selectedCaseName}
                 onCaseNameChange={handleCaseNameChange}
@@ -510,6 +528,8 @@ export const BrowsePage = ({
                         const display =
                           key === 'machineId'
                             ? (machineOptions.find((opt) => opt.value === value)?.label ?? value)
+                            : key === 'createdBy'
+                              ? (creatorOptions.find((opt) => opt.value === value)?.label ?? value)
                             : value;
                         return (
                           <span
@@ -547,6 +567,8 @@ export const BrowsePage = ({
                       const display =
                         key === 'machineId'
                           ? (machineOptions.find((opt) => opt.value === values)?.label ?? values)
+                          : key === 'createdBy'
+                            ? (creatorOptions.find((opt) => opt.value === values)?.label ?? values)
                           : values;
                       return (
                         <span

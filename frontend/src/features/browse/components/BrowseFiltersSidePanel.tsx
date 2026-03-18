@@ -10,6 +10,7 @@ interface FilterPanelProps {
   availableFilters: FilterState;
   onChange: (next: FilterState) => void;
   machineOptions: { value: string; label: string }[];
+  creatorOptions: { value: string; label: string }[];
   caseOptions: { value: string; label: string }[];
   selectedCaseName: string;
   onCaseNameChange: (caseName: string) => void;
@@ -20,6 +21,7 @@ export const BrowseFiltersSidePanel = ({
   availableFilters,
   onChange,
   machineOptions,
+  creatorOptions,
   caseOptions,
   selectedCaseName,
   onCaseNameChange,
@@ -222,13 +224,29 @@ export const BrowseFiltersSidePanel = ({
 
         <label className="block text-sm font-medium text-gray-700">Created By</label>
         <MultiSelect
-          options={(availableFilters.createdBy || []).map((id) => ({
-            value: id,
-            label: id,
-          }))}
+          options={
+            creatorOptions.length > 0
+              ? creatorOptions
+              : (availableFilters.createdBy || []).map((id) => ({
+                  value: id,
+                  label: id,
+                }))
+          }
           defaultValue={appliedFilters.createdBy || []}
           onValueChange={(next) => handleChange('createdBy', next as string[])}
           placeholder="Select creators"
+          resetOnDefaultValueChange={true}
+        />
+
+        <label className="block text-sm font-medium text-gray-700">HPC Username</label>
+        <MultiSelect
+          options={(availableFilters.hpcUsername || []).map((id) => ({
+            value: id,
+            label: id,
+          }))}
+          defaultValue={appliedFilters.hpcUsername || []}
+          onValueChange={(next) => handleChange('hpcUsername', next as string[])}
+          placeholder="Select HPC usernames"
           resetOnDefaultValueChange={true}
         />
       </CollapsibleGroup>

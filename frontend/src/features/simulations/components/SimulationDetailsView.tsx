@@ -366,6 +366,12 @@ export const SimulationDetailsView = ({
                   </Label>
                   <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">
+                    HPC Username:
+                  </Label>
+                  <p className="text-sm">{simulation.hpcUsername ?? '—'}</p>
+                </div>
               </CardContent>
             </Card>
           </div>

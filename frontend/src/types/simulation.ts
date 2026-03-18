@@ -2,6 +2,13 @@ import type { ArtifactIn, ArtifactOut } from '@/types/artifact';
 import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
 
+export interface SimulationUserPreview {
+  id: string;
+  email: string;
+  role: string;
+  full_name?: string | null;
+}
+
 /**
  * API response model for a Case with nested simulation summaries.
  */
@@ -79,6 +86,7 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdBy?: string | null;
   lastUpdatedBy?: string | null;
+  hpcUsername?: string | null;
 
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
@@ -115,6 +123,8 @@ export interface SimulationOut extends SimulationCreate {
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
+  createdByUser?: SimulationUserPreview | null;
+  lastUpdatedByUser?: SimulationUserPreview | null;
 
   // Relationships
   // ~~~~~~~~~~~~~~
