@@ -76,14 +76,31 @@ class TestSettings:
     @pytest.fixture(autouse=True)
     def restore_settings(self):
         original_env = settings.env
+        original_domain_url = settings.domain_url
         original_frontend_origin = settings.frontend_origin
         original_frontend_origins = settings.frontend_origins
 
         yield
 
         settings.env = original_env
+        settings.domain_url = original_domain_url
         settings.frontend_origin = original_frontend_origin
         settings.frontend_origins = original_frontend_origins
+
+    @pytest.mark.parametrize(
+        ("domain_url", "expected_domain"),
+        [
+            ("https://www.example.com", "example.com"),
+            ("http://www.example.com", "example.com"),
+            ("https://example.com", "example.com"),
+            ("https://example.com:8443/path?q=1", "example.com"),
+        ],
+    )
+    def test_domain_strips_scheme_www_and_url_parts(
+        self, domain_url: str, expected_domain: str
+    ):
+        settings.domain_url = domain_url
+        assert settings.domain == expected_domain
 
     def test_frontend_origin_has_no_trailing_slash(self):
         settings.frontend_origin = "http://localhost:3000/"

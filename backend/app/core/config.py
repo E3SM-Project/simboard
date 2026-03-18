@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,20 @@ def _normalize_list(items: list[str]) -> list[str]:
     return [item.strip().rstrip("/") for item in items if item.strip()]
 
 
+def _extract_domain(domain_url: str) -> str:
+    """
+    Extract a bare hostname from a URL-like domain setting.
+
+    Removes the scheme, leading ``www.``, port, and any path/query fragments.
+    """
+    candidate = domain_url.strip()
+    parsed = urlparse(
+        candidate if "://" in candidate else f"https://{candidate}",
+    )
+    hostname = parsed.hostname or candidate
+    return hostname.removeprefix("www.")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=get_env_file(),
@@ -61,7 +76,15 @@ class Settings(BaseSettings):
     # ----------------------------------------
     env: str = "development"
     port: int = 8000
-    domain: str = "example.com"
+    domain_url: str = Field(
+        default="https://example.com",
+        validation_alias="DOMAIN_URL",
+        description="Primary backend domain URL including scheme",
+    )
+
+    @property
+    def domain(self) -> str:
+        return _extract_domain(self.domain_url)
 
     # Frontend
     # ----------------------------------------

@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 from app.api.version import API_BASE
 
-# DEFAULT_BASE_URL = f"https://{settings.domain}:8000"
+# DEFAULT_BASE_URL = settings.domain_url
 DEFAULT_BASE_URL = "https://127.0.0.1:8000"
 LOCAL_CERT_PATH = Path(__file__).resolve().parents[4] / "certs" / "local.crt"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
