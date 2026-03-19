@@ -1,9 +1,16 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { LayoutGrid, Table } from 'lucide-react';
+import type { VisibilityState } from '@tanstack/react-table';
+import { ChevronDown, LayoutGrid, Table } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -19,6 +26,18 @@ import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simu
 import type { SimulationOut } from '@/types/index';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
+  ensembleMember: false,
+  gridResolution: false,
+  gridName: false,
+  compset: false,
+};
+const TOGGLEABLE_BROWSE_COLUMNS = [
+  { id: 'ensembleMember', label: 'Ensemble member' },
+  { id: 'gridResolution', label: 'Grid resolution' },
+  { id: 'gridName', label: 'Grid name' },
+  { id: 'compset', label: 'Component set' },
+] as const;
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
@@ -113,6 +132,8 @@ export const BrowsePage = ({
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => parseViewMode(searchParams));
   const [page, setPage] = useState(() => parsePage(searchParams));
   const [pageSize, setPageSize] = useState(() => parsePageSize(searchParams));
+  const [columnVisibility, setColumnVisibility] =
+    useState<VisibilityState>(DEFAULT_COLUMN_VISIBILITY);
 
   // -------------------- Derived Data --------------------
   const availableFilters = useMemo(() => {
@@ -467,38 +488,64 @@ export const BrowsePage = ({
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-col">
-              <header className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-sm sm:p-6 xl:flex-row xl:items-start xl:justify-between">
-                <div>
-                  <div className="mb-3 inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                    Research Workspace
-                  </div>
+              <header className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-sm sm:p-5 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0">
                   <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
                     Browse Simulations
                   </h1>
-                  <p className="max-w-4xl text-[15px] leading-8 text-slate-600 sm:text-base">
+                  <p className="max-w-4xl text-[15px] leading-7 text-slate-600 sm:text-base">
                     Explore and filter available simulations using the panel on the left. Select
                     simulations to view more details or take further actions.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 xl:min-w-[290px] xl:items-end">
-                  <div className="flex flex-wrap gap-2 xl:justify-end">
-                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm">
-                      <span className="mr-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-                        Results
-                      </span>
-                      <span className="font-semibold text-slate-950">{filteredData.length}</span>
-                    </div>
-                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm">
-                      <span className="mr-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-                        View
-                      </span>
-                      <span className="font-semibold text-slate-950">
-                        {viewMode === 'grid' ? 'Cards' : 'Table'}
-                      </span>
-                    </div>
-                  </div>
+                <div className="xl:min-w-[360px]">
                   <TooltipProvider delayDuration={150}>
-                    <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm xl:self-end">
+                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm xl:justify-end">
+                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
+                        <span className="mr-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                          Results
+                        </span>
+                        <span className="font-semibold text-slate-950">{filteredData.length}</span>
+                      </div>
+                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
+                        <span className="mr-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                          View
+                        </span>
+                        <span className="font-semibold text-slate-950">
+                          {viewMode === 'grid' ? 'Cards' : 'Table'}
+                        </span>
+                      </div>
+                      {viewMode === 'table' && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="h-10 rounded-xl border-slate-200 bg-white text-slate-700 shadow-none hover:bg-slate-50"
+                            >
+                              Columns <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {TOGGLEABLE_BROWSE_COLUMNS.map((column) => (
+                              <DropdownMenuCheckboxItem
+                                key={column.id}
+                                className="capitalize"
+                                checked={columnVisibility[column.id] !== false}
+                                onCheckedChange={(checked) =>
+                                  setColumnVisibility((prev) => ({
+                                    ...prev,
+                                    [column.id]: !!checked,
+                                  }))
+                                }
+                              >
+                                {column.label}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      <div className="h-8 w-px bg-slate-200" />
+                      <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
@@ -531,6 +578,7 @@ export const BrowsePage = ({
                         </TooltipTrigger>
                         <TooltipContent>Show simulations as cards</TooltipContent>
                       </Tooltip>
+                      </div>
                     </div>
                   </TooltipProvider>
                 </div>
@@ -662,6 +710,8 @@ export const BrowsePage = ({
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
+                    columnVisibility={columnVisibility}
+                    setColumnVisibility={setColumnVisibility}
                   />
                 ) : (
                   <SimulationResultCards

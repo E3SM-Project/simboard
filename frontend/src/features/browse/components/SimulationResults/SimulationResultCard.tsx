@@ -50,18 +50,18 @@ export const SimulationResultCard = ({
           className="mt-1"
           style={{ width: 24, height: 24 }}
         />
-        <div className="flex-1 w-full min-w-0 max-w-2xl">
-          <CardHeader className="mb-4 flex flex-col items-start gap-3 p-0">
+        <div className="w-full max-w-2xl min-w-0 flex-1">
+          <CardHeader className="mb-4 flex flex-col items-start gap-2.5 p-0">
             <div className="min-w-0">
-              <span className="block break-words text-lg font-semibold tracking-tight text-slate-950">
+              <span className="block break-words text-base font-semibold tracking-tight text-slate-950">
                 {simulation.executionId}
               </span>
-              <div className="mt-1 break-words text-sm text-slate-500">
+              <div className="mt-1 break-words text-sm leading-6 text-slate-500">
                 <span className="font-medium text-slate-600">Case:</span> {simulation.caseName}
               </div>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium text-slate-600">Status</span>
+            <div className="flex w-full flex-wrap items-center gap-2 text-xs uppercase tracking-[0.12em] text-slate-400">
+              <span>Status</span>
               <SimulationStatusBadge status={simulation.status} />
             </div>
           </CardHeader>

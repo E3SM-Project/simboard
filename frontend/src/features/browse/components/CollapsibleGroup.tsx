@@ -21,13 +21,13 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
           <motion.div
             layout
             initial={false}
-            className="mb-1 flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 transition-colors hover:bg-slate-100/70"
+            className="mb-1 flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 transition-colors hover:bg-slate-100/70"
             onClick={() => setOpen((prev) => !prev)}
             whileTap={{ scale: 0.98 }}
           >
             <div className="flex flex-1 flex-col gap-1">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+                <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
                 <motion.span
                   animate={{ rotate: open ? 90 : 0 }}
                   transition={{ type: 'spring', stiffness: 200, damping: 30 }}
@@ -43,7 +43,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                  className="px-0.5 text-xs leading-5 text-slate-500"
+                  className="px-0.5 text-[11px] leading-4 text-slate-500"
                 >
                   {description}
                 </motion.p>
@@ -60,7 +60,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -16 }}
                 transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                className="flex flex-col gap-3 px-1 pb-1 pt-3"
+                className="flex flex-col gap-2.5 px-1 pb-1 pt-2.5"
               >
                 {children}
               </motion.div>

@@ -26,6 +26,9 @@ export const BrowseFiltersSidePanel = ({
   selectedCaseName,
   onCaseNameChange,
 }: FilterPanelProps) => {
+  const filterLabelClassName =
+    'mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500';
+
   // -------------------- Handlers --------------------
   const handleChange = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     const nextValue = Array.isArray(value) ? Array.from(new Set(value)) : value;
@@ -35,8 +38,8 @@ export const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="flex w-full max-w-full flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:h-full lg:overflow-y-auto">
-      <div className="mb-1">
+    <aside className="flex w-full max-w-full flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:h-full lg:overflow-y-auto">
+      <div className="mb-0.5">
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-950">
           Filters <Funnel />
         </h1>
@@ -45,9 +48,7 @@ export const BrowseFiltersSidePanel = ({
         </p>
       </div>
 
-      <label className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-        Case
-      </label>
+      <label className={filterLabelClassName}>Case</label>
       <MultiSelect
         options={
           selectedCaseName && !caseOptions.some((o) => o.value === selectedCaseName)
@@ -67,7 +68,7 @@ export const BrowseFiltersSidePanel = ({
         title="Scientific Goal"
         description="Filter by high-level scientific purpose, such as campaign, experiment, or outputs."
       >
-        <label className="block text-sm font-medium text-gray-700">Campaign</label>
+        <label className={filterLabelClassName}>Campaign</label>
         <MultiSelect
           options={(availableFilters.campaign || []).map((id) => ({
             value: id,
@@ -79,7 +80,7 @@ export const BrowseFiltersSidePanel = ({
           resetOnDefaultValueChange={true}
         />
 
-        <label className="block text-sm font-medium text-gray-700">Experiment Type</label>
+        <label className={filterLabelClassName}>Experiment Type</label>
         <MultiSelect
           options={(availableFilters.experimentType || []).map((id) => ({
             value: id,
@@ -113,7 +114,7 @@ export const BrowseFiltersSidePanel = ({
         title="Simulation Context"
         description="Refine results based on the technical setup of the simulation."
       >
-        <label className="block text-sm font-medium text-gray-700">Compset</label>
+        <label className={filterLabelClassName}>Compset</label>
         <MultiSelect
           options={(availableFilters.compset || []).map((id) => ({
             value: id,
@@ -125,7 +126,7 @@ export const BrowseFiltersSidePanel = ({
           resetOnDefaultValueChange={true}
         />
 
-        <label className="block text-sm font-medium text-gray-700">Grid Name</label>
+        <label className={filterLabelClassName}>Grid Name</label>
         <MultiSelect
           options={(availableFilters.gridName || []).map((id) => ({
             value: id,
@@ -137,7 +138,7 @@ export const BrowseFiltersSidePanel = ({
           resetOnDefaultValueChange={true}
         />
 
-        <label className="block text-sm font-medium text-gray-700">Grid Resolution</label>
+        <label className={filterLabelClassName}>Grid Resolution</label>
         <MultiSelect
           options={(availableFilters.gridResolution || []).map((id) => ({
             value: id,
@@ -185,8 +186,8 @@ export const BrowseFiltersSidePanel = ({
         />
 
         <div>
-          <label className="block text-sm font-medium mb-2">Canonical Status</label>
-          <div className="space-y-2">
+          <label className={filterLabelClassName}>Canonical Status</label>
+          <div className="space-y-1.5">
             {[
               { value: '', label: 'All' },
               { value: 'canonical', label: 'Canonical Only' },
@@ -201,7 +202,10 @@ export const BrowseFiltersSidePanel = ({
                   onChange={() => handleChange('canonicalStatus', opt.value)}
                   className="h-4 w-4"
                 />
-                <label htmlFor={`canonical-${opt.value || 'all'}`} className="text-sm">
+                <label
+                  htmlFor={`canonical-${opt.value || 'all'}`}
+                  className="text-sm text-slate-700"
+                >
                   {opt.label}
                 </label>
               </div>
@@ -212,7 +216,7 @@ export const BrowseFiltersSidePanel = ({
 
       {/* Provenance*/}
       <CollapsibleGroup title="Provenance" description="Filter by provenance information.">
-        <label className="block text-sm font-medium text-gray-700">Git Version/Tag</label>
+        <label className={filterLabelClassName}>Git Version/Tag</label>
         <MultiSelect
           options={(availableFilters.gitTag || []).map((id) => ({
             value: id,
@@ -224,7 +228,7 @@ export const BrowseFiltersSidePanel = ({
           resetOnDefaultValueChange={true}
         />
 
-        <label className="block text-sm font-medium text-gray-700">Created By</label>
+        <label className={filterLabelClassName}>Created By</label>
         <MultiSelect
           options={
             creatorOptions.length > 0
@@ -240,7 +244,7 @@ export const BrowseFiltersSidePanel = ({
           resetOnDefaultValueChange={true}
         />
 
-        <label className="block text-sm font-medium text-gray-700">HPC Username</label>
+        <label className={filterLabelClassName}>HPC Username</label>
         <MultiSelect
           options={(availableFilters.hpcUsername || []).map((id) => ({
             value: id,

@@ -13,17 +13,11 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ChevronDown } from 'lucide-react';
+import { ArrowUpDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -56,7 +50,9 @@ const renderSortableHeader = (label: string) =>
         size="sm"
         onClick={() => column.toggleSorting()}
         className={`h-8 px-2 text-sm font-semibold ${
-          isSorted ? 'text-slate-950' : 'text-slate-500'
+          isSorted
+            ? 'bg-slate-100 text-slate-950 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.3)]'
+            : 'text-slate-500'
         } hover:bg-slate-100 hover:text-slate-950`}
       >
         {label}
@@ -73,6 +69,10 @@ interface SimulationResultsTable {
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
+  columnVisibility: VisibilityState;
+  setColumnVisibility: (
+    updater: VisibilityState | ((old: VisibilityState) => VisibilityState),
+  ) => void;
 }
 
 const columns: ColumnDef<SimulationOut>[] = [
@@ -93,14 +93,22 @@ const columns: ColumnDef<SimulationOut>[] = [
   {
     accessorKey: 'caseName',
     header: renderSortableHeader('Case Name'),
-    cell: ({ row }) => <TableCellText value={row.original.caseName} />,
+    cell: ({ row }) => (
+      <TableCellText value={row.original.caseName} className="font-medium text-slate-950" />
+    ),
     enableSorting: true,
     meta: { sticky: true, width: 320, position: 'left' },
   },
   {
     accessorKey: 'executionId',
     header: renderSortableHeader('Execution ID'),
-    cell: ({ row }) => <TableCellText value={row.original.executionId} mono />,
+    cell: ({ row }) => (
+      <TableCellText
+        value={row.original.executionId}
+        mono
+        className="font-medium text-slate-800"
+      />
+    ),
     enableSorting: true,
     meta: { width: 220 },
   },
@@ -114,7 +122,7 @@ const columns: ColumnDef<SimulationOut>[] = [
         <div>
           {isCanonical ? 'Yes' : 'No'}
           {!isCanonical && changeCount > 0 && (
-            <span className="text-muted-foreground ml-1">({changeCount})</span>
+            <span className="ml-1 text-slate-400">({changeCount})</span>
           )}
         </div>
       );
@@ -125,21 +133,23 @@ const columns: ColumnDef<SimulationOut>[] = [
   {
     accessorKey: 'campaign',
     header: renderSortableHeader('Campaign'),
-    cell: ({ row }) => <TableCellText value={row.original.campaign} />,
+    cell: ({ row }) => <TableCellText value={row.original.campaign} className="text-slate-600" />,
     enableSorting: true,
     meta: { width: 280 },
   },
   {
     accessorKey: 'experimentType',
     header: renderSortableHeader('Experiment'),
-    cell: ({ row }) => <TableCellText value={row.original.experimentType} />,
+    cell: ({ row }) => (
+      <TableCellText value={row.original.experimentType} className="text-slate-600" />
+    ),
     enableSorting: true,
     meta: { width: 180 },
   },
   {
     accessorKey: 'gitTag',
     header: renderSortableHeader('Version Tag'),
-    cell: ({ row }) => <TableCellText value={row.original.gitTag} />,
+    cell: ({ row }) => <TableCellText value={row.original.gitTag} className="text-slate-600" />,
     enableSorting: true,
     meta: { width: 180 },
   },
@@ -206,6 +216,7 @@ const columns: ColumnDef<SimulationOut>[] = [
         <Button
           variant="outline"
           size="sm"
+          className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           onClick={() => {
             window.location.href = `/simulations/${simulation.id}`;
           }}
@@ -292,16 +303,12 @@ export const SimulationResultsTable = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
   handleCompareButtonClick,
+  columnVisibility,
+  setColumnVisibility,
 }: SimulationResultsTable) => {
   // -------------------- Local State --------------------
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    ensembleMember: false,
-    gridResolution: false,
-    gridName: false,
-    compset: false,
-  });
 
   // -------------------- Derived Data --------------------
   const rowSelection = idsToRowSelection(selectedSimulationIds);
@@ -374,8 +381,7 @@ export const SimulationResultsTable = ({
 
   return (
     <div className="w-full min-w-0">
-      {/* Top controls */}
-      <div className="flex flex-col gap-3 py-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="py-4">
         <BrowseToolbar
           simulations={simulations}
           buttonText="Compare"
@@ -384,40 +390,14 @@ export const SimulationResultsTable = ({
           setSelectedSimulationIds={setSelectedSimulationIds}
           isCompareButtonDisabled={isCompareButtonDisabled}
         />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-10 w-full rounded-xl border-slate-200 bg-white text-slate-700 shadow-sm xl:ml-auto xl:w-auto"
-            >
-              Columns <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((col) => col.getCanHide())
-              .map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  className="capitalize"
-                  checked={col.getIsVisible()}
-                  onCheckedChange={(val) => col.toggleVisibility(!!val)}
-                >
-                  {col.id}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto overflow-y-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <Table
           className="w-full table-fixed border-separate border-spacing-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
           style={{ minWidth: tableMinWidth }}
         >
-          <TableHeader className="bg-slate-50/90">
+          <TableHeader className="bg-slate-50/95">
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id} className="border-b border-slate-200 hover:bg-transparent">
                 {hg.headers.map((header) => {
@@ -433,8 +413,8 @@ export const SimulationResultsTable = ({
                       key={header.id}
                       className={
                         isSticky
-                          ? 'sticky z-20 overflow-hidden border-b border-slate-200 bg-slate-50/95'
-                          : 'overflow-hidden border-b border-slate-200 bg-slate-50/90'
+                          ? 'sticky z-20 overflow-hidden border-b border-slate-200 bg-slate-50/95 shadow-[inset_0_-1px_0_0_rgba(226,232,240,1)]'
+                          : 'overflow-hidden border-b border-slate-200 bg-slate-50/95 shadow-[inset_0_-1px_0_0_rgba(226,232,240,1)]'
                       }
                       style={{
                         left,
@@ -455,7 +435,11 @@ export const SimulationResultsTable = ({
           </TableHeader>
           <TableBody>
             {paginatedRows.map((row) => (
-              <TableRow key={row.id} className="hover:bg-slate-50/70">
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() ? 'selected' : undefined}
+                className="border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
+              >
                 {row.getVisibleCells().map((cell) => {
                   const meta = cell.column.columnDef.meta;
                   const isSticky = meta?.sticky;
@@ -468,8 +452,8 @@ export const SimulationResultsTable = ({
                       key={cell.id}
                       className={
                         isSticky
-                          ? 'sticky z-10 overflow-hidden bg-white align-middle'
-                          : 'overflow-hidden align-middle'
+                          ? 'sticky z-10 overflow-hidden bg-white align-middle text-slate-700'
+                          : 'overflow-hidden align-middle text-slate-700'
                       }
                       style={{
                         left,

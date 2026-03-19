@@ -19,8 +19,10 @@ const MultiSelectCheckboxGroup = ({
 }: MultiSelectCheckboxGroupProps) => {
   return (
     <div>
-      <label className="block text-sm font-medium mb-2">{label}</label>
-      <div className="space-y-2">
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </label>
+      <div className="space-y-1.5">
         {options.map((opt) => {
           const value = typeof opt === 'string' ? opt : opt.value;
           const display = renderOptionLabel
@@ -41,7 +43,7 @@ const MultiSelectCheckboxGroup = ({
                   onChange(next);
                 }}
               />
-              <label htmlFor={`${label}-${value}`} className="text-sm">
+              <label htmlFor={`${label}-${value}`} className="text-sm text-slate-700">
                 {display}
               </label>
             </div>
