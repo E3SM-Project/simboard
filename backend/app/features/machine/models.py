@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class Machine(Base, IDMixin, TimestampMixin):
     __tablename__ = "machines"
 
-    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
     site: Mapped[str] = mapped_column(String(200))
     architecture: Mapped[str] = mapped_column(String(100))
     scheduler: Mapped[str] = mapped_column(String(100))

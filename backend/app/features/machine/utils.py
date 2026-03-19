@@ -1,4 +1,3 @@
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
@@ -21,13 +20,4 @@ def resolve_machine_by_name(db: Session, machine_name: str) -> Machine | None:
     """Resolve a machine by canonical name, accepting known aliases."""
     canonical_name = canonicalize_machine_name(machine_name)
 
-    machine = db.query(Machine).filter(Machine.name == canonical_name).first()
-    if machine is not None:
-        return machine
-
-    # Fallback for legacy mixed-case rows until machine names are normalized.
-    machine = (
-        db.query(Machine).filter(func.lower(Machine.name) == canonical_name).first()
-    )
-
-    return machine
+    return db.query(Machine).filter(Machine.name == canonical_name).first()

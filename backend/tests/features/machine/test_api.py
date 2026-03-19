@@ -1,6 +1,9 @@
 from uuid import uuid4
 
+import pytest
 from fastapi import HTTPException
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
@@ -23,8 +26,10 @@ class TestCreateMachine:
         machine_create = MachineCreate(**payload)
         machine = create_machine(machine_create, db)
 
+        assert machine.name == "machine a"
         for key in payload:
-            assert getattr(machine, key) == payload[key]
+            if key != "name":
+                assert getattr(machine, key) == payload[key]
 
     def test_endpoint_succeeds_with_valid_payload(self, client):
         payload = {
@@ -41,13 +46,15 @@ class TestCreateMachine:
         assert res.status_code == 201
         data = res.json()
 
+        assert data["name"] == "machine f"
         for key in payload:
-            assert data[key] == payload[key]
+            if key != "name":
+                assert data[key] == payload[key]
 
     def test_function_raises_error_for_duplicate_name_(self, db: Session):
         db.add(
             Machine(
-                name="Machine B",
+                name="machine b",
                 site="Site B",
                 architecture="x86_64",
                 scheduler="PBS",
@@ -58,7 +65,7 @@ class TestCreateMachine:
         db.commit()
 
         payload = {
-            "name": "Machine B",
+            "name": "MACHINE B",
             "site": "Site C",
             "architecture": "ARM",
             "scheduler": "SLURM",
@@ -75,7 +82,7 @@ class TestCreateMachine:
     def test_endpoint_raises_400_for_duplicate_name(self, client, db: Session):
         db.add(
             Machine(
-                name="Machine B",
+                name="machine b",
                 site="Site B",
                 architecture="x86_64",
                 scheduler="PBS",
@@ -86,7 +93,7 @@ class TestCreateMachine:
         db.commit()
 
         payload = {
-            "name": "Machine B",
+            "name": "MACHINE B",
             "site": "Site C",
             "architecture": "ARM",
             "scheduler": "SLURM",
@@ -97,6 +104,56 @@ class TestCreateMachine:
         res = client.post(f"{API_BASE}/machines", json=payload)
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine with this name already exists"
+
+    def test_database_enforces_case_insensitive_machine_uniqueness(
+        self, db: Session
+    ) -> None:
+        db.add(
+            Machine(
+                name="machine constraint",
+                site="Site A",
+                architecture="x86_64",
+                scheduler="SLURM",
+                gpu=False,
+            )
+        )
+        db.commit()
+
+        db.add(
+            Machine(
+                name="MACHINE CONSTRAINT",
+                site="Site B",
+                architecture="ARM",
+                scheduler="PBS",
+                gpu=False,
+            )
+        )
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+        db.rollback()
+
+    def test_database_uses_lowercase_unique_index_for_machine_names(
+        self, db: Session
+    ) -> None:
+        index_rows = db.execute(
+            text(
+                """
+                SELECT indexname, indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND tablename = 'machines'
+                ORDER BY indexname
+                """
+            )
+        ).all()
+
+        indexes = {row[0]: row[1] for row in index_rows}
+
+        assert "ix_machines_name" not in indexes
+        assert "uq_machines_name_lower" in indexes
+        assert "UNIQUE INDEX" in indexes["uq_machines_name_lower"]
+        assert "lower(" in indexes["uq_machines_name_lower"]
 
 
 class TestListMachines:
@@ -140,7 +197,7 @@ class TestListMachines:
 class TestGetMachine:
     def test_function_successfully_gets_machine(self, db: Session):
         expected = Machine(
-            name="Machine E",
+            name="machine e",
             site="Site E",
             architecture="x86_64",
             scheduler="SLURM",
@@ -157,7 +214,7 @@ class TestGetMachine:
 
     def test_endpoint_successfully_get_machine(self, client, db: Session):
         expected = Machine(
-            name="Machine E",
+            name="machine e",
             site="Site E",
             architecture="x86_64",
             scheduler="SLURM",

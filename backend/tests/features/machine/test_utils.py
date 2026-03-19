@@ -40,10 +40,10 @@ class TestResolveMachineByName:
         assert resolved is not None
         assert resolved.id == machine.id
 
-    def test_falls_back_to_case_insensitive_match_for_legacy_rows(
+    def test_resolves_unknown_names_after_lowercase_normalization(
         self, db: Session
     ) -> None:
-        machine = self._create_machine(db, "Legacy-Machine")
+        machine = self._create_machine(db, "legacy-machine")
 
         resolved = resolve_machine_by_name(db, " legacy-machine ")
 

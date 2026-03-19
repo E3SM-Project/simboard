@@ -7,6 +7,7 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate, MachineOut
+from app.features.machine.utils import canonicalize_machine_name
 
 router = APIRouter(prefix="/machines", tags=["Machines"])
 
@@ -48,13 +49,17 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_database_se
         If a machine with the same name already exists, an HTTP 400 Bad Request
         error is raised with an appropriate message.
     """
-    if db.query(Machine).filter(Machine.name == payload.name).first():
+    normalized_name = canonicalize_machine_name(payload.name)
+
+    if db.query(Machine).filter(Machine.name == normalized_name).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Machine with this name already exists",
         )
 
-    new_machine = Machine(**payload.model_dump())
+    machine_data = payload.model_dump()
+    machine_data["name"] = normalized_name
+    new_machine = Machine(**machine_data)
 
     with transaction(db):
         db.add(new_machine)

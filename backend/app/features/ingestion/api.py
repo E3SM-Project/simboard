@@ -27,6 +27,16 @@ from app.features.user.models import User, UserRole
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
 
+def _resolve_request_machine(db: Session, machine_name: str):
+    machine = resolve_machine_by_name(db, machine_name)
+    if not machine:
+        raise HTTPException(
+            status_code=404, detail=f"Machine '{machine_name}' not found."
+        )
+
+    return machine
+
+
 @router.post(
     "/from-path",
     response_model=IngestionResponse,
@@ -78,12 +88,7 @@ def ingest_from_path(
             detail="Only administrators and service accounts may ingest from filesystem paths.",
         )
 
-    machine = resolve_machine_by_name(db, payload.machine_name)
-
-    if not machine:
-        raise HTTPException(
-            status_code=404, detail=f"Machine '{payload.machine_name}' not found."
-        )
+    machine = _resolve_request_machine(db, payload.machine_name)
 
     archive_path = Path(payload.archive_path)
     _validate_archive_path(archive_path)
@@ -151,12 +156,7 @@ def ingest_from_upload(
         Response model summarizing ingestion results, including counts,
         created simulations, and any recorded errors.
     """
-    machine = resolve_machine_by_name(db, machine_name)
-
-    if not machine:
-        raise HTTPException(
-            status_code=404, detail=f"Machine '{machine_name}' not found."
-        )
+    machine = _resolve_request_machine(db, machine_name)
 
     _validate_upload_file(file)
     filename = file.filename
