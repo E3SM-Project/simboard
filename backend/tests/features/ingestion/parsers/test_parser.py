@@ -167,6 +167,13 @@ class TestMainParser:
         assert parser.FILE_SPECS["case_docs_env_run"]["required"] is True
         assert parser.FILE_SPECS["e3sm_timing"]["required"] is True
 
+    def test_resolve_execution_id_rejects_blank_values(self) -> None:
+        with pytest.raises(
+            FileNotFoundError,
+            match="Required timing-file LID missing for execution directory '1.0-0'",
+        ):
+            parser._resolve_execution_id("   ", "1.0-0")
+
     def test_with_valid_zip_archive(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
         execution_dir = archive_base / "1.0-0"

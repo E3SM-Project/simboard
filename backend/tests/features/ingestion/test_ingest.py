@@ -16,6 +16,7 @@ from app.features.ingestion.ingest import (
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
+    _stringify_config_value,
     _validate_simulation_create,
     ingest_archive,
 )
@@ -91,6 +92,13 @@ class TestIngestArchive:
     - Archive parsing integration
     - Error handling and propagation
     """
+
+    def test_stringify_config_value_falls_back_to_str_for_non_string_objects(self):
+        class ValueObject:
+            def __str__(self) -> str:
+                return "42"
+
+        assert _stringify_config_value(ValueObject()) == "42"
 
     @staticmethod
     def _create_machine(db: Session, name: str) -> Machine:

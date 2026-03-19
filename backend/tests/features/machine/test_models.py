@@ -1,16 +1,52 @@
+from collections.abc import Generator
+from typing import cast
+from uuid import uuid4
+
 import pytest
+from sqlalchemy import Table, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.models.base import Base
 from app.features.machine.models import Machine
+from tests.conftest import engine
 
-pytestmark = pytest.mark.asyncio
+
+@pytest.fixture
+def machine_create_all_db() -> Generator[Session, None, None]:
+    schema_name = f"test_machine_create_all_{uuid4().hex}"
+
+    with engine.connect() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
+        connection.execute(text(f'SET search_path TO "{schema_name}"'))
+        Base.metadata.create_all(
+            bind=connection,
+            tables=[cast(Table, Machine.__table__)],
+        )
+        connection.commit()
+
+        session = sessionmaker(
+            bind=connection,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,
+            future=True,
+        )()
+
+        try:
+            yield session
+        finally:
+            session.close()
+            connection.execute(text("RESET search_path"))
+            connection.execute(text(f'DROP SCHEMA "{schema_name}" CASCADE'))
+            connection.commit()
 
 
 class TestMachineModelCreateAllSchema:
-    async def test_create_all_schema_enforces_case_insensitive_uniqueness(
-        self, async_db
+    def test_create_all_schema_enforces_case_insensitive_uniqueness(
+        self, machine_create_all_db: Session
     ) -> None:
-        async_db.add(
+        machine_create_all_db.add(
             Machine(
                 name="machine constraint",
                 site="Site A",
@@ -19,9 +55,9 @@ class TestMachineModelCreateAllSchema:
                 gpu=False,
             )
         )
-        await async_db.commit()
+        machine_create_all_db.commit()
 
-        async_db.add(
+        machine_create_all_db.add(
             Machine(
                 name="MACHINE CONSTRAINT",
                 site="Site B",
@@ -32,14 +68,14 @@ class TestMachineModelCreateAllSchema:
         )
 
         with pytest.raises(IntegrityError):
-            await async_db.commit()
+            machine_create_all_db.commit()
 
-        await async_db.rollback()
+        machine_create_all_db.rollback()
 
-    async def test_create_all_schema_enforces_lowercase_machine_names(
-        self, async_db
+    def test_create_all_schema_enforces_lowercase_machine_names(
+        self, machine_create_all_db: Session
     ) -> None:
-        async_db.add(
+        machine_create_all_db.add(
             Machine(
                 name="Mixed-Case-Machine",
                 site="Site Mixed",
@@ -50,6 +86,6 @@ class TestMachineModelCreateAllSchema:
         )
 
         with pytest.raises(IntegrityError):
-            await async_db.commit()
+            machine_create_all_db.commit()
 
-        await async_db.rollback()
+        machine_create_all_db.rollback()

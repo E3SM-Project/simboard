@@ -250,6 +250,22 @@ class TestParseEnvRun:
 
         assert result["simulation_end_date"] is None
 
+    def test_missing_simulation_start_date_returns_none(self, tmp_path):
+        xml_run = """
+        <config>
+            <entry id="RUN_TYPE" value="startup" />
+            <entry id="STOP_OPTION" value="ndays" />
+            <entry id="STOP_N" value="10" />
+        </config>
+        """
+        tmp_run = tmp_path / "env_run_missing_start.xml"
+        tmp_run.write_text(xml_run)
+
+        result = parse_env_run(tmp_run)
+
+        assert result["simulation_start_date"] is None
+        assert result["simulation_end_date"] is None
+
     def test_missing_stop_date_returns_none(self, tmp_path):
         xml_run = """
         <config>

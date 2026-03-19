@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.common.dependencies import get_database_session
-from app.common.models.base import Base
 from app.core.config import settings
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
@@ -390,12 +389,17 @@ AsyncTestingSessionLocal = async_sessionmaker(
 @pytest_asyncio.fixture(scope="function")
 async def async_db() -> AsyncGenerator[AsyncSession, None]:
     """Provide an AsyncSession for FastAPI Users tests."""
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    async with AsyncTestingSessionLocal() as session:
-        yield session
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    async with async_engine.connect() as conn:
+        outer_tx = await conn.begin()
+        session = AsyncTestingSessionLocal(
+            bind=conn,
+            join_transaction_mode="create_savepoint",
+        )
+        try:
+            yield session
+        finally:
+            await session.close()
+            await outer_tx.rollback()
 
 
 @pytest_asyncio.fixture(scope="function")

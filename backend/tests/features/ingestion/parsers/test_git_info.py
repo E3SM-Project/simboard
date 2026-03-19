@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.features.ingestion.parsers.git_info import (
+    _extract_branch,
     _extract_remote_url,
     parse_git_config,
     parse_git_describe,
@@ -39,6 +40,11 @@ class TestGitInfoParser:
         result = parse_git_status(str(file_path))
 
         assert result == {"git_branch": "feature/59-automate-ingestion"}
+
+    def test_extract_branch_returns_none_without_branch_line(self) -> None:
+        lines = ["nothing useful here", "HEAD detached at abc123"]
+
+        assert _extract_branch(lines) is None
 
     def test_parse_git_config_origin_url(self, tmp_path: Path) -> None:
         content = '[remote "origin"]\n    url = https://github.com/example/repo.git\n'
