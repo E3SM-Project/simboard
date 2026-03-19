@@ -9,9 +9,14 @@ MACHINE_NAME_ALIASES = {
 }
 
 
+def normalize_machine_name_for_storage(machine_name: str) -> str:
+    """Normalize machine names for canonical lowercase storage."""
+    return machine_name.strip().lower()
+
+
 def canonicalize_machine_name(machine_name: str) -> str:
     """Normalize external machine names to their canonical SimBoard name."""
-    normalized_name = machine_name.strip().lower()
+    normalized_name = normalize_machine_name_for_storage(machine_name)
 
     return MACHINE_NAME_ALIASES.get(normalized_name, normalized_name)
 

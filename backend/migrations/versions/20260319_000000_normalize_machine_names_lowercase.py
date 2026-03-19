@@ -44,6 +44,11 @@ def upgrade() -> None:
     op.execute(
         sa.text("UPDATE machines SET name = lower(name) WHERE name <> lower(name)")
     )
+    op.create_check_constraint(
+        "ck_machines_name_lowercase",
+        "machines",
+        "name = lower(name)",
+    )
     op.drop_index(op.f("ix_machines_name"), table_name="machines")
     op.create_index(
         "uq_machines_name_lower",
@@ -56,4 +61,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restore the original case-sensitive unique index."""
     op.drop_index("uq_machines_name_lower", table_name="machines")
+    op.drop_constraint("ck_machines_name_lowercase", "machines", type_="check")
     op.create_index(op.f("ix_machines_name"), "machines", ["name"], unique=True)

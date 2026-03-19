@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.features.machine.models import Machine
 from app.features.machine.utils import (
     canonicalize_machine_name,
+    normalize_machine_name_for_storage,
     resolve_machine_by_name,
 )
 
@@ -15,6 +16,12 @@ class TestCanonicalizeMachineName:
 
     def test_normalizes_unknown_names(self) -> None:
         assert canonicalize_machine_name(" Frontier ") == "frontier"
+
+
+class TestNormalizeMachineNameForStorage:
+    def test_lowercases_and_trims_without_alias_expansion(self) -> None:
+        assert normalize_machine_name_for_storage(" Machine A ") == "machine a"
+        assert normalize_machine_name_for_storage("PM") == "pm"
 
 
 class TestResolveMachineByName:
