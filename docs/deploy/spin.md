@@ -227,7 +227,7 @@ Prerequisites for this section:
      python -m app.scripts.users.provision_service_account \
        --service-name nersc-archive-ingestor \
        --base-url http://backend:8000 \
-       --admin-email admin@simboard.org \
+       --admin-email admin@simboard-dev.e3sm.org \
        --expires-in-days 365
      ```
 

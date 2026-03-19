@@ -42,7 +42,7 @@ jobs:
       # --------------------------------------------------
       ENV: "test"
       ENVIRONMENT: "test"
-      DOMAIN: "localhost"
+      DOMAIN_URL: "https://example.com"
       STACK_NAME: "simboard"
       PORT: "8000"
 

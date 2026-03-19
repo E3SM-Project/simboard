@@ -305,12 +305,12 @@ Use an explicit rollout strategy that guarantees only one new pod (and therefore
 
 ```yaml
 spec:
-   replicas: 1
-   strategy:
-      type: RollingUpdate
-      rollingUpdate:
-         maxSurge: 0
-         maxUnavailable: 1
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
 ```
 
 Why this is required: with default `RollingUpdate` settings, Kubernetes may create a surge pod during updates, which can run a second migration initContainer even when the steady-state replica count is `1`.
@@ -366,7 +366,7 @@ cd backend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg ENV=production \
-  -t registry.nersc.gov/e3sm/simboard/backend:manual \
+  -t registry.nersc.gov/e3sm/simboard/backend:dev-manual \
   --push \
   .
 
@@ -380,7 +380,7 @@ cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
+  -t registry.nersc.gov/e3sm/simboard/frontend:dev-manual \
   --push \
   .
 ```
@@ -391,7 +391,7 @@ cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg VITE_API_BASE_URL=https://simboard-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
+  -t registry.nersc.gov/e3sm/simboard/frontend:prod-manual \
   --push \
   .
 ```

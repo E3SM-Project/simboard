@@ -34,7 +34,7 @@ help:
 	@echo "  make install                               # Install backend, frontend, and pre-commit dependencies"
 	@echo "  make setup-local                           # Bare-metal local environment setup"
 	@echo "  make setup-local-assets                    # Ensure .env files + certs exist"
-	@echo "  make copy-env-files                        # Copy .env.example → .env"
+	@echo "  make copy-env-files                        # Copy example env files into .envs/local/"
 	@echo "  make gen-certs                             # Generate local SSL certs"
 	@echo ""
 
@@ -279,7 +279,7 @@ frontend-fix:
 .PHONY: docker-help docker-build docker-rebuild docker-up docker-down docker-restart docker-logs docker-shell docker-ps docker-config
 
 ENV_PROD := \
-	--env-file .env \
+	--env-file .envs/local/.env \
 	--env-file .envs/local/backend.production.env
 
 COMPOSE := docker compose $(ENV_PROD) -f docker-compose.yml
