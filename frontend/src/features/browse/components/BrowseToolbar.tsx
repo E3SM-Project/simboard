@@ -21,17 +21,18 @@ export const BrowseToolbar = ({
   isCompareButtonDisabled,
 }: SelectedSimulationsBreadcrumbProps) => {
   return (
-    <div className="flex items-center">
+    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-start">
       <Button
         variant="default"
         size="sm"
         onClick={() => onCompareButtonClick()}
         disabled={isCompareButtonDisabled}
+        className="w-full sm:w-auto"
       >
         {buttonText}
       </Button>
 
-      <div className="ml-4 flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:ml-4">
         <span
           className={`text-xs ${
             selectedSimulationIds.length === MAX_SELECTION
@@ -47,9 +48,9 @@ export const BrowseToolbar = ({
           return (
             <span
               key={id}
-              className="flex items-center rounded bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
+              className="flex max-w-full items-center rounded bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
             >
-              {row.executionId}
+              <span className="truncate">{row.executionId}</span>
               <button
                 type="button"
                 className="ml-1 text-muted-foreground hover:text-destructive focus:outline-none"
@@ -67,7 +68,7 @@ export const BrowseToolbar = ({
           <Button
             variant="ghost"
             size="sm"
-            className="ml-2 text-xs"
+            className="text-xs sm:ml-2"
             onClick={() => setSelectedSimulationIds([])}
           >
             Deselect all

@@ -449,10 +449,10 @@ export const BrowsePage = ({
   // -------------------- Render --------------------
   return (
     <div className="w-full bg-white">
-      <div className="mx-auto max-w-[1440px] px-6 py-8">
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="flex flex-row w-full gap-6">
-            <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
+      <div className="mx-auto w-full max-w-[2200px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        <div className="grid gap-6 lg:grid-cols-[clamp(300px,22vw,380px)_minmax(0,1fr)] xl:gap-8">
+          <div className="min-w-0">
+            <div className="lg:pr-2">
               <BrowseFiltersSidePanel
                 appliedFilters={appliedFilters}
                 availableFilters={availableFilters}
@@ -464,17 +464,19 @@ export const BrowsePage = ({
                 onCaseNameChange={handleCaseNameChange}
               />
             </div>
-            <div className="flex-1 flex flex-col min-w-0">
-              <header className="mb-3 px-2 mt-4 flex items-center justify-between">
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-col">
+              <header className="mb-4 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:p-5 xl:flex-row xl:items-start xl:justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold mb-2">Browse Simulations</h1>
-                  <p className="text-gray-600 max-w-6xl">
+                  <h1 className="mb-2 text-3xl font-bold">Browse Simulations</h1>
+                  <p className="max-w-4xl text-gray-600">
                     Explore and filter available simulations using the panel on the left. Select
                     simulations to view more details or take further actions.
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1 ml-8">
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="flex flex-col gap-3 xl:min-w-[250px] xl:items-end">
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground xl:justify-end">
                     <span>
                       <span className="font-semibold text-foreground">{filteredData.length}</span>{' '}
                       simulations found
@@ -488,12 +490,16 @@ export const BrowsePage = ({
                     </span>
                   </div>
                   <TooltipProvider delayDuration={150}>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 xl:justify-end">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             aria-label="Table view"
-                            className={`p-2 rounded ${viewMode === 'table' ? 'bg-gray-200' : ''}`}
+                            className={`rounded border p-2 transition-colors ${
+                              viewMode === 'table'
+                                ? 'border-gray-300 bg-gray-200'
+                                : 'border-transparent hover:bg-gray-100'
+                            }`}
                             onClick={() => setViewMode('table')}
                           >
                             <Table size={24} strokeWidth={2} />
@@ -505,7 +511,11 @@ export const BrowsePage = ({
                         <TooltipTrigger asChild>
                           <button
                             aria-label="Grid view"
-                            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-200' : ''}`}
+                            className={`rounded border p-2 transition-colors ${
+                              viewMode === 'grid'
+                                ? 'border-gray-300 bg-gray-200'
+                                : 'border-transparent hover:bg-gray-100'
+                            }`}
                             onClick={() => setViewMode('grid')}
                           >
                             <LayoutGrid size={24} strokeWidth={2} />
@@ -518,8 +528,8 @@ export const BrowsePage = ({
                 </div>
               </header>
 
-              <div className="flex flex-col items-start gap-2">
-                <div className="flex flex-wrap gap-2">
+              <div className="mb-4 flex min-w-0 flex-col items-start gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   {(
                     Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
                   ).flatMap(([key, values]) => {
@@ -534,12 +544,12 @@ export const BrowsePage = ({
                         return (
                           <span
                             key={`${key}-${value}-${idx}`}
-                            className="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-sm text-gray-700 border border-gray-300"
+                            className="inline-flex max-w-full items-center rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-sm text-gray-700"
                           >
                             <span className="mr-2 font-medium capitalize">
                               {String(key).replace(/Id$/, '')}:
                             </span>
-                            <span className="mr-2">{display}</span>
+                            <span className="mr-2 truncate">{display}</span>
                             <button
                               type="button"
                               aria-label={`Remove ${String(key)} filter`}
@@ -573,12 +583,12 @@ export const BrowsePage = ({
                       return (
                         <span
                           key={`${String(key)}-${values}`}
-                          className="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-sm text-gray-700 border border-gray-300"
+                          className="inline-flex max-w-full items-center rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-sm text-gray-700"
                         >
                           <span className="mr-2 font-medium capitalize">
                             {String(key).replace(/Id$/, '')}:
                           </span>
-                          <span className="mr-2">{display}</span>
+                          <span className="mr-2 truncate">{display}</span>
                           <button
                             type="button"
                             aria-label={`Remove ${String(key)} filter`}
@@ -624,7 +634,7 @@ export const BrowsePage = ({
                   )}
                 </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 {viewMode === 'table' ? (
                   <SimulationResultsTable
                     simulations={simulations}
@@ -646,8 +656,8 @@ export const BrowsePage = ({
                 )}
 
                 {/* Shared pagination controls */}
-                <div className="flex items-center justify-between py-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 py-4 text-sm text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span>Rows per page:</span>
                     <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
                       <SelectTrigger className="w-[70px] h-8">
@@ -666,7 +676,7 @@ export const BrowsePage = ({
                       {Math.min(page * pageSize, totalItems)} of {totalItems}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <Button
                       variant="outline"
                       size="sm"

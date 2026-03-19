@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { TableCellText } from '@/components/ui/table-cell-text';
 import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
@@ -20,6 +21,9 @@ export const ComparePage = ({
   setSelectedSimulationIds,
   selectedSimulations,
 }: ComparePageProps) => {
+  const LABEL_COLUMN_WIDTH = 260;
+  const VALUE_COLUMN_WIDTH = 320;
+
   // -------------------- Router --------------------
   const navigate = useNavigate();
   const handleButtonClick = () => navigate('/Browse');
@@ -267,6 +271,19 @@ export const ComparePage = ({
     }));
   };
 
+  const renderCompareValue = (sectionKey: string, value: unknown) => {
+    if (sectionKey === 'locations' || sectionKey === 'diagnostics' || sectionKey === 'performance') {
+      return <div className="max-w-full min-w-0 break-words">{renderCellValue(value)}</div>;
+    }
+
+    const lines =
+      sectionKey === 'notes' || sectionKey === 'keyFeatures' || sectionKey === 'knownIssues' ? 3 : 2;
+    const textValue =
+      value === null || value === undefined || value === '' ? '—' : String(value);
+
+    return <TableCellText value={textValue} lines={lines} fullValueMode="tooltip" />;
+  };
+
   // -------------------- Render --------------------
   if (selectedSimulationIds.length === 0) {
     return (
@@ -353,16 +370,22 @@ export const ComparePage = ({
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <div className="min-w-[72rem]">
+          <div
+            className="min-w-max"
+            style={{ minWidth: LABEL_COLUMN_WIDTH + visibleOrder.length * VALUE_COLUMN_WIDTH }}
+          >
             {/* Column headers */}
             <div className="flex border-b bg-gray-100 font-semibold text-sm">
-              <div className="sticky-col shrink-0 w-64 px-4 py-2 border-r z-10 bg-white"></div>
+              <div
+                className="sticky left-0 z-10 shrink-0 border-r bg-white px-4 py-2 shadow-sm"
+                style={{ width: LABEL_COLUMN_WIDTH }}
+              ></div>
               {order
                 .filter((colIdx) => !hidden.includes(selectedSimulationIds[colIdx]))
                 .map((colIdx) => (
                   <div
                     key={colIdx}
-                    className="flex-1 min-w-[12rem] px-4 py-2 text-center cursor-default relative group"
+                    className="relative shrink-0 cursor-default border-r px-4 py-3 group"
                     draggable
                     onDragStart={() => handleDragStart(colIdx)}
                     onDragOver={(e) => handleDragOver(e, colIdx)}
@@ -371,9 +394,10 @@ export const ComparePage = ({
                     style={{
                       opacity: dragCol.current === colIdx ? 0.5 : 1,
                       zIndex: dragOverIdx === colIdx ? 20 : undefined,
+                      width: VALUE_COLUMN_WIDTH,
                     }}
                   >
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-start gap-2">
                       {/* Drag handle */}
                       <span
                         className="cursor-grab text-gray-400 hover:text-blue-600"
@@ -392,10 +416,10 @@ export const ComparePage = ({
                         </svg>
                       </span>
                       {/* Sim name clickable */}
-                      <div className="flex flex-col items-center">
+                      <div className="min-w-0 pr-12 text-left">
                         <a
                           href={`/simulations/${selectedSimulationIds[colIdx]}`}
-                          className="text-lg font-semibold text-blue-700 hover:underline transition"
+                          className="block max-w-full truncate font-mono text-sm font-semibold text-blue-700 transition hover:underline"
                           tabIndex={0}
                           title={`Go to details for ${headers[colIdx]}`}
                           onClick={(e) => {
@@ -405,9 +429,12 @@ export const ComparePage = ({
                         >
                           {headers[colIdx]}
                         </a>
-                        <span className="text-xs text-muted-foreground">
-                          {getSimProp(selectedSimulationIds[colIdx], 'caseName', '')}
-                        </span>
+                        <TableCellText
+                          value={String(getSimProp(selectedSimulationIds[colIdx], 'caseName', ''))}
+                          lines={2}
+                          className="mt-1 text-xs text-muted-foreground"
+                          fullValueMode="tooltip"
+                        />
                       </div>
                     </div>
                     <button
@@ -468,9 +495,10 @@ export const ComparePage = ({
                   }}
                 >
                   <button
-                    className={`sticky-col w-64 px-4 py-3 font-semibold border-r text-lg uppercase tracking-wide bg-white z-10 flex items-center focus:outline-none ${
+                    className={`sticky left-0 z-10 shrink-0 flex items-center border-r bg-white px-4 py-3 text-lg font-semibold uppercase tracking-wide shadow-sm focus:outline-none ${
                       expandedSections[sectionKey] ? 'text-gray-900' : 'text-gray-600'
                     }`}
+                    style={{ width: LABEL_COLUMN_WIDTH }}
                     onClick={() => toggleSection(sectionKey)}
                     aria-expanded={expandedSections[sectionKey]}
                     aria-controls={`section-${sectionKey}`}
@@ -502,9 +530,10 @@ export const ComparePage = ({
                         >
                           {/* metric/label cell */}
                           <div
-                            className={`sticky-col w-64 px-4 py-2 font-medium text-sm border-r bg-white z-10 ${
+                            className={`sticky left-0 z-10 shrink-0 border-r bg-white px-4 py-2 text-sm font-medium shadow-sm ${
                               isDiff ? 'border-l-2 border-amber-400' : ''
                             }`}
+                            style={{ width: LABEL_COLUMN_WIDTH }}
                           >
                             {row.label}
                           </div>
@@ -515,9 +544,10 @@ export const ComparePage = ({
                             return (
                               <div
                                 key={colIdx}
-                                className="flex-1 min-w-[12rem] px-4 py-2 text-sm break-words"
+                                className="shrink-0 px-4 py-2 text-sm align-top"
+                                style={{ width: VALUE_COLUMN_WIDTH }}
                               >
-                                {renderCellValue(value)}
+                                {renderCompareValue(sectionKey, value)}
                               </div>
                             );
                           })}

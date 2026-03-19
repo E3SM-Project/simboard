@@ -20,9 +20,9 @@ export const SimulationResultCards = ({
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
 
   return (
-    <div>
+    <div className="min-w-0">
       {/* Top controls */}
-      <div className="flex items-center py-4">
+      <div className="py-4">
         <BrowseToolbar
           simulations={simulations}
           buttonText="Compare"
@@ -33,7 +33,7 @@ export const SimulationResultCards = ({
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
         {filteredData.map((sim) => (
           <div key={sim.id} className="h-full">
             <SimulationResultCard

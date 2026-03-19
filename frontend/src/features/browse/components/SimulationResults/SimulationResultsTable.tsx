@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import type { SimulationOut } from '@/types/index';
 
@@ -71,9 +72,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('caseName')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.caseName} />,
     enableSorting: true,
-    meta: { sticky: true, width: 200, position: 'left' },
+    meta: { sticky: true, width: 320, position: 'left' },
   },
   {
     accessorKey: 'executionId',
@@ -83,8 +84,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('executionId')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.executionId} mono />,
     enableSorting: true,
+    meta: { width: 220 },
   },
   {
     accessorKey: 'isCanonical',
@@ -107,6 +109,7 @@ const columns: ColumnDef<SimulationOut>[] = [
       );
     },
     enableSorting: true,
+    meta: { width: 110 },
   },
   {
     accessorKey: 'campaign',
@@ -116,8 +119,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('campaign')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.campaign} />,
     enableSorting: true,
+    meta: { width: 280 },
   },
   {
     accessorKey: 'experimentType',
@@ -127,8 +131,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('experimentType')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.experimentType} />,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'gitTag',
@@ -138,8 +143,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('gitTag')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.gitTag} />,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'simulationStartDate',
@@ -158,6 +164,7 @@ const columns: ColumnDef<SimulationOut>[] = [
       );
     },
     enableSorting: true,
+    meta: { width: 150 },
   },
   {
     accessorKey: 'simulationEndDate',
@@ -172,6 +179,7 @@ const columns: ColumnDef<SimulationOut>[] = [
       return end ? <span>{end}</span> : <span className="text-muted-foreground italic">N/A</span>;
     },
     enableSorting: true,
+    meta: { width: 150 },
   },
   {
     accessorKey: 'ensembleMember',
@@ -181,8 +189,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('ensembleMember')}</div>,
+    cell: ({ getValue }) => <TableCellText value={String(getValue() ?? '—')} />,
     enableSorting: true,
+    meta: { width: 160 },
   },
   {
     accessorKey: 'gridResolution',
@@ -192,8 +201,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('gridResolution')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.gridResolution} />,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'compset',
@@ -203,9 +213,10 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('compset')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.compset} />,
     enableSorting: true,
     enableHiding: true,
+    meta: { width: 220 },
   },
   {
     accessorKey: 'gridName',
@@ -215,9 +226,10 @@ const columns: ColumnDef<SimulationOut>[] = [
         <ArrowUpDown />
       </Button>
     ),
-    cell: ({ row }) => <div>{row.getValue('gridName')}</div>,
+    cell: ({ row }) => <TableCellText value={row.original.gridName} />,
     enableSorting: true,
     enableHiding: true,
+    meta: { width: 180 },
   },
   {
     id: 'details',
@@ -389,11 +401,15 @@ export const SimulationResultsTable = ({
   const sortedFilteredRows = table.getRowModel().rows;
   const pageStart = (page - 1) * pageSize;
   const paginatedRows = sortedFilteredRows.slice(pageStart, pageStart + pageSize);
+  const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => {
+    const meta = column.columnDef.meta as { width?: number } | undefined;
+    return sum + (meta?.width ?? 180);
+  }, 0);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {/* Top controls */}
-      <div className="flex items-center py-4">
+      <div className="flex flex-col gap-3 py-4 xl:flex-row xl:items-start xl:justify-between">
         <BrowseToolbar
           simulations={simulations}
           buttonText="Compare"
@@ -405,7 +421,7 @@ export const SimulationResultsTable = ({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
+            <Button variant="outline" className="w-full xl:ml-auto xl:w-auto">
               Columns <ChevronDown />
             </Button>
           </DropdownMenuTrigger>
@@ -427,71 +443,74 @@ export const SimulationResultsTable = ({
         </DropdownMenu>
       </div>
 
-      {/* Scroll container for sticky columns */}
-      <div className="rounded-md border overflow-x-auto w-full max-w-full"></div>
-      <Table className="min-w-max table-auto border-separate border-spacing-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
-        <TableHeader>
-          {table.getHeaderGroups().map((hg) => (
-            <TableRow key={hg.id}>
-              {hg.headers.map((header) => {
-                const meta = header.column.columnDef.meta;
+      <div className="rounded-md border">
+        <Table
+          className="w-full table-fixed border-separate border-spacing-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+          style={{ minWidth: tableMinWidth }}
+        >
+          <TableHeader>
+            {table.getHeaderGroups().map((hg) => (
+              <TableRow key={hg.id}>
+                {hg.headers.map((header) => {
+                  const meta = header.column.columnDef.meta;
 
-                const isSticky = meta?.sticky;
-                const left =
-                  meta?.position === 'left' ? getStickyLeftOffset(header, table) : undefined;
-                const right = meta?.position === 'right' ? 0 : undefined;
+                  const isSticky = meta?.sticky;
+                  const left =
+                    meta?.position === 'left' ? getStickyLeftOffset(header, table) : undefined;
+                  const right = meta?.position === 'right' ? 0 : undefined;
 
-                return (
-                  <TableHead
-                    key={header.id}
-                    className={isSticky ? 'sticky bg-background z-20' : undefined}
-                    style={{
-                      left,
-                      right,
-                      minWidth: meta?.width,
-                      maxWidth: meta?.width,
-                      width: meta?.width,
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {paginatedRows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => {
-                const meta = cell.column.columnDef.meta;
-                const isSticky = meta?.sticky;
-                const left =
-                  meta?.position === 'left' ? getStickyLeftOffset(cell, table) : undefined;
-                const right = meta?.position === 'right' ? 0 : undefined;
+                  return (
+                    <TableHead
+                      key={header.id}
+                      className={isSticky ? 'sticky bg-background z-20' : 'overflow-hidden'}
+                      style={{
+                        left,
+                        right,
+                        minWidth: meta?.width,
+                        maxWidth: meta?.width,
+                        width: meta?.width,
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {paginatedRows.map((row) => (
+              <TableRow key={row.id}>
+                {row.getVisibleCells().map((cell) => {
+                  const meta = cell.column.columnDef.meta;
+                  const isSticky = meta?.sticky;
+                  const left =
+                    meta?.position === 'left' ? getStickyLeftOffset(cell, table) : undefined;
+                  const right = meta?.position === 'right' ? 0 : undefined;
 
-                return (
-                  <TableCell
-                    key={cell.id}
-                    className={isSticky ? 'sticky bg-background z-10' : undefined}
-                    style={{
-                      left,
-                      right,
-                      minWidth: meta?.width,
-                      maxWidth: meta?.width,
-                      width: meta?.width,
-                    }}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                  return (
+                    <TableCell
+                      key={cell.id}
+                      className={isSticky ? 'sticky bg-background z-10' : 'overflow-hidden'}
+                      style={{
+                        left,
+                        right,
+                        minWidth: meta?.width,
+                        maxWidth: meta?.width,
+                        width: meta?.width,
+                      }}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-muted-foreground flex-1 text-sm">

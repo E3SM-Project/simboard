@@ -35,7 +35,7 @@ export const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="w-[360px] max-w-full bg-background border-r p-6 flex flex-col gap-6 min-h-screen border border-gray-300">
+    <aside className="flex w-full max-w-full flex-col gap-6 rounded-xl border border-gray-300 bg-background p-5 sm:p-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
       <div className="mb-4">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           Filters <Funnel />

@@ -104,7 +104,7 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
   if (links.length > 0) {
     return (
       <TooltipProvider delayDuration={150}>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex max-w-full flex-wrap gap-2">
           {links.map((l, i) => (
             <Tooltip key={`${l.url}-${i}`}>
               <TooltipTrigger asChild>
@@ -114,7 +114,7 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
                     href={l.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 underline break-all hover:text-blue-800"
+                    className="inline-flex max-w-full items-center gap-1 break-all text-blue-600 underline hover:text-blue-800"
                   >
                     {l.label}
                     <ExternalLink
@@ -125,8 +125,8 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
                   </a>
                 ) : (
                   // Local URIs (Locations)
-                  <span className="inline-flex items-center gap-1 text-gray-700 break-all">
-                    <span>{l.url}</span>
+                  <span className="inline-flex max-w-full items-center gap-1 text-gray-700">
+                    <span className="break-all">{l.url}</span>
                     <button
                       type="button"
                       onClick={() => copyText(l.url)}

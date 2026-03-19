@@ -2,6 +2,15 @@ import { Earth } from 'lucide-react'; // Or use your own SVG if you have one
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import LatestSimulationsTable from '@/features/home/components/LatestSimulationsTable';
 import type { Machine, SimulationOut } from '@/types/index';
 
@@ -17,7 +26,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-[70vh] bg-white px-4 py-12">
-      <section className="flex flex-col md:flex-row items-center gap-10 w-full max-w-7xl mx-auto bg</main>-white/90 shadow-2xl rounded-3xl border border-muted p-10 md:p-20">
+      <section className="mx-auto flex w-full max-w-7xl flex-col items-center gap-10 rounded-3xl border border-muted bg-white/90 p-10 shadow-2xl md:flex-row md:p-20">
         {/* Left: Text */}
         <div className="flex-[1.3]">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
@@ -132,38 +141,42 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
           details.
         </p>
         <div className="bg-white border border-muted rounded-xl shadow p-6">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-2">Name</th>
-                <th className="text-left p-2">Location</th>
-                <th className="text-left p-2">Architecture</th>
-                <th className="text-left p-2">Scheduler</th>
-                <th className="text-left p-2">GPU</th>
-                <th className="text-left p-2">Simulation Count</th>
-                <th className="text-left p-2">Notes</th>
-                <th className="text-left p-2">Created At</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Architecture</TableHead>
+                <TableHead>Scheduler</TableHead>
+                <TableHead>GPU</TableHead>
+                <TableHead>Simulation Count</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Created At</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {machines.map((machine) => (
-                <tr key={machine.id} className="border-b">
-                  <td className="p-2">{machine.name}</td>
-                  <td className="p-2">{machine.site || 'N/A'}</td>
-                  <td className="p-2">{machine.architecture || 'N/A'}</td>
-                  <td className="p-2">{machine.scheduler || 'N/A'}</td>
-                  <td className="p-2">{machine.gpu ? 'Yes' : 'No'}</td>
-                  <td className="p-2">
+                <TableRow key={machine.id}>
+                  <TableCell>{machine.name}</TableCell>
+                  <TableCell>{machine.site || 'N/A'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={machine.architecture || 'N/A'} lines={2} />
+                  </TableCell>
+                  <TableCell>{machine.scheduler || 'N/A'}</TableCell>
+                  <TableCell>{machine.gpu ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>
                     {simulations.filter((sim) => sim.machineId === machine.id).length}
-                  </td>
-                  <td className="p-2">{machine.notes || 'N/A'}</td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={machine.notes || 'N/A'} lines={2} />
+                  </TableCell>
+                  <TableCell>
                     {machine.createdAt ? new Date(machine.createdAt).toLocaleDateString() : 'N/A'}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </section>
     </main>

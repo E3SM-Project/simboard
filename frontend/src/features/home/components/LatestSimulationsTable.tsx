@@ -1,9 +1,17 @@
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ColumnDef } from '@tanstack/react-table';
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { ArrowRight, Check, GitBranch } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import type { SimulationOut } from '@/types/index';
 
 const simulationTypeIcon = (sim: SimulationOut) => {
@@ -37,47 +45,21 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
     {
       accessorKey: 'executionId',
       header: 'Execution ID',
-      cell: (info) => info.getValue() || 'N/A',
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} mono />,
     },
     {
       accessorKey: 'caseName',
       header: 'Case Name',
-      cell: (info) => info.getValue() || 'N/A',
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} />,
     },
     {
       accessorKey: 'campaign',
       header: 'Campaign',
-      cell: (info) => info.getValue() || 'N/A',
-    },
-    {
-      accessorKey: 'simulationStartDate',
-      header: 'Sim Start Date',
-      cell: (info) => {
-        const value = info.getValue();
-        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
-      },
-    },
-    {
-      accessorKey: 'simulationEndDate',
-      header: 'Sim End Date',
-      cell: (info) => {
-        const value = info.getValue();
-        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
-      },
-    },
-    {
-      id: 'versionOrHash',
-      header: 'Version / Git Hash',
-      cell: (info) => {
-        const sim = info.row.original;
-        return sim.simulationType === 'production'
-          ? sim.gitTag || 'N/A'
-          : sim.gitCommitHash || 'N/A';
-      },
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} />,
     },
     {
       accessorKey: 'createdAt',
-      header: 'Upload Date',
+      header: 'Submitted',
       cell: (info) => {
         const value = info.getValue();
         return value ? new Date(value as string).toLocaleDateString() : 'N/A';
@@ -115,46 +97,35 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
   });
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
+    <Table className="table-fixed">
+      <TableHeader>
         {table.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id}>
+          <TableRow key={headerGroup.id}>
             {headerGroup.headers.map((header) => (
-              <th
+              <TableHead
                 key={header.id}
-                style={{
-                  borderBottom: '1px solid #ddd',
-                  padding: '8px',
-                  textAlign: 'left',
-                  background: '#f9f9f9',
-                }}
+                className="bg-muted/40"
               >
                 {header.isPlaceholder
                   ? null
                   : flexRender(header.column.columnDef.header, header.getContext())}
-              </th>
+              </TableHead>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </thead>
-      <tbody>
+      </TableHeader>
+      <TableBody>
         {table.getRowModel().rows.map((row) => (
-          <tr key={row.id}>
+          <TableRow key={row.id}>
             {row.getVisibleCells().map((cell) => (
-              <td
-                key={cell.id}
-                style={{
-                  borderBottom: '1px solid #eee',
-                  padding: '8px',
-                }}
-              >
+              <TableCell key={cell.id} className="align-top">
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </td>
+              </TableCell>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 
