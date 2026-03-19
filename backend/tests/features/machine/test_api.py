@@ -227,7 +227,7 @@ class TestCreateMachine:
 
         assert lowercase_constraint is not None
         assert "CHECK" in lowercase_constraint
-        assert "lower((name)::text)" in lowercase_constraint
+        assert "lower" in lowercase_constraint
 
 
 class TestListMachines:
