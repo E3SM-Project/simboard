@@ -21,12 +21,14 @@ import type { SimulationOut } from '@/types/index';
 interface SimulationResultCard {
   simulation: SimulationOut;
   selected: boolean;
+  isSelectionDisabled: boolean;
   handleSelect: (sim: SimulationOut) => void;
 }
 
 export const SimulationResultCard = ({
   simulation,
   selected,
+  isSelectionDisabled,
   handleSelect,
 }: SimulationResultCard) => {
   // -------------------- Router --------------------
@@ -41,13 +43,26 @@ export const SimulationResultCard = ({
     : 'N/A';
 
   return (
-    <Card className="flex h-full w-full flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-shadow hover:shadow-md">
+    <Card
+      className={`flex h-full w-full flex-col rounded-2xl border bg-white p-0 shadow-sm transition-shadow ${
+        selected
+          ? 'border-slate-300 ring-1 ring-slate-200'
+          : 'border-slate-200 hover:shadow-md'
+      } ${isSelectionDisabled ? 'cursor-default' : 'cursor-pointer'}`}
+      onClick={() => {
+        if (!isSelectionDisabled || selected) {
+          handleSelect(simulation);
+        }
+      }}
+    >
       <div className="flex flex-col items-start gap-4 p-5 sm:flex-row">
         <Checkbox
           checked={selected}
           onCheckedChange={() => handleSelect(simulation)}
           aria-label="Select for comparison"
           className="mt-1"
+          disabled={isSelectionDisabled && !selected}
+          onClick={(event) => event.stopPropagation()}
           style={{ width: 24, height: 24 }}
         />
         <div className="w-full max-w-2xl min-w-0 flex-1">
@@ -104,18 +119,20 @@ export const SimulationResultCard = ({
 
             <div className="my-2 w-full border-t border-slate-200" />
 
-            {/* Grid & Machine grouping with divider and lighter value color */}
-            <div className="mb-4 mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-700">
-              <div className="flex items-center gap-1">
-                <FlaskConical className="h-3 w-3 text-slate-700" />
+            <div className="mb-4 mt-2 space-y-2 text-xs text-slate-700">
+              <div className="flex items-start gap-2">
+                <FlaskConical className="mt-0.5 h-3 w-3 shrink-0 text-slate-700" />
                 <span className="font-semibold">Grid:</span>
-                <span className="ml-1 font-normal text-slate-500">{simulation.gridName}</span>
+                <span className="min-w-0 break-words font-normal text-slate-500">
+                  {simulation.gridName}
+                </span>
               </div>
-              <span className="mx-2 h-4 w-px bg-slate-300" />
-              <div className="flex items-center gap-1">
-                <Server className="h-3 w-3 text-slate-700" />
+              <div className="flex items-start gap-2">
+                <Server className="mt-0.5 h-3 w-3 shrink-0 text-slate-700" />
                 <span className="font-semibold">Machine:</span>
-                <span className="ml-1 font-normal text-slate-500">{simulation.machine.name}</span>
+                <span className="min-w-0 break-words font-normal text-slate-500">
+                  {simulation.machine.name}
+                </span>
               </div>
             </div>
 
@@ -180,8 +197,11 @@ export const SimulationResultCard = ({
             <div style={{ height: '6px' }} />
 
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70">
-              <details className="w-full group">
-                <summary className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-slate-100 group-open:border-b group-open:border-slate-200">
+              <details className="w-full group" onClick={(event) => event.stopPropagation()}>
+                <summary
+                  className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-slate-100 group-open:border-b group-open:border-slate-200"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   More Details
                   <ChevronDown className="w-4 h-4 ml-2" />
                 </summary>
@@ -224,6 +244,7 @@ export const SimulationResultCard = ({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-700 underline"
+                                onClick={(event) => event.stopPropagation()}
                               >
                                 {d.label}
                               </a>
@@ -246,6 +267,7 @@ export const SimulationResultCard = ({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-700 underline"
+                                onClick={(event) => event.stopPropagation()}
                               >
                                 {p.label}
                               </a>
@@ -329,7 +351,10 @@ export const SimulationResultCard = ({
                 variant="outline"
                 size="sm"
                 className="w-full sm:w-40"
-                onClick={() => navigate(`/simulations/${simulation.id}`)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/simulations/${simulation.id}`);
+                }}
               >
                 View All Details
               </Button>

@@ -48,7 +48,12 @@ export const BrowseFiltersSidePanel = ({
         </p>
       </div>
 
-      <label className={filterLabelClassName}>Case</label>
+      <div>
+        <label className={filterLabelClassName}>Case</label>
+        <p className="mb-2 text-xs leading-5 text-slate-500">
+          Only one case can be selected at a time. Choosing a new case resets the other filters.
+        </p>
+      </div>
       <MultiSelect
         options={
           selectedCaseName && !caseOptions.some((o) => o.value === selectedCaseName)
@@ -57,7 +62,7 @@ export const BrowseFiltersSidePanel = ({
         }
         defaultValue={selectedCaseName ? [selectedCaseName] : []}
         onValueChange={(next) => onCaseNameChange(next[next.length - 1] ?? '')}
-        placeholder="Select case"
+        placeholder="Select one case"
         hideSelectAll={true}
         closeOnSelect={true}
         resetOnDefaultValueChange={true}

@@ -2,6 +2,8 @@ import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import { SimulationResultCard } from '@/features/browse/components/SimulationResults/SimulationResultCard';
 import type { SimulationOut } from '@/types/index';
 
+const MAX_SELECTION = 5;
+
 interface SimulationResultCards {
   simulations: SimulationOut[];
   filteredData: SimulationOut[];
@@ -18,6 +20,20 @@ export const SimulationResultCards = ({
   handleCompareButtonClick,
 }: SimulationResultCards) => {
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+  const handleSelectSimulation = (simulation: SimulationOut) => {
+    const isSelected = selectedSimulationIds.includes(simulation.id);
+
+    if (isSelected) {
+      setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== simulation.id));
+      return;
+    }
+
+    if (selectedSimulationIds.length >= MAX_SELECTION) {
+      return;
+    }
+
+    setSelectedSimulationIds([...selectedSimulationIds, simulation.id]);
+  };
 
   return (
     <div className="min-w-0">
@@ -39,13 +55,11 @@ export const SimulationResultCards = ({
             <SimulationResultCard
               simulation={sim}
               selected={selectedSimulationIds.includes(sim.id)}
-              handleSelect={() => {
-                if (selectedSimulationIds.includes(sim.id)) {
-                  setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== sim.id));
-                } else {
-                  setSelectedSimulationIds([...selectedSimulationIds, sim.id]);
-                }
-              }}
+              isSelectionDisabled={
+                !selectedSimulationIds.includes(sim.id) &&
+                selectedSimulationIds.length >= MAX_SELECTION
+              }
+              handleSelect={handleSelectSimulation}
             />
           </div>
         ))}

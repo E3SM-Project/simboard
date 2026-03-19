@@ -217,7 +217,8 @@ const columns: ColumnDef<SimulationOut>[] = [
           variant="outline"
           size="sm"
           className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             window.location.href = `/simulations/${simulation.id}`;
           }}
         >
@@ -438,7 +439,16 @@ export const SimulationResultsTable = ({
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() ? 'selected' : undefined}
-                className="border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
+                className="cursor-pointer border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
+                onClick={() => {
+                  const isSelected = row.getIsSelected();
+                  const canSelectMore =
+                    isSelected || Object.values(rowSelection).filter(Boolean).length < MAX_SELECTION;
+
+                  if (canSelectMore) {
+                    row.toggleSelected(!isSelected);
+                  }
+                }}
               >
                 {row.getVisibleCells().map((cell) => {
                   const meta = cell.column.columnDef.meta;

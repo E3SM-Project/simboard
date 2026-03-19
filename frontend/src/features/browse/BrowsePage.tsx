@@ -418,14 +418,25 @@ export const BrowsePage = ({
 
   // -------------------- Handlers --------------------
   const handleCaseNameChange = (caseName: string) => {
+    setAppliedFilters(createEmptyFilters());
+    setPage(1);
+
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
+
+        (Object.keys(createEmptyFilters()) as (keyof FilterState)[]).forEach((key) => {
+          next.delete(key);
+        });
+
         if (caseName) {
           next.set('caseName', caseName);
         } else {
           next.delete('caseName');
         }
+
+        next.delete('page');
+
         return next;
       },
       { replace: true },
