@@ -21,17 +21,17 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
           <motion.div
             layout
             initial={false}
-            className="rounded-lg shadow-sm p-4 cursor-pointer flex items-center justify-between mb-2 transition-shadow border border-gray-300"
+            className="mb-1 flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 transition-colors hover:bg-slate-100/70"
             onClick={() => setOpen((prev) => !prev)}
             whileTap={{ scale: 0.98 }}
           >
-            <div className="flex-1 flex flex-col gap-1">
+            <div className="flex flex-1 flex-col gap-1">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-lg text-gray-800">{title}</h2>
+                <h2 className="text-base font-semibold text-slate-900">{title}</h2>
                 <motion.span
                   animate={{ rotate: open ? 90 : 0 }}
                   transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-                  className="inline-block ml-2"
+                  className="ml-2 inline-block text-slate-500"
                 >
                   <ChevronRight size={18} strokeWidth={2} />
                 </motion.span>
@@ -43,7 +43,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                  className="text-sm text-gray-500 px-1"
+                  className="px-0.5 text-xs leading-5 text-slate-500"
                 >
                   {description}
                 </motion.p>
@@ -60,7 +60,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -16 }}
                 transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                className="pl-4 pt-4 pb-2 flex flex-col gap-4"
+                className="flex flex-col gap-3 px-1 pb-1 pt-3"
               >
                 {children}
               </motion.div>

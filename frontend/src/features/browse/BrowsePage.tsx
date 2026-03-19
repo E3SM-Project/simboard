@@ -450,9 +450,9 @@ export const BrowsePage = ({
   return (
     <div className="w-full bg-white">
       <div className="mx-auto w-full max-w-[2200px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="grid gap-6 lg:grid-cols-[clamp(300px,22vw,380px)_minmax(0,1fr)] xl:gap-8">
-          <div className="min-w-0">
-            <div className="lg:pr-2">
+        <div className="grid gap-6 lg:items-start lg:grid-cols-[clamp(300px,22vw,380px)_minmax(0,1fr)] xl:gap-8">
+          <div className="min-w-0 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:self-start">
+            <div className="lg:h-full lg:pr-2">
               <BrowseFiltersSidePanel
                 appliedFilters={appliedFilters}
                 availableFilters={availableFilters}
@@ -467,38 +467,46 @@ export const BrowsePage = ({
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-col">
-              <header className="mb-4 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:p-5 xl:flex-row xl:items-start xl:justify-between">
+              <header className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-sm sm:p-6 xl:flex-row xl:items-start xl:justify-between">
                 <div>
-                  <h1 className="mb-2 text-3xl font-bold">Browse Simulations</h1>
-                  <p className="max-w-4xl text-gray-600">
+                  <div className="mb-3 inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                    Research Workspace
+                  </div>
+                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
+                    Browse Simulations
+                  </h1>
+                  <p className="max-w-4xl text-[15px] leading-8 text-slate-600 sm:text-base">
                     Explore and filter available simulations using the panel on the left. Select
                     simulations to view more details or take further actions.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 xl:min-w-[250px] xl:items-end">
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground xl:justify-end">
-                    <span>
-                      <span className="font-semibold text-foreground">{filteredData.length}</span>{' '}
-                      simulations found
-                    </span>
-                    <span className="h-4 w-px bg-gray-300 mx-1" />
-                    <span>
-                      View mode:{' '}
-                      <span className="font-medium text-foreground">
+                <div className="flex flex-col gap-3 xl:min-w-[290px] xl:items-end">
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm">
+                      <span className="mr-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                        Results
+                      </span>
+                      <span className="font-semibold text-slate-950">{filteredData.length}</span>
+                    </div>
+                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 shadow-sm">
+                      <span className="mr-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                        View
+                      </span>
+                      <span className="font-semibold text-slate-950">
                         {viewMode === 'grid' ? 'Cards' : 'Table'}
                       </span>
-                    </span>
+                    </div>
                   </div>
                   <TooltipProvider delayDuration={150}>
-                    <div className="flex gap-2 xl:justify-end">
+                    <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm xl:self-end">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             aria-label="Table view"
-                            className={`rounded border p-2 transition-colors ${
+                            className={`rounded-xl border px-3 py-2 transition-colors ${
                               viewMode === 'table'
-                                ? 'border-gray-300 bg-gray-200'
-                                : 'border-transparent hover:bg-gray-100'
+                                ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
+                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                             onClick={() => setViewMode('table')}
                           >
@@ -511,10 +519,10 @@ export const BrowsePage = ({
                         <TooltipTrigger asChild>
                           <button
                             aria-label="Grid view"
-                            className={`rounded border p-2 transition-colors ${
+                            className={`rounded-xl border px-3 py-2 transition-colors ${
                               viewMode === 'grid'
-                                ? 'border-gray-300 bg-gray-200'
-                                : 'border-transparent hover:bg-gray-100'
+                                ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
+                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                             onClick={() => setViewMode('grid')}
                           >
@@ -528,8 +536,34 @@ export const BrowsePage = ({
                 </div>
               </header>
 
-              <div className="mb-4 flex min-w-0 flex-col items-start gap-2">
-                <div className="flex min-w-0 flex-wrap gap-2">
+              {(selectedCaseName ||
+                Object.values(appliedFilters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))) && (
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Active filters</p>
+                      <p className="text-xs text-slate-500">
+                        Current query scope and faceted filters
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                      aria-label="Clear all filters"
+                      onClick={handleResetFilters}
+                    >
+                      <span className="mr-2">Clear all</span>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path
+                          d="M4 4L12 12M12 4L4 12"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="flex min-w-0 flex-wrap gap-2">
                   {(
                     Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
                   ).flatMap(([key, values]) => {
@@ -544,16 +578,18 @@ export const BrowsePage = ({
                         return (
                           <span
                             key={`${key}-${value}-${idx}`}
-                            className="inline-flex max-w-full items-center rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-sm text-gray-700"
+                            className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                           >
-                            <span className="mr-2 font-medium capitalize">
+                            <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                               {String(key).replace(/Id$/, '')}:
                             </span>
-                            <span className="mr-2 truncate">{display}</span>
+                            <span className="mr-2 truncate font-medium text-slate-700">
+                              {display}
+                            </span>
                             <button
                               type="button"
                               aria-label={`Remove ${String(key)} filter`}
-                              className="ml-1 text-gray-400 hover:text-gray-700 rounded-full focus:outline-none"
+                              className="ml-1 rounded-full text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                               onClick={() => {
                                 setAppliedFilters((prev) => ({
                                   ...prev,
@@ -583,16 +619,18 @@ export const BrowsePage = ({
                       return (
                         <span
                           key={`${String(key)}-${values}`}
-                          className="inline-flex max-w-full items-center rounded-full border border-gray-300 bg-gray-100 px-3 py-1 text-sm text-gray-700"
+                          className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                         >
-                          <span className="mr-2 font-medium capitalize">
+                          <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                             {String(key).replace(/Id$/, '')}:
                           </span>
-                          <span className="mr-2 truncate">{display}</span>
+                          <span className="mr-2 truncate font-medium text-slate-700">
+                            {display}
+                          </span>
                           <button
                             type="button"
                             aria-label={`Remove ${String(key)} filter`}
-                            className="ml-1 text-gray-400 hover:text-gray-700 rounded-full focus:outline-none"
+                            className="ml-1 rounded-full text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                             onClick={() => {
                               setAppliedFilters((prev) => ({ ...prev, [key]: '' }));
                             }}
@@ -611,29 +649,9 @@ export const BrowsePage = ({
                     }
                     return [];
                   })}
-                  {(selectedCaseName ||
-                    Object.values(appliedFilters).some((v) =>
-                      Array.isArray(v) ? v.length > 0 : !!v,
-                    )) && (
-                    <button
-                      type="button"
-                      className="inline-flex items-center px-3 py-1 rounded-full bg-red-100 text-sm text-red-700 border border-red-300 ml-2"
-                      aria-label="Clear all filters"
-                      onClick={handleResetFilters}
-                    >
-                      <span className="mr-2 font-medium">Clear All</span>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path
-                          d="M4 4L12 12M12 4L4 12"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </button>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="min-w-0">
                 {viewMode === 'table' ? (
                   <SimulationResultsTable

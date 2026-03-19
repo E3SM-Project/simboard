@@ -35,17 +35,19 @@ export const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="flex w-full max-w-full flex-col gap-6 rounded-xl border border-gray-300 bg-background p-5 sm:p-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="mb-4">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
+    <aside className="flex w-full max-w-full flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:h-full lg:overflow-y-auto">
+      <div className="mb-1">
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-950">
           Filters <Funnel />
         </h1>
-        <p className="text-base text-gray-600 mt-1">
+        <p className="mt-1 text-sm leading-6 text-slate-600">
           Use the filters below to refine your search results.
         </p>
       </div>
 
-      <label className="block text-sm font-medium text-gray-700">Case</label>
+      <label className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        Case
+      </label>
       <MultiSelect
         options={
           selectedCaseName && !caseOptions.some((o) => o.value === selectedCaseName)

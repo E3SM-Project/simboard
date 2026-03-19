@@ -41,8 +41,8 @@ export const SimulationResultCard = ({
     : 'N/A';
 
   return (
-    <Card className="w-full h-full p-0 flex flex-col shadow-md rounded-lg border">
-      <div className="flex flex-col sm:flex-row items-start gap-4 p-4">
+    <Card className="flex h-full w-full flex-col rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex flex-col items-start gap-4 p-5 sm:flex-row">
         <Checkbox
           checked={selected}
           onCheckedChange={() => handleSelect(simulation)}
@@ -51,15 +51,17 @@ export const SimulationResultCard = ({
           style={{ width: 24, height: 24 }}
         />
         <div className="flex-1 w-full min-w-0 max-w-2xl">
-          <CardHeader className="p-0 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div>
-              <span className="font-semibold text-lg break-words">{simulation.executionId}</span>
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium">Case:</span> {simulation.caseName}
+          <CardHeader className="mb-4 flex flex-col items-start gap-3 p-0">
+            <div className="min-w-0">
+              <span className="block break-words text-lg font-semibold tracking-tight text-slate-950">
+                {simulation.executionId}
+              </span>
+              <div className="mt-1 break-words text-sm text-slate-500">
+                <span className="font-medium text-slate-600">Case:</span> {simulation.caseName}
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-medium text-gray-700">Status:</span>
+            <div className="flex w-full flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-slate-600">Status</span>
               <SimulationStatusBadge status={simulation.status} />
             </div>
           </CardHeader>
@@ -73,54 +75,54 @@ export const SimulationResultCard = ({
             }}
           >
             {/* One metadata item per line with bold labels */}
-            <dl className="space-y-1 text-sm mb-2">
+            <dl className="mb-2 space-y-2 text-sm">
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Rocket className="w-4 h-4" /> Campaign:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">{simulation.campaign}</dd>
+                <dd className="break-words font-normal text-slate-600">{simulation.campaign}</dd>
               </div>
 
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Lightbulb className="w-4 h-4" /> Experiment:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">
+                <dd className="break-words font-normal text-slate-600">
                   {simulation.experimentType}
                 </dd>
               </div>
 
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Clock className="w-4 h-4" /> Model Run Dates:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">
+                <dd className="break-words font-normal text-slate-600">
                   {startStr} {'\u2192'} {endStr}
                 </dd>
               </div>
             </dl>
 
-            <div className="w-full my-2 border-t border-gray-200" />
+            <div className="my-2 w-full border-t border-slate-200" />
 
             {/* Grid & Machine grouping with divider and lighter value color */}
-            <div className="flex flex-wrap gap-4 items-center mb-4 mt-2 text-xs text-gray-700">
+            <div className="mb-4 mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-700">
               <div className="flex items-center gap-1">
-                <FlaskConical className="w-3 h-3 text-gray-800" />
+                <FlaskConical className="h-3 w-3 text-slate-700" />
                 <span className="font-semibold">Grid:</span>
-                <span className="font-normal ml-1 text-gray-500">{simulation.gridName}</span>
+                <span className="ml-1 font-normal text-slate-500">{simulation.gridName}</span>
               </div>
-              <span className="h-4 w-px bg-gray-300 mx-2" />
+              <span className="mx-2 h-4 w-px bg-slate-300" />
               <div className="flex items-center gap-1">
-                <Server className="w-3 h-3 text-gray-800" />
+                <Server className="h-3 w-3 text-slate-700" />
                 <span className="font-semibold">Machine:</span>
-                <span className="font-normal ml-1 text-gray-500">{simulation.machine.name}</span>
+                <span className="ml-1 font-normal text-slate-500">{simulation.machine.name}</span>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 items-center mb-4 mt-2">
+            <div className="mb-4 mt-2 flex flex-wrap items-center gap-2">
               <Badge
                 variant="secondary"
-                className="flex items-center gap-1 text-sm px-2 py-1 border border-gray-300"
+                className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
                 <Tag className="w-4 h-4" />
                 Tag:
@@ -128,7 +130,7 @@ export const SimulationResultCard = ({
               </Badge>
               <Badge
                 variant="secondary"
-                className="flex items-center gap-1 text-sm px-2 py-1 border border-gray-300"
+                className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
                 Canonical: {simulation.isCanonical ? 'Yes' : 'No'}
                 {!simulation.isCanonical && simulation.changeCount > 0 && (
@@ -177,13 +179,13 @@ export const SimulationResultCard = ({
 
             <div style={{ height: '6px' }} />
 
-            <div className="mb-4 border rounded-lg bg-muted/40">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70">
               <details className="w-full group">
-                <summary className="flex justify-between items-center cursor-pointer px-2 py-2 rounded hover:bg-muted transition group-open:border-b group-open:border-muted-foreground">
+                <summary className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-slate-100 group-open:border-b group-open:border-slate-200">
                   More Details
                   <ChevronDown className="w-4 h-4 ml-2" />
                 </summary>
-                <div className="px-2 py-2 space-y-2 text-sm text-gray-700">
+                <div className="space-y-2 px-3 py-3 text-sm text-slate-700">
                   {/* FIXME: Fix this field.  */}
                   {/* Key Features */}
                   {simulation.keyFeatures && (
