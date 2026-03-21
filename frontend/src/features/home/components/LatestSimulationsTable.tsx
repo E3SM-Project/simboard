@@ -17,18 +17,15 @@ import type { SimulationOut } from '@/types/index';
 const simulationTypeIcon = (sim: SimulationOut) => {
   if (sim.simulationType === 'production') {
     return (
-      <span
-        title="Production"
-        style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}
-      >
-        <Check className="w-4 h-4" style={{ marginRight: 4 }} />
+      <span title="Production" className="inline-flex items-center gap-1.5 text-foreground">
+        <Check className="h-4 w-4" />
         Production
       </span>
     );
   }
   return (
-    <span title="Master" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}>
-      <GitBranch className="w-4 h-4" style={{ marginRight: 4 }} />
+    <span title="Master" className="inline-flex items-center gap-1.5 text-foreground">
+      <GitBranch className="h-4 w-4" />
       Master
     </span>
   );
@@ -79,9 +76,9 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
           size="sm"
           onClick={() => navigate(`/simulations/${info.row.original.id}`)}
           aria-label="Details"
-          className="p-2"
+          className="h-8 w-8 p-0 text-muted-foreground"
         >
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </Button>
       ),
       enableSorting: false,
@@ -104,7 +101,7 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
             {headerGroup.headers.map((header) => (
               <TableHead
                 key={header.id}
-                className="bg-muted/40"
+                className="bg-muted/30 text-xs font-medium uppercase tracking-wide text-muted-foreground"
               >
                 {header.isPlaceholder
                   ? null

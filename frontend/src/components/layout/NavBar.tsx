@@ -58,10 +58,9 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
     <header className="w-full bg-white border-b">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
         <div className="flex items-center gap-4">
-          {/* Logo */}
-          <Link to="/" className="text-xl font-bold flex items-center gap-2">
-            <span className="text-muted-foreground">🔬🌍</span>
-            SimBoard
+          <Link to="/" className="flex items-center gap-3 text-xl font-bold">
+            <img src="/logos/simboard-logo.png" alt="" className="h-8 w-8 shrink-0" />
+            <span>SimBoard</span>
           </Link>
         </div>
 
