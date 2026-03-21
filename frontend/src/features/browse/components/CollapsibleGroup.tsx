@@ -21,7 +21,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
           <motion.div
             layout
             initial={false}
-            className="mb-1 flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 transition-colors hover:bg-slate-100/70"
+            className="mb-1 flex cursor-pointer items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 transition-colors hover:bg-slate-50"
             onClick={() => setOpen((prev) => !prev)}
             whileTap={{ scale: 0.98 }}
           >
@@ -60,7 +60,7 @@ const CollapsibleGroup = ({ title, description, children, defaultOpen = true }: 
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -16 }}
                 transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                className="flex flex-col gap-2.5 px-1 pb-1 pt-2.5"
+                className="flex flex-col gap-2.5 px-1 pb-1 pt-2"
               >
                 {children}
               </motion.div>

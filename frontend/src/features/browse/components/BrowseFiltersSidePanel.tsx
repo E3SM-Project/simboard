@@ -27,7 +27,7 @@ export const BrowseFiltersSidePanel = ({
   onCaseNameChange,
 }: FilterPanelProps) => {
   const filterLabelClassName =
-    'mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500';
+    'mb-1.5 block text-xs font-semibold tracking-[0.08em] text-slate-500';
 
   // -------------------- Handlers --------------------
   const handleChange = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
@@ -38,10 +38,10 @@ export const BrowseFiltersSidePanel = ({
 
   // -------------------- Render --------------------
   return (
-    <aside className="flex w-full max-w-full flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:h-full lg:overflow-y-auto">
+    <aside className="flex w-full max-w-full flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:h-full lg:overflow-y-auto">
       <div className="mb-0.5">
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-950">
-          Filters <Funnel />
+          Filters <Funnel className="h-5 w-5" />
         </h1>
         <p className="mt-1 text-sm leading-6 text-slate-600">
           Use the filters below to refine your search results.

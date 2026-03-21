@@ -499,7 +499,7 @@ export const BrowsePage = ({
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-col">
-              <header className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-sm sm:p-5 xl:flex-row xl:items-start xl:justify-between">
+              <header className="mb-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
                     Browse Simulations
@@ -511,84 +511,86 @@ export const BrowsePage = ({
                 </div>
                 <div className="xl:min-w-[360px]">
                   <TooltipProvider delayDuration={150}>
-                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm xl:justify-end">
-                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
-                        <span className="mr-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                          Results
-                        </span>
-                        <span className="font-semibold text-slate-950">{filteredData.length}</span>
+                    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+                        <div>
+                          <span className="font-medium text-slate-500">Results</span>{' '}
+                          <span className="font-semibold text-slate-950">{filteredData.length}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-slate-500">View</span>{' '}
+                          <span className="font-semibold text-slate-950">
+                            {viewMode === 'grid' ? 'Cards' : 'Table'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
-                        <span className="mr-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                          View
-                        </span>
-                        <span className="font-semibold text-slate-950">
-                          {viewMode === 'grid' ? 'Cards' : 'Table'}
-                        </span>
-                      </div>
-                      {viewMode === 'table' && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="h-10 rounded-xl border-slate-200 bg-white text-slate-700 shadow-none hover:bg-slate-50"
-                            >
-                              Columns <ChevronDown className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {TOGGLEABLE_BROWSE_COLUMNS.map((column) => (
-                              <DropdownMenuCheckboxItem
-                                key={column.id}
-                                className="capitalize"
-                                checked={columnVisibility[column.id] !== false}
-                                onCheckedChange={(checked) =>
-                                  setColumnVisibility((prev) => ({
-                                    ...prev,
-                                    [column.id]: !!checked,
-                                  }))
-                                }
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          {viewMode === 'table' && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className="h-10 shrink-0 rounded-lg border-slate-200 bg-white text-slate-700 shadow-none hover:bg-slate-50"
+                                >
+                                  Columns <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {TOGGLEABLE_BROWSE_COLUMNS.map((column) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={column.id}
+                                    className="capitalize"
+                                    checked={columnVisibility[column.id] !== false}
+                                    onCheckedChange={(checked) =>
+                                      setColumnVisibility((prev) => ({
+                                        ...prev,
+                                        [column.id]: !!checked,
+                                      }))
+                                    }
+                                  >
+                                    {column.label}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                        <div className="inline-flex shrink-0 w-fit items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                aria-label="Table view"
+                                className={`rounded-md border px-3 py-2 transition-colors ${
+                                  viewMode === 'table'
+                                    ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
+                                    : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                                onClick={() => setViewMode('table')}
                               >
-                                {column.label}
-                              </DropdownMenuCheckboxItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                      <div className="h-8 w-px bg-slate-200" />
-                      <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            aria-label="Table view"
-                            className={`rounded-xl border px-3 py-2 transition-colors ${
-                              viewMode === 'table'
-                                ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
-                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                            }`}
-                            onClick={() => setViewMode('table')}
-                          >
-                            <Table size={24} strokeWidth={2} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Show simulations in a table</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            aria-label="Grid view"
-                            className={`rounded-xl border px-3 py-2 transition-colors ${
-                              viewMode === 'grid'
-                                ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
-                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                            }`}
-                            onClick={() => setViewMode('grid')}
-                          >
-                            <LayoutGrid size={24} strokeWidth={2} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Show simulations as cards</TooltipContent>
-                      </Tooltip>
+                                <Table size={24} strokeWidth={2} />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Show simulations in a table</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                aria-label="Grid view"
+                                className={`rounded-md border px-3 py-2 transition-colors ${
+                                  viewMode === 'grid'
+                                    ? 'border-slate-300 bg-slate-100 text-slate-950 shadow-sm'
+                                    : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                                onClick={() => setViewMode('grid')}
+                              >
+                                <LayoutGrid size={24} strokeWidth={2} />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Show simulations as cards</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                   </TooltipProvider>
@@ -597,7 +599,7 @@ export const BrowsePage = ({
 
               {(selectedCaseName ||
                 Object.values(appliedFilters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))) && (
-                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Active filters</p>
@@ -607,7 +609,7 @@ export const BrowsePage = ({
                     </div>
                     <button
                       type="button"
-                      className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                      className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
                       aria-label="Clear all filters"
                       onClick={handleResetFilters}
                     >
@@ -637,9 +639,9 @@ export const BrowsePage = ({
                         return (
                           <span
                             key={`${key}-${value}-${idx}`}
-                            className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                            className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                           >
-                            <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                            <span className="mr-2 text-xs font-medium text-slate-500">
                               {String(key).replace(/Id$/, '')}:
                             </span>
                             <span className="mr-2 truncate font-medium text-slate-700">
@@ -648,7 +650,7 @@ export const BrowsePage = ({
                             <button
                               type="button"
                               aria-label={`Remove ${String(key)} filter`}
-                              className="ml-1 rounded-full text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                              className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                               onClick={() => {
                                 setAppliedFilters((prev) => ({
                                   ...prev,
@@ -678,9 +680,9 @@ export const BrowsePage = ({
                       return (
                         <span
                           key={`${String(key)}-${values}`}
-                          className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                          className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                         >
-                          <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          <span className="mr-2 text-xs font-medium text-slate-500">
                             {String(key).replace(/Id$/, '')}:
                           </span>
                           <span className="mr-2 truncate font-medium text-slate-700">
@@ -689,7 +691,7 @@ export const BrowsePage = ({
                           <button
                             type="button"
                             aria-label={`Remove ${String(key)} filter`}
-                            className="ml-1 rounded-full text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                            className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                             onClick={() => {
                               setAppliedFilters((prev) => ({ ...prev, [key]: '' }));
                             }}

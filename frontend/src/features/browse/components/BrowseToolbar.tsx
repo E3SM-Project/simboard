@@ -25,7 +25,7 @@ export const BrowseToolbar = ({
   const hiddenSelectionCount = Math.max(0, selectedSimulationIds.length - visibleSelectedIds.length);
 
   return (
-    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+    <div className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Button
@@ -33,15 +33,13 @@ export const BrowseToolbar = ({
             size="sm"
             onClick={() => onCompareButtonClick()}
             disabled={isCompareButtonDisabled}
-            className="h-10 rounded-xl px-4 shadow-sm"
+            className="h-10 rounded-lg px-4 shadow-none"
           >
             {buttonText}
           </Button>
 
-          <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-            <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Selected
-            </span>
+          <div className="flex items-baseline gap-2 text-sm text-slate-600">
+            <span className="font-medium text-slate-500">Selected</span>
             <span className="font-semibold text-slate-950">
               {selectedSimulationIds.length} / {MAX_SELECTION}
             </span>
@@ -52,7 +50,7 @@ export const BrowseToolbar = ({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 rounded-full px-3 text-xs font-medium text-slate-500 transition-colors hover:bg-white hover:text-slate-900 lg:self-start"
+            className="h-8 shrink-0 rounded-md px-2 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:self-start"
             onClick={() => setSelectedSimulationIds([])}
           >
             Deselect all
@@ -68,12 +66,12 @@ export const BrowseToolbar = ({
             return (
               <span
                 key={id}
-                className="flex min-w-0 max-w-full items-center rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 sm:max-w-[220px] xl:max-w-[200px] 2xl:max-w-[220px]"
+                className="flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 sm:max-w-[220px] xl:max-w-[200px] 2xl:max-w-[220px]"
               >
                 <span className="min-w-0 truncate">{row.executionId}</span>
                 <button
                   type="button"
-                  className="ml-1 shrink-0 rounded-full text-slate-400 transition-colors hover:text-destructive focus:outline-none"
+                  className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-destructive focus:outline-none"
                   aria-label={`Remove ${row.executionId}`}
                   onClick={() =>
                     setSelectedSimulationIds(
@@ -88,7 +86,7 @@ export const BrowseToolbar = ({
           })}
 
           {hiddenSelectionCount > 0 && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
               +{hiddenSelectionCount} more
             </span>
           )}
