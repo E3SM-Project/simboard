@@ -16,6 +16,12 @@ interface ComparePageProps {
   selectedSimulations: SimulationOut[];
 }
 
+interface CompareMetricRow {
+  label: string;
+  values: unknown[];
+  renderMode?: 'default' | 'rich';
+}
+
 export const ComparePage = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
@@ -69,17 +75,22 @@ export const ComparePage = ({
     label: string,
     prop: T,
     fallback: SimulationOut[T] | '' = '',
-  ) => {
+    renderMode: CompareMetricRow['renderMode'] = 'default',
+  ): CompareMetricRow => {
     const values = selectedSimulationIds.map((id) => {
       const sim = selectedSimulations.find((s) => s.id === id);
       if (!sim) return fallback;
       return (sim[prop] ?? fallback) as SimulationOut[T];
     });
 
-    return { label, values };
+    return { label, values, renderMode };
   };
 
-  const makeGroupedMetricRow = (label: string, kind: string, fallback: unknown[] = []) => {
+  const makeGroupedMetricRow = (
+    label: string,
+    kind: string,
+    fallback: unknown[] = [],
+  ): CompareMetricRow => {
     const values = selectedSimulationIds.map((id) => {
       const sim = selectedSimulations.find((s) => s.id === id);
       if (!sim) return fallback;
@@ -184,7 +195,7 @@ export const ComparePage = ({
     performance: [makeGroupedMetricRow('PACE Links', 'performance')],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
-      makeMetricRow('Repository URL', 'gitRepositoryUrl', ''),
+      makeMetricRow('Repository URL', 'gitRepositoryUrl', '', 'rich'),
       makeMetricRow('Branch', 'gitBranch', ''),
       makeMetricRow('Version/Tag', 'gitTag', ''),
       makeMetricRow('Commit Hash', 'gitCommitHash', ''),
@@ -271,8 +282,13 @@ export const ComparePage = ({
     }));
   };
 
-  const renderCompareValue = (sectionKey: string, value: unknown) => {
-    if (sectionKey === 'locations' || sectionKey === 'diagnostics' || sectionKey === 'performance') {
+  const renderCompareValue = (sectionKey: string, row: CompareMetricRow, value: unknown) => {
+    if (
+      row.renderMode === 'rich' ||
+      sectionKey === 'locations' ||
+      sectionKey === 'diagnostics' ||
+      sectionKey === 'performance'
+    ) {
       return <div className="max-w-full min-w-0 break-words">{renderCellValue(value)}</div>;
     }
 
@@ -547,7 +563,7 @@ export const ComparePage = ({
                                 className="shrink-0 px-4 py-2 text-sm align-top"
                                 style={{ width: VALUE_COLUMN_WIDTH }}
                               >
-                                {renderCompareValue(sectionKey, value)}
+                                {renderCompareValue(sectionKey, row, value)}
                               </div>
                             );
                           })}

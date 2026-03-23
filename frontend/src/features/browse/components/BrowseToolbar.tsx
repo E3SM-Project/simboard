@@ -11,7 +11,6 @@ interface SelectedSimulationsBreadcrumbProps {
 }
 
 const MAX_SELECTION = 5;
-const MAX_VISIBLE_SELECTED_IDS = 3;
 
 export const BrowseToolbar = ({
   simulations,
@@ -21,9 +20,6 @@ export const BrowseToolbar = ({
   setSelectedSimulationIds,
   isCompareButtonDisabled,
 }: SelectedSimulationsBreadcrumbProps) => {
-  const visibleSelectedIds = selectedSimulationIds.slice(0, MAX_VISIBLE_SELECTED_IDS);
-  const hiddenSelectionCount = Math.max(0, selectedSimulationIds.length - visibleSelectedIds.length);
-
   return (
     <div className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -60,7 +56,7 @@ export const BrowseToolbar = ({
 
       {selectedSimulationIds.length > 0 && (
         <div className="mt-3 flex min-w-0 flex-wrap items-start gap-2">
-          {visibleSelectedIds.map((id) => {
+          {selectedSimulationIds.map((id) => {
             const row = simulations.find((r) => r.id === id);
             if (!row) return null;
             return (
@@ -84,12 +80,6 @@ export const BrowseToolbar = ({
               </span>
             );
           })}
-
-          {hiddenSelectionCount > 0 && (
-            <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
-              +{hiddenSelectionCount} more
-            </span>
-          )}
         </div>
       )}
     </div>

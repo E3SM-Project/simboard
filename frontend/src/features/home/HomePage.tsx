@@ -1,4 +1,5 @@
 import { GitCompareArrows, Search, Upload } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -20,17 +21,22 @@ interface HomePageProps {
 }
 
 export const HomePage = ({ simulations, machines }: HomePageProps) => {
-  const latestSimulations = [...simulations]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 6);
+  const latestSimulations = useMemo(
+    () =>
+      [...simulations]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 6),
+    [simulations],
+  );
   const latestSubmission = latestSimulations[0]?.createdAt;
   const canonicalCount = simulations.filter((simulation) => simulation.isCanonical).length;
-  const machineSimulationCounts = new Map(
-    machines.map((machine) => [
-      machine.id,
-      simulations.filter((simulation) => simulation.machineId === machine.id).length,
-    ]),
-  );
+  const machineSimulationCounts = new Map<Machine['id'], number>();
+  for (const simulation of simulations) {
+    machineSimulationCounts.set(
+      simulation.machineId,
+      (machineSimulationCounts.get(simulation.machineId) ?? 0) + 1,
+    );
+  }
   const featuredMachines = [...machines]
     .sort(
       (left, right) =>
@@ -247,7 +253,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
             <a
               href="https://www.e3sm.org/"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="transition-opacity hover:opacity-80"
               aria-label="Visit the E3SM website"
             >
@@ -261,7 +267,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
             <a
               href="https://www.energy.gov/"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="transition-opacity hover:opacity-80"
               aria-label="Visit the U.S. Department of Energy website"
             >

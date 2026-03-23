@@ -430,112 +430,114 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       </div>
 
       {/* Main Table */}
-      <div className="rounded-md border bg-background relative">
-        <Table className="table-fixed" style={{ width: tableWidth, minWidth: tableWidth }}>
-          <TableHeader className="sticky top-0 bg-background z-20">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {/* Sticky select-all column */}
-                <TableHead className="w-10 sticky left-0 z-30 bg-background border-r">
-                  <Checkbox
-                    checked={
-                      table.getRowModel().rows.length > 0 &&
-                      table.getRowModel().rows.every((r) => selectedRows[r.original.id])
-                    }
-                    onCheckedChange={toggleAllOnPage}
-                    aria-label="Select all on page"
-                  />
-                </TableHead>
-                {headerGroup.headers.map((header) => {
-                  const isName = header.column.id === 'executionId';
-                  const isAdvanced = header.column.columnDef.meta?.isAdvanced;
-                  return (
-                    <TableHead
-                      key={header.id}
-                      className={cn(
-                        'overflow-hidden whitespace-nowrap',
-                        isName && 'sticky left-10 z-20 bg-background border-r',
-                        isAdvanced && columnVisibility[header.column.id] && 'bg-blue-100',
-                      )}
-                      style={{
-                        width: header.getSize(),
-                        minWidth: header.getSize(),
-                        maxWidth: header.getSize(),
-                      }}
-                    >
-                      {header.isPlaceholder ? null : (
-                        <div
-                          className={cn(
-                            'select-none',
-                            header.column.getCanSort() && 'cursor-pointer',
-                          )}
-                          onClick={header.column.getToggleSortingHandler?.()}
-                          title={
-                            header.column.getIsSorted() === 'asc'
-                              ? 'Sorted ascending'
-                              : header.column.getIsSorted() === 'desc'
-                                ? 'Sorted descending'
-                                : 'Click to sort'
-                          }
-                        >
-                          {String(header.column.columnDef.header ?? header.column.id)}
-                          {header.column.getIsSorted() === 'asc' && ' ▲'}
-                          {header.column.getIsSorted() === 'desc' && ' ▼'}
-                        </div>
-                      )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                className="hover:bg-muted/40 cursor-pointer"
-                onClick={() => navigate(`/simulations/${row.original.id}`)}
-              >
-                {/* Sticky checkbox cell */}
-                <TableCell
-                  className="w-10 sticky left-0 z-10 bg-background border-r"
-                  onClick={(e) => e.stopPropagation()}
+      <div className="relative overflow-hidden rounded-md border bg-background">
+        <div className="overflow-x-auto overflow-y-hidden">
+          <Table className="table-fixed" style={{ width: tableWidth, minWidth: tableWidth }}>
+            <TableHeader className="sticky top-0 bg-background z-20">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {/* Sticky select-all column */}
+                  <TableHead className="w-10 sticky left-0 z-30 bg-background border-r">
+                    <Checkbox
+                      checked={
+                        table.getRowModel().rows.length > 0 &&
+                        table.getRowModel().rows.every((r) => selectedRows[r.original.id])
+                      }
+                      onCheckedChange={toggleAllOnPage}
+                      aria-label="Select all on page"
+                    />
+                  </TableHead>
+                  {headerGroup.headers.map((header) => {
+                    const isName = header.column.id === 'executionId';
+                    const isAdvanced = header.column.columnDef.meta?.isAdvanced;
+                    return (
+                      <TableHead
+                        key={header.id}
+                        className={cn(
+                          'overflow-hidden whitespace-nowrap',
+                          isName && 'sticky left-10 z-20 bg-background border-r',
+                          isAdvanced && columnVisibility[header.column.id] && 'bg-blue-100',
+                        )}
+                        style={{
+                          width: header.getSize(),
+                          minWidth: header.getSize(),
+                          maxWidth: header.getSize(),
+                        }}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div
+                            className={cn(
+                              'select-none',
+                              header.column.getCanSort() && 'cursor-pointer',
+                            )}
+                            onClick={header.column.getToggleSortingHandler?.()}
+                            title={
+                              header.column.getIsSorted() === 'asc'
+                                ? 'Sorted ascending'
+                                : header.column.getIsSorted() === 'desc'
+                                  ? 'Sorted descending'
+                                  : 'Click to sort'
+                            }
+                          >
+                            {String(header.column.columnDef.header ?? header.column.id)}
+                            {header.column.getIsSorted() === 'asc' && ' ▲'}
+                            {header.column.getIsSorted() === 'desc' && ' ▼'}
+                          </div>
+                        )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="hover:bg-muted/40 cursor-pointer"
+                  onClick={() => navigate(`/simulations/${row.original.id}`)}
                 >
-                  <Checkbox
-                    checked={!!selectedRows[row.original.id]}
-                    onCheckedChange={(checked) =>
-                      setSelectedRows((prev) => ({ ...prev, [row.original.id]: checked === true }))
-                    }
-                    aria-label="Select row"
-                  />
-                </TableCell>
-                {row.getVisibleCells().map((cell) => {
-                  const isName = cell.column.id === 'executionId';
-                  const isAdvanced = cell.column.columnDef.meta?.isAdvanced;
-                  return (
-                    <TableCell
-                      key={cell.id}
-                      className={cn(
-                        'overflow-hidden align-top',
-                        isName && 'sticky left-10 z-[5] bg-background border-r',
-                        isAdvanced && columnVisibility[cell.column.id] && 'bg-blue-50',
-                      )}
-                      style={{
-                        width: cell.column.getSize(),
-                        minWidth: cell.column.getSize(),
-                        maxWidth: cell.column.getSize(),
-                      }}
-                    >
-                      {typeof cell.column.columnDef.cell === 'function'
-                        ? cell.column.columnDef.cell(cell.getContext())
-                        : ((cell.getValue() as unknown) ?? '—')}
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  {/* Sticky checkbox cell */}
+                  <TableCell
+                    className="w-10 sticky left-0 z-10 bg-background border-r"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={!!selectedRows[row.original.id]}
+                      onCheckedChange={(checked) =>
+                        setSelectedRows((prev) => ({ ...prev, [row.original.id]: checked === true }))
+                      }
+                      aria-label="Select row"
+                    />
+                  </TableCell>
+                  {row.getVisibleCells().map((cell) => {
+                    const isName = cell.column.id === 'executionId';
+                    const isAdvanced = cell.column.columnDef.meta?.isAdvanced;
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          'overflow-hidden align-top',
+                          isName && 'sticky left-10 z-[5] bg-background border-r',
+                          isAdvanced && columnVisibility[cell.column.id] && 'bg-blue-50',
+                        )}
+                        style={{
+                          width: cell.column.getSize(),
+                          minWidth: cell.column.getSize(),
+                          maxWidth: cell.column.getSize(),
+                        }}
+                      >
+                        {typeof cell.column.columnDef.cell === 'function'
+                          ? cell.column.columnDef.cell(cell.getContext())
+                          : ((cell.getValue() as unknown) ?? '—')}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Footer / Pagination */}
