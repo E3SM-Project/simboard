@@ -29,7 +29,6 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
     [simulations],
   );
   const latestSubmission = latestSimulations[0]?.createdAt;
-  const canonicalCount = simulations.filter((simulation) => simulation.isCanonical).length;
   const machineSimulationCounts = new Map<Machine['id'], number>();
   for (const simulation of simulations) {
     machineSimulationCounts.set(
@@ -114,14 +113,6 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
                 {simulations.length}
-              </p>
-            </div>
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-b sm:border-r xl:border-b-0">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Canonical
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {canonicalCount}
               </p>
             </div>
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 xl:border-b-0 xl:border-r">

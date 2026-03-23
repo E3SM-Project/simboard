@@ -72,7 +72,22 @@ Workloads -> Deployments -> Create (top-right)
 | Name          | `db`       |
 | Replicas      | `1`        |
 
-#### 2. Container tab (`db`)
+#### 2. Pod tab
+
+`Storage`:
+
+Create a PersistentVolumeClaim volume for Postgres data.
+
+| Rancher field                | Value                                                  |
+| ---------------------------- | ------------------------------------------------------ |
+| Volume type                  | `PersistentVolumeClaim`                                |
+| Volume name                  | `db-data` (or your naming standard)                    |
+| Persistent Volume Claim Name | `pvc-simboard-db` (or existing claim)                  |
+| Access mode                  | `Single-Node Read/Write`                               |
+| Capacity                     | `1Gi` minimum (or larger per policy)                   |
+| Storage class                | Namespace/default class (example: `nfs-client-vast`)   |
+
+#### 3. Container tab (`db`)
 
 `General`:
 
@@ -99,6 +114,15 @@ Workloads -> Deployments -> Create (top-right)
 | Run as User       | Required: set numeric NERSC UID (check Iris) |
 | Add Capabilities  | `CHOWN,DAC_OVERRIDE,FOWNER,SETGID,SETUID`    |
 | Drop Capabilities | `ALL`                                        |
+
+`Storage`:
+
+| Rancher field    | Value                                                             |
+| ---------------- | ----------------------------------------------------------------- |
+| Volume           | `db-data` (PVC volume defined in `Pod -> Storage`)               |
+| Mount path       | `/var/lib/postgresql/data/pgdata`                                |
+| Sub path         | leave empty (unless required by storage policy)                  |
+| Read only        | `false` (required; Postgres data directory must be writable)     |
 
 ### Workload 2: Backend Deployment (`backend`)
 
