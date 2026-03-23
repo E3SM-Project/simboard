@@ -1,6 +1,6 @@
 <p align="center">
   <span style="display:inline-block; background:#ffffff; padding:16px 24px; border-radius:12px;">
-    <img src="frontend/public/logos/simboard-logo-full.png" alt="SimBoard logo" width="360" />
+    <img src="frontend/public/logos/simboard-logo-full-white-bg.png" alt="SimBoard logo" width="360" />
   </span>
 </p>
 
