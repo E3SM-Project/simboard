@@ -122,7 +122,6 @@ export const ComparePage = ({
       makeMetricRow('Grid Resolution', 'gridResolution', ''),
       makeMetricRow('Initialization Type', 'initializationType', ''),
       makeMetricRow('Compiler', 'compiler', ''),
-      makeMetricRow('Parent Simulation ID', 'parentSimulationId', ''),
     ],
     modelSetup: [
       makeMetricRow('Simulation Type', 'simulationType', ''),
