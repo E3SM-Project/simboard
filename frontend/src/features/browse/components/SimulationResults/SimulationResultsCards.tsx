@@ -1,5 +1,6 @@
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import { SimulationResultCard } from '@/features/browse/components/SimulationResults/SimulationResultCard';
+import { cn } from '@/lib/utils';
 import type { SimulationOut } from '@/types/index';
 
 const MAX_SELECTION = 5;
@@ -20,6 +21,8 @@ export const SimulationResultCards = ({
   handleCompareButtonClick,
 }: SimulationResultCards) => {
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+  const isSingleResult = filteredData.length === 1;
+
   const handleSelectSimulation = (simulation: SimulationOut) => {
     const isSelected = selectedSimulationIds.includes(simulation.id);
 
@@ -51,7 +54,10 @@ export const SimulationResultCards = ({
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
         {filteredData.map((sim) => (
-          <div key={sim.id} className="h-full">
+          <div
+            key={sim.id}
+            className={cn('h-full', isSingleResult && 'max-w-[420px] justify-self-start')}
+          >
             <SimulationResultCard
               simulation={sim}
               selected={selectedSimulationIds.includes(sim.id)}
