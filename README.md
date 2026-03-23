@@ -1,5 +1,9 @@
 # SimBoard
 
+<p align="center">
+  <img src="frontend/public/logos/simboard-logo-full.png" alt="SimBoard logo" width="360" />
+</p>
+
 SimBoard is a platform for managing and comparing Earth system simulation metadata, with a focus on **E3SM** (Energy Exascale Earth System Model) reference simulations.
 
 SimBoard helps researchers:
