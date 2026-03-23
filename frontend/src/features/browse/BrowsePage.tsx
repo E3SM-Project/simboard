@@ -369,10 +369,16 @@ export const BrowsePage = ({
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
   const isInitialFilterSync = useRef(true);
+  const skipNextFilterUrlSync = useRef(false);
   useEffect(() => {
     // Skip the initial render — filters are read FROM the URL on mount.
     if (isInitialFilterSync.current) {
       isInitialFilterSync.current = false;
+      return;
+    }
+
+    if (skipNextFilterUrlSync.current) {
+      skipNextFilterUrlSync.current = false;
       return;
     }
 
@@ -418,6 +424,7 @@ export const BrowsePage = ({
 
   // -------------------- Handlers --------------------
   const handleCaseNameChange = (caseName: string) => {
+    skipNextFilterUrlSync.current = true;
     setAppliedFilters(createEmptyFilters());
     setPage(1);
 
@@ -443,12 +450,31 @@ export const BrowsePage = ({
     );
   };
 
-  const handleResetFilters = () => {
-    setAppliedFilters(createEmptyFilters());
+  const handleClearCaseNameFilter = () => {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete('caseName');
+        next.delete('page');
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const handleResetFilters = () => {
+    skipNextFilterUrlSync.current = true;
+    setAppliedFilters(createEmptyFilters());
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+
+        (Object.keys(createEmptyFilters()) as (keyof FilterState)[]).forEach((key) => {
+          next.delete(key);
+        });
+
+        next.delete('caseName');
+        next.delete('page');
         return next;
       },
       { replace: true },
@@ -625,6 +651,29 @@ export const BrowsePage = ({
                     </button>
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
+                  {selectedCaseName && (
+                    <span className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
+                      <span className="mr-2 text-xs font-medium text-slate-500">case:</span>
+                      <span className="mr-2 truncate font-medium text-slate-700">
+                        {selectedCaseName}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Remove case filter"
+                        className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                        onClick={handleClearCaseNameFilter}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M4 4L12 12M12 4L4 12"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    </span>
+                  )}
                   {(
                     Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
                   ).flatMap(([key, values]) => {
