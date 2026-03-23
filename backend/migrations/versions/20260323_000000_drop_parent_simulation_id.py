@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Drop the obsolete self-referential parent simulation column."""
     op.drop_constraint(
-        "fk_simulations_parent_simulation_id_simulations",
+        op.f("fk_simulations_parent_simulation_id_simulations"),
         "simulations",
         type_="foreignkey",
     )
@@ -34,7 +34,7 @@ def downgrade() -> None:
         sa.Column("parent_simulation_id", sa.UUID(), nullable=True),
     )
     op.create_foreign_key(
-        "fk_simulations_parent_simulation_id_simulations",
+        op.f("fk_simulations_parent_simulation_id_simulations"),
         "simulations",
         "simulations",
         ["parent_simulation_id"],
