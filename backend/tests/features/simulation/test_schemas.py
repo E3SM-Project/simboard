@@ -56,7 +56,6 @@ class TestSimulationCreateSchema:
             "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "gitTag": "v1.0",
             "gitCommitHash": "abc123",
-            "parentSimulationId": uuid4(),
             "campaign": "campaign1",
             "experimentType": "exp1",
             "simulationEndDate": datetime(2023, 12, 31, 0, 0, 0),
@@ -159,7 +158,6 @@ class TestSimulationOutSchema:
 
         # Assert: Validate optional fields are set to their defaults
         optional_fields = [
-            "parent_simulation_id",
             "campaign",
             "experiment_type",
             "case_group",
@@ -229,7 +227,6 @@ class TestSimulationOutSchema:
         }
 
         optional_fields = {
-            "parent_simulation_id": uuid4(),
             "campaign": "campaign1",
             "experiment_type": "exp1",
             "case_group": "group1",

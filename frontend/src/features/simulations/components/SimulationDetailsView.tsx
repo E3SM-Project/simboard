@@ -156,9 +156,6 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Compiler">
                   <ReadonlyInput value={simulation.compiler ?? undefined} />
                 </FieldRow>
-                <FieldRow label="Parent Simulation ID">
-                  <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
-                </FieldRow>
               </CardContent>
             </Card>
             <Card>

@@ -127,9 +127,6 @@ class SimulationCreate(CamelInBaseModel):
     grid_resolution: Annotated[
         str, Field(..., description="Grid resolution used in the simulation")
     ]
-    parent_simulation_id: Annotated[
-        UUID | None, Field(None, description="Optional ID of the parent simulation")
-    ]
 
     # Model setup/context
     # -------------------
@@ -422,9 +419,6 @@ class SimulationOut(CamelOutBaseModel):
     ]
     grid_resolution: Annotated[
         str, Field(..., description="Grid resolution used in the simulation")
-    ]
-    parent_simulation_id: Annotated[
-        UUID | None, Field(None, description="Optional ID of the parent simulation")
     ]
 
     # Model setup/context

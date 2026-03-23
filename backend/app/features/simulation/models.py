@@ -76,9 +76,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     compset_alias: Mapped[str] = mapped_column(Text)
     grid_name: Mapped[str] = mapped_column(Text)
     grid_resolution: Mapped[str] = mapped_column(Text)
-    parent_simulation_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("simulations.id")
-    )
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~
@@ -167,7 +164,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     machine: Mapped[Machine] = relationship(
         back_populates="simulations", foreign_keys=[machine_id]
     )
-    parent: Mapped[Simulation] = relationship(remote_side="Simulation.id")
     artifacts: Mapped[list[Artifact]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"
     )

@@ -42,7 +42,6 @@ const initialState: SimulationCreateForm = {
   gridResolution: '', // required
   initializationType: '',
   compiler: null,
-  parentSimulationId: null,
 
   // --- Model Setup ---
   simulationType: '', // required
@@ -161,13 +160,6 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         required: false,
         type: 'text',
         placeholder: 'e.g., intel/2021.4',
-      },
-      {
-        label: 'Parent Simulation ID',
-        name: 'parentSimulationId',
-        required: false,
-        type: 'text',
-        placeholder: 'Parent simulation ID (optional)',
       },
     ],
     [],
@@ -683,7 +675,6 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       // nullable strings / IDs
       description: form.description?.trim() || null,
       compiler: form.compiler?.trim() || null,
-      parentSimulationId: form.parentSimulationId || null,
       campaign: form.campaign || null,
       experimentType: form.experimentType || null,
       gitRepositoryUrl: form.gitRepositoryUrl?.trim() || null,

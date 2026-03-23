@@ -50,7 +50,6 @@ export interface SimulationCreate {
   compsetAlias: string;
   gridName: string;
   gridResolution: string;
-  parentSimulationId?: string | null;
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
