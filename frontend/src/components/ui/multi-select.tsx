@@ -276,6 +276,13 @@ interface MultiSelectProps
 	 * Optional, defaults to false.
 	 */
 	closeOnSelect?: boolean;
+
+	/**
+	 * Maximum number of selected values allowed at once.
+	 * When set to 1, the component behaves like a single-select while reusing the same UI.
+	 * Optional, defaults to unlimited.
+	 */
+	maxSelected?: number;
 }
 
 /**
@@ -331,12 +338,24 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 			deduplicateOptions = false,
 			resetOnDefaultValueChange = true,
 			closeOnSelect = false,
+			maxSelected,
 			...props
 		},
 		ref
 	) => {
+		const normalizeSelectedValues = React.useCallback(
+			(values: string[]): string[] => {
+				const uniqueValues = Array.from(new Set(values));
+				if (!maxSelected || maxSelected < 1) {
+					return uniqueValues;
+				}
+				return uniqueValues.slice(-maxSelected);
+			},
+			[maxSelected]
+		);
+
 		const [selectedValues, setSelectedValues] =
-			React.useState<string[]>(defaultValue);
+			React.useState<string[]>(() => normalizeSelectedValues(defaultValue));
 		const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 		const [isAnimating, setIsAnimating] = React.useState(false);
 		const [searchValue, setSearchValue] = React.useState("");
@@ -364,8 +383,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 		const listboxId = `${multiSelectId}-listbox`;
 		const triggerDescriptionId = `${multiSelectId}-description`;
 		const selectedCountId = `${multiSelectId}-count`;
+		const normalizedDefaultValue = React.useMemo(
+			() => normalizeSelectedValues(defaultValue),
+			[defaultValue, normalizeSelectedValues]
+		);
 
-		const prevDefaultValueRef = React.useRef<string[]>(defaultValue);
+		const prevDefaultValueRef = React.useRef<string[]>(normalizedDefaultValue);
 
 		const isGroupedOptions = React.useCallback(
 			(
@@ -387,11 +410,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 		);
 
 		const resetToDefault = React.useCallback(() => {
-			setSelectedValues(defaultValue);
+			setSelectedValues(normalizedDefaultValue);
 			setIsPopoverOpen(false);
 			setSearchValue("");
-			onValueChange(defaultValue);
-		}, [defaultValue, onValueChange]);
+			onValueChange(normalizedDefaultValue);
+		}, [normalizedDefaultValue, onValueChange]);
 
 		const buttonRef = React.useRef<HTMLButtonElement>(null);
 
@@ -401,8 +424,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 				reset: resetToDefault,
 				getSelectedValues: () => selectedValues,
 				setSelectedValues: (values: string[]) => {
-					setSelectedValues(values);
-					onValueChange(values);
+					const normalizedValues = normalizeSelectedValues(values);
+					setSelectedValues(normalizedValues);
+					onValueChange(normalizedValues);
 				},
 				clear: () => {
 					setSelectedValues([]);
@@ -424,7 +448,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 					}
 				},
 			}),
-			[resetToDefault, selectedValues, onValueChange]
+			[normalizeSelectedValues, onValueChange, resetToDefault, selectedValues]
 		);
 
 		const [screenSize, setScreenSize] = React.useState<
@@ -623,7 +647,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 			if (option?.disabled) return;
 			const newSelectedValues = selectedValues.includes(optionValue)
 				? selectedValues.filter((value) => value !== optionValue)
-				: [...selectedValues, optionValue];
+				: normalizeSelectedValues([...selectedValues, optionValue]);
 			setSelectedValues(newSelectedValues);
 			onValueChange(newSelectedValues);
 			if (closeOnSelect) {
@@ -658,7 +682,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 			if (selectedValues.length === allOptions.length) {
 				handleClear();
 			} else {
-				const allValues = allOptions.map((option) => option.value);
+				const allValues = normalizeSelectedValues(
+					allOptions.map((option) => option.value)
+				);
 				setSelectedValues(allValues);
 				onValueChange(allValues);
 			}
@@ -671,13 +697,18 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 		React.useEffect(() => {
 			if (!resetOnDefaultValueChange) return;
 			const prevDefaultValue = prevDefaultValueRef.current;
-			if (!arraysEqual(prevDefaultValue, defaultValue)) {
-				if (!arraysEqual(selectedValues, defaultValue)) {
-					setSelectedValues(defaultValue);
+			if (!arraysEqual(prevDefaultValue, normalizedDefaultValue)) {
+				if (!arraysEqual(selectedValues, normalizedDefaultValue)) {
+					setSelectedValues(normalizedDefaultValue);
 				}
-				prevDefaultValueRef.current = [...defaultValue];
+				prevDefaultValueRef.current = [...normalizedDefaultValue];
 			}
-		}, [defaultValue, selectedValues, arraysEqual, resetOnDefaultValueChange]);
+		}, [
+			arraysEqual,
+			normalizedDefaultValue,
+			resetOnDefaultValueChange,
+			selectedValues,
+		]);
 
 		const getWidthConstraints = () => {
 			const defaultMinWidth = screenSize === "mobile" ? "0px" : "200px";
@@ -806,7 +837,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 								getAllOptions().length
 							} options selected. ${placeholder}`}
 							className={cn(
-								"flex p-1 rounded-md border min-h-10 h-auto items-center justify-between bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto",
+								"flex min-w-0 p-1 rounded-md border min-h-10 h-auto items-center justify-between bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto",
 								autoSize ? "w-auto" : "w-full",
 								responsiveSettings.compactMode && "min-h-8 text-sm",
 								screenSize === "mobile" && "min-h-12 text-base",
@@ -818,10 +849,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 								maxWidth: `min(${widthConstraints.maxWidth}, 100%)`,
 							}}>
 							{selectedValues.length > 0 ? (
-								<div className="flex justify-between items-center w-full">
+								<div className="flex min-w-0 items-center justify-between w-full">
 									<div
 										className={cn(
-											"flex items-center gap-1",
+											"flex min-w-0 flex-1 items-center gap-1",
 											singleLine
 												? "overflow-x-auto multiselect-singleline-scroll"
 												: "flex-wrap",
@@ -857,14 +888,16 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 													<Badge
 														key={value}
 														className={cn(
+															"min-w-0 max-w-full",
 															getBadgeAnimationClass(),
 															multiSelectVariants({ variant }),
 															customStyle?.gradient &&
 																"text-white border-transparent",
 															responsiveSettings.compactMode &&
 																"text-xs px-1.5 py-0.5",
-															screenSize === "mobile" &&
-																"max-w-[120px] truncate",
+															screenSize === "mobile"
+																? "max-w-[120px]"
+																: "max-w-full",
 															singleLine && "flex-shrink-0 whitespace-nowrap",
 															"[&>svg]:pointer-events-auto"
 														)}
@@ -889,9 +922,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 															/>
 														)}
 														<span
-															className={cn(
-																screenSize === "mobile" && "truncate"
-															)}>
+															className="min-w-0 flex-1 truncate"
+															title={option.label}>
 															{option.label}
 														</span>
 														<div
@@ -958,7 +990,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 											</Badge>
 										)}
 									</div>
-									<div className="flex items-center justify-between">
+									<div className="ml-2 flex shrink-0 items-center justify-between">
 										<div
 											role="button"
 											tabIndex={0}
@@ -1000,7 +1032,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 					<PopoverContent
 						id={listboxId}
 						role="listbox"
-						aria-multiselectable="true"
+						aria-multiselectable={maxSelected === 1 ? "false" : "true"}
 						aria-label="Available options"
 						className={cn(
 							"w-auto p-0",
@@ -1118,7 +1150,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 																aria-hidden="true"
 															/>
 														)}
-														<span>{option.label}</span>
+														<span className="min-w-0 flex-1 truncate" title={option.label}>
+															{option.label}
+														</span>
 													</CommandItem>
 												);
 											})}
@@ -1159,7 +1193,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 															aria-hidden="true"
 														/>
 													)}
-													<span>{option.label}</span>
+													<span className="min-w-0 flex-1 truncate" title={option.label}>
+														{option.label}
+													</span>
 												</CommandItem>
 											);
 										})}

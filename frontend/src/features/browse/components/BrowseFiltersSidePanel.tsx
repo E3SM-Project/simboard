@@ -60,8 +60,10 @@ export const BrowseFiltersSidePanel = ({
             ? [...caseOptions, { value: selectedCaseName, label: selectedCaseName }]
             : caseOptions
         }
+        maxSelected={1}
+        maxCount={1}
         defaultValue={selectedCaseName ? [selectedCaseName] : []}
-        onValueChange={(next) => onCaseNameChange(next[next.length - 1] ?? '')}
+        onValueChange={(next) => onCaseNameChange(next[0] ?? '')}
         placeholder="Select one case"
         hideSelectAll={true}
         closeOnSelect={true}
