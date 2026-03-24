@@ -8,7 +8,6 @@ import {
   Server,
   Tag,
 } from 'lucide-react';
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
@@ -16,14 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { TableCellText } from '@/components/ui/table-cell-text';
+import { shouldSuppressBrowseSelection } from '@/features/browse/components/SimulationResults/selectionGuard';
+import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCard {
@@ -33,6 +27,10 @@ interface SimulationResultCard {
   handleSelect: (sim: SimulationOut) => void;
 }
 
+const shouldIgnoreSelection = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  Boolean(target.closest('button, a, input, [role="button"], [data-prevent-selection]'));
+
 export const SimulationResultCard = ({
   simulation,
   selected,
@@ -41,7 +39,6 @@ export const SimulationResultCard = ({
 }: SimulationResultCard) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   // -------------------- Derived Data --------------------
   const startStr = simulation.simulationStartDate
@@ -50,22 +47,6 @@ export const SimulationResultCard = ({
   const endStr = simulation.simulationEndDate
     ? new Date(simulation.simulationEndDate).toISOString().slice(0, 10)
     : 'N/A';
-  const runStartStr = simulation.runStartDate
-    ? new Date(simulation.runStartDate).toISOString().slice(0, 10)
-    : 'N/A';
-  const runEndStr = simulation.runEndDate
-    ? new Date(simulation.runEndDate).toISOString().slice(0, 10)
-    : 'N/A';
-  const createdAtStr = new Date(simulation.createdAt).toISOString().slice(0, 10);
-  const updatedAtStr = new Date(simulation.updatedAt).toISOString().slice(0, 10);
-  const diagnosticLinks = simulation.groupedLinks.diagnostic ?? [];
-  const performanceLinks = simulation.groupedLinks.performance ?? [];
-  const runScripts = simulation.groupedArtifacts.runScript ?? [];
-  const archivePaths = simulation.groupedArtifacts.archive ?? [];
-  const postprocessingScripts =
-    simulation.groupedArtifacts.postProcessingScript ??
-    simulation.groupedArtifacts.postprocessingScript ??
-    [];
 
   return (
     <Card
@@ -74,7 +55,11 @@ export const SimulationResultCard = ({
           ? 'border-slate-300 ring-1 ring-slate-200'
           : 'border-slate-200 hover:shadow-md'
       } ${isSelectionDisabled ? 'cursor-default' : 'cursor-pointer'}`}
-      onClick={() => {
+      onClick={(event) => {
+        if (shouldSuppressBrowseSelection() || shouldIgnoreSelection(event.target)) {
+          return;
+        }
+
         if (!isSelectionDisabled || selected) {
           handleSelect(simulation);
         }
@@ -96,8 +81,14 @@ export const SimulationResultCard = ({
               <span className="block break-words text-base font-semibold tracking-tight text-slate-950">
                 {simulation.executionId}
               </span>
-              <div className="mt-1 break-words text-sm leading-6 text-slate-500">
-                <span className="font-medium text-slate-600">Case:</span> {simulation.caseName}
+              <div className="mt-1 min-w-0 text-sm leading-6 text-slate-500">
+                <span className="font-medium text-slate-600">Case:</span>
+                <TableCellText
+                  value={simulation.caseName}
+                  lines={2}
+                  fullValueMode="tooltip"
+                  className="mt-0.5 text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]"
+                />
               </div>
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 text-xs uppercase tracking-[0.12em] text-slate-400">
@@ -117,18 +108,30 @@ export const SimulationResultCard = ({
             {/* One metadata item per line with bold labels */}
             <dl className="mb-2 space-y-2 text-sm">
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
+                <dt className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Rocket className="w-4 h-4" /> Campaign:
                 </dt>
-                <dd className="break-words font-normal text-slate-600">{simulation.campaign}</dd>
+                <dd className="min-w-0 flex-1 font-normal text-slate-600">
+                  <TableCellText
+                    value={simulation.campaign}
+                    lines={2}
+                    fullValueMode="tooltip"
+                    className="text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]"
+                  />
+                </dd>
               </div>
 
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
+                <dt className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Lightbulb className="w-4 h-4" /> Experiment:
                 </dt>
-                <dd className="break-words font-normal text-slate-600">
-                  {simulation.experimentType}
+                <dd className="min-w-0 flex-1 font-normal text-slate-600">
+                  <TableCellText
+                    value={simulation.experimentType}
+                    lines={2}
+                    fullValueMode="tooltip"
+                    className="text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]"
+                  />
                 </dd>
               </div>
 
@@ -221,339 +224,10 @@ export const SimulationResultCard = ({
 
             <div style={{ height: '6px' }} />
 
-            <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="mb-4 w-full justify-between rounded-xl border-slate-200 bg-slate-50/70 px-4 py-6 text-left text-base text-slate-900 hover:bg-slate-100"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  More Details
-                </Button>
-              </DialogTrigger>
-              <DialogContent
-                className="left-auto right-0 top-0 h-[100dvh] w-full max-w-[min(92vw,42rem)] translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-2xl sm:rounded-none"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex h-full min-h-0 flex-col">
-                  <DialogHeader className="border-b border-slate-200 px-6 py-5 text-left">
-                    <DialogTitle className="text-xl text-slate-950">
-                      {simulation.executionId}
-                    </DialogTitle>
-                    <DialogDescription className="mt-2 text-sm leading-6 text-slate-600">
-                      Additional browse details for <span className="font-medium">{simulation.caseName}</span>.
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
-                    <section className="space-y-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                        Overview
-                      </h3>
-                      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-2">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Case
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">{simulation.caseName}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Status
-                          </p>
-                          <div className="mt-1">
-                            <SimulationStatusBadge status={simulation.status} />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Machine
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">{simulation.machine.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Compiler
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">{simulation.compiler ?? 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Grid
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">{simulation.gridName}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Canonical
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {simulation.isCanonical ? 'Yes' : 'No'}
-                            {!simulation.isCanonical && simulation.changeCount > 0
-                              ? ` (${simulation.changeCount} changes)`
-                              : ''}
-                          </p>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                        Runtime And Provenance
-                      </h3>
-                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Model Run Dates
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {startStr} to {endStr}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Runtime Window
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {runStartStr} to {runEndStr}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Created By
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {simulation.createdByUser?.email ?? simulation.createdBy ?? 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            HPC Username
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">{simulation.hpcUsername ?? 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            Catalog Dates
-                          </p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            Created {createdAtStr}, updated {updatedAtStr}
-                          </p>
-                        </div>
-                      </div>
-                    </section>
-
-                    {(simulation.gitRepositoryUrl ||
-                      simulation.gitBranch ||
-                      simulation.gitTag ||
-                      simulation.gitCommitHash) && (
-                      <section className="space-y-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          Version Control
-                        </h3>
-                        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-                          {simulation.gitRepositoryUrl && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Repository
-                              </p>
-                              <p className="mt-1 break-all text-sm text-slate-700">
-                                {simulation.gitRepositoryUrl}
-                              </p>
-                            </div>
-                          )}
-                          {simulation.gitBranch && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Branch
-                              </p>
-                              <p className="mt-1 break-all font-mono text-xs text-slate-700">
-                                {simulation.gitBranch}
-                              </p>
-                            </div>
-                          )}
-                          {simulation.gitTag && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Tag
-                              </p>
-                              <p className="mt-1 text-sm text-slate-700">{simulation.gitTag}</p>
-                            </div>
-                          )}
-                          {simulation.gitCommitHash && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Commit
-                              </p>
-                              <p className="mt-1 break-all font-mono text-xs text-slate-700">
-                                {simulation.gitCommitHash}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    )}
-
-                    {(simulation.description ||
-                      simulation.keyFeatures ||
-                      simulation.knownIssues ||
-                      simulation.notesMarkdown) && (
-                      <section className="space-y-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          Notes And Context
-                        </h3>
-                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
-                          {simulation.description && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Description
-                              </p>
-                              <p className="mt-1 text-sm leading-6 text-slate-700">
-                                {simulation.description}
-                              </p>
-                            </div>
-                          )}
-                          {simulation.keyFeatures && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Key Features
-                              </p>
-                              <p className="mt-1 text-sm leading-6 text-slate-700">
-                                {simulation.keyFeatures}
-                              </p>
-                            </div>
-                          )}
-                          {simulation.knownIssues && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Known Issues
-                              </p>
-                              <p className="mt-1 text-sm leading-6 text-slate-700">
-                                {simulation.knownIssues}
-                              </p>
-                            </div>
-                          )}
-                          {simulation.notesMarkdown && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Notes
-                              </p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                                {simulation.notesMarkdown}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    )}
-
-                    {(diagnosticLinks.length > 0 || performanceLinks.length > 0) && (
-                      <section className="space-y-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          External Links
-                        </h3>
-                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
-                          {diagnosticLinks.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Diagnostics
-                              </p>
-                              <ul className="mt-2 space-y-2">
-                                {diagnosticLinks.map((link) => (
-                                  <li key={link.id}>
-                                    <a
-                                      href={link.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sm text-blue-700 underline"
-                                    >
-                                      {link.label}
-                                    </a>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {performanceLinks.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Performance
-                              </p>
-                              <ul className="mt-2 space-y-2">
-                                {performanceLinks.map((link) => (
-                                  <li key={link.id}>
-                                    <a
-                                      href={link.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sm text-blue-700 underline"
-                                    >
-                                      {link.label}
-                                    </a>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    )}
-
-                    {(runScripts.length > 0 || archivePaths.length > 0 || postprocessingScripts.length > 0) && (
-                      <section className="space-y-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          Artifact Paths
-                        </h3>
-                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
-                          {runScripts.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Run Scripts
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                                {runScripts.map((item, index) => (
-                                  <li key={index} className="break-all">
-                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {archivePaths.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Archive Paths
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                                {archivePaths.map((item, index) => (
-                                  <li key={index} className="break-all">
-                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {postprocessingScripts.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                Postprocessing Scripts
-                              </p>
-                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                                {postprocessingScripts.map((item, index) => (
-                                  <li key={index} className="break-all">
-                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    )}
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <SimulationBrowseDetailsDialog
+              simulation={simulation}
+              triggerClassName="mb-4 w-full justify-between rounded-xl border-slate-200 bg-slate-50/70 px-4 py-6 text-left text-base text-slate-900 hover:bg-slate-100"
+            />
 
             <div className="flex flex-col sm:flex-row items-center gap-4 mt-4 justify-end">
               <Button
@@ -565,7 +239,7 @@ export const SimulationResultCard = ({
                   navigate(`/simulations/${simulation.id}`);
                 }}
               >
-                View All Details
+                All Details
               </Button>
             </div>
           </CardContent>

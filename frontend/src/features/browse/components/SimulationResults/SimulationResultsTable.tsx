@@ -15,6 +15,7 @@ import {
 } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +29,8 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
+import { shouldSuppressBrowseSelection } from '@/features/browse/components/SimulationResults/selectionGuard';
+import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
@@ -74,6 +77,36 @@ interface SimulationResultsTable {
     updater: VisibilityState | ((old: VisibilityState) => VisibilityState),
   ) => void;
 }
+
+const shouldIgnoreRowSelection = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  Boolean(target.closest('button, a, input, [role="button"], [data-prevent-selection]'));
+
+const SimulationTableActions = ({ simulation }: { simulation: SimulationOut }) => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="flex items-center justify-end gap-2" data-prevent-selection="true">
+      <SimulationBrowseDetailsDialog
+        simulation={simulation}
+        triggerSize="sm"
+        triggerClassName="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        data-prevent-selection="true"
+        className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        onClick={(event) => {
+          event.stopPropagation();
+          navigate(`/simulations/${simulation.id}`);
+        }}
+      >
+        All Details
+      </Button>
+    </div>
+  );
+};
 
 const columns: ColumnDef<SimulationOut>[] = [
   {
@@ -208,26 +241,11 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { width: 180 },
   },
   {
-    id: 'details',
+    id: 'actions',
     enableHiding: false,
-    cell: ({ row }) => {
-      const simulation = row.original;
-      return (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          onClick={(event) => {
-            event.stopPropagation();
-            window.location.href = `/simulations/${simulation.id}`;
-          }}
-        >
-          Details
-        </Button>
-      );
-    },
+    cell: ({ row }) => <SimulationTableActions simulation={row.original} />,
     enableSorting: false,
-    meta: { sticky: true, width: 100, position: 'right' },
+    meta: { sticky: true, width: 220, position: 'right' },
   },
 ];
 
@@ -440,7 +458,11 @@ export const SimulationResultsTable = ({
                 key={row.id}
                 data-state={row.getIsSelected() ? 'selected' : undefined}
                 className="cursor-pointer border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
-                onClick={() => {
+                onClick={(event) => {
+                  if (shouldSuppressBrowseSelection() || shouldIgnoreRowSelection(event.target)) {
+                    return;
+                  }
+
                   const isSelected = row.getIsSelected();
                   const canSelectMore =
                     isSelected || Object.values(rowSelection).filter(Boolean).length < MAX_SELECTION;
