@@ -11,7 +11,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  shouldSuppressBrowseSelection,
   suppressNextBrowseInteraction,
 } from '@/features/browse/components/SimulationResults/selectionGuard';
 import type { SimulationOut } from '@/types/index';
@@ -34,10 +33,6 @@ export const SimulationBrowseDetailsDialog = ({
   const [isOpen, setIsOpen] = useState(false);
   const handleTriggerInteraction = (event: React.SyntheticEvent) => {
     event.stopPropagation();
-
-    if (shouldSuppressBrowseSelection()) {
-      event.preventDefault();
-    }
   };
   const stopDrawerPropagation = (event: React.SyntheticEvent) => {
     event.stopPropagation();

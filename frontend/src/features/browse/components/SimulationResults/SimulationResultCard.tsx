@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { shouldSuppressBrowseSelection } from '@/features/browse/components/SimulationResults/selectionGuard';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
@@ -56,7 +55,7 @@ export const SimulationResultCard = ({
           : 'border-slate-200 hover:shadow-md'
       } ${isSelectionDisabled ? 'cursor-default' : 'cursor-pointer'}`}
       onClick={(event) => {
-        if (shouldSuppressBrowseSelection() || shouldIgnoreSelection(event.target)) {
+        if (shouldIgnoreSelection(event.target)) {
           return;
         }
 

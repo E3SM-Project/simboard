@@ -29,7 +29,6 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
-import { shouldSuppressBrowseSelection } from '@/features/browse/components/SimulationResults/selectionGuard';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
@@ -459,7 +458,7 @@ export const SimulationResultsTable = ({
                 data-state={row.getIsSelected() ? 'selected' : undefined}
                 className="cursor-pointer border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
                 onClick={(event) => {
-                  if (shouldSuppressBrowseSelection() || shouldIgnoreRowSelection(event.target)) {
+                  if (shouldIgnoreRowSelection(event.target)) {
                     return;
                   }
 
