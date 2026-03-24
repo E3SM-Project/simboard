@@ -48,15 +48,15 @@ Environment variable keys:
 
 `simboard-db`:
 
-| Key                 | Required | Example/Allowed Value | Used By |
-| ------------------- | -------- | --------------------- | ------- |
-| `POSTGRES_USER`     | Yes      | DB username           | `db`    |
-| `POSTGRES_PASSWORD` | Yes      | DB password           | `db`    |
-| `POSTGRES_DB`       | Yes      | DB name               | `db`    |
-| `POSTGRES_PORT`     | Yes      | `5432`                | `db`    |
-| `POSTGRES_SERVER`   | Yes      | `db`                  | `db`    |
-| `PGDATA`            | Yes      | Postgres data dir     | `db`    |
-| `PGTZ`              | Yes      | timezone string       | `db`    |
+| Key                 | Required | Example/Allowed Value             | Used By |
+| ------------------- | -------- | --------------------------------- | ------- |
+| `POSTGRES_USER`     | Yes      | DB username                       | `db`    |
+| `POSTGRES_PASSWORD` | Yes      | DB password                       | `db`    |
+| `POSTGRES_DB`       | Yes      | DB name                           | `db`    |
+| `POSTGRES_PORT`     | Yes      | `5432`                            | `db`    |
+| `POSTGRES_SERVER`   | Yes      | `db`                              | `db`    |
+| `PGDATA`            | Yes      | `/var/lib/postgresql/data/pgdata` | `db`    |
+| `PGTZ`              | Yes      | timezone string                   | `db`    |
 
 ## Workload Configurations
 
@@ -117,12 +117,13 @@ Create a PersistentVolumeClaim volume for Postgres data.
 
 `Storage`:
 
-| Rancher field    | Value                                                             |
-| ---------------- | ----------------------------------------------------------------- |
-| Volume           | `db-data` (PVC volume defined in `Pod -> Storage`)               |
-| Mount path       | `/var/lib/postgresql/data/pgdata`                                |
-| Sub path         | leave empty (unless required by storage policy)                  |
-| Read only        | `false` (required; Postgres data directory must be writable)     |
+| Rancher field | Value                      |
+| ------------- | -------------------------- |
+| Volume        | `db-data`                  |
+| Mount path    | `/var/lib/postgresql/data` |
+| Read only     | `false`                    |
+
+Keep `PGDATA=/var/lib/postgresql/data/pgdata` in the `simboard-db` secret. Mount the claim at `/var/lib/postgresql/data`, not at `PGDATA`, so Postgres initializes inside the `pgdata` subdirectory instead of the volume root. This avoids `initdb` failures on storage backends that pre-create files such as `lost+found` at the claim root.
 
 ### Workload 2: Backend Deployment (`backend`)
 
