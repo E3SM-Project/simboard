@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
@@ -652,15 +653,18 @@ export const BrowsePage = ({
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
                   {selectedCaseName && (
-                    <span className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
-                      <span className="mr-2 text-xs font-medium text-slate-500">case:</span>
-                      <span className="mr-2 truncate font-medium text-slate-700">
-                        {selectedCaseName}
-                      </span>
+                    <span className="inline-flex min-w-0 max-w-[min(100%,40rem)] items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
+                      <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">case:</span>
+                      <TableCellText
+                        value={selectedCaseName}
+                        lines={1}
+                        fullValueMode="tooltip"
+                        className="mr-2 min-w-0 flex-1 font-medium text-slate-700"
+                      />
                       <button
                         type="button"
                         aria-label="Remove case filter"
-                        className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                        className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                         onClick={handleClearCaseNameFilter}
                       >
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -688,18 +692,18 @@ export const BrowsePage = ({
                         return (
                           <span
                             key={`${key}-${value}-${idx}`}
-                            className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                            className="inline-flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                           >
-                            <span className="mr-2 text-xs font-medium text-slate-500">
+                            <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">
                               {String(key).replace(/Id$/, '')}:
                             </span>
-                            <span className="mr-2 truncate font-medium text-slate-700">
+                            <span className="mr-2 min-w-0 flex-1 truncate font-medium text-slate-700">
                               {display}
                             </span>
                             <button
                               type="button"
                               aria-label={`Remove ${String(key)} filter`}
-                              className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                              className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                               onClick={() => {
                                 setAppliedFilters((prev) => ({
                                   ...prev,
@@ -729,18 +733,18 @@ export const BrowsePage = ({
                       return (
                         <span
                           key={`${String(key)}-${values}`}
-                          className="inline-flex max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                          className="inline-flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                         >
-                          <span className="mr-2 text-xs font-medium text-slate-500">
+                          <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">
                             {String(key).replace(/Id$/, '')}:
                           </span>
-                          <span className="mr-2 truncate font-medium text-slate-700">
+                          <span className="mr-2 min-w-0 flex-1 truncate font-medium text-slate-700">
                             {display}
                           </span>
                           <button
                             type="button"
                             aria-label={`Remove ${String(key)} filter`}
-                            className="ml-1 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                            className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                             onClick={() => {
                               setAppliedFilters((prev) => ({ ...prev, [key]: '' }));
                             }}

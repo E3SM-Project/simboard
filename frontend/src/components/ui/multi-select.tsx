@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TableCellText } from "@/components/ui/table-cell-text";
 import {
 	Popover,
 	PopoverContent,
@@ -921,11 +922,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 																})}
 															/>
 														)}
-														<span
-															className="min-w-0 flex-1 truncate"
-															title={option.label}>
-															{option.label}
-														</span>
+														<TableCellText
+															value={option.label}
+															lines={1}
+															fullValueMode="tooltip"
+															className="min-w-0 flex-1"
+														/>
 														<div
 															role="button"
 															tabIndex={0}
@@ -1029,19 +1031,19 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 							)}
 						</Button>
 					</PopoverTrigger>
-					<PopoverContent
-						id={listboxId}
-						role="listbox"
-						aria-multiselectable={maxSelected === 1 ? "false" : "true"}
-						aria-label="Available options"
-						className={cn(
-							"w-auto p-0",
-							getPopoverAnimationClass(),
-							screenSize === "mobile" && "w-[85vw] max-w-[280px]",
-							screenSize === "tablet" && "w-[70vw] max-w-md",
-							screenSize === "desktop" && "min-w-[300px]",
-							popoverClassName
-						)}
+						<PopoverContent
+							id={listboxId}
+							role="listbox"
+							aria-multiselectable={maxSelected === 1 ? "false" : "true"}
+							aria-label="Available options"
+							className={cn(
+								"w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] p-0",
+								getPopoverAnimationClass(),
+								screenSize === "mobile" && "w-[85vw] max-w-[280px]",
+								screenSize === "tablet" && "w-[70vw] max-w-md",
+								screenSize === "desktop" && "max-w-full",
+								popoverClassName
+							)}
 						style={{
 							animationDuration: `${animationConfig?.duration || animation}s`,
 							animationDelay: `${animationConfig?.delay || 0}s`,
@@ -1130,7 +1132,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 															isSelected ? ", selected" : ", not selected"
 														}${option.disabled ? ", disabled" : ""}`}
 														className={cn(
-															"cursor-pointer",
+															"min-w-0 max-w-full cursor-pointer",
 															option.disabled && "opacity-50 cursor-not-allowed"
 														)}
 														disabled={option.disabled}>
@@ -1150,9 +1152,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 																aria-hidden="true"
 															/>
 														)}
-														<span className="min-w-0 flex-1 truncate" title={option.label}>
-															{option.label}
-														</span>
+														<TableCellText
+															value={option.label}
+															lines={1}
+															fullValueMode="tooltip"
+															className="min-w-0 flex-1"
+														/>
 													</CommandItem>
 												);
 											})}
@@ -1173,7 +1178,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 														isSelected ? ", selected" : ", not selected"
 													}${option.disabled ? ", disabled" : ""}`}
 													className={cn(
-														"cursor-pointer",
+														"min-w-0 max-w-full cursor-pointer",
 														option.disabled && "opacity-50 cursor-not-allowed"
 													)}
 													disabled={option.disabled}>
@@ -1193,9 +1198,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 															aria-hidden="true"
 														/>
 													)}
-													<span className="min-w-0 flex-1 truncate" title={option.label}>
-														{option.label}
-													</span>
+													<TableCellText
+														value={option.label}
+														lines={1}
+														fullValueMode="tooltip"
+														className="min-w-0 flex-1"
+													/>
 												</CommandItem>
 											);
 										})}
