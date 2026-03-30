@@ -1,4 +1,4 @@
-import { GitCompareArrows, Search, Upload } from 'lucide-react';
+import { FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -59,6 +59,13 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
       icon: GitCompareArrows,
     },
     {
+      title: 'Browse Cases',
+      description: 'Discover experiment-level case records and inspect their canonical baselines.',
+      to: '/cases',
+      action: 'Open Cases',
+      icon: FolderOpen,
+    },
+    {
       title: 'Upload a Simulation',
       description: 'Submit new simulation metadata to share results and preserve provenance.',
       to: '/upload',
@@ -100,6 +107,9 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
             </Button>
             <Button asChild variant="secondary">
               <Link to="/compare">Compare</Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link to="/cases">Browse Cases</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link to="/simulations">All Simulations</Link>
@@ -155,7 +165,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
             Jump from the catalog overview into the primary SimBoard tasks.
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {workflows.map((workflow) => {
             const Icon = workflow.icon;
             return (

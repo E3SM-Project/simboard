@@ -1,5 +1,7 @@
 import type { RouteObject } from 'react-router-dom';
 
+import { CaseDetailsPage } from '@/features/simulations/CaseDetailsPage';
+import { CasesPage } from '@/features/simulations/CasesPage';
 import { SimulationDetailsPage } from '@/features/simulations/SimulationDetailsPage';
 import { SimulationsPage } from '@/features/simulations/SimulationsPage';
 import type { SimulationOut } from '@/types';
@@ -9,6 +11,14 @@ interface SimulationRoutesProps {
 }
 
 export const simulationsRoutes = ({ simulations }: SimulationRoutesProps): RouteObject[] => [
+  {
+    path: '/cases',
+    element: <CasesPage />,
+  },
+  {
+    path: '/cases/:id',
+    element: <CaseDetailsPage />,
+  },
   {
     path: '/simulations',
     element: <SimulationsPage simulations={simulations} />,

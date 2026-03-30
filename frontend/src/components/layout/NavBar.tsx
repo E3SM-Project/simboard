@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { label: 'Home', href: '/', description: 'Overview and featured simulations' },
   { label: 'Browse', href: '/browse', description: 'Guided discovery with filters' },
+  { label: 'Cases', href: '/cases', description: 'Experiment-level browse and detail pages' },
   { label: 'Compare', href: '/compare', description: 'Side-by-side view of selected runs' },
   {
     label: 'All Simulations',
@@ -67,7 +68,10 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
         <nav className="hidden md:flex gap-3 ml-6">
           {navItems.map((item) => {
             const isCompare = item.label === 'Compare';
-            const isActive = location.pathname === item.href;
+            const isActive =
+              item.href === '/'
+                ? location.pathname === item.href
+                : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
 
             return (
               <TooltipProvider delayDuration={150} key={item.href}>
