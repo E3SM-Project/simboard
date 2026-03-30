@@ -28,3 +28,4 @@ class ParsedSimulation:
     git_tag: str | None
     git_commit_hash: str | None
     status: str | None
+    case_hash: str | None = None

@@ -23,6 +23,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         Dictionary with case metadata (values are str or None), including:
 
         - ``case_name``: Case name (``CASE``)
+        - ``case_hash``: Case hash (``CASE_HASH``)
         - ``case_group``: Case group (``CASE_GROUP``)
         - ``machine``: Machine name (``MACH``)
         - ``user``: Real user (``REALUSER``)
@@ -34,6 +35,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     env_case_path = Path(env_case_path)
 
     case_name = _extract_value_from_file(env_case_path, "CASE")
+    case_hash = _extract_value_from_file(env_case_path, "CASE_HASH")
     case_group = _extract_value_from_file(env_case_path, "CASE_GROUP")
     machine = _extract_value_from_file(env_case_path, "MACH")
     user = _extract_value_from_file(env_case_path, "REALUSER")
@@ -44,6 +46,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
 
     return {
         "case_name": case_name,
+        "case_hash": case_hash,
         "case_group": case_group,
         "machine": machine,
         "user": user,

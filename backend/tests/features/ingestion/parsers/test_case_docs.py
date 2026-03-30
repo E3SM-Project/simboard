@@ -59,6 +59,7 @@ class TestParseEnvCase:
         xml_case = """
         <config>
             <entry id="CASE" value="v3.LR.historical_0121" />
+            <entry id="CASE_HASH" value="abc123def456" />
         </config>
         """
         tmp_case = tmp_path / "env_case_campaign.xml"
@@ -68,6 +69,7 @@ class TestParseEnvCase:
 
         assert result["campaign"] == "v3.LR.historical"
         assert result["experiment_type"] == "historical"
+        assert result["case_hash"] == "abc123def456"
 
     def test_non_dot_case_name_does_not_set_campaign(self, tmp_path):
         xml_case = """
@@ -91,6 +93,7 @@ class TestParseEnvCase:
             result = parse_env_case(Path("/tmp/missing.xml"))
 
         assert result["case_name"] is None
+        assert result["case_hash"] is None
         assert result["case_group"] is None
 
 

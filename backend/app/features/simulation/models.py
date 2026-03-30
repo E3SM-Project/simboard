@@ -71,6 +71,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     execution_id: Mapped[str] = mapped_column(
         Text, unique=True, index=True, nullable=False
     )
+    case_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(Text)
