@@ -6,13 +6,13 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
-import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -35,9 +35,22 @@ import {
   getCanonicalSimulation,
 } from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
+import { cn } from '@/lib/utils';
 import type { CaseOut, SimulationOut } from '@/types';
 
 type CanonicalFilter = 'all' | 'with-canonical' | 'without-canonical';
+type ActiveFilterKey =
+  | 'caseName'
+  | 'hpcUsername'
+  | 'machineId'
+  | 'campaign'
+  | 'simulationType'
+  | 'initializationType'
+  | 'compiler'
+  | 'gitTag'
+  | 'createdBy'
+  | 'caseGroup'
+  | 'canonical';
 
 interface CasesPageProps {
   simulations: SimulationOut[];
@@ -46,7 +59,6 @@ interface CasesPageProps {
 interface CaseSimulationFilters {
   hpcUsername: string;
   machineId: string;
-  status: string;
   campaign: string;
   simulationType: string;
   initializationType: string;
@@ -55,10 +67,20 @@ interface CaseSimulationFilters {
   createdBy: string;
 }
 
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface ActiveFilterPill {
+  key: ActiveFilterKey;
+  label: string;
+  value: string;
+}
+
 const createEmptySimulationFilters = (): CaseSimulationFilters => ({
   hpcUsername: '',
   machineId: '',
-  status: '',
   campaign: '',
   simulationType: '',
   initializationType: '',
@@ -80,13 +102,13 @@ const sortCaseSimulations = (caseSimulations: SimulationOut[]) =>
   });
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {
-  const navigate = useNavigate();
   const { data: cases, loading, error } = useCases();
   const [caseNameFilter, setCaseNameFilter] = useState('');
   const [caseGroupFilter, setCaseGroupFilter] = useState('');
   const [simulationFilters, setSimulationFilters] =
     useState<CaseSimulationFilters>(createEmptySimulationFilters);
   const [canonicalFilter, setCanonicalFilter] = useState<CanonicalFilter>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'updatedAt', desc: true },
@@ -114,6 +136,54 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     return caseMap;
   }, [simulations]);
+  const caseMachineSummaries = useMemo(() => {
+    const summaries = new Map<string, string>();
+
+    for (const [caseId, caseSimulations] of simulationsByCaseId.entries()) {
+      const machineNames = [
+        ...new Set(
+          caseSimulations
+            .map((simulation) => simulation.machine?.name)
+            .filter((machineName): machineName is string => Boolean(machineName)),
+        ),
+      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+
+      if (machineNames.length === 0) {
+        summaries.set(caseId, '—');
+      } else if (machineNames.length === 1) {
+        summaries.set(caseId, machineNames[0]);
+      } else {
+        summaries.set(caseId, `${machineNames[0]} +${machineNames.length - 1}`);
+      }
+    }
+
+    return summaries;
+  }, [simulationsByCaseId]);
+  const caseHpcUserSummaries = useMemo(() => {
+    const summaries = new Map<string, string>();
+
+    for (const [caseId, caseSimulations] of simulationsByCaseId.entries()) {
+      const usernames = [
+        ...new Set(
+          caseSimulations
+            .map((simulation) => simulation.hpcUsername)
+            .filter((username): username is string => Boolean(username)),
+        ),
+      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+
+      if (simulationFilters.hpcUsername) {
+        summaries.set(caseId, simulationFilters.hpcUsername);
+      } else if (usernames.length === 0) {
+        summaries.set(caseId, '—');
+      } else if (usernames.length === 1) {
+        summaries.set(caseId, usernames[0]);
+      } else {
+        summaries.set(caseId, `${usernames.length} users`);
+      }
+    }
+
+    return summaries;
+  }, [simulationFilters.hpcUsername, simulationsByCaseId]);
   const hpcUsernames = useMemo(
     () =>
       [
@@ -149,13 +219,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }),
     );
   }, [simulations]);
-  const statuses = useMemo(
-    () =>
-      sortStringValues(
-        [...new Set(simulations.map((simulation) => simulation.status).filter(Boolean))] as string[],
-      ),
-    [simulations],
-  );
   const campaigns = useMemo(
     () =>
       sortStringValues(
@@ -204,6 +267,21 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     caseGroupFilter.length > 0 ||
     canonicalFilter !== 'all' ||
     hasActiveSimulationFilters;
+  const advancedFilterCount = useMemo(
+    () =>
+      [
+        simulationFilters.machineId,
+        simulationFilters.campaign,
+        simulationFilters.simulationType,
+        simulationFilters.initializationType,
+        simulationFilters.compiler,
+        simulationFilters.gitTag,
+        simulationFilters.createdBy,
+        caseGroupFilter,
+        canonicalFilter !== 'all' ? canonicalFilter : '',
+      ].filter(Boolean).length,
+    [canonicalFilter, caseGroupFilter, simulationFilters],
+  );
   const matchingSimulationsByCaseId = useMemo(() => {
     const matchingMap = new Map<string, SimulationOut[]>();
 
@@ -215,9 +293,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         return false;
       }
       if (simulationFilters.machineId && simulation.machine?.id !== simulationFilters.machineId) {
-        return false;
-      }
-      if (simulationFilters.status && simulation.status !== simulationFilters.status) {
         return false;
       }
       if (simulationFilters.campaign && simulation.campaign !== simulationFilters.campaign) {
@@ -259,8 +334,10 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     return matchingMap;
   }, [simulationFilters, simulations]);
   const activeFilterPills = useMemo(() => {
-    const filters: { key: string; label: string; value: string }[] = [];
-    if (caseNameFilter.trim()) filters.push({ key: 'caseName', label: 'Case', value: caseNameFilter.trim() });
+    const filters: ActiveFilterPill[] = [];
+    if (caseNameFilter.trim()) {
+      filters.push({ key: 'caseName', label: 'Case', value: caseNameFilter.trim() });
+    }
     if (simulationFilters.hpcUsername) {
       filters.push({ key: 'hpcUsername', label: 'HPC', value: simulationFilters.hpcUsername });
     }
@@ -272,9 +349,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           machineOptions.find((option) => option.value === simulationFilters.machineId)?.label ??
           simulationFilters.machineId,
       });
-    }
-    if (simulationFilters.status) {
-      filters.push({ key: 'status', label: 'Status', value: simulationFilters.status });
     }
     if (simulationFilters.campaign) {
       filters.push({ key: 'campaign', label: 'Campaign', value: simulationFilters.campaign });
@@ -320,6 +394,45 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     return filters;
   }, [canonicalFilter, caseGroupFilter, caseNameFilter, creatorOptions, machineOptions, simulationFilters]);
 
+  const setSimulationFilter = (key: keyof CaseSimulationFilters, value: string) => {
+    setSimulationFilters((current) => ({
+      ...current,
+      [key]: value,
+    }));
+    table.setPageIndex(0);
+  };
+
+  const clearAllFilters = () => {
+    setCaseNameFilter('');
+    setCaseGroupFilter('');
+    setSimulationFilters(createEmptySimulationFilters());
+    setCanonicalFilter('all');
+    setShowAdvancedFilters(false);
+    table.setPageIndex(0);
+  };
+
+  const removeFilter = (filterKey: ActiveFilterKey) => {
+    switch (filterKey) {
+      case 'caseName':
+        setCaseNameFilter('');
+        break;
+      case 'caseGroup':
+        setCaseGroupFilter('');
+        break;
+      case 'canonical':
+        setCanonicalFilter('all');
+        break;
+      default:
+        setSimulationFilters((current) => ({
+          ...current,
+          [filterKey]: '',
+        }));
+        break;
+    }
+
+    table.setPageIndex(0);
+  };
+
   const filteredCases = useMemo(() => {
     const normalizedNameFilter = caseNameFilter.trim().toLowerCase();
 
@@ -347,6 +460,17 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     hasActiveSimulationFilters,
     matchingSimulationsByCaseId,
   ]);
+  const visibleRunCount = useMemo(
+    () =>
+      filteredCases.reduce((count, caseRecord) => {
+        if (hasActiveSimulationFilters) {
+          return count + (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0);
+        }
+
+        return count + (simulationsByCaseId.get(caseRecord.id)?.length ?? caseRecord.simulations.length);
+      }, 0),
+    [filteredCases, hasActiveSimulationFilters, matchingSimulationsByCaseId, simulationsByCaseId],
+  );
 
   const columns = useMemo<ColumnDef<CaseOut>[]>(
     () => [
@@ -392,6 +516,22 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         accessorKey: 'caseGroup',
         header: 'Case Group',
         cell: ({ row }) => <TableCellText value={row.original.caseGroup ?? '—'} />,
+      },
+      {
+        id: 'machines',
+        header: 'Machines',
+        accessorFn: (caseRecord) => caseMachineSummaries.get(caseRecord.id) ?? '—',
+        cell: ({ row }) => (
+          <TableCellText value={caseMachineSummaries.get(row.original.id) ?? '—'} lines={1} />
+        ),
+      },
+      {
+        id: 'hpcUsers',
+        header: 'HPC Users',
+        accessorFn: (caseRecord) => caseHpcUserSummaries.get(caseRecord.id) ?? '—',
+        cell: ({ row }) => (
+          <TableCellText value={caseHpcUserSummaries.get(row.original.id) ?? '—'} lines={1} />
+        ),
       },
       {
         id: 'canonicalSimulation',
@@ -451,7 +591,14 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         ),
       },
     ],
-    [expandedCaseId, hasActiveSimulationFilters, matchingSimulationsByCaseId, simulationsByCaseId],
+    [
+      caseHpcUserSummaries,
+      caseMachineSummaries,
+      expandedCaseId,
+      hasActiveSimulationFilters,
+      matchingSimulationsByCaseId,
+      simulationsByCaseId,
+    ],
   );
 
   const table = useReactTable({
@@ -469,6 +616,39 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       },
     },
   });
+
+  const renderSelectField = ({
+    label,
+    value,
+    placeholder,
+    options,
+    onValueChange,
+  }: {
+    label: string;
+    value: string;
+    placeholder: string;
+    options: SelectOption[];
+    onValueChange: (value: string) => void;
+  }) => (
+    <div className="space-y-2">
+      <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </label>
+      <Select value={value || '__all__'} onValueChange={onValueChange}>
+        <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white shadow-none">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all__">{placeholder}</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   const renderExpandedContent = (caseRecord: CaseOut) => {
     const allCaseSimulations = sortCaseSimulations(simulationsByCaseId.get(caseRecord.id) ?? []);
@@ -500,11 +680,10 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Canonical</TableHead>
-                  <TableHead>Change Count</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>HPC Username</TableHead>
                   <TableHead>Simulation Dates</TableHead>
-                  <TableHead>View Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -519,9 +698,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
-                      <SimulationStatusBadge status={simulation.status} />
-                    </TableCell>
-                    <TableCell className="align-top">
                       {simulation.isCanonical ? (
                         <Badge
                           variant="outline"
@@ -533,19 +709,16 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="align-top">{simulation.changeCount}</TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={simulation.machine?.name ?? '—'} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={simulation.hpcUsername ?? '—'} lines={1} />
+                    </TableCell>
                     <TableCell className="align-top">
                       {`${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(
                         simulation.simulationEndDate ?? null,
                       )}`}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <Link
-                        to={`/simulations/${simulation.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        View simulation
-                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -574,306 +747,283 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-8 py-8">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Cases</h1>
-          <p className="text-sm text-muted-foreground">
-            Discover cases through run metadata like HPC username, machine, status, and version context.
-          </p>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {filteredCases.length} of {cases.length} cases
+    <div className="mx-auto w-full max-w-[1480px] space-y-6 px-6 py-8">
+      <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/70 to-slate-100/80 shadow-sm">
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                Primary Discovery
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
+                <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                  Find the cases behind your runs. Start with HPC username or machine, then
+                  refine by campaign, version context, and canonical state.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[440px]">
+              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                  Cases shown
+                </p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                  {filteredCases.length}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">of {cases.length} total cases</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                  Runs shown
+                </p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                  {visibleRunCount}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {hasActiveSimulationFilters ? 'matching runs in visible cases' : 'runs across visible cases'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                  Active filters
+                </p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                  {activeFilterPills.length}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {advancedFilterCount > 0
+                    ? `${advancedFilterCount} advanced refinements applied`
+                    : 'Quick case discovery'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.35fr)_220px_220px]">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        placeholder="Search case name…"
+                        value={caseNameFilter}
+                        onChange={(event) => {
+                          setCaseNameFilter(event.target.value);
+                          table.setPageIndex(0);
+                        }}
+                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-none"
+                      />
+                    </div>
+                  </div>
+
+                  {renderSelectField({
+                      label: 'HPC Username',
+                      value: simulationFilters.hpcUsername,
+                      placeholder: 'All HPC usernames',
+                    options: hpcUsernames.map((username) => ({
+                      value: username,
+                      label: username,
+                    })),
+                    onValueChange: (value) =>
+                      setSimulationFilter('hpcUsername', value === '__all__' ? '' : value),
+                  })}
+
+                  {renderSelectField({
+                    label: 'Machine',
+                    value: simulationFilters.machineId,
+                    placeholder: 'All machines',
+                    options: machineOptions,
+                    onValueChange: (value) =>
+                      setSimulationFilter('machineId', value === '__all__' ? '' : value),
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                    >
+                      <SlidersHorizontal className="mr-2 h-4 w-4" />
+                      {advancedFilterCount > 0
+                        ? `More filters (${advancedFilterCount})`
+                        : 'More filters'}
+                      <ChevronDown
+                        className={cn(
+                          'ml-2 h-4 w-4 transition-transform duration-200',
+                          showAdvancedFilters && 'rotate-180',
+                        )}
+                      />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={clearAllFilters}
+                    disabled={!hasActiveFilters}
+                    className="h-10 rounded-xl px-4 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+
+              <CollapsibleContent>
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-slate-900">Run context</p>
+                        <p className="text-xs text-slate-500">
+                          Filter cases by the metadata attached to the runs inside them.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {renderSelectField({
+                          label: 'Campaign',
+                          value: simulationFilters.campaign,
+                          placeholder: 'All campaigns',
+                          options: campaigns.map((campaign) => ({ value: campaign, label: campaign })),
+                          onValueChange: (value) =>
+                            setSimulationFilter('campaign', value === '__all__' ? '' : value),
+                        })}
+                        {renderSelectField({
+                          label: 'Type',
+                          value: simulationFilters.simulationType,
+                          placeholder: 'All types',
+                          options: simulationTypes.map((simulationType) => ({
+                            value: simulationType,
+                            label: simulationType,
+                          })),
+                          onValueChange: (value) =>
+                            setSimulationFilter('simulationType', value === '__all__' ? '' : value),
+                        })}
+                        {renderSelectField({
+                          label: 'Initialization',
+                          value: simulationFilters.initializationType,
+                          placeholder: 'All init types',
+                          options: initializationTypes.map((initializationType) => ({
+                            value: initializationType,
+                            label: initializationType,
+                          })),
+                          onValueChange: (value) =>
+                            setSimulationFilter(
+                              'initializationType',
+                              value === '__all__' ? '' : value,
+                            ),
+                        })}
+                        {renderSelectField({
+                          label: 'Compiler',
+                          value: simulationFilters.compiler,
+                          placeholder: 'All compilers',
+                          options: compilers.map((compiler) => ({
+                            value: compiler,
+                            label: compiler,
+                          })),
+                          onValueChange: (value) =>
+                            setSimulationFilter('compiler', value === '__all__' ? '' : value),
+                        })}
+                        {renderSelectField({
+                          label: 'Tag',
+                          value: simulationFilters.gitTag,
+                          placeholder: 'All tags',
+                          options: gitTags.map((gitTag) => ({ value: gitTag, label: gitTag })),
+                          onValueChange: (value) =>
+                            setSimulationFilter('gitTag', value === '__all__' ? '' : value),
+                        })}
+                        {renderSelectField({
+                          label: 'Creator',
+                          value: simulationFilters.createdBy,
+                          placeholder: 'All creators',
+                          options: creatorOptions,
+                          onValueChange: (value) =>
+                            setSimulationFilter('createdBy', value === '__all__' ? '' : value),
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-slate-900">Case settings</p>
+                        <p className="text-xs text-slate-500">
+                          Narrow the result set using case-level metadata and baseline state.
+                        </p>
+                      </div>
+                      <div className="grid gap-3">
+                        {renderSelectField({
+                          label: 'Case group',
+                          value: caseGroupFilter,
+                          placeholder: 'All case groups',
+                          options: caseGroups.map((group) => ({ value: group, label: group })),
+                          onValueChange: (value) => {
+                            setCaseGroupFilter(value === '__all__' ? '' : value);
+                            table.setPageIndex(0);
+                          },
+                        })}
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                            Canonical state
+                          </label>
+                          <Select
+                            value={canonicalFilter}
+                            onValueChange={(value: CanonicalFilter) => {
+                              setCanonicalFilter(value);
+                              table.setPageIndex(0);
+                            }}
+                          >
+                            <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white shadow-none">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All canonical states</SelectItem>
+                              <SelectItem value="with-canonical">Canonical present</SelectItem>
+                              <SelectItem value="without-canonical">Canonical missing</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2">
+              {activeFilterPills.map((filter) => (
+                <span
+                  key={`${filter.key}-${filter.value}`}
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm shadow-slate-200/30"
+                >
+                  <span className="mr-2 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                    {filter.label}
+                  </span>
+                  <span className="font-medium">{filter.value}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${filter.label} filter`}
+                    className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    onClick={() => removeFilter(filter.key)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted p-4">
-        <Input
-          placeholder="Search case name…"
-          value={caseNameFilter}
-          onChange={(event) => {
-            setCaseNameFilter(event.target.value);
-            table.setPageIndex(0);
-          }}
-          className="w-full md:w-[320px]"
-        />
-
-        <Select
-          value={simulationFilters.hpcUsername || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              hpcUsername: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All HPC usernames" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All HPC usernames</SelectItem>
-            {hpcUsernames.map((username) => (
-              <SelectItem key={username} value={username}>
-                {username}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.machineId || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              machineId: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All machines" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All machines</SelectItem>
-            {machineOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.status || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              status: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All statuses</SelectItem>
-            {statuses.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.campaign || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              campaign: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All campaigns" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All campaigns</SelectItem>
-            {campaigns.map((campaign) => (
-              <SelectItem key={campaign} value={campaign}>
-                {campaign}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.simulationType || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              simulationType: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All types</SelectItem>
-            {simulationTypes.map((simulationType) => (
-              <SelectItem key={simulationType} value={simulationType}>
-                {simulationType}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.initializationType || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              initializationType: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All init types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All init types</SelectItem>
-            {initializationTypes.map((initializationType) => (
-              <SelectItem key={initializationType} value={initializationType}>
-                {initializationType}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.compiler || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              compiler: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All compilers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All compilers</SelectItem>
-            {compilers.map((compiler) => (
-              <SelectItem key={compiler} value={compiler}>
-                {compiler}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.gitTag || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              gitTag: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All tags" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All tags</SelectItem>
-            {gitTags.map((gitTag) => (
-              <SelectItem key={gitTag} value={gitTag}>
-                {gitTag}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={simulationFilters.createdBy || '__all__'}
-          onValueChange={(value) => {
-            setSimulationFilters((current) => ({
-              ...current,
-              createdBy: value === '__all__' ? '' : value,
-            }));
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All creators" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All creators</SelectItem>
-            {creatorOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={caseGroupFilter || '__all__'}
-          onValueChange={(value) => {
-            setCaseGroupFilter(value === '__all__' ? '' : value);
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue placeholder="All case groups" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All case groups</SelectItem>
-            {caseGroups.map((group) => (
-              <SelectItem key={group} value={group}>
-                {group}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={canonicalFilter}
-          onValueChange={(value: CanonicalFilter) => {
-            setCanonicalFilter(value);
-            table.setPageIndex(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All canonical states</SelectItem>
-            <SelectItem value="with-canonical">Canonical present</SelectItem>
-            <SelectItem value="without-canonical">Canonical missing</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant="outline"
-          size="sm"
-          type="button"
-          onClick={() => {
-            setCaseNameFilter('');
-            setCaseGroupFilter('');
-            setSimulationFilters(createEmptySimulationFilters());
-            setCanonicalFilter('all');
-            table.setPageIndex(0);
-          }}
-          disabled={!hasActiveFilters}
-        >
-          Clear filters
-        </Button>
-      </div>
-
-      {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-background p-3">
-          {activeFilterPills.map((filter) => (
-            <span
-              key={`${filter.key}-${filter.value}`}
-              className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
-            >
-              <span className="mr-2 text-xs font-medium text-slate-500">{filter.label}:</span>
-              <span className="font-medium">{filter.value}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="overflow-hidden rounded-md border bg-background">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -908,7 +1058,11 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                     <Fragment key={row.id}>
                       <TableRow
                         className="cursor-pointer hover:bg-muted/40"
-                        onClick={() => navigate(`/cases/${row.original.id}`)}
+                        onClick={() =>
+                          setExpandedCaseId((current) =>
+                            current === row.original.id ? null : row.original.id,
+                          )
+                        }
                       >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell key={cell.id} className="align-top">
