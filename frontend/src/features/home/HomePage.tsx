@@ -35,6 +35,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
         name: string;
         caseGroup: string | null;
         machineNames: Set<string>;
+        hpcUsernames: Set<string>;
         simulationCount: number;
         lastUpdated: string;
       }
@@ -49,6 +50,9 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
         if (simulation.machine?.name) {
           existing.machineNames.add(simulation.machine.name);
         }
+        if (simulation.hpcUsername) {
+          existing.hpcUsernames.add(simulation.hpcUsername);
+        }
         if (new Date(simulationUpdatedAt).getTime() > new Date(existing.lastUpdated).getTime()) {
           existing.lastUpdated = simulationUpdatedAt;
         }
@@ -60,6 +64,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
         name: simulation.caseName,
         caseGroup: simulation.caseGroup ?? null,
         machineNames: simulation.machine?.name ? new Set([simulation.machine.name]) : new Set(),
+        hpcUsernames: simulation.hpcUsername ? new Set([simulation.hpcUsername]) : new Set(),
         simulationCount: 1,
         lastUpdated: simulationUpdatedAt,
       });
@@ -76,12 +81,24 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
       return `${names[0]} +${names.length - 1}`;
     };
 
+    const summarizeUsers = (hpcUsernames: Set<string>) => {
+      const names = [...hpcUsernames].sort((left, right) =>
+        left.localeCompare(right, undefined, { sensitivity: 'base' }),
+      );
+
+      if (names.length === 0) return '—';
+      if (names.length === 1) return names[0];
+
+      return `${names[0]} +${names.length - 1}`;
+    };
+
     return [...casesById.values()]
       .sort((left, right) => new Date(right.lastUpdated).getTime() - new Date(left.lastUpdated).getTime())
       .slice(0, 6)
       .map((caseRecord) => ({
         ...caseRecord,
         machineSummary: summarizeMachines(caseRecord.machineNames),
+        hpcUsernameSummary: summarizeUsers(caseRecord.hpcUsernames),
       }));
   }, [simulations]);
   const machineSimulationCounts = new Map<Machine['id'], number>();
@@ -256,10 +273,11 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Case Name</TableHead>
-                <TableHead>Case Group</TableHead>
+                <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
+                <TableHead>HPC Username</TableHead>
                 <TableHead>Machines</TableHead>
                 <TableHead>Runs</TableHead>
+                <TableHead>Case Group</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead>Details</TableHead>
               </TableRow>
@@ -270,11 +288,14 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.name} lines={1} />
                   </TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.hpcUsernameSummary} lines={1} />
+                  </TableCell>
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.machineSummary} lines={1} />
                   </TableCell>
                   <TableCell>{caseRecord.simulationCount}</TableCell>
+                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
                   <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">

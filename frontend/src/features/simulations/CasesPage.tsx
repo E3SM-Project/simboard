@@ -515,9 +515,12 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         ),
       },
       {
-        accessorKey: 'caseGroup',
-        header: 'Case Group',
-        cell: ({ row }) => <TableCellText value={row.original.caseGroup ?? '—'} />,
+        id: 'hpcUsers',
+        header: 'HPC Users',
+        accessorFn: (caseRecord) => caseHpcUserSummaries.get(caseRecord.id) ?? '—',
+        cell: ({ row }) => (
+          <TableCellText value={caseHpcUserSummaries.get(row.original.id) ?? '—'} lines={1} />
+        ),
       },
       {
         id: 'machines',
@@ -525,14 +528,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         accessorFn: (caseRecord) => caseMachineSummaries.get(caseRecord.id) ?? '—',
         cell: ({ row }) => (
           <TableCellText value={caseMachineSummaries.get(row.original.id) ?? '—'} lines={1} />
-        ),
-      },
-      {
-        id: 'hpcUsers',
-        header: 'HPC Users',
-        accessorFn: (caseRecord) => caseHpcUserSummaries.get(caseRecord.id) ?? '—',
-        cell: ({ row }) => (
-          <TableCellText value={caseHpcUserSummaries.get(row.original.id) ?? '—'} lines={1} />
         ),
       },
       {
@@ -553,6 +548,11 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
             <Badge variant="secondary">{totalSimulations}</Badge>
           );
         },
+      },
+      {
+        accessorKey: 'caseGroup',
+        header: 'Case Group',
+        cell: ({ row }) => <TableCellText value={row.original.caseGroup ?? '—'} />,
       },
       {
         accessorKey: 'updatedAt',
