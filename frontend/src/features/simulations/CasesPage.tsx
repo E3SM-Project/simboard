@@ -659,7 +659,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         </div>
 
         <div className="overflow-hidden rounded-md border bg-background">
-          <div className="overflow-x-auto">
+          <div className="max-h-[26rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>

@@ -8,16 +8,28 @@ import type { SimulationOut } from '@/types';
 
 interface SimulationRoutesProps {
   simulations: SimulationOut[];
+  selectedSimulationIds: string[];
+  setSelectedSimulationIds: (ids: string[]) => void;
 }
 
-export const simulationsRoutes = ({ simulations }: SimulationRoutesProps): RouteObject[] => [
+export const simulationsRoutes = ({
+  simulations,
+  selectedSimulationIds,
+  setSelectedSimulationIds,
+}: SimulationRoutesProps): RouteObject[] => [
   {
     path: '/cases',
     element: <CasesPage simulations={simulations} />,
   },
   {
     path: '/cases/:id',
-    element: <CaseDetailsPage simulations={simulations} />,
+    element: (
+      <CaseDetailsPage
+        simulations={simulations}
+        selectedSimulationIds={selectedSimulationIds}
+        setSelectedSimulationIds={setSelectedSimulationIds}
+      />
+    ),
   },
   {
     path: '/simulations',

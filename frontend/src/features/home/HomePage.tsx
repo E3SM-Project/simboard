@@ -46,14 +46,14 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
   const workflows = [
     {
       title: 'Browse Cases',
-      description: 'Find cases by run metadata, inspect canonical baselines, and open nested runs.',
+      description: 'Browse grouped simulation work, scan related runs, and open deeper case details.',
       to: '/cases',
       action: 'Open Cases',
       icon: FolderOpen,
     },
     {
       title: 'Explore Runs',
-      description: 'Use the advanced execution browser when you need run-level filters and selection.',
+      description: 'Use the advanced run browser when you need detailed filters, selection, and compare setup.',
       to: '/browse',
       action: 'Open Runs',
       icon: Search,
@@ -80,22 +80,23 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
-              Find Cases Through Your Runs
+              Explore E3SM Simulations
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              SimBoard is a web interface for finding E3SM cases and reviewing the runs that belong
-              to them. Start from run metadata like HPC username, then move into case-level context.
+              SimBoard is a public-facing interface for browsing, comparing, and sharing cataloged
+              E3SM simulations. Start with a broad view of the catalog, then drill into cases and
+              runs when you want more detail.
             </p>
           </div>
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Filter cases using run metadata such as HPC username, machine, status, and execution context.
+              Browse simulation collections, open case pages, and inspect the runs connected to them.
             </li>
             <li>
-              Open case detail pages to inspect canonical baselines and nested run summaries.
+              Jump into run-level views when you need machine, version, user, or date-specific context.
             </li>
-            <li>Use the runs workspace when you need execution-level browsing, selection, and compare setup.</li>
+            <li>Compare simulations side by side and share specific case or run pages with collaborators.</li>
           </ul>
 
           <div className="flex flex-wrap gap-3">

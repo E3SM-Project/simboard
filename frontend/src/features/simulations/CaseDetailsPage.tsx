@@ -1,11 +1,12 @@
 import { ArrowLeft, Share2 } from 'lucide-react';
 import { useMemo } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -34,11 +35,20 @@ const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }
 
 interface CaseDetailsPageProps {
   simulations: SimulationOut[];
+  selectedSimulationIds: string[];
+  setSelectedSimulationIds: (ids: string[]) => void;
 }
 
-export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPageProps) => {
+const MAX_SELECTION = 5;
+
+export const CaseDetailsPage = ({
+  simulations: allSimulations,
+  selectedSimulationIds,
+  setSelectedSimulationIds,
+}: CaseDetailsPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const { data: caseRecord, loading, error } = useCase(id ?? '');
   const currentPath = `${location.pathname}${location.search}`;
   const state = location.state as { from?: string } | null;
@@ -119,6 +129,20 @@ export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPage
     summary: simulation,
     details: simulationDetailsById.get(simulation.id),
   }));
+  const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+
+  const toggleSimulationSelection = (simulationId: string) => {
+    if (selectedSimulationIds.includes(simulationId)) {
+      setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== simulationId));
+      return;
+    }
+
+    if (selectedSimulationIds.length >= MAX_SELECTION) {
+      return;
+    }
+
+    setSelectedSimulationIds([...selectedSimulationIds, simulationId]);
+  };
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-8">
@@ -159,7 +183,7 @@ export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPage
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Canonical Simulation</CardTitle>
+            <CardTitle className="text-base">Baseline Simulation</CardTitle>
           </CardHeader>
           <CardContent>
             {canonicalSimulation ? (
@@ -203,11 +227,40 @@ export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPage
           </p>
         </div>
 
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              onClick={() => navigate('/compare')}
+              disabled={isCompareButtonDisabled}
+            >
+              Compare Selected
+            </Button>
+            <div className="text-sm text-slate-600">
+              Selected <span className="font-semibold text-slate-950">{selectedSimulationIds.length}</span>{' '}
+              / {MAX_SELECTION}
+            </div>
+          </div>
+
+          {selectedSimulationIds.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-slate-600 hover:text-slate-900"
+              onClick={() => setSelectedSimulationIds([])}
+            >
+              Deselect all
+            </Button>
+          )}
+        </div>
+
         <div className="overflow-hidden rounded-md border bg-background">
-          <div className="overflow-x-auto">
+          <div className="max-h-[32rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">Select</TableHead>
                   <TableHead>Execution ID</TableHead>
                   <TableHead>Change Count</TableHead>
                   <TableHead>Simulation Type</TableHead>
@@ -221,6 +274,17 @@ export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPage
               <TableBody>
                 {simulations.map(({ summary, details }) => (
                   <TableRow key={summary.id}>
+                    <TableCell className="align-top">
+                      <Checkbox
+                        checked={selectedSimulationIds.includes(summary.id)}
+                        disabled={
+                          !selectedSimulationIds.includes(summary.id) &&
+                          selectedSimulationIds.length >= MAX_SELECTION
+                        }
+                        onCheckedChange={() => toggleSimulationSelection(summary.id)}
+                        aria-label={`Select ${summary.executionId} for compare`}
+                      />
+                    </TableCell>
                     <TableCell className="align-top">
                       <Link
                         to={`/simulations/${summary.id}`}
