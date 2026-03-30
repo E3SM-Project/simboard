@@ -645,6 +645,7 @@ class TestGetSimulation:
         sim = Simulation(
             case_id=case.id,
             execution_id="get-test-exec-1",
+            case_hash="abc123casehash",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -669,6 +670,7 @@ class TestGetSimulation:
         data = res.json()
         assert data["caseName"] == "test_case_get"
         assert data["executionId"] == "get-test-exec-1"
+        assert data["caseHash"] == "abc123casehash"
 
     def test_endpoint_raises_404_if_simulation_not_found(self, client):
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")

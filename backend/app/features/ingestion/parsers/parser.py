@@ -589,6 +589,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
         archive_path=metadata.get("archive_path"),
         case_root=metadata.get("case_root"),
         postprocessing_script=metadata.get("postprocessing_script"),
+        case_hash=metadata.get("case_hash"),
     )
 
 

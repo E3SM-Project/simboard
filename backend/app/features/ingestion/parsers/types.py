@@ -32,3 +32,4 @@ class ParsedSimulation:
     archive_path: str | None = None
     case_root: str | None = None
     postprocessing_script: str | None = None
+    case_hash: str | None = None
