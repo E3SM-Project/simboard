@@ -1,4 +1,4 @@
-import { FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
+import { ArrowRight, FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -12,7 +12,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import LatestSimulationsTable from '@/features/home/components/LatestSimulationsTable';
 import type { Machine, SimulationOut } from '@/types/index';
 
 interface HomePageProps {
@@ -21,14 +20,70 @@ interface HomePageProps {
 }
 
 export const HomePage = ({ simulations, machines }: HomePageProps) => {
-  const latestSimulations = useMemo(
+  const latestSubmission = useMemo(
     () =>
       [...simulations]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 6),
+        .map((simulation) => simulation.createdAt)
+        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0],
     [simulations],
   );
-  const latestSubmission = latestSimulations[0]?.createdAt;
+  const recentCases = useMemo(() => {
+    const casesById = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        caseGroup: string | null;
+        machineNames: Set<string>;
+        simulationCount: number;
+        lastUpdated: string;
+      }
+    >();
+
+    for (const simulation of simulations) {
+      const existing = casesById.get(simulation.caseId);
+      const simulationUpdatedAt = simulation.updatedAt ?? simulation.createdAt;
+
+      if (existing) {
+        existing.simulationCount += 1;
+        if (simulation.machine?.name) {
+          existing.machineNames.add(simulation.machine.name);
+        }
+        if (new Date(simulationUpdatedAt).getTime() > new Date(existing.lastUpdated).getTime()) {
+          existing.lastUpdated = simulationUpdatedAt;
+        }
+        continue;
+      }
+
+      casesById.set(simulation.caseId, {
+        id: simulation.caseId,
+        name: simulation.caseName,
+        caseGroup: simulation.caseGroup ?? null,
+        machineNames: simulation.machine?.name ? new Set([simulation.machine.name]) : new Set(),
+        simulationCount: 1,
+        lastUpdated: simulationUpdatedAt,
+      });
+    }
+
+    const summarizeMachines = (machineNames: Set<string>) => {
+      const names = [...machineNames].sort((left, right) =>
+        left.localeCompare(right, undefined, { sensitivity: 'base' }),
+      );
+
+      if (names.length === 0) return '—';
+      if (names.length === 1) return names[0];
+
+      return `${names[0]} +${names.length - 1}`;
+    };
+
+    return [...casesById.values()]
+      .sort((left, right) => new Date(right.lastUpdated).getTime() - new Date(left.lastUpdated).getTime())
+      .slice(0, 6)
+      .map((caseRecord) => ({
+        ...caseRecord,
+        machineSummary: summarizeMachines(caseRecord.machineNames),
+      }));
+  }, [simulations]);
   const machineSimulationCounts = new Map<Machine['id'], number>();
   for (const simulation of simulations) {
     machineSimulationCounts.set(
@@ -188,17 +243,51 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Recently Added Simulations</h2>
+            <h2 className="text-2xl font-bold">Recent Cases</h2>
             <p className="text-muted-foreground">
-              Preview recent catalog activity and jump into the run-level workspace when needed.
+              Open recently active case pages and move from grouped simulation context into run details.
             </p>
           </div>
           <Button asChild variant="secondary">
-            <Link to="/browse">Open Runs</Link>
+            <Link to="/cases">Browse Cases</Link>
           </Button>
         </div>
         <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
-          <LatestSimulationsTable latestSimulations={latestSimulations} />
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Case Name</TableHead>
+                <TableHead>Case Group</TableHead>
+                <TableHead>Machines</TableHead>
+                <TableHead>Runs</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentCases.map((caseRecord) => (
+                <TableRow key={caseRecord.id}>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.name} lines={1} />
+                  </TableCell>
+                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.machineSummary} lines={1} />
+                  </TableCell>
+                  <TableCell>{caseRecord.simulationCount}</TableCell>
+                  <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
+                      <Link to={`/cases/${caseRecord.id}`}>
+                        Open
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </section>
 
