@@ -13,7 +13,7 @@ interface SimulationRoutesProps {
 export const simulationsRoutes = ({ simulations }: SimulationRoutesProps): RouteObject[] => [
   {
     path: '/cases',
-    element: <CasesPage />,
+    element: <CasesPage simulations={simulations} />,
   },
   {
     path: '/cases/:id',

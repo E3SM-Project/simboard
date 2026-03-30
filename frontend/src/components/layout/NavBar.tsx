@@ -17,15 +17,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { label: 'Home', href: '/', description: 'Overview and featured simulations' },
-  { label: 'Browse', href: '/browse', description: 'Guided discovery with filters' },
-  { label: 'Cases', href: '/cases', description: 'Experiment-level browse and detail pages' },
+  { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
+  { label: 'Cases', href: '/cases', description: 'Primary case-centric discovery and detail pages' },
+  { label: 'Runs', href: '/browse', description: 'Advanced execution-level discovery workspace' },
   { label: 'Compare', href: '/compare', description: 'Side-by-side view of selected runs' },
-  {
-    label: 'All Simulations',
-    href: '/simulations',
-    description: 'Complete catalog in a sortable table',
-  },
   { label: 'Upload', href: '/upload', description: 'Add a new simulation to the catalog' },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];

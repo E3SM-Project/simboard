@@ -1,7 +1,9 @@
+import { Share2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -18,6 +20,7 @@ import {
   sortSimulationSummaries,
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
+import { toast } from '@/hooks/use-toast';
 
 const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex items-start justify-between gap-4 border-b border-border/60 py-3 last:border-b-0">
@@ -29,6 +32,40 @@ const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }
 export const CaseDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const { data: caseRecord, loading, error } = useCase(id ?? '');
+
+  const handleShareCase = async () => {
+    if (!id) return;
+
+    const shareUrl = new URL(`/cases/${id}`, window.location.origin).toString();
+    const canUseWebShare = typeof navigator.share === 'function';
+
+    try {
+      if (canUseWebShare) {
+        await navigator.share({
+          title: caseRecord?.name ?? 'SimBoard Case',
+          text: caseRecord?.name ?? 'SimBoard Case',
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+
+      toast({
+        title: 'Case link ready',
+        description: canUseWebShare ? 'Share dialog opened.' : 'Case URL copied to clipboard.',
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      toast({
+        title: 'Unable to share case',
+        description: 'Try copying the page URL directly from your browser.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   if (!id) {
     return (
@@ -78,7 +115,13 @@ export const CaseDetailsPage = () => {
             </Link>
           </div>
         </div>
-        {caseRecord.caseGroup && <Badge variant="outline">{caseRecord.caseGroup}</Badge>}
+        <div className="flex items-center gap-2 self-start">
+          {caseRecord.caseGroup && <Badge variant="outline">{caseRecord.caseGroup}</Badge>}
+          <Button variant="outline" size="sm" type="button" onClick={handleShareCase}>
+            <Share2 className="h-4 w-4" />
+            Share Case
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

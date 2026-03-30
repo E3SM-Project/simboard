@@ -45,10 +45,17 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
 
   const workflows = [
     {
-      title: 'Browse Curated Simulations',
-      description: 'Filter simulations by case, campaign, context, and execution metadata.',
+      title: 'Browse Cases',
+      description: 'Find cases by run metadata, inspect canonical baselines, and open nested runs.',
+      to: '/cases',
+      action: 'Open Cases',
+      icon: FolderOpen,
+    },
+    {
+      title: 'Explore Runs',
+      description: 'Use the advanced execution browser when you need run-level filters and selection.',
       to: '/browse',
-      action: 'Open Browse',
+      action: 'Open Runs',
       icon: Search,
     },
     {
@@ -57,13 +64,6 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
       to: '/compare',
       action: 'Open Compare',
       icon: GitCompareArrows,
-    },
-    {
-      title: 'Browse Cases',
-      description: 'Discover experiment-level case records and inspect their canonical baselines.',
-      to: '/cases',
-      action: 'Open Cases',
-      icon: FolderOpen,
     },
     {
       title: 'Upload a Simulation',
@@ -80,39 +80,36 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
-              Explore E3SM Simulations
+              Find Cases Through Your Runs
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              SimBoard is a web interface for exploring, comparing, and sharing curated simulations
-              from the Department of Energy&apos;s Energy Exascale Earth System Model.
+              SimBoard is a web interface for finding E3SM cases and reviewing the runs that belong
+              to them. Start from run metadata like HPC username, then move into case-level context.
             </p>
           </div>
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Browse cataloged runs across cases, campaigns, configurations, and execution metadata.
+              Filter cases using run metadata such as HPC username, machine, status, and execution context.
             </li>
             <li>
-              Compare simulations side by side to inspect canonical status, versioning, and context.
+              Open case detail pages to inspect canonical baselines and nested run summaries.
             </li>
-            <li>Review recent submissions and the machines used to run cataloged E3SM datasets.</li>
+            <li>Use the runs workspace when you need execution-level browsing, selection, and compare setup.</li>
           </ul>
 
           <div className="flex flex-wrap gap-3">
             <Button asChild>
-              <Link to="/browse">Browse Simulations</Link>
+              <Link to="/cases">Browse Cases</Link>
             </Button>
-            <Button asChild>
-              <Link to="/upload">Upload Simulation</Link>
+            <Button asChild variant="secondary">
+              <Link to="/browse">Open Runs</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link to="/compare">Compare</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/cases">Browse Cases</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link to="/simulations">All Simulations</Link>
+              <Link to="/upload">Upload Simulation</Link>
             </Button>
           </div>
 
@@ -192,11 +189,11 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
           <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recently Added Simulations</h2>
             <p className="text-muted-foreground">
-              Preview recent catalog activity and jump directly into the full simulation index.
+              Preview recent catalog activity and jump into the run-level workspace when needed.
             </p>
           </div>
           <Button asChild variant="secondary">
-            <Link to="/simulations">View All Simulations</Link>
+            <Link to="/browse">Open Runs</Link>
           </Button>
         </div>
         <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">

@@ -529,11 +529,11 @@ export const BrowsePage = ({
               <header className="mb-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
-                    Browse Simulations
+                    Runs
                   </h1>
                   <p className="max-w-4xl text-[15px] leading-7 text-slate-600 sm:text-base">
-                    Explore and filter available simulations using the panel on the left. Select
-                    simulations to view more details or take further actions.
+                    Explore and filter individual runs using the panel on the left. This is the
+                    advanced execution-level workspace for drilling into details and setting up compare.
                   </p>
                 </div>
                 <div className="xl:min-w-[360px]">
