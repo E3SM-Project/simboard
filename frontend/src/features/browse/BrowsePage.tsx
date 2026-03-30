@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { TableCellText } from '@/components/ui/table-cell-text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
@@ -42,6 +41,8 @@ const TOGGLEABLE_BROWSE_COLUMNS = [
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
+  caseName: string[];
+
   // Scientific Goal
   campaign: string[];
   experimentType: string[];
@@ -74,6 +75,8 @@ interface BrowsePageProps {
 
 // -------------------- Pure Helpers --------------------
 const createEmptyFilters = (): FilterState => ({
+  caseName: [],
+
   // Scientific Goal
   campaign: [],
   experimentType: [],
@@ -123,7 +126,6 @@ export const BrowsePage = ({
   // -------------------- Router --------------------
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedCaseName = searchParams.get('caseName') ?? '';
 
   // -------------------- Local State --------------------
   const [simulations, setSimulations] = useState<SimulationOut[]>([]);
@@ -235,6 +237,7 @@ export const BrowsePage = ({
         (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
       >
     > = {
+      caseName: (rec) => rec.caseName ?? [],
       machineId: (rec) => simMachineId(rec) ?? '',
       campaign: (rec) => rec.campaign ?? [],
       experimentType: (rec) => rec.experimentType ?? [],
@@ -297,17 +300,8 @@ export const BrowsePage = ({
 
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams();
 
-    if (selectedCaseName) {
-      params.set('case_name', selectedCaseName);
-    }
-
-    const simulationsUrl = params.toString()
-      ? `${SIMULATIONS_URL}?${params.toString()}`
-      : SIMULATIONS_URL;
-
-    listSimulations(simulationsUrl)
+    listSimulations(SIMULATIONS_URL)
       .then((res) => {
         if (!cancelled) setSimulations(res);
       })
@@ -318,7 +312,7 @@ export const BrowsePage = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedCaseName]);
+  }, []);
 
   useEffect(() => {
     const next = createEmptyFilters();
@@ -351,7 +345,6 @@ export const BrowsePage = ({
   const prevPageResetSignature = useRef<string | null>(null);
   useEffect(() => {
     const currentSignature = JSON.stringify({
-      selectedCaseName,
       appliedFilters,
     });
 
@@ -365,7 +358,7 @@ export const BrowsePage = ({
       prevPageResetSignature.current = currentSignature;
       setPage(1);
     }
-  }, [appliedFilters, selectedCaseName]);
+  }, [appliedFilters]);
 
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
@@ -386,8 +379,6 @@ export const BrowsePage = ({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-
-        // Preserve caseName (managed by handleCaseNameChange).
         const filterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
 
         for (const key of filterKeys) {
@@ -424,45 +415,6 @@ export const BrowsePage = ({
   }, [appliedFilters, viewMode, page, pageSize, setSearchParams]);
 
   // -------------------- Handlers --------------------
-  const handleCaseNameChange = (caseName: string) => {
-    skipNextFilterUrlSync.current = true;
-    setAppliedFilters(createEmptyFilters());
-    setPage(1);
-
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-
-        (Object.keys(createEmptyFilters()) as (keyof FilterState)[]).forEach((key) => {
-          next.delete(key);
-        });
-
-        if (caseName) {
-          next.set('caseName', caseName);
-        } else {
-          next.delete('caseName');
-        }
-
-        next.delete('page');
-
-        return next;
-      },
-      { replace: true },
-    );
-  };
-
-  const handleClearCaseNameFilter = () => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('caseName');
-        next.delete('page');
-        return next;
-      },
-      { replace: true },
-    );
-  };
-
   const handleResetFilters = () => {
     skipNextFilterUrlSync.current = true;
     setAppliedFilters(createEmptyFilters());
@@ -474,7 +426,6 @@ export const BrowsePage = ({
           next.delete(key);
         });
 
-        next.delete('caseName');
         next.delete('page');
         return next;
       },
@@ -519,8 +470,6 @@ export const BrowsePage = ({
                 machineOptions={machineOptions}
                 creatorOptions={creatorOptions}
                 caseOptions={caseOptions}
-                selectedCaseName={selectedCaseName}
-                onCaseNameChange={handleCaseNameChange}
               />
             </div>
           </div>
@@ -624,8 +573,7 @@ export const BrowsePage = ({
                 </div>
               </header>
 
-              {(selectedCaseName ||
-                Object.values(appliedFilters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))) && (
+              {Object.values(appliedFilters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v)) && (
                 <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -652,32 +600,6 @@ export const BrowsePage = ({
                     </button>
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
-                  {selectedCaseName && (
-                    <span className="inline-flex min-w-0 max-w-[min(100%,40rem)] items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
-                      <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">case:</span>
-                      <TableCellText
-                        value={selectedCaseName}
-                        lines={1}
-                        fullValueMode="tooltip"
-                        className="mr-2 min-w-0 flex-1 font-medium text-slate-700"
-                      />
-                      <button
-                        type="button"
-                        aria-label="Remove case filter"
-                        className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
-                        onClick={handleClearCaseNameFilter}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                          <path
-                            d="M4 4L12 12M12 4L4 12"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
-                    </span>
-                  )}
                   {(
                     Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
                   ).flatMap(([key, values]) => {
