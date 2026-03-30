@@ -17,7 +17,7 @@ export const simulationsRoutes = ({ simulations }: SimulationRoutesProps): Route
   },
   {
     path: '/cases/:id',
-    element: <CaseDetailsPage />,
+    element: <CaseDetailsPage simulations={simulations} />,
   },
   {
     path: '/simulations',

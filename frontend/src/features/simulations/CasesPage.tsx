@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,6 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   formatCaseDate,
-  getCanonicalSimulation,
 } from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
@@ -102,7 +101,9 @@ const sortCaseSimulations = (caseSimulations: SimulationOut[]) =>
   });
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {
+  const location = useLocation();
   const { data: cases, loading, error } = useCases();
+  const currentPath = `${location.pathname}${location.search}`;
   const [caseNameFilter, setCaseNameFilter] = useState('');
   const [caseGroupFilter, setCaseGroupFilter] = useState('');
   const [simulationFilters, setSimulationFilters] =
@@ -504,6 +505,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         cell: ({ row }) => (
           <Link
             to={`/cases/${row.original.id}`}
+            state={{ from: currentPath }}
             className="block max-w-[28rem] truncate font-medium text-blue-600 hover:underline"
             title={row.original.name}
             onClick={(event) => event.stopPropagation()}
@@ -532,29 +534,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         cell: ({ row }) => (
           <TableCellText value={caseHpcUserSummaries.get(row.original.id) ?? '—'} lines={1} />
         ),
-      },
-      {
-        id: 'canonicalSimulation',
-        header: 'Canonical Simulation',
-        accessorFn: (caseRecord) => getCanonicalSimulation(caseRecord)?.executionId ?? '—',
-        cell: ({ row }) => {
-          const canonicalSimulation = getCanonicalSimulation(row.original);
-
-          if (!canonicalSimulation) {
-            return <span className="text-muted-foreground">—</span>;
-          }
-
-          return (
-            <Link
-              to={`/simulations/${canonicalSimulation.id}`}
-              className="font-mono text-xs text-blue-600 hover:underline"
-              title={canonicalSimulation.executionId}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {canonicalSimulation.executionId}
-            </Link>
-          );
-        },
       },
       {
         id: 'simulationCount',
@@ -586,7 +565,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         enableSorting: false,
         cell: ({ row }) => (
           <Button variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
-            <Link to={`/cases/${row.original.id}`}>View case</Link>
+            <Link to={`/cases/${row.original.id}`} state={{ from: currentPath }}>
+              View case
+            </Link>
           </Button>
         ),
       },
@@ -594,6 +575,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     [
       caseHpcUserSummaries,
       caseMachineSummaries,
+      currentPath,
       expandedCaseId,
       hasActiveSimulationFilters,
       matchingSimulationsByCaseId,
@@ -666,11 +648,13 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
             <p className="text-xs text-muted-foreground">
               {hasActiveSimulationFilters
                 ? `${matchingCaseSimulations.length} of ${allCaseSimulations.length} runs match the current filters.`
-                : 'Canonical simulations are pinned first. Open the case page for full context.'}
+                : 'Reference runs are pinned first. Open the case page for full context.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link to={`/cases/${caseRecord.id}`}>Open case page</Link>
+            <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
+              Open case page
+            </Link>
           </Button>
         </div>
 
@@ -680,7 +664,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Canonical</TableHead>
                   <TableHead>Machine</TableHead>
                   <TableHead>HPC Username</TableHead>
                   <TableHead>Simulation Dates</TableHead>
@@ -692,22 +675,11 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                     <TableCell className="align-top">
                       <Link
                         to={`/simulations/${simulation.id}`}
+                        state={{ from: currentPath }}
                         className="font-mono text-xs text-blue-600 hover:underline"
                       >
                         {simulation.executionId}
                       </Link>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {simulation.isCanonical ? (
-                        <Badge
-                          variant="outline"
-                          className="border-green-200 bg-green-50 text-green-700"
-                        >
-                          Canonical
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
                     </TableCell>
                     <TableCell className="align-top">
                       <TableCellText value={simulation.machine?.name ?? '—'} lines={1} />
@@ -752,9 +724,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
-              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                Primary Discovery
-              </div>
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">

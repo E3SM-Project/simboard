@@ -8,7 +8,7 @@ import {
   Server,
   Tag,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +38,8 @@ export const SimulationResultCard = ({
 }: SimulationResultCard) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
 
   // -------------------- Derived Data --------------------
   const startStr = simulation.simulationStartDate
@@ -235,7 +237,7 @@ export const SimulationResultCard = ({
                 className="w-full sm:w-40"
                 onClick={(event) => {
                   event.stopPropagation();
-                  navigate(`/simulations/${simulation.id}`);
+                  navigate(`/simulations/${simulation.id}`, { state: { from: currentPath } });
                 }}
               >
                 All Details

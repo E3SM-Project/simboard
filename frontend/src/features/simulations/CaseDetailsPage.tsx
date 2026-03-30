@@ -1,5 +1,6 @@
-import { Share2 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { ArrowLeft, Share2 } from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   formatCaseDate,
   formatSimulationDateRange,
@@ -21,6 +23,7 @@ import {
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
+import type { SimulationOut } from '@/types';
 
 const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex items-start justify-between gap-4 border-b border-border/60 py-3 last:border-b-0">
@@ -29,9 +32,21 @@ const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }
   </div>
 );
 
-export const CaseDetailsPage = () => {
+interface CaseDetailsPageProps {
+  simulations: SimulationOut[];
+}
+
+export const CaseDetailsPage = ({ simulations: allSimulations }: CaseDetailsPageProps) => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const { data: caseRecord, loading, error } = useCase(id ?? '');
+  const currentPath = `${location.pathname}${location.search}`;
+  const state = location.state as { from?: string } | null;
+  const backHref = typeof state?.from === 'string' ? state.from : '/cases';
+  const simulationDetailsById = useMemo(
+    () => new Map(allSimulations.map((simulation) => [simulation.id, simulation])),
+    [allSimulations],
+  );
 
   const handleShareCase = async () => {
     if (!id) return;
@@ -100,19 +115,24 @@ export const CaseDetailsPage = () => {
   }
 
   const canonicalSimulation = getCanonicalSimulation(caseRecord);
-  const simulations = sortSimulationSummaries(caseRecord.simulations);
+  const simulations = sortSimulationSummaries(caseRecord.simulations).map((simulation) => ({
+    summary: simulation,
+    details: simulationDetailsById.get(simulation.id),
+  }));
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
+          <Button variant="outline" size="sm" asChild className="mb-3">
+            <Link to={backHref}>
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </Button>
           <h1 className="text-2xl font-bold">{caseRecord.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Case detail</span>
-            <span>•</span>
-            <Link to="/cases" className="text-blue-600 hover:underline">
-              Back to cases
-            </Link>
           </div>
         </div>
         <div className="flex items-center gap-2 self-start">
@@ -149,6 +169,7 @@ export const CaseDetailsPage = () => {
                   value={
                     <Link
                       to={`/simulations/${canonicalSimulation.id}`}
+                      state={{ from: currentPath }}
                       className="font-mono text-xs text-blue-600 hover:underline"
                     >
                       {canonicalSimulation.executionId}
@@ -178,7 +199,7 @@ export const CaseDetailsPage = () => {
         <div>
           <h2 className="text-xl font-semibold">Simulations</h2>
           <p className="text-sm text-muted-foreground">
-            Execution-level summaries for this case. Canonical runs are pinned first.
+            Execution-level summaries for this case. Reference runs are pinned first.
           </p>
         </div>
 
@@ -188,50 +209,45 @@ export const CaseDetailsPage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Canonical</TableHead>
                   <TableHead>Change Count</TableHead>
+                  <TableHead>Simulation Type</TableHead>
+                  <TableHead>Initialization</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>HPC Username</TableHead>
+                  <TableHead>Git Tag</TableHead>
                   <TableHead>Simulation Dates</TableHead>
-                  <TableHead>View Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {simulations.map((simulation) => (
-                  <TableRow key={simulation.id}>
+                {simulations.map(({ summary, details }) => (
+                  <TableRow key={summary.id}>
                     <TableCell className="align-top">
                       <Link
-                        to={`/simulations/${simulation.id}`}
+                        to={`/simulations/${summary.id}`}
+                        state={{ from: currentPath }}
                         className="font-mono text-xs text-blue-600 hover:underline"
                       >
-                        {simulation.executionId}
+                        {summary.executionId}
                       </Link>
                     </TableCell>
+                    <TableCell className="align-top">{summary.changeCount}</TableCell>
                     <TableCell className="align-top">
-                      <SimulationStatusBadge status={simulation.status} />
+                      <TableCellText value={details?.simulationType ?? '—'} lines={1} />
                     </TableCell>
                     <TableCell className="align-top">
-                      {simulation.isCanonical ? (
-                        <Badge
-                          variant="outline"
-                          className="border-green-200 bg-green-50 text-green-700"
-                        >
-                          Canonical
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top">{simulation.changeCount}</TableCell>
-                    <TableCell className="align-top">
-                      {formatSimulationDateRange(simulation)}
+                      <TableCellText value={details?.initializationType ?? '—'} lines={1} />
                     </TableCell>
                     <TableCell className="align-top">
-                      <Link
-                        to={`/simulations/${simulation.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        View simulation
-                      </Link>
+                      <TableCellText value={details?.machine?.name ?? '—'} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={details?.hpcUsername ?? '—'} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={details?.gitTag ?? '—'} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      {formatSimulationDateRange(summary)}
                     </TableCell>
                   </TableRow>
                 ))}

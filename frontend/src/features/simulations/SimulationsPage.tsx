@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-table';
 import { format } from 'date-fns';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -97,6 +97,8 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
 
   // Derive unique case names and case groups for filter dropdowns.
   const caseNames = useMemo(
@@ -129,6 +131,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         cell: ({ row }) => (
           <Link
             to={`/simulations/${row.original.id}`}
+            state={{ from: currentPath }}
             className="block max-w-full truncate font-mono text-xs text-blue-600 hover:underline"
             title={row.original.executionId}
             onClick={(e) => e.stopPropagation()}
@@ -276,7 +279,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         meta: { isAdvanced: true },
       },
     ],
-    [],
+    [currentPath],
   );
 
   const table = useReactTable({

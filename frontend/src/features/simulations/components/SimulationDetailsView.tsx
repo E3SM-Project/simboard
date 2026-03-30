@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -20,6 +21,8 @@ import { formatDate, getSimulationDuration } from '@/utils/utils';
 interface SimulationDetailsViewProps {
   simulation: SimulationOut;
   canEdit?: boolean;
+  backHref?: string;
+  backLabel?: string;
 }
 
 // -------------------- Small UI helpers --------------------
@@ -47,6 +50,8 @@ const DiffCell = ({ value, className }: { value: unknown; className?: string }) 
 export const SimulationDetailsView = ({
   simulation,
   canEdit = false,
+  backHref = '/browse',
+  backLabel = 'Back to Runs',
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
@@ -83,6 +88,12 @@ export const SimulationDetailsView = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
+          <Button variant="outline" size="sm" asChild className="mb-3">
+            <Link to={backHref}>
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </Link>
+          </Button>
           <h1 className="text-2xl font-bold">{simulation.executionId}</h1>
           <p className="text-sm text-muted-foreground">{simulation.caseName}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -98,10 +109,6 @@ export const SimulationDetailsView = ({
                 <code className="rounded bg-muted px-2 py-0.5 text-xs">{simulation.gitTag}</code>
               </>
             )}
-            <span>•</span>
-            <Link to="/browse" className="text-blue-600 hover:underline">
-              Back to results
-            </Link>
           </div>
         </div>
         <div className="flex items-center gap-2">
