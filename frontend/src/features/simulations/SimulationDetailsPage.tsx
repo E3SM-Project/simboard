@@ -7,13 +7,15 @@ export const SimulationDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { data: simulation, loading, error } = useSimulation(id ?? '');
+
   const state = location.state as { from?: string } | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/browse';
-  const backLabel = backHref.startsWith('/cases/')
+  const normalizedBackHref = backHref.split(/[?#]/)[0];
+  const backLabel = normalizedBackHref.startsWith('/cases/')
     ? 'Back to Case'
-    : backHref === '/cases'
+    : normalizedBackHref === '/cases'
       ? 'Back to Cases'
-      : backHref.startsWith('/simulations')
+      : normalizedBackHref.startsWith('/simulations')
         ? 'Back to Simulations'
         : 'Back to Runs';
 
@@ -49,5 +51,7 @@ export const SimulationDetailsPage = () => {
     );
   }
 
-  return <SimulationDetailsView simulation={simulation} backHref={backHref} backLabel={backLabel} />;
+  return (
+    <SimulationDetailsView simulation={simulation} backHref={backHref} backLabel={backLabel} />
+  );
 };

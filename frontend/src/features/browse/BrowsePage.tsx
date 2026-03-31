@@ -102,6 +102,18 @@ const createEmptyFilters = (): FilterState => ({
   hpcUsername: [],
 });
 
+const FILTER_KEYS = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'canonicalStatus');
+
+const areStringArraysEqual = (left: string[], right: string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const areFiltersEqual = (left: FilterState, right: FilterState): boolean =>
+  left.canonicalStatus === right.canonicalStatus &&
+  MULTI_SELECT_FILTER_KEYS.every((key) =>
+    areStringArraysEqual(left[key] as string[], right[key] as string[]),
+  );
+
 const parseViewMode = (params: URLSearchParams): 'grid' | 'table' =>
   params.get('view') === 'grid' ? 'grid' : 'table';
 
@@ -144,9 +156,7 @@ export const BrowsePage = ({
     const filters = createEmptyFilters();
 
     // Array-based filter keys that correspond to SimulationOut properties.
-    const arrayKeys = Object.keys(createEmptyFilters()).filter(
-      (k) => k !== 'canonicalStatus',
-    ) as (keyof SimulationOut)[];
+    const arrayKeys = MULTI_SELECT_FILTER_KEYS as (keyof SimulationOut)[];
 
     // Populate filter options based on available simulations.
     for (const sim of simulations) {
@@ -301,7 +311,14 @@ export const BrowsePage = ({
   useEffect(() => {
     let cancelled = false;
 
-    listSimulations(SIMULATIONS_URL)
+    // If exactly one caseName filter is applied, pass it as a query param for server-side narrowing.
+    const caseNames = appliedFilters.caseName;
+    const fetchPromise =
+      Array.isArray(caseNames) && caseNames.length === 1
+        ? listSimulations(`${SIMULATIONS_URL}?case_name=${encodeURIComponent(caseNames[0])}`)
+        : listSimulations(SIMULATIONS_URL);
+
+    fetchPromise
       .then((res) => {
         if (!cancelled) setSimulations(res);
       })
@@ -312,15 +329,13 @@ export const BrowsePage = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Re-run when the caseName filter changes.
+  }, [appliedFilters.caseName]);
 
   useEffect(() => {
     const next = createEmptyFilters();
-    const multiSelectFilterKeys = (
-      Object.keys(createEmptyFilters()) as (keyof FilterState)[]
-    ).filter((key) => key !== 'canonicalStatus');
 
-    multiSelectFilterKeys.forEach((key) => {
+    MULTI_SELECT_FILTER_KEYS.forEach((key) => {
       const value = searchParams.get(key);
       if (value !== null) {
         next[key] = value.split(',').filter(Boolean) as FilterState[typeof key];
@@ -333,7 +348,7 @@ export const BrowsePage = ({
         ? canonicalStatus
         : '';
 
-    setAppliedFilters(next);
+    setAppliedFilters((current) => (areFiltersEqual(current, next) ? current : next));
 
     // Sync view, page, pageSize from URL (handles back/forward navigation).
     setViewMode(parseViewMode(searchParams));
@@ -379,9 +394,8 @@ export const BrowsePage = ({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        const filterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
 
-        for (const key of filterKeys) {
+        for (const key of FILTER_KEYS) {
           const value = appliedFilters[key];
           if (Array.isArray(value) && value.length) {
             next.set(key, value.join(','));
@@ -422,7 +436,7 @@ export const BrowsePage = ({
       (prev) => {
         const next = new URLSearchParams(prev);
 
-        (Object.keys(createEmptyFilters()) as (keyof FilterState)[]).forEach((key) => {
+        FILTER_KEYS.forEach((key) => {
           next.delete(key);
         });
 
@@ -477,12 +491,11 @@ export const BrowsePage = ({
             <div className="flex min-w-0 flex-col">
               <header className="mb-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
-                    Runs
-                  </h1>
+                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">Runs</h1>
                   <p className="max-w-4xl text-[15px] leading-7 text-slate-600 sm:text-base">
                     Explore and filter individual runs using the panel on the left. This is the
-                    advanced execution-level workspace for drilling into details and setting up compare.
+                    advanced execution-level workspace for drilling into details and setting up
+                    compare.
                   </p>
                 </div>
                 <div className="xl:min-w-[360px]">
@@ -491,7 +504,9 @@ export const BrowsePage = ({
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
                         <div>
                           <span className="font-medium text-slate-500">Results</span>{' '}
-                          <span className="font-semibold text-slate-950">{filteredData.length}</span>
+                          <span className="font-semibold text-slate-950">
+                            {filteredData.length}
+                          </span>
                         </div>
                         <div>
                           <span className="font-medium text-slate-500">View</span>{' '}
@@ -573,7 +588,9 @@ export const BrowsePage = ({
                 </div>
               </header>
 
-              {Object.values(appliedFilters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v)) && (
+              {Object.values(appliedFilters).some((v) =>
+                Array.isArray(v) ? v.length > 0 : !!v,
+              ) && (
                 <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -600,20 +617,63 @@ export const BrowsePage = ({
                     </button>
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
-                  {(
-                    Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
-                  ).flatMap(([key, values]) => {
-                    if (Array.isArray(values)) {
-                      return values.map((value, idx) => {
+                    {(
+                      Object.entries(appliedFilters) as [keyof FilterState, string[] | string][]
+                    ).flatMap(([key, values]) => {
+                      if (Array.isArray(values)) {
+                        return values.map((value, idx) => {
+                          const display =
+                            key === 'machineId'
+                              ? (machineOptions.find((opt) => opt.value === value)?.label ?? value)
+                              : key === 'createdBy'
+                                ? (creatorOptions.find((opt) => opt.value === value)?.label ??
+                                  value)
+                                : value;
+                          return (
+                            <span
+                              key={`${key}-${value}-${idx}`}
+                              className="inline-flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                            >
+                              <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">
+                                {String(key).replace(/Id$/, '')}:
+                              </span>
+                              <span className="mr-2 min-w-0 flex-1 truncate font-medium text-slate-700">
+                                {display}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Remove ${String(key)} filter`}
+                                className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
+                                onClick={() => {
+                                  setAppliedFilters((prev) => ({
+                                    ...prev,
+                                    [key]: (prev[key] as string[]).filter((v) => v !== value),
+                                  }));
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                  <path
+                                    d="M4 4L12 12M12 4L4 12"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                              </button>
+                            </span>
+                          );
+                        });
+                      } else if (values) {
                         const display =
                           key === 'machineId'
-                            ? (machineOptions.find((opt) => opt.value === value)?.label ?? value)
+                            ? (machineOptions.find((opt) => opt.value === values)?.label ?? values)
                             : key === 'createdBy'
-                              ? (creatorOptions.find((opt) => opt.value === value)?.label ?? value)
-                            : value;
+                              ? (creatorOptions.find((opt) => opt.value === values)?.label ??
+                                values)
+                              : values;
                         return (
                           <span
-                            key={`${key}-${value}-${idx}`}
+                            key={`${String(key)}-${values}`}
                             className="inline-flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                           >
                             <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">
@@ -627,10 +687,7 @@ export const BrowsePage = ({
                               aria-label={`Remove ${String(key)} filter`}
                               className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
                               onClick={() => {
-                                setAppliedFilters((prev) => ({
-                                  ...prev,
-                                  [key]: (prev[key] as string[]).filter((v) => v !== value),
-                                }));
+                                setAppliedFilters((prev) => ({ ...prev, [key]: '' }));
                               }}
                             >
                               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -644,47 +701,9 @@ export const BrowsePage = ({
                             </button>
                           </span>
                         );
-                      });
-                    } else if (values) {
-                      const display =
-                        key === 'machineId'
-                          ? (machineOptions.find((opt) => opt.value === values)?.label ?? values)
-                          : key === 'createdBy'
-                            ? (creatorOptions.find((opt) => opt.value === values)?.label ?? values)
-                          : values;
-                      return (
-                        <span
-                          key={`${String(key)}-${values}`}
-                          className="inline-flex min-w-0 max-w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
-                        >
-                          <span className="mr-2 shrink-0 text-xs font-medium text-slate-500">
-                            {String(key).replace(/Id$/, '')}:
-                          </span>
-                          <span className="mr-2 min-w-0 flex-1 truncate font-medium text-slate-700">
-                            {display}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={`Remove ${String(key)} filter`}
-                            className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-slate-700 focus:outline-none"
-                            onClick={() => {
-                              setAppliedFilters((prev) => ({ ...prev, [key]: '' }));
-                            }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                              <path
-                                d="M4 4L12 12M12 4L4 12"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          </button>
-                        </span>
-                      );
-                    }
-                    return [];
-                  })}
+                      }
+                      return [];
+                    })}
                   </div>
                 </div>
               )}

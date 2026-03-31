@@ -33,7 +33,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { formatCaseDate } from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
-import type { CaseOut, SimulationOut } from '@/types';
+import type { CaseOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
 type CanonicalFilter = 'all' | 'with-canonical' | 'without-canonical';
 type ActiveFilterKey =
@@ -75,6 +75,8 @@ interface ActiveFilterPill {
   value: string;
 }
 
+type CaseSimulationListItem = SimulationOut | SimulationSummaryOut;
+
 const createEmptySimulationFilters = (): CaseSimulationFilters => ({
   hpcUsername: '',
   machineId: '',
@@ -89,7 +91,7 @@ const createEmptySimulationFilters = (): CaseSimulationFilters => ({
 const sortStringValues = (values: string[]) =>
   values.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
 
-const sortCaseSimulations = (caseSimulations: SimulationOut[]) =>
+const sortCaseSimulations = (caseSimulations: CaseSimulationListItem[]) =>
   [...caseSimulations].sort((left, right) => {
     if (left.isCanonical !== right.isCanonical) {
       return left.isCanonical ? -1 : 1;
@@ -99,6 +101,18 @@ const sortCaseSimulations = (caseSimulations: SimulationOut[]) =>
       new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime()
     );
   });
+
+const getSimulationChangeTitle = (simulation: CaseSimulationListItem) => {
+  if ('runConfigDeltas' in simulation && simulation.runConfigDeltas) {
+    const changedFields = Object.keys(simulation.runConfigDeltas);
+
+    if (changedFields.length > 0) {
+      return `Changed fields: ${changedFields.join(', ')}`;
+    }
+  }
+
+  return `${simulation.changeCount} changes from baseline`;
+};
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {
   const location = useLocation();
@@ -639,9 +653,18 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   );
 
   const renderExpandedContent = (caseRecord: CaseOut) => {
-    const allCaseSimulations = sortCaseSimulations(simulationsByCaseId.get(caseRecord.id) ?? []);
+    const detailedCaseSimulations = simulationsByCaseId.get(caseRecord.id);
+    const summaryCaseSimulations = caseRecord.simulations;
+    const isUsingSummaryFallback =
+      (detailedCaseSimulations == null || detailedCaseSimulations.length === 0) &&
+      summaryCaseSimulations.length > 0;
+    const allCaseSimulations = sortCaseSimulations(
+      detailedCaseSimulations?.length ? detailedCaseSimulations : summaryCaseSimulations,
+    );
     const matchingCaseSimulations = sortCaseSimulations(
-      matchingSimulationsByCaseId.get(caseRecord.id) ?? [],
+      isUsingSummaryFallback
+        ? summaryCaseSimulations
+        : (matchingSimulationsByCaseId.get(caseRecord.id) ?? []),
     );
     const visibleCaseSimulations = hasActiveSimulationFilters
       ? matchingCaseSimulations
@@ -653,9 +676,11 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           <div>
             <p className="text-sm font-medium">Simulation Summaries</p>
             <p className="text-xs text-muted-foreground">
-              {hasActiveSimulationFilters
-                ? `${matchingCaseSimulations.length} of ${allCaseSimulations.length} runs match the current filters.`
-                : 'Reference runs are pinned first. Open the case page for full context.'}
+              {isUsingSummaryFallback
+                ? 'Showing case-level run summaries because full simulation details are unavailable.'
+                : hasActiveSimulationFilters
+                  ? `${matchingCaseSimulations.length} of ${allCaseSimulations.length} runs match the current filters.`
+                  : 'Reference runs are pinned first. Open the case page for full context.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
@@ -705,15 +730,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                           Baseline
                         </span>
                       ) : (
-                        <Badge
-                          variant="secondary"
-                          title={
-                            simulation.runConfigDeltas &&
-                            Object.keys(simulation.runConfigDeltas).length > 0
-                              ? `Changed fields: ${Object.keys(simulation.runConfigDeltas).join(', ')}`
-                              : `${simulation.changeCount} changes from baseline`
-                          }
-                        >
+                        <Badge variant="secondary" title={getSimulationChangeTitle(simulation)}>
                           {simulation.changeCount}
                         </Badge>
                       )}
