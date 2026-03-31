@@ -233,11 +233,25 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 type="file"
               />
 
-              <p className="mt-2 text-xs text-gray-500">
-                Required root files: <code>e3sm_timing..*..*</code>, <code>CaseStatus..*.gz</code>,{' '}
-                <code>GIT_DESCRIBE..*.gz</code>. Required <code>casedocs/</code> files: <code>README.case..*.gz</code>,{' '}
-                <code>env_case.xml..*.gz</code>, <code>env_build.xml..*.gz</code>, and <code>env_run.xml..*</code>.
-              </p>
+              <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="font-medium text-gray-700">Required root files</p>
+                    <p className="mt-1">
+                      <code>e3sm_timing..*..*</code>, <code>CaseStatus..*.gz</code>, <code>GIT_DESCRIBE..*.gz</code>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-700">
+                      Required <code>casedocs/</code> files
+                    </p>
+                    <p className="mt-1">
+                      <code>README.case..*.gz</code>, <code>env_case.xml..*.gz</code>, <code>env_build.xml..*.gz</code>,{' '}
+                      <code>env_run.xml..*</code>
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               {archiveFile ? (
                 <div className="mt-3 flex items-start gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
