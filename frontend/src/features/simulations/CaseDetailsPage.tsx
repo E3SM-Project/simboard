@@ -202,10 +202,10 @@ export const CaseDetailsPage = ({
             <CardTitle className="text-base">Case Metadata</CardTitle>
           </CardHeader>
           <CardContent>
-            <MetadataRow label="Case Group" value={caseRecord.caseGroup ?? '—'} />
             <MetadataRow label="Total Simulations" value={caseRecord.simulations.length} />
             <MetadataRow label="Machines" value={machineSummary} />
             <MetadataRow label="HPC Usernames" value={hpcUsernameSummary} />
+            <MetadataRow label="Case Group" value={caseRecord.caseGroup ?? '—'} />
             <MetadataRow label="Created" value={formatCaseDate(caseRecord.createdAt)} />
             <MetadataRow label="Last Updated" value={formatCaseDate(caseRecord.updatedAt)} />
           </CardContent>
@@ -218,15 +218,26 @@ export const CaseDetailsPage = ({
           <CardContent>
             {canonicalSimulation ? (
               <>
+                <p className="mb-4 text-sm leading-6 text-muted-foreground">
+                  This is the first successful run for the case and serves as the baseline used to
+                  compare configuration changes across the other simulations.
+                </p>
                 <MetadataRow
                   label="Execution ID"
                   value={
                     <Link
                       to={`/simulations/${canonicalSimulation.id}`}
                       state={{ from: currentPath }}
-                      className="font-mono text-xs text-blue-600 hover:underline"
+                      className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                     >
                       {canonicalSimulation.executionId}
+                      <span
+                        className="inline-flex items-center"
+                        title="Baseline simulation"
+                        aria-label="Baseline simulation"
+                      >
+                        <Pin className="h-3.5 w-3.5 text-amber-600" />
+                      </span>
                     </Link>
                   }
                 />
@@ -234,7 +245,6 @@ export const CaseDetailsPage = ({
                   label="Status"
                   value={<SimulationStatusBadge status={canonicalSimulation.status} />}
                 />
-                <MetadataRow label="Change Count" value={canonicalSimulation.changeCount} />
                 <MetadataRow
                   label="Simulation Dates"
                   value={formatSimulationDateRange(canonicalSimulation)}
