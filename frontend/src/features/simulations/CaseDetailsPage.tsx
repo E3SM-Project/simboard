@@ -1,4 +1,4 @@
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { ArrowLeft, Pin, Share2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -262,13 +262,13 @@ export const CaseDetailsPage = ({
                 <TableRow>
                   <TableHead className="w-12">Select</TableHead>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Change Count</TableHead>
-                  <TableHead>Simulation Type</TableHead>
+                  <TableHead>Changes</TableHead>
                   <TableHead>Initialization</TableHead>
                   <TableHead>Machine</TableHead>
                   <TableHead>HPC Username</TableHead>
                   <TableHead>Git Tag</TableHead>
                   <TableHead>Simulation Dates</TableHead>
+                  <TableHead>Run Dates</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -289,14 +289,26 @@ export const CaseDetailsPage = ({
                       <Link
                         to={`/simulations/${summary.id}`}
                         state={{ from: currentPath }}
-                        className="font-mono text-xs text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {summary.executionId}
+                        {summary.isCanonical && (
+                          <span
+                            className="inline-flex items-center"
+                            title="Baseline simulation"
+                            aria-label="Baseline simulation"
+                          >
+                            <Pin className="h-3.5 w-3.5 text-amber-600" />
+                          </span>
+                        )}
                       </Link>
                     </TableCell>
-                    <TableCell className="align-top">{summary.changeCount}</TableCell>
                     <TableCell className="align-top">
-                      <TableCellText value={details?.simulationType ?? '—'} lines={1} />
+                      {summary.isCanonical ? (
+                        <span className="text-sm font-medium text-slate-700">Baseline</span>
+                      ) : (
+                        summary.changeCount
+                      )}
                     </TableCell>
                     <TableCell className="align-top">
                       <TableCellText value={details?.initializationType ?? '—'} lines={1} />
@@ -312,6 +324,17 @@ export const CaseDetailsPage = ({
                     </TableCell>
                     <TableCell className="align-top">
                       {formatSimulationDateRange(summary)}
+                    </TableCell>
+                    <TableCell className="align-top">
+                      {details?.runStartDate || details?.runEndDate ? (
+                        <span
+                          title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
+                        >
+                          {`${details?.runStartDate?.slice(0, 10) ?? '—'} → ${details?.runEndDate?.slice(0, 10) ?? '—'}`}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

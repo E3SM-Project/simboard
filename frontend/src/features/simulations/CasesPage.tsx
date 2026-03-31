@@ -6,7 +6,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -537,16 +537,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         cell: ({ row }) => {
           const totalSimulations =
             simulationsByCaseId.get(row.original.id)?.length ?? row.original.simulations.length;
-          const matchingSimulations = matchingSimulationsByCaseId.get(row.original.id)?.length ?? 0;
 
-          return hasActiveSimulationFilters ? (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{matchingSimulations}</Badge>
-              <span className="text-xs text-muted-foreground">of {totalSimulations}</span>
-            </div>
-          ) : (
-            <Badge variant="secondary">{totalSimulations}</Badge>
-          );
+          return <Badge variant="secondary">{totalSimulations}</Badge>;
         },
       },
       {
@@ -577,8 +569,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       caseMachineSummaries,
       currentPath,
       expandedCaseId,
-      hasActiveSimulationFilters,
-      matchingSimulationsByCaseId,
       simulationsByCaseId,
     ],
   );
@@ -676,9 +666,18 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                       <Link
                         to={`/simulations/${simulation.id}`}
                         state={{ from: currentPath }}
-                        className="font-mono text-xs text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {simulation.executionId}
+                        {simulation.isCanonical && (
+                          <span
+                            className="inline-flex items-center"
+                            title="Baseline simulation"
+                            aria-label="Baseline simulation"
+                          >
+                            <Pin className="h-3.5 w-3.5 text-amber-600" />
+                          </span>
+                        )}
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
