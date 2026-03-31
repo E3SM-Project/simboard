@@ -322,13 +322,6 @@ def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
     return True
 
 
-def _location_label(location: str) -> str:
-    if location == "root":
-        return "archive root"
-
-    return "casedocs/"
-
-
 def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
     """Maps case directories to their execution subdirectories.
 
@@ -459,6 +452,13 @@ def _find_spec_matches(
                 matches.append(os.path.join(directory, fname))
 
     return matches
+
+
+def _location_label(location: str) -> str:
+    if location == "root":
+        return "archive root"
+
+    return "casedocs/"
 
 
 def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:

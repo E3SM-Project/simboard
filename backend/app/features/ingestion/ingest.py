@@ -649,7 +649,7 @@ def _build_simulation_create_draft(
     """
     # Parse datetime fields using the shared utility function.
     simulation_start_date = _parse_datetime_field(
-        parsed_simulation.simulation_start_date or parsed_simulation.run_start_date
+        parsed_simulation.simulation_start_date
     )
     simulation_end_date = _parse_datetime_field(parsed_simulation.simulation_end_date)
 
@@ -671,7 +671,7 @@ def _build_simulation_create_draft(
         status=status,
         campaign=parsed_simulation.campaign,
         experiment_type=parsed_simulation.experiment_type,
-        initialization_type=parsed_simulation.initialization_type or "unknown",
+        initialization_type=parsed_simulation.initialization_type,
         machine_id=machine_id,
         simulation_start_date=simulation_start_date,
         simulation_end_date=simulation_end_date,
