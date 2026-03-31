@@ -18,7 +18,7 @@ from app.api.version import API_BASE
 from app.features.ingestion.api import (
     _run_ingest_archive,
     _save_uploaded_file_and_hash,
-    _set_baseline_simulations,
+    _set_reference_simulations,
     _validate_archive_path,
     _validate_upload_file,
     ingest_from_upload,
@@ -1139,14 +1139,14 @@ class TestIngestFromUploadEndpoint:
 
 
 class TestIngestionApiCoverage:
-    def test_set_baseline_simulations_skips_non_uuid_case_id(self):
+    def test_set_reference_simulations_skips_non_uuid_case_id(self):
         """Covers defensive skip when a created simulation has a non-UUID case_id."""
         db = MagicMock(spec=Session)
         db.query.return_value.filter.return_value.all.return_value = []
 
         sim = Simulation(case_id="not-a-uuid", id=uuid.uuid4())
 
-        _set_baseline_simulations(db, [sim])
+        _set_reference_simulations(db, [sim])
 
         db.add.assert_not_called()
 

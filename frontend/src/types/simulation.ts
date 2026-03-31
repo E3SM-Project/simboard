@@ -16,7 +16,7 @@ export interface CaseOut {
   id: string;
   name: string;
   caseGroup: string | null;
-  baselineSimulationId: string | null;
+  referenceSimulationId: string | null;
   simulations: SimulationSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
@@ -32,7 +32,7 @@ export interface SimulationSummaryOut {
   id: string;
   executionId: string;
   status: string;
-  isBaseline: boolean;
+  isReference: boolean;
   changeCount: number;
   simulationStartDate: string;
   simulationEndDate: string | null;
@@ -92,7 +92,7 @@ export interface SimulationCreate {
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
   extra?: Record<string, unknown>;
-  runConfigDeltas?: Record<string, { baseline: unknown; current: unknown }> | null;
+  runConfigDeltas?: Record<string, { reference: unknown; current: unknown }> | null;
 
   // Relationships
   // ~~~~~~~~~~~~~~
@@ -117,7 +117,7 @@ export interface SimulationOut extends SimulationCreate {
   id: string;
   caseName: string;
   caseGroup: string | null;
-  isBaseline: boolean;
+  isReference: boolean;
   changeCount: number;
 
   // Provenance & submission

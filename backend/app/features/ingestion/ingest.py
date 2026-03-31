@@ -1,20 +1,20 @@
 """
 Module for ingesting simulation archives and mapping to DB schemas.
 
-Baseline simulation semantics for performance_archive ingestion:
+Reference simulation semantics for performance_archive ingestion:
   - A run is "successful" only if all required metadata files are present.
   - case_name (from timing files) is the identity for Case grouping.
-  - The first successful run per case is the baseline simulation.
+  - The first successful run per case is the reference simulation.
   - Each run creates a Simulation linked to a Case via case_id.
-  - Baseline simulations have run_config_deltas = None.
-  - Non-baseline runs store config differences vs the baseline.
+  - Reference simulations have run_config_deltas = None.
+  - Non-reference runs store config differences vs the reference.
   - Incomplete runs are skipped at the parser level.
   - Re-processing is idempotent due to execution_id uniqueness.
 
-Caching for baseline lookup:
-  - baseline_cache: baseline metadata for new cases in this ingest batch,
+Caching for reference lookup:
+  - reference_cache: reference metadata for new cases in this ingest batch,
     keyed by case_name.
-  - persisted_baseline_cache: baseline metadata for cases already in DB,
+  - persisted_reference_cache: reference metadata for cases already in DB,
     keyed by case.id, to avoid repeated DB queries.
 """
 
@@ -106,22 +106,22 @@ def ingest_archive(
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements baseline simulation semantics:
+    Implements reference simulation semantics:
 
     - Case lookup/creation is done by ``case_name`` from timing files.
-    - The first successful run per case becomes the baseline simulation
+    - The first successful run per case becomes the reference simulation
       (``run_config_deltas = None``).
-    - Non-baseline simulations store a single dict of configuration
-      differences versus the baseline.
+    - Non-reference simulations store a single dict of configuration
+      differences versus the reference.
     - Duplicate detection is based on ``execution_id`` uniqueness.
     - Uses two caches to avoid redundant work:
-       - ``baseline_cache``: Tracks the baseline simulation metadata for each
+       - ``reference_cache``: Tracks the reference simulation metadata for each
            new case found in the current ingest batch (keyed by case_name). This
            ensures that if multiple new runs for the same case appear in a
-           single archive, all are compared against the same in-batch baseline.
-       - ``persisted_baseline_cache``: Tracks baseline simulation metadata
+           single archive, all are compared against the same in-batch reference.
+       - ``persisted_reference_cache``: Tracks reference simulation metadata
            for cases already in the database (keyed by case.id). This avoids
-           repeated database queries for the baseline simulation of a case
+           repeated database queries for the reference simulation of a case
            when processing multiple runs for the same case in a single ingest
            operation.
 
@@ -166,16 +166,16 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-    baseline_cache: dict[str, SimulationConfigSnapshot] = {}
-    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+    reference_cache: dict[str, SimulationConfigSnapshot] = {}
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
     for parsed_simulation in parsed_simulations:
         try:
             simulation, is_duplicate = _process_simulation_for_ingest(
                 parsed_simulation=parsed_simulation,
                 db=db,
-                baseline_cache=baseline_cache,
-                persisted_baseline_cache=persisted_baseline_cache,
+                reference_cache=reference_cache,
+                persisted_reference_cache=persisted_reference_cache,
             )
 
             if is_duplicate:
@@ -215,8 +215,8 @@ def ingest_archive(
 def _process_simulation_for_ingest(
     parsed_simulation: ParsedSimulation,
     db: Session,
-    baseline_cache: dict[str, SimulationConfigSnapshot],
-    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
+    reference_cache: dict[str, SimulationConfigSnapshot],
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
 ) -> tuple[SimulationCreate | None, bool]:
     """Process one parsed simulation entry.
 
@@ -226,10 +226,10 @@ def _process_simulation_for_ingest(
         Parsed archive-derived metadata for the simulation.
     db : Session
         Active database session for lookups and case resolution.
-    baseline_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of baseline config values per case_name for the current batch.
-    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of baseline metadata loaded from the database by case_id.
+    reference_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of reference config values per case_name for the current batch.
+    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of reference metadata loaded from the database by case_id.
 
     Returns
     -------
@@ -244,8 +244,8 @@ def _process_simulation_for_ingest(
     case = _resolve_case(parsed_simulation, case_name, db)
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
-        _seed_baseline_cache_from_duplicate(
-            case_name, parsed_simulation, baseline_cache
+        _seed_reference_cache_from_duplicate(
+            case_name, parsed_simulation, reference_cache
         )
         return None, True
 
@@ -253,8 +253,8 @@ def _process_simulation_for_ingest(
         parsed_simulation=parsed_simulation,
         machine_id=machine_id,
         case=case,
-        baseline_cache=baseline_cache,
-        persisted_baseline_cache=persisted_baseline_cache,
+        reference_cache=reference_cache,
+        persisted_reference_cache=persisted_reference_cache,
         db=db,
     )
 
@@ -301,25 +301,25 @@ def _is_duplicate_simulation(
     return True
 
 
-def _seed_baseline_cache_from_duplicate(
+def _seed_reference_cache_from_duplicate(
     case_name: str,
     parsed_simulation: ParsedSimulation,
-    baseline_cache: dict[str, SimulationConfigSnapshot],
+    reference_cache: dict[str, SimulationConfigSnapshot],
 ) -> None:
-    """Seed per-case baseline cache using duplicate metadata when needed."""
-    if case_name not in baseline_cache:
-        baseline_cache[case_name] = _build_config_snapshot(parsed_simulation)
+    """Seed per-case reference cache using duplicate metadata when needed."""
+    if case_name not in reference_cache:
+        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
 
 def _build_simulation_create(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case: Case,
-    baseline_cache: dict[str, SimulationConfigSnapshot],
-    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
+    reference_cache: dict[str, SimulationConfigSnapshot],
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
 ) -> SimulationCreate:
-    """Create a SimulationCreate using baseline simulation semantics.
+    """Create a SimulationCreate using reference simulation semantics.
 
     Parameters
     ----------
@@ -329,24 +329,24 @@ def _build_simulation_create(
         Resolved machine ID from the database.
     case : Case
         Resolved Case object for this simulation.
-    baseline_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of baseline metadata per case_name for the current batch.
-    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of baseline metadata loaded from the database by case_id.
+    reference_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of reference metadata per case_name for the current batch.
+    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of reference metadata loaded from the database by case_id.
     db : Session
         Active database session for lookups and case resolution.
     """
     case_name = case.name
-    baseline_snapshot = _get_baseline_metadata_for_case(
+    reference_snapshot = _get_reference_metadata_for_case(
         case=case,
         case_name=case_name,
-        baseline_cache=baseline_cache,
-        persisted_baseline_cache=persisted_baseline_cache,
+        reference_cache=reference_cache,
+        persisted_reference_cache=persisted_reference_cache,
         db=db,
     )
 
-    if baseline_snapshot is None:
-        baseline_cache[case_name] = _build_config_snapshot(parsed_simulation)
+    if reference_snapshot is None:
+        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
         simulation = _validate_simulation_create(
             _build_simulation_create_draft(
@@ -356,14 +356,14 @@ def _build_simulation_create(
             )
         )
         logger.info(
-            "Mapped baseline simulation from %s: %s",
+            "Mapped reference simulation from %s: %s",
             parsed_simulation.execution_dir,
             case_name,
         )
 
         return simulation
 
-    delta = baseline_snapshot.diff(_build_config_snapshot(parsed_simulation))
+    delta = reference_snapshot.diff(_build_config_snapshot(parsed_simulation))
     run_config_deltas = delta if delta else None
     simulation_draft = _build_simulation_create_draft(
         parsed_simulation=parsed_simulation,
@@ -375,67 +375,67 @@ def _build_simulation_create(
 
     if delta:
         logger.info(
-            "Non-baseline run in '%s' has config differences from the baseline: %s",
+            "Non-reference run in '%s' has config differences from the reference: %s",
             parsed_simulation.execution_dir,
             list(delta.keys()),
         )
     else:
         logger.info(
-            "Non-baseline run in '%s' has identical configuration to the baseline.",
+            "Non-reference run in '%s' has identical configuration to the reference.",
             parsed_simulation.execution_dir,
         )
 
     return simulation
 
 
-def _get_baseline_metadata_for_case(
+def _get_reference_metadata_for_case(
     case: Case,
     case_name: str,
-    baseline_cache: dict[str, SimulationConfigSnapshot],
-    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
+    reference_cache: dict[str, SimulationConfigSnapshot],
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
 ) -> SimulationConfigSnapshot | None:
-    """Resolve baseline metadata from persisted baseline or batch cache.
+    """Resolve reference metadata from persisted reference or batch cache.
 
     This function is useful for ensuring that all simulations of the same case
-    within a batch are compared against a consistent baseline simulation.
+    within a batch are compared against a consistent reference simulation.
 
     Parameters
     ----------
     case : Case
-        The Case object for which to retrieve baseline metadata.
+        The Case object for which to retrieve reference metadata.
     case_name : str
         The name of the case, used for in-memory cache lookup.
-    baseline_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of baseline metadata per case_name for the current batch.
-    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of baseline metadata loaded from the database by case_id.
+    reference_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of reference metadata per case_name for the current batch.
+    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of reference metadata loaded from the database by case_id.
 
     Returns
     -------
     SimulationConfigSnapshot | None
-        The baseline config snapshot for the case, or None if no baseline run exists.
+        The reference config snapshot for the case, or None if no reference run exists.
     """
-    if case.baseline_simulation_id is not None:
-        if case.id in persisted_baseline_cache:
-            return persisted_baseline_cache[case.id]
+    if case.reference_simulation_id is not None:
+        if case.id in persisted_reference_cache:
+            return persisted_reference_cache[case.id]
 
-        baseline_simulation = (
+        reference_simulation = (
             db.query(Simulation)
-            .filter(Simulation.id == case.baseline_simulation_id)
+            .filter(Simulation.id == case.reference_simulation_id)
             .first()
         )
 
-        if baseline_simulation:
-            baseline_snapshot = _build_config_snapshot(baseline_simulation)
-            persisted_baseline_cache[case.id] = baseline_snapshot
+        if reference_simulation:
+            reference_snapshot = _build_config_snapshot(reference_simulation)
+            persisted_reference_cache[case.id] = reference_snapshot
 
-            return baseline_snapshot
+            return reference_snapshot
 
-        persisted_baseline_cache[case.id] = None
+        persisted_reference_cache[case.id] = None
         return None
 
-    return baseline_cache.get(case_name)
+    return reference_cache.get(case_name)
 
 
 def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -> Case:
@@ -483,7 +483,7 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
 def _build_config_snapshot(
     source: ParsedSimulation | Simulation,
 ) -> SimulationConfigSnapshot:
-    """Return a normalized config snapshot for baseline delta comparison."""
+    """Return a normalized config snapshot for reference delta comparison."""
     snapshot_values: dict[str, str | None] = {}
 
     for field_name in SimulationConfigSnapshot.field_names():
@@ -639,7 +639,7 @@ def _build_simulation_create_draft(
     case_id : UUID
         ID of the Case this simulation belongs to.
     run_config_deltas : dict | None
-        Configuration differences vs the baseline simulation, or None.
+        Configuration differences vs the reference simulation, or None.
 
     Returns
     -------

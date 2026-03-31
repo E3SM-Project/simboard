@@ -30,17 +30,17 @@ class Case(Base, IDMixin, TimestampMixin):
     """A logical experiment grouped by case name.
 
     Each Case contains one or more Simulation executions.  Exactly one
-    Simulation may be designated as the baseline via
-    :attr:`baseline_simulation_id`.
+    Simulation may be designated as the reference via
+    :attr:`reference_simulation_id`.
     """
 
     __tablename__ = "cases"
 
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
-    baseline_simulation_id: Mapped[UUID | None] = mapped_column(
+    reference_simulation_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("simulations.id", use_alter=True, name="fk_cases_baseline_sim"),
+        ForeignKey("simulations.id", use_alter=True, name="fk_cases_reference_sim"),
         nullable=True,
     )
 
@@ -52,8 +52,8 @@ class Case(Base, IDMixin, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    baseline_simulation: Mapped[Simulation | None] = relationship(
-        "Simulation", foreign_keys=[baseline_simulation_id], post_update=True
+    reference_simulation: Mapped[Simulation | None] = relationship(
+        "Simulation", foreign_keys=[reference_simulation_id], post_update=True
     )
 
 

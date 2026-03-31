@@ -5,7 +5,7 @@
     "simulations": [
       {
         "executionId": "1000001.240101-120000",
-        "description": "Baseline preindustrial control run for E3SM version 1.1.0.",
+        "description": "Reference preindustrial control run for E3SM version 1.1.0.",
         "compset": "PICNTRL",
         "compsetAlias": "piControl",
         "gridName": "ne30_oECv3",
@@ -25,7 +25,7 @@
         "compiler": "intel",
         "keyFeatures": "Fully coupled atmosphere, ocean, land, and sea ice components.",
         "knownIssues": "Occasional model drift after year 45.",
-        "notesMarkdown": "This is the baseline preindustrial control run for E3SM v1.1.0, featuring fully coupled components. Known issues include occasional model drift after year 45.",
+        "notesMarkdown": "This is the reference preindustrial control run for E3SM v1.1.0, featuring fully coupled components. Known issues include occasional model drift after year 45.",
         "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
         "gitBranch": "main",
         "gitTag": "v1.1.0",
@@ -77,7 +77,7 @@
         "runEndDate": "2019-12-01T00:00:00Z",
         "compiler": "intel",
         "keyFeatures": "Continuation of piControl run from year 45.",
-        "notesMarkdown": "Continuation run; matches the baseline configuration.",
+        "notesMarkdown": "Continuation run; matches the reference configuration.",
         "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
         "gitBranch": "main",
         "gitTag": "v1.1.0",
@@ -309,8 +309,8 @@
         "simulationStartDate": "1850-01-01T00:00:00Z",
         "simulationEndDate": "1900-12-31T00:00:00Z",
         "compiler": "gnu",
-        "notesMarkdown": "This preindustrial climate simulation serves as a baseline for DECK experiments.",
-        "keyFeatures": "Baseline preindustrial climate simulation.",
+        "notesMarkdown": "This preindustrial climate simulation serves as a reference for DECK experiments.",
+        "keyFeatures": "Reference preindustrial climate simulation.",
         "knownIssues": "None reported.",
         "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
         "gitBranch": "main",
@@ -361,11 +361,11 @@
         "extra": {},
         "runConfigDeltas": {
           "compiler": {
-            "baseline": "gnu",
+            "reference": "gnu",
             "current": "intel"
           },
           "git_commit_hash": {
-            "baseline": "mno7890",
+            "reference": "mno7890",
             "current": "mno7891"
           }
         },

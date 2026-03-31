@@ -384,8 +384,8 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
     return IngestionStatus.FAILED.value
 
 
-def _set_baseline_simulations(db: Session, created_sims: list[Simulation]) -> None:
-    """Set the baseline simulation per case when one is not already set."""
+def _set_reference_simulations(db: Session, created_sims: list[Simulation]) -> None:
+    """Set the reference simulation per case when one is not already set."""
     case_ids: set[UUID] = {
         case_id for sim in created_sims if isinstance((case_id := sim.case_id), UUID)
     }
@@ -397,10 +397,10 @@ def _set_baseline_simulations(db: Session, created_sims: list[Simulation]) -> No
 
             if (
                 case
-                and case.baseline_simulation_id is None
+                and case.reference_simulation_id is None
                 and isinstance(sim.id, UUID)
             ):
-                case.baseline_simulation_id = sim.id
+                case.reference_simulation_id = sim.id
                 db.add(case)
 
 
@@ -413,9 +413,9 @@ def _persist_simulations(
 ) -> list[Simulation]:
     """Persist simulation records with artifacts and links to the database.
 
-    After all simulations are flushed, sets the baseline simulation on
+    After all simulations are flushed, sets the reference simulation on
     each Case that does not yet have one.  The first simulation per Case
-    (in insertion order) becomes the baseline.
+    (in insertion order) becomes the reference.
 
     Parameters
     ----------
@@ -481,7 +481,7 @@ def _persist_simulations(
 
     db.flush()
 
-    _set_baseline_simulations(db, created_sims)
+    _set_reference_simulations(db, created_sims)
 
     return created_sims
 

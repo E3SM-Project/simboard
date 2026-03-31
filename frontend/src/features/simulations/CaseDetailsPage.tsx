@@ -19,7 +19,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   formatCaseDate,
   formatSimulationDateRange,
-  getBaselineSimulation,
+  getReferenceSimulation,
   sortSimulationSummaries,
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
@@ -124,7 +124,7 @@ export const CaseDetailsPage = ({
     );
   }
 
-  const baselineSimulation = getBaselineSimulation(caseRecord);
+  const referenceSimulation = getReferenceSimulation(caseRecord);
   const simulations = sortSimulationSummaries(caseRecord.simulations).map((simulation) => ({
     summary: simulation,
     details: simulationDetailsById.get(simulation.id),
@@ -193,28 +193,28 @@ export const CaseDetailsPage = ({
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Baseline Simulation</CardTitle>
+            <CardTitle className="text-base">Reference Simulation</CardTitle>
           </CardHeader>
           <CardContent>
-            {baselineSimulation ? (
+            {referenceSimulation ? (
               <>
                 <p className="mb-4 text-sm leading-6 text-muted-foreground">
-                  This is the first successful run for the case and serves as the baseline used to
+                  This is the first successful run for the case and serves as the reference used to
                   compare configuration changes across the other simulations.
                 </p>
                 <MetadataRow
                   label="Execution ID"
                   value={
                     <Link
-                      to={`/simulations/${baselineSimulation.id}`}
+                      to={`/simulations/${referenceSimulation.id}`}
                       state={{ from: currentPath }}
                       className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                     >
-                      {baselineSimulation.executionId}
+                      {referenceSimulation.executionId}
                       <span
                         className="inline-flex items-center"
-                        title="Baseline simulation"
-                        aria-label="Baseline simulation"
+                        title="Reference simulation"
+                        aria-label="Reference simulation"
                       >
                         <Pin className="h-3.5 w-3.5 text-amber-600" />
                       </span>
@@ -223,16 +223,16 @@ export const CaseDetailsPage = ({
                 />
                 <MetadataRow
                   label="Status"
-                  value={<SimulationStatusBadge status={baselineSimulation.status} />}
+                  value={<SimulationStatusBadge status={referenceSimulation.status} />}
                 />
                 <MetadataRow
                   label="Simulation Dates"
-                  value={formatSimulationDateRange(baselineSimulation)}
+                  value={formatSimulationDateRange(referenceSimulation)}
                 />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No baseline simulation is set for this case.
+                No reference simulation is set for this case.
               </p>
             )}
           </CardContent>
@@ -310,11 +310,11 @@ export const CaseDetailsPage = ({
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {summary.executionId}
-                        {summary.isBaseline && (
+                        {summary.isReference && (
                           <span
                             className="inline-flex items-center"
-                            title="Baseline simulation"
-                            aria-label="Baseline simulation"
+                            title="Reference simulation"
+                            aria-label="Reference simulation"
                           >
                             <Pin className="h-3.5 w-3.5 text-amber-600" />
                           </span>
@@ -322,8 +322,8 @@ export const CaseDetailsPage = ({
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
-                      {summary.isBaseline ? (
-                        <span className="text-sm font-medium text-slate-700">Baseline</span>
+                      {summary.isReference ? (
+                        <span className="text-sm font-medium text-slate-700">Reference</span>
                       ) : (
                         summary.changeCount
                       )}

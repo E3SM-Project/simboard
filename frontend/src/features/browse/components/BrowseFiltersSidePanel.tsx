@@ -182,24 +182,24 @@ export const BrowseFiltersSidePanel = ({
         />
 
         <div>
-          <label className={filterLabelClassName}>Baseline Status</label>
+          <label className={filterLabelClassName}>Reference Status</label>
           <div className="space-y-1.5">
             {[
               { value: '', label: 'All' },
-              { value: 'baseline', label: 'Baseline Only' },
-              { value: 'non-baseline', label: 'Non-Baseline Only' },
+              { value: 'reference', label: 'Reference Only' },
+              { value: 'non-reference', label: 'Non-Reference Only' },
             ].map((opt) => (
               <div key={opt.value} className="flex items-center gap-2">
                 <input
                   type="radio"
-                  id={`baseline-${opt.value || 'all'}`}
-                  name="baselineStatus"
-                  checked={appliedFilters.baselineStatus === opt.value}
-                  onChange={() => handleChange('baselineStatus', opt.value)}
+                  id={`reference-${opt.value || 'all'}`}
+                  name="referenceStatus"
+                  checked={appliedFilters.referenceStatus === opt.value}
+                  onChange={() => handleChange('referenceStatus', opt.value)}
                   className="h-4 w-4"
                 />
                 <label
-                  htmlFor={`baseline-${opt.value || 'all'}`}
+                  htmlFor={`reference-${opt.value || 'all'}`}
                   className="text-sm text-slate-700"
                 >
                   {opt.label}

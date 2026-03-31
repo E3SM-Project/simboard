@@ -147,15 +147,15 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { width: 220 },
   },
   {
-    accessorKey: 'isBaseline',
-    header: renderSortableHeader('Baseline'),
+    accessorKey: 'isReference',
+    header: renderSortableHeader('Reference'),
     cell: ({ row }) => {
-      const isBaseline = row.original.isBaseline;
+      const isReference = row.original.isReference;
       const changeCount = row.original.changeCount;
       return (
         <div>
-          {isBaseline ? 'Yes' : 'No'}
-          {!isBaseline && changeCount > 0 && (
+          {isReference ? 'Yes' : 'No'}
+          {!isReference && changeCount > 0 && (
             <span className="ml-1 text-slate-400">({changeCount})</span>
           )}
         </div>

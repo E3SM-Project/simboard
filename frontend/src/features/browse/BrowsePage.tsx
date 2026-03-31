@@ -59,8 +59,8 @@ export interface FilterState {
   compiler: string[];
   status: string[];
 
-  // Baseline Status
-  baselineStatus: string;
+  // Reference Status
+  referenceStatus: string;
 
   // Metadata & Provenance
   gitTag: string[];
@@ -93,8 +93,8 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
-  // Baseline Status
-  baselineStatus: '',
+  // Reference Status
+  referenceStatus: '',
 
   // Metadata & Provenance
   gitTag: [],
@@ -103,13 +103,13 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 const FILTER_KEYS = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'baselineStatus');
+const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'referenceStatus');
 
 const areStringArraysEqual = (left: string[], right: string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const areFiltersEqual = (left: FilterState, right: FilterState): boolean =>
-  left.baselineStatus === right.baselineStatus &&
+  left.referenceStatus === right.referenceStatus &&
   MULTI_SELECT_FILTER_KEYS.every((key) =>
     areStringArraysEqual(left[key] as string[], right[key] as string[]),
   );
@@ -296,8 +296,8 @@ export const BrowsePage = ({
         }
       }
 
-      if (appliedFilters.baselineStatus === 'baseline' && !record.isBaseline) return false;
-      if (appliedFilters.baselineStatus === 'non-baseline' && record.isBaseline) return false;
+      if (appliedFilters.referenceStatus === 'reference' && !record.isReference) return false;
+      if (appliedFilters.referenceStatus === 'non-reference' && record.isReference) return false;
 
       return true;
     });
@@ -359,10 +359,10 @@ export const BrowsePage = ({
       }
     });
 
-    const baselineStatus = searchParams.get('baselineStatus');
-    next.baselineStatus =
-      baselineStatus !== null && ['', 'baseline', 'non-baseline'].includes(baselineStatus)
-        ? baselineStatus
+    const referenceStatus = searchParams.get('referenceStatus');
+    next.referenceStatus =
+      referenceStatus !== null && ['', 'reference', 'non-reference'].includes(referenceStatus)
+        ? referenceStatus
         : '';
 
     setAppliedFilters((current) => (areFiltersEqual(current, next) ? current : next));
@@ -381,7 +381,7 @@ export const BrowsePage = ({
     });
 
     if (prevPageResetSignature.current === null) {
-      // First render — record baseline without resetting page.
+      // First render — record reference without resetting page.
       prevPageResetSignature.current = currentSignature;
       return;
     }

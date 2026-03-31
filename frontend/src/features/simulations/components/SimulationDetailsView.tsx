@@ -137,11 +137,11 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>
-                <FieldRow label="Baseline">
-                  <span className="text-sm">{simulation.isBaseline ? 'Yes' : 'No'}</span>
+                <FieldRow label="Reference">
+                  <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
                 </FieldRow>
-                {!simulation.isBaseline && (
-                  <FieldRow label="Changes vs baseline">
+                {!simulation.isReference && (
+                  <FieldRow label="Changes vs reference">
                     <span className="text-sm">{simulation.changeCount}</span>
                   </FieldRow>
                 )}
@@ -189,8 +189,8 @@ export const SimulationDetailsView = ({
             </Card>
           </div>
 
-          {/* Config diff section for non-baseline simulations */}
-          {!simulation.isBaseline && (
+          {/* Config diff section for non-reference simulations */}
+          {!simulation.isReference && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Configuration Differences</CardTitle>
@@ -206,7 +206,7 @@ export const SimulationDetailsView = ({
                             Field
                           </th>
                           <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Baseline
+                            Reference
                           </th>
                           <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             Current
@@ -215,7 +215,7 @@ export const SimulationDetailsView = ({
                       </thead>
                       <tbody>
                         {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => {
-                          const baseline = (diff as Record<string, unknown>).baseline;
+                          const reference = (diff as Record<string, unknown>).reference;
                           const current = (diff as Record<string, unknown>).current;
                           return (
                             <tr key={field} className="border-b last:border-0">
@@ -226,7 +226,7 @@ export const SimulationDetailsView = ({
                                 />
                               </td>
                               <td className="p-2 align-top">
-                                <DiffCell value={baseline} className="max-w-[240px]" />
+                                <DiffCell value={reference} className="max-w-[240px]" />
                               </td>
                               <td className="p-2 align-top">
                                 <DiffCell value={current} className="max-w-[240px]" />

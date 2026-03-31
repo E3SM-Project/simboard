@@ -151,12 +151,12 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         size: 380,
       },
       {
-        accessorKey: 'isBaseline',
-        header: 'Baseline',
+        accessorKey: 'isReference',
+        header: 'Reference',
         cell: ({ row }) =>
-          row.original.isBaseline ? (
+          row.original.isReference ? (
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              Baseline
+              Reference
             </Badge>
           ) : null,
         size: 100,

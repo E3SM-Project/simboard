@@ -156,7 +156,7 @@ def _case_to_out(case: Case) -> CaseOut:
     )
 
     for sim in case.simulations:
-        is_baseline = sim.id == case.baseline_simulation_id
+        is_reference = sim.id == case.reference_simulation_id
         change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
 
         summaries.append(
@@ -164,7 +164,7 @@ def _case_to_out(case: Case) -> CaseOut:
                 id=sim.id,
                 execution_id=sim.execution_id,
                 status=sim.status,
-                is_baseline=is_baseline,
+                is_reference=is_reference,
                 change_count=change_count,
                 simulation_start_date=sim.simulation_start_date,
                 simulation_end_date=sim.simulation_end_date,
@@ -175,7 +175,7 @@ def _case_to_out(case: Case) -> CaseOut:
         id=case.id,
         name=case.name,
         case_group=case.case_group,
-        baseline_simulation_id=case.baseline_simulation_id,
+        reference_simulation_id=case.reference_simulation_id,
         simulations=summaries,
         machine_names=machine_names,
         hpc_usernames=hpc_usernames,
@@ -257,9 +257,9 @@ def create_simulation(
         db.add(sim)
         db.flush()
 
-        if case.baseline_simulation_id is None:
+        if case.reference_simulation_id is None:
             sim.run_config_deltas = None
-            case.baseline_simulation_id = sim.id
+            case.reference_simulation_id = sim.id
             db.add(case)
 
     # Re-query with relationships loaded
@@ -396,7 +396,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
 def _simulation_to_out(sim: Simulation) -> SimulationOut:
     """Convert a Simulation ORM instance to a SimulationOut schema.
 
-    Derives ``case_name``, ``is_baseline``, and ``change_count`` from
+    Derives ``case_name``, ``is_reference``, and ``change_count`` from
     the associated Case relationship.
 
     Parameters
@@ -411,7 +411,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
         fields.
     """
     case = sim.case
-    is_baseline = sim.id == case.baseline_simulation_id
+    is_reference = sim.id == case.reference_simulation_id
     change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
 
     result = SimulationOut.model_validate(
@@ -419,7 +419,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
             "case_group": case.case_group,
-            "is_baseline": is_baseline,
+            "is_reference": is_reference,
             "change_count": change_count,
         },
         from_attributes=True,
