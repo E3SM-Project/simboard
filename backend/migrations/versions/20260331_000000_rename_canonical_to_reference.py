@@ -20,18 +20,21 @@ def _rename_run_config_delta_key(source_key: str, target_key: str) -> None:
     op.execute(
         f"""
         UPDATE simulations
-        SET run_config_deltas = (
-            SELECT jsonb_object_agg(
-                delta.key,
-                CASE
-                    WHEN jsonb_typeof(delta.value) = 'object' AND delta.value ? '{source_key}'
-                    THEN jsonb_build_object('{target_key}', delta.value -> '{source_key}')
-                         || (delta.value - '{source_key}')
-                    ELSE delta.value
-                END
+        SET run_config_deltas = CASE
+            WHEN jsonb_typeof(run_config_deltas) = 'object' THEN (
+                SELECT jsonb_object_agg(
+                    delta.key,
+                    CASE
+                        WHEN jsonb_typeof(delta.value) = 'object' AND delta.value ? '{source_key}'
+                        THEN jsonb_build_object('{target_key}', delta.value -> '{source_key}')
+                             || (delta.value - '{source_key}')
+                        ELSE delta.value
+                    END
+                )
+                FROM jsonb_each(run_config_deltas) AS delta(key, value)
             )
-            FROM jsonb_each(run_config_deltas) AS delta(key, value)
-        )
+            ELSE run_config_deltas
+        END
         WHERE run_config_deltas IS NOT NULL;
         """
     )
