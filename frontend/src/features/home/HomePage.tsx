@@ -20,6 +20,9 @@ interface HomePageProps {
 }
 
 export const HomePage = ({ simulations, machines }: HomePageProps) => {
+  const totalCases = useMemo(() => new Set(simulations.map((simulation) => simulation.caseId)).size, [
+    simulations,
+  ]);
   const latestSubmission = useMemo(
     () =>
       [...simulations]
@@ -138,8 +141,8 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
       icon: GitCompareArrows,
     },
     {
-      title: 'Upload a Simulation',
-      description: 'Submit new simulation metadata to share results and preserve provenance.',
+      title: 'Upload a Case',
+      description: 'Submit new case metadata to share results and preserve provenance.',
       to: '/upload',
       action: 'Open Upload',
       icon: Upload,
@@ -189,13 +192,21 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
           <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-4">
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
               <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Total Cases
+              </p>
+              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
+                {totalCases}
+              </p>
+            </div>
+            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
+              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Total Simulations
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
                 {simulations.length}
               </p>
             </div>
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 xl:border-b-0 xl:border-r">
+            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
               <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Machines
               </p>
