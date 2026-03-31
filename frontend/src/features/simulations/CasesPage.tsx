@@ -35,7 +35,7 @@ import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
 import type { CaseOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
-type CanonicalFilter = 'all' | 'with-canonical' | 'without-canonical';
+type BaselineFilter = 'all' | 'with-baseline' | 'without-baseline';
 type ActiveFilterKey =
   | 'caseName'
   | 'hpcUsername'
@@ -47,7 +47,7 @@ type ActiveFilterKey =
   | 'gitTag'
   | 'createdBy'
   | 'caseGroup'
-  | 'canonical';
+  | 'baseline';
 
 interface CasesPageProps {
   simulations: SimulationOut[];
@@ -93,8 +93,8 @@ const sortStringValues = (values: string[]) =>
 
 const sortCaseSimulations = (caseSimulations: CaseSimulationListItem[]) =>
   [...caseSimulations].sort((left, right) => {
-    if (left.isCanonical !== right.isCanonical) {
-      return left.isCanonical ? -1 : 1;
+    if (left.isBaseline !== right.isBaseline) {
+      return left.isBaseline ? -1 : 1;
     }
 
     return (
@@ -124,7 +124,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const [simulationFilters, setSimulationFilters] = useState<CaseSimulationFilters>(
     createEmptySimulationFilters,
   );
-  const [canonicalFilter, setCanonicalFilter] = useState<CanonicalFilter>('all');
+  const [baselineFilter, setBaselineFilter] = useState<BaselineFilter>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([
@@ -275,7 +275,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const hasActiveFilters =
     caseNameFilter.trim().length > 0 ||
     caseGroupFilter.length > 0 ||
-    canonicalFilter !== 'all' ||
+    baselineFilter !== 'all' ||
     hasActiveSimulationFilters;
   const advancedFilterCount = useMemo(
     () =>
@@ -288,9 +288,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         simulationFilters.gitTag,
         simulationFilters.createdBy,
         caseGroupFilter,
-        canonicalFilter !== 'all' ? canonicalFilter : '',
+        baselineFilter !== 'all' ? baselineFilter : '',
       ].filter(Boolean).length,
-    [canonicalFilter, caseGroupFilter, simulationFilters],
+    [baselineFilter, caseGroupFilter, simulationFilters],
   );
   const matchingSimulationsByCaseId = useMemo(() => {
     const matchingMap = new Map<string, SimulationOut[]>();
@@ -404,17 +404,17 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
-    if (canonicalFilter !== 'all') {
+    if (baselineFilter !== 'all') {
       filters.push({
-        key: 'canonical',
-        label: 'Canonical',
-        value: canonicalFilter === 'with-canonical' ? 'Present' : 'Missing',
+        key: 'baseline',
+        label: 'Baseline',
+        value: baselineFilter === 'with-baseline' ? 'Present' : 'Missing',
       });
     }
 
     return filters;
   }, [
-    canonicalFilter,
+    baselineFilter,
     caseGroupFilter,
     caseNameFilter,
     creatorOptions,
@@ -434,7 +434,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
     setSimulationFilters(createEmptySimulationFilters());
-    setCanonicalFilter('all');
+    setBaselineFilter('all');
     setShowAdvancedFilters(false);
     table.setPageIndex(0);
   };
@@ -447,8 +447,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       case 'caseGroup':
         setCaseGroupFilter('');
         break;
-      case 'canonical':
-        setCanonicalFilter('all');
+      case 'baseline':
+        setBaselineFilter('all');
         break;
       default:
         setSimulationFilters((current) => ({
@@ -469,21 +469,21 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         normalizedNameFilter.length === 0 ||
         caseRecord.name.toLowerCase().includes(normalizedNameFilter);
       const matchesGroup = !caseGroupFilter || caseRecord.caseGroup === caseGroupFilter;
-      const hasCanonicalSimulation = caseRecord.canonicalSimulationId != null;
-      const matchesCanonical =
-        canonicalFilter === 'all' ||
-        (canonicalFilter === 'with-canonical' && hasCanonicalSimulation) ||
-        (canonicalFilter === 'without-canonical' && !hasCanonicalSimulation);
+      const hasBaselineSimulation = caseRecord.baselineSimulationId != null;
+      const matchesBaseline =
+        baselineFilter === 'all' ||
+        (baselineFilter === 'with-baseline' && hasBaselineSimulation) ||
+        (baselineFilter === 'without-baseline' && !hasBaselineSimulation);
       const matchesSimulationFilters =
         !hasActiveSimulationFilters ||
         (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0) > 0;
 
-      return matchesName && matchesGroup && matchesCanonical && matchesSimulationFilters;
+      return matchesName && matchesGroup && matchesBaseline && matchesSimulationFilters;
     });
   }, [
     caseGroupFilter,
     cases,
-    canonicalFilter,
+    baselineFilter,
     caseNameFilter,
     hasActiveSimulationFilters,
     matchingSimulationsByCaseId,
@@ -710,7 +710,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {simulation.executionId}
-                        {simulation.isCanonical && (
+                        {simulation.isBaseline && (
                           <span
                             className="inline-flex items-center"
                             title="Baseline simulation"
@@ -722,7 +722,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
-                      {simulation.isCanonical ? (
+                      {simulation.isBaseline ? (
                         <span
                           className="text-sm font-medium text-slate-700"
                           title="Baseline simulation"
@@ -776,7 +776,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
                   Find the cases behind your runs. Start with HPC username or machine, then refine
-                  by campaign, version context, and canonical state.
+                  by campaign, version context, and baseline state.
                 </p>
               </div>
             </div>
@@ -992,12 +992,12 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         })}
                         <div className="space-y-2">
                           <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                            Canonical state
+                            Baseline state
                           </label>
                           <Select
-                            value={canonicalFilter}
-                            onValueChange={(value: CanonicalFilter) => {
-                              setCanonicalFilter(value);
+                            value={baselineFilter}
+                            onValueChange={(value: BaselineFilter) => {
+                              setBaselineFilter(value);
                               table.setPageIndex(0);
                             }}
                           >
@@ -1005,9 +1005,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">All canonical states</SelectItem>
-                              <SelectItem value="with-canonical">Canonical present</SelectItem>
-                              <SelectItem value="without-canonical">Canonical missing</SelectItem>
+                              <SelectItem value="all">All baseline states</SelectItem>
+                              <SelectItem value="with-baseline">Baseline present</SelectItem>
+                              <SelectItem value="without-baseline">Baseline missing</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

@@ -77,7 +77,7 @@
         "runEndDate": "2019-12-01T00:00:00Z",
         "compiler": "intel",
         "keyFeatures": "Continuation of piControl run from year 45.",
-        "notesMarkdown": "Continuation run; matches canonical configuration.",
+        "notesMarkdown": "Continuation run; matches the baseline configuration.",
         "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM",
         "gitBranch": "main",
         "gitTag": "v1.1.0",
@@ -361,11 +361,11 @@
         "extra": {},
         "runConfigDeltas": {
           "compiler": {
-            "canonical": "gnu",
+            "baseline": "gnu",
             "current": "intel"
           },
           "git_commit_hash": {
-            "canonical": "mno7890",
+            "baseline": "mno7890",
             "current": "mno7891"
           }
         },

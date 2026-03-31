@@ -4,7 +4,7 @@ from dataclasses import fields as dataclass_fields
 
 @dataclass(frozen=True)
 class SimulationConfigSnapshot:
-    """Normalized configuration fields used for canonical delta comparison."""
+    """Normalized configuration fields used for baseline delta comparison."""
 
     compset: str | None
     compset_alias: str | None
@@ -22,7 +22,7 @@ class SimulationConfigSnapshot:
 
     @classmethod
     def field_names(cls) -> frozenset[str]:
-        """Return the config field set tracked for canonical comparisons."""
+        """Return the config field set tracked for baseline comparisons."""
         return frozenset(field.name for field in dataclass_fields(cls))
 
     def diff(
@@ -33,11 +33,11 @@ class SimulationConfigSnapshot:
 
         for field in dataclass_fields(self):
             field_name = field.name
-            canonical_value = getattr(self, field_name)
+            baseline_value = getattr(self, field_name)
             current_value = getattr(other, field_name)
-            if canonical_value != current_value:
+            if baseline_value != current_value:
                 delta[field_name] = {
-                    "canonical": canonical_value,
+                    "baseline": baseline_value,
                     "current": current_value,
                 }
 

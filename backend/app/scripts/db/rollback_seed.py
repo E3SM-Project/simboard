@@ -72,12 +72,12 @@ def rollback_seed(db: Session):
                     )
                 )
 
-                # Clear canonical_simulation_id on cases before deleting simulations
+                # Clear baseline_simulation_id on cases before deleting simulations
                 if case_ids:
                     db.execute(
                         update(Case)
                         .where(Case.__table__.c.id.in_(case_ids))
-                        .values(canonical_simulation_id=None)
+                        .values(baseline_simulation_id=None)
                     )
 
                 db.execute(

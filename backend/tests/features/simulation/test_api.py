@@ -103,18 +103,16 @@ class TestListCases:
             status="created",
             machine_id=machine.id,
             simulation_start_date="2023-02-01T00:00:00Z",
-            run_config_deltas={
-                "compiler": {"canonical": "gcc-11", "current": "gcc-12"}
-            },
+            run_config_deltas={"compiler": {"baseline": "gcc-11", "current": "gcc-12"}},
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
         )
         db.add(sim1)
         db.flush()
-        # Set canonical
+        # Set baseline
         assert sim1.id is not None
-        case.canonical_simulation_id = sim1.id
+        case.baseline_simulation_id = sim1.id
         db.add(sim2)
         db.commit()
 
@@ -125,7 +123,7 @@ class TestListCases:
 
         case_data = data[0]
         assert case_data["name"] == "test_case_nested"
-        assert case_data["canonicalSimulationId"] == str(sim1.id)
+        assert case_data["baselineSimulationId"] == str(sim1.id)
         assert case_data["machineNames"] == [machine.name]
         assert case_data["hpcUsernames"] == []
 
@@ -138,7 +136,7 @@ class TestListCases:
             assert "id" in s
             assert "executionId" in s
             assert "status" in s
-            assert "isCanonical" in s
+            assert "isBaseline" in s
             assert "changeCount" in s
             assert "simulationStartDate" in s
             # Must NOT include heavy fields
@@ -150,11 +148,11 @@ class TestListCases:
             assert "runConfigDeltas" not in s
             assert "createdByUser" not in s
 
-        # Verify canonical and change_count derivation
+        # Verify baseline and change_count derivation
         exec_ids = {s["executionId"]: s for s in sims}
-        assert exec_ids["case-nested-exec-1"]["isCanonical"] is True
+        assert exec_ids["case-nested-exec-1"]["isBaseline"] is True
         assert exec_ids["case-nested-exec-1"]["changeCount"] == 0
-        assert exec_ids["case-nested-exec-2"]["isCanonical"] is False
+        assert exec_ids["case-nested-exec-2"]["isBaseline"] is False
         assert exec_ids["case-nested-exec-2"]["changeCount"] == 1
 
 
@@ -218,7 +216,7 @@ class TestGetCase:
         db.add(sim)
         db.flush()
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.baseline_simulation_id = sim.id
         db.commit()
 
         res = client.get(f"{API_BASE}/cases/{case.id}")
@@ -229,7 +227,7 @@ class TestGetCase:
         assert data["machineNames"] == [machine.name]
         assert data["hpcUsernames"] == []
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
-        assert data["simulations"][0]["isCanonical"] is True
+        assert data["simulations"][0]["isBaseline"] is True
 
     def test_endpoint_raises_404_if_case_not_found(self, client):
         res = client.get(f"{API_BASE}/cases/{uuid4()}")
@@ -311,12 +309,12 @@ class TestCreateSimulation:
         assert res.status_code == 400
         assert "not found" in res.json()["detail"].lower()
 
-    def test_first_manual_create_sets_canonical_on_case(
+    def test_first_manual_create_sets_baseline_on_case(
         self, client, db: Session
     ) -> None:
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
-        case = _create_case(db, "test_case_first_manual_canonical")
+        case = _create_case(db, "test_case_first_manual_baseline")
         db.commit()
 
         payload = {
@@ -337,12 +335,12 @@ class TestCreateSimulation:
         assert res.status_code == 201
         data = res.json()
 
-        assert data["isCanonical"] is True
+        assert data["isBaseline"] is True
         assert data["runConfigDeltas"] is None
 
         db.refresh(case)
-        assert case.canonical_simulation_id is not None
-        assert str(case.canonical_simulation_id) == data["id"]
+        assert case.baseline_simulation_id is not None
+        assert str(case.baseline_simulation_id) == data["id"]
 
     def test_create_simulation_raises_500_when_reload_fails(self) -> None:
         case_id = uuid4()

@@ -177,10 +177,10 @@ def seed_from_json(db: Session, json_path: str):
 
             total_sims += 1
 
-        # Set the first simulation as canonical for this case
+        # Set the first simulation as the baseline for this case
         if first_sim is not None:
             if first_sim.id is not None:
-                case.canonical_simulation_id = first_sim.id
+                case.baseline_simulation_id = first_sim.id
             db.flush()
 
     db.commit()

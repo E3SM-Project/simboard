@@ -59,8 +59,8 @@ export interface FilterState {
   compiler: string[];
   status: string[];
 
-  // Canonical Status
-  canonicalStatus: string;
+  // Baseline Status
+  baselineStatus: string;
 
   // Metadata & Provenance
   gitTag: string[];
@@ -93,8 +93,8 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
-  // Canonical Status
-  canonicalStatus: '',
+  // Baseline Status
+  baselineStatus: '',
 
   // Metadata & Provenance
   gitTag: [],
@@ -103,13 +103,13 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 const FILTER_KEYS = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'canonicalStatus');
+const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'baselineStatus');
 
 const areStringArraysEqual = (left: string[], right: string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const areFiltersEqual = (left: FilterState, right: FilterState): boolean =>
-  left.canonicalStatus === right.canonicalStatus &&
+  left.baselineStatus === right.baselineStatus &&
   MULTI_SELECT_FILTER_KEYS.every((key) =>
     areStringArraysEqual(left[key] as string[], right[key] as string[]),
   );
@@ -296,8 +296,8 @@ export const BrowsePage = ({
         }
       }
 
-      if (appliedFilters.canonicalStatus === 'canonical' && !record.isCanonical) return false;
-      if (appliedFilters.canonicalStatus === 'non-canonical' && record.isCanonical) return false;
+      if (appliedFilters.baselineStatus === 'baseline' && !record.isBaseline) return false;
+      if (appliedFilters.baselineStatus === 'non-baseline' && record.isBaseline) return false;
 
       return true;
     });
@@ -359,10 +359,10 @@ export const BrowsePage = ({
       }
     });
 
-    const canonicalStatus = searchParams.get('canonicalStatus');
-    next.canonicalStatus =
-      canonicalStatus !== null && ['', 'canonical', 'non-canonical'].includes(canonicalStatus)
-        ? canonicalStatus
+    const baselineStatus = searchParams.get('baselineStatus');
+    next.baselineStatus =
+      baselineStatus !== null && ['', 'baseline', 'non-baseline'].includes(baselineStatus)
+        ? baselineStatus
         : '';
 
     setAppliedFilters((current) => (areFiltersEqual(current, next) ? current : next));

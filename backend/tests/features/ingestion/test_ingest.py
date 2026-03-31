@@ -11,7 +11,7 @@ from app.features.ingestion.ingest import (
     SimulationCreateDraft,
     _build_config_snapshot,
     _build_simulation_create_draft,
-    _get_canonical_metadata_for_case,
+    _get_baseline_metadata_for_case,
     _get_or_create_case,
     _normalize_git_url,
     _normalize_simulation_status,
@@ -1236,12 +1236,12 @@ class TestNormalizeGitUrl:
         return machine
 
 
-class TestCanonicalRunIngestion:
-    """Tests for canonical run selection and config delta semantics.
+class TestBaselineRunIngestion:
+    """Tests for baseline run selection and config delta semantics.
 
     These tests verify that:
     - Multiple runs under the same casename are grouped properly
-    - The first successful run is treated as canonical
+    - The first successful run is treated as baseline
     - Subsequent runs record only config deltas
     - Idempotent re-ingestion works correctly
     - Incremental ingestion adds deltas without overwriting
@@ -1298,8 +1298,8 @@ class TestCanonicalRunIngestion:
         base.update(overrides)
         return base
 
-    def test_canonical_run_selected_from_multiple_runs(self, db: Session) -> None:
-        """First run per case is canonical (None deltas), subsequent runs
+    def test_baseline_run_selected_from_multiple_runs(self, db: Session) -> None:
+        """First run per case is baseline (None deltas), subsequent runs
         with config differences get a delta dict."""
         self._create_machine(db, "test-machine")
 
@@ -1326,16 +1326,16 @@ class TestCanonicalRunIngestion:
         # Both runs are created as simulations
         assert result.created_count == 2
         assert len(result.simulations) == 2
-        # Canonical run has run_config_deltas=None
-        canonical = [s for s in result.simulations if s.run_config_deltas is None]
-        non_canonical = [
+        # Baseline run has run_config_deltas=None
+        baseline = [s for s in result.simulations if s.run_config_deltas is None]
+        non_baseline = [
             s for s in result.simulations if s.run_config_deltas is not None
         ]
-        assert len(canonical) == 1
-        assert len(non_canonical) == 1
+        assert len(baseline) == 1
+        assert len(non_baseline) == 1
 
-    def test_config_delta_stored_for_non_canonical_run(self, db: Session) -> None:
-        """Non-canonical runs with config differences record deltas as a dict."""
+    def test_config_delta_stored_for_non_baseline_run(self, db: Session) -> None:
+        """Non-baseline runs with config differences record deltas as a dict."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1359,21 +1359,21 @@ class TestCanonicalRunIngestion:
 
         # Both runs created
         assert result.created_count == 2
-        # Find canonical (run_config_deltas=None) and non-canonical
-        canonical = [s for s in result.simulations if s.run_config_deltas is None]
-        non_canonical = [
+        # Find baseline (run_config_deltas=None) and non-baseline
+        baseline = [s for s in result.simulations if s.run_config_deltas is None]
+        non_baseline = [
             s for s in result.simulations if s.run_config_deltas is not None
         ]
-        assert len(canonical) == 1
-        assert len(non_canonical) == 1
-        deltas = non_canonical[0].run_config_deltas
+        assert len(baseline) == 1
+        assert len(non_baseline) == 1
+        deltas = non_baseline[0].run_config_deltas
         assert deltas is not None
         assert "compiler" in deltas
-        assert deltas["compiler"]["canonical"] == "gcc-11"
+        assert deltas["compiler"]["baseline"] == "gcc-11"
         assert deltas["compiler"]["current"] == "gcc-12"
 
     def test_no_delta_when_configs_identical(self, db: Session) -> None:
-        """Non-canonical runs with identical config have run_config_deltas=None."""
+        """Non-baseline runs with identical config have run_config_deltas=None."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1401,7 +1401,7 @@ class TestCanonicalRunIngestion:
     def test_different_case_names_create_separate_simulations(
         self, db: Session
     ) -> None:
-        """Runs with different case_names are independent canonical selections."""
+        """Runs with different case_names are independent baseline selections."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1421,7 +1421,7 @@ class TestCanonicalRunIngestion:
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
-        # Each case_name gets its own canonical simulation
+        # Each case_name gets its own baseline simulation
         assert result.created_count == 2
         assert result.skipped_count == 0
         # Verify Cases were created
@@ -1501,7 +1501,7 @@ class TestCanonicalRunIngestion:
         """A new run under an existing case records config delta."""
         machine = self._create_machine(db, "test-machine")
 
-        # Pre-populate DB with a canonical simulation
+        # Pre-populate DB with a baseline simulation
         user = User(
             email="test@example.com",
             is_active=True,
@@ -1544,9 +1544,9 @@ class TestCanonicalRunIngestion:
         db.add(sim)
         db.flush()
 
-        # Set canonical_simulation_id on the case
+        # Set baseline_simulation_id on the case
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.baseline_simulation_id = sim.id
         db.commit()
 
         # Ingest archive containing the existing run plus a new one
@@ -1577,7 +1577,7 @@ class TestCanonicalRunIngestion:
         new_sim = result.simulations[0]
         assert new_sim.run_config_deltas is not None
         assert "compiler" in new_sim.run_config_deltas
-        assert new_sim.run_config_deltas["compiler"]["canonical"] == "gcc-11"
+        assert new_sim.run_config_deltas["compiler"]["baseline"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
 
     def test_incremental_ingestion_normalizes_git_url_for_delta(
@@ -1629,7 +1629,7 @@ class TestCanonicalRunIngestion:
         db.flush()
 
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.baseline_simulation_id = sim.id
         db.commit()
 
         mock_simulations = {
@@ -1653,7 +1653,7 @@ class TestCanonicalRunIngestion:
     def test_incremental_ingestion_persisted_simulation_type_adds_delta(
         self, db: Session
     ) -> None:
-        """Persisted canonical simulation_type differences are reflected in deltas."""
+        """Persisted baseline simulation_type differences are reflected in deltas."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -1698,7 +1698,7 @@ class TestCanonicalRunIngestion:
         db.flush()
 
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.baseline_simulation_id = sim.id
         db.commit()
 
         mock_simulations = {
@@ -1724,7 +1724,7 @@ class TestCanonicalRunIngestion:
         assert result.simulations[0].run_config_deltas is not None
         assert "simulation_type" in result.simulations[0].run_config_deltas
         assert result.simulations[0].run_config_deltas["simulation_type"] == {
-            "canonical": SimulationType.PRODUCTION.value,
+            "baseline": SimulationType.PRODUCTION.value,
             "current": SimulationType.UNKNOWN.value,
         }
 
@@ -1811,30 +1811,30 @@ class TestIngestHelpers:
         assert updated.case_group == "groupA"
         mock_warning.assert_called_once()
 
-    def test_get_canonical_metadata_caches_missing_persisted_canonical(self) -> None:
+    def test_get_baseline_metadata_caches_missing_persisted_baseline(self) -> None:
         case = MagicMock(spec=Case)
         case.id = uuid4()
-        case.canonical_simulation_id = uuid4()
+        case.baseline_simulation_id = uuid4()
 
         db = MagicMock(spec=Session)
         db.query.return_value.filter.return_value.first.return_value = None
 
-        canonical_cache: dict[str, SimulationConfigSnapshot] = {}
-        persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+        baseline_cache: dict[str, SimulationConfigSnapshot] = {}
+        persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
-        result = _get_canonical_metadata_for_case(
+        result = _get_baseline_metadata_for_case(
             case=case,
-            case_name="missing_canonical_case",
-            canonical_cache=canonical_cache,
-            persisted_canonical_cache=persisted_canonical_cache,
+            case_name="missing_baseline_case",
+            baseline_cache=baseline_cache,
+            persisted_baseline_cache=persisted_baseline_cache,
             db=db,
         )
 
         assert result is None
-        assert case.id in persisted_canonical_cache
-        assert persisted_canonical_cache[case.id] is None
+        assert case.id in persisted_baseline_cache
+        assert persisted_baseline_cache[case.id] is None
 
-    def test_get_canonical_metadata_uses_persisted_cache_on_second_lookup(
+    def test_get_baseline_metadata_uses_persisted_cache_on_second_lookup(
         self, db: Session
     ) -> None:
         machine = Machine(
@@ -1864,7 +1864,7 @@ class TestIngestHelpers:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="canonical_cache_case")
+        case = Case(name="baseline_cache_case")
         db.add(case)
         db.flush()
 
@@ -1889,28 +1889,28 @@ class TestIngestHelpers:
         db.flush()
 
         assert sim.id is not None
-        case.canonical_simulation_id = sim.id
+        case.baseline_simulation_id = sim.id
         db.commit()
 
-        canonical_cache: dict[str, SimulationConfigSnapshot] = {}
-        persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+        baseline_cache: dict[str, SimulationConfigSnapshot] = {}
+        persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
-        first = _get_canonical_metadata_for_case(
+        first = _get_baseline_metadata_for_case(
             case=case,
             case_name=case.name,
-            canonical_cache=canonical_cache,
-            persisted_canonical_cache=persisted_canonical_cache,
+            baseline_cache=baseline_cache,
+            persisted_baseline_cache=persisted_baseline_cache,
             db=db,
         )
         assert first is not None
         assert first.compiler == "gcc-11"
 
         with patch.object(db, "query", side_effect=AssertionError):
-            second = _get_canonical_metadata_for_case(
+            second = _get_baseline_metadata_for_case(
                 case=case,
                 case_name=case.name,
-                canonical_cache=canonical_cache,
-                persisted_canonical_cache=persisted_canonical_cache,
+                baseline_cache=baseline_cache,
+                persisted_baseline_cache=persisted_baseline_cache,
                 db=db,
             )
         assert second == first
@@ -2099,7 +2099,7 @@ class TestIngestHelpers:
         assert parsed_snapshot.diff(persisted_snapshot) == {}
 
     def test_snapshot_diff_returns_only_changed_fields(self) -> None:
-        canonical = SimulationConfigSnapshot(
+        baseline = SimulationConfigSnapshot(
             compset="FHIST",
             compset_alias="alias1",
             grid_name="grid1",
@@ -2130,11 +2130,11 @@ class TestIngestHelpers:
             simulation_type=SimulationType.UNKNOWN.value,
         )
 
-        delta = canonical.diff(current)
+        delta = baseline.diff(current)
 
         assert delta == {
-            "compiler": {"canonical": "gcc-11", "current": "gcc-12"},
-            "git_branch": {"canonical": "main", "current": "feature"},
+            "compiler": {"baseline": "gcc-11", "current": "gcc-12"},
+            "git_branch": {"baseline": "main", "current": "feature"},
         }
 
     def test_simulation_create_draft_validates_by_field_name(self) -> None:

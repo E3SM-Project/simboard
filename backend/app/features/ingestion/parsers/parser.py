@@ -15,7 +15,7 @@ Key behaviors:
   - Only directories with all required files are included in results.
   - Skipped/incomplete runs are counted and logged.
   - Parsing is deterministic: execution subdirectories are sorted to ensure
-    reproducible canonical run selection.
+    reproducible baseline run selection.
 
 This parser is used by the ingestion workflow to provide a consistent,
 reliable mapping from raw archive contents to structured simulation metadata.
@@ -156,7 +156,7 @@ def main_parser(
     skipped with a warning rather than aborting the entire ingestion.
 
     Within each case (parent directory), execution subdirectories are sorted
-    deterministically so that canonical run selection is reproducible.
+    deterministically so that baseline run selection is reproducible.
 
     Parameters
     ----------

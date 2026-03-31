@@ -132,11 +132,11 @@ export const SimulationBrowseDetailsDialog = ({
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Canonical
+                    Baseline
                   </p>
                   <p className="mt-1 text-sm text-slate-700">
-                    {simulation.isCanonical ? 'Yes' : 'No'}
-                    {!simulation.isCanonical && simulation.changeCount > 0
+                    {simulation.isBaseline ? 'Yes' : 'No'}
+                    {!simulation.isBaseline && simulation.changeCount > 0
                       ? ` (${simulation.changeCount} changes)`
                       : ''}
                   </p>

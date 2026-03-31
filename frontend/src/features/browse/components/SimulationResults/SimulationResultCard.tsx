@@ -178,8 +178,8 @@ export const SimulationResultCard = ({
                 variant="secondary"
                 className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
-                Canonical: {simulation.isCanonical ? 'Yes' : 'No'}
-                {!simulation.isCanonical && simulation.changeCount > 0 && (
+                Baseline: {simulation.isBaseline ? 'Yes' : 'No'}
+                {!simulation.isBaseline && simulation.changeCount > 0 && (
                   <span className="ml-1 text-xs text-muted-foreground">
                     (Changes: {simulation.changeCount})
                   </span>

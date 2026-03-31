@@ -151,12 +151,12 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         size: 380,
       },
       {
-        accessorKey: 'isCanonical',
-        header: 'Canonical',
+        accessorKey: 'isBaseline',
+        header: 'Baseline',
         cell: ({ row }) =>
-          row.original.isCanonical ? (
+          row.original.isBaseline ? (
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              Canonical
+              Baseline
             </Badge>
           ) : null,
         size: 100,

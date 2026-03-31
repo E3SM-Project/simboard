@@ -19,7 +19,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   formatCaseDate,
   formatSimulationDateRange,
-  getCanonicalSimulation,
+  getBaselineSimulation,
   sortSimulationSummaries,
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
@@ -124,7 +124,7 @@ export const CaseDetailsPage = ({
     );
   }
 
-  const canonicalSimulation = getCanonicalSimulation(caseRecord);
+  const baselineSimulation = getBaselineSimulation(caseRecord);
   const simulations = sortSimulationSummaries(caseRecord.simulations).map((simulation) => ({
     summary: simulation,
     details: simulationDetailsById.get(simulation.id),
@@ -196,7 +196,7 @@ export const CaseDetailsPage = ({
             <CardTitle className="text-base">Baseline Simulation</CardTitle>
           </CardHeader>
           <CardContent>
-            {canonicalSimulation ? (
+            {baselineSimulation ? (
               <>
                 <p className="mb-4 text-sm leading-6 text-muted-foreground">
                   This is the first successful run for the case and serves as the baseline used to
@@ -206,11 +206,11 @@ export const CaseDetailsPage = ({
                   label="Execution ID"
                   value={
                     <Link
-                      to={`/simulations/${canonicalSimulation.id}`}
+                      to={`/simulations/${baselineSimulation.id}`}
                       state={{ from: currentPath }}
                       className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                     >
-                      {canonicalSimulation.executionId}
+                      {baselineSimulation.executionId}
                       <span
                         className="inline-flex items-center"
                         title="Baseline simulation"
@@ -223,16 +223,16 @@ export const CaseDetailsPage = ({
                 />
                 <MetadataRow
                   label="Status"
-                  value={<SimulationStatusBadge status={canonicalSimulation.status} />}
+                  value={<SimulationStatusBadge status={baselineSimulation.status} />}
                 />
                 <MetadataRow
                   label="Simulation Dates"
-                  value={formatSimulationDateRange(canonicalSimulation)}
+                  value={formatSimulationDateRange(baselineSimulation)}
                 />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No canonical simulation is set for this case.
+                No baseline simulation is set for this case.
               </p>
             )}
           </CardContent>
@@ -310,7 +310,7 @@ export const CaseDetailsPage = ({
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {summary.executionId}
-                        {summary.isCanonical && (
+                        {summary.isBaseline && (
                           <span
                             className="inline-flex items-center"
                             title="Baseline simulation"
@@ -322,7 +322,7 @@ export const CaseDetailsPage = ({
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
-                      {summary.isCanonical ? (
+                      {summary.isBaseline ? (
                         <span className="text-sm font-medium text-slate-700">Baseline</span>
                       ) : (
                         summary.changeCount

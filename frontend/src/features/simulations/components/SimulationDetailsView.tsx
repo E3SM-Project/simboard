@@ -137,11 +137,11 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Case Name">
                   <ReadonlyInput value={simulation.caseName} />
                 </FieldRow>
-                <FieldRow label="Canonical">
-                  <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>
+                <FieldRow label="Baseline">
+                  <span className="text-sm">{simulation.isBaseline ? 'Yes' : 'No'}</span>
                 </FieldRow>
-                {!simulation.isCanonical && (
-                  <FieldRow label="Changes vs canonical">
+                {!simulation.isBaseline && (
+                  <FieldRow label="Changes vs baseline">
                     <span className="text-sm">{simulation.changeCount}</span>
                   </FieldRow>
                 )}
@@ -189,8 +189,8 @@ export const SimulationDetailsView = ({
             </Card>
           </div>
 
-          {/* Config diff section for non-canonical simulations */}
-          {!simulation.isCanonical && (
+          {/* Config diff section for non-baseline simulations */}
+          {!simulation.isBaseline && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Configuration Differences</CardTitle>
@@ -206,7 +206,7 @@ export const SimulationDetailsView = ({
                             Field
                           </th>
                           <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Canonical
+                            Baseline
                           </th>
                           <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             Current
@@ -215,7 +215,7 @@ export const SimulationDetailsView = ({
                       </thead>
                       <tbody>
                         {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => {
-                          const canonical = (diff as Record<string, unknown>).canonical;
+                          const baseline = (diff as Record<string, unknown>).baseline;
                           const current = (diff as Record<string, unknown>).current;
                           return (
                             <tr key={field} className="border-b last:border-0">
@@ -226,7 +226,7 @@ export const SimulationDetailsView = ({
                                 />
                               </td>
                               <td className="p-2 align-top">
-                                <DiffCell value={canonical} className="max-w-[240px]" />
+                                <DiffCell value={baseline} className="max-w-[240px]" />
                               </td>
                               <td className="p-2 align-top">
                                 <DiffCell value={current} className="max-w-[240px]" />

@@ -14,14 +14,14 @@ export const formatCaseDate = (value?: string | null) => {
 export const formatSimulationDateRange = (simulation: SimulationSummaryOut) =>
   `${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(simulation.simulationEndDate)}`;
 
-export const getCanonicalSimulation = (caseRecord: CaseOut) =>
-  caseRecord.simulations.find((simulation) => simulation.id === caseRecord.canonicalSimulationId) ??
+export const getBaselineSimulation = (caseRecord: CaseOut) =>
+  caseRecord.simulations.find((simulation) => simulation.id === caseRecord.baselineSimulationId) ??
   null;
 
 export const sortSimulationSummaries = (simulations: SimulationSummaryOut[]) =>
   [...simulations].sort((left, right) => {
-    if (left.isCanonical !== right.isCanonical) {
-      return left.isCanonical ? -1 : 1;
+    if (left.isBaseline !== right.isBaseline) {
+      return left.isBaseline ? -1 : 1;
     }
 
     return (

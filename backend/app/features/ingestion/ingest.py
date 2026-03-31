@@ -1,20 +1,20 @@
 """
 Module for ingesting simulation archives and mapping to DB schemas.
 
-Canonical run semantics for performance_archive ingestion:
+Baseline simulation semantics for performance_archive ingestion:
   - A run is "successful" only if all required metadata files are present.
   - case_name (from timing files) is the identity for Case grouping.
-  - The first successful run per case is the canonical baseline.
+  - The first successful run per case is the baseline simulation.
   - Each run creates a Simulation linked to a Case via case_id.
-  - Canonical simulation has run_config_deltas = None.
-  - Non-canonical runs store config differences vs canonical.
+  - Baseline simulations have run_config_deltas = None.
+  - Non-baseline runs store config differences vs the baseline.
   - Incomplete runs are skipped at the parser level.
   - Re-processing is idempotent due to execution_id uniqueness.
 
-Caching for canonical lookup:
-  - canonical_cache: canonical metadata for new cases in this ingest batch,
+Caching for baseline lookup:
+  - baseline_cache: baseline metadata for new cases in this ingest batch,
     keyed by case_name.
-  - persisted_canonical_cache: canonical metadata for cases already in DB,
+  - persisted_baseline_cache: baseline metadata for cases already in DB,
     keyed by case.id, to avoid repeated DB queries.
 """
 
@@ -106,23 +106,22 @@ def ingest_archive(
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements canonical run semantics:
+    Implements baseline simulation semantics:
 
     - Case lookup/creation is done by ``case_name`` from timing files.
-    - The first successful run per case becomes the canonical baseline
+    - The first successful run per case becomes the baseline simulation
       (``run_config_deltas = None``).
-    - Non-canonical simulations store a single dict of configuration
-      differences versus the canonical.
+    - Non-baseline simulations store a single dict of configuration
+      differences versus the baseline.
     - Duplicate detection is based on ``execution_id`` uniqueness.
     - Uses two caches to avoid redundant work:
-       - ``canonical_cache``: Tracks the canonical simulation metadata for each
+       - ``baseline_cache``: Tracks the baseline simulation metadata for each
            new case found in the current ingest batch (keyed by case_name). This
            ensures that if multiple new runs for the same case appear in a
-           single archive, all are compared against the same in-batch canonical
-           baseline.
-       - ``persisted_canonical_cache``: Tracks canonical simulation metadata
+           single archive, all are compared against the same in-batch baseline.
+       - ``persisted_baseline_cache``: Tracks baseline simulation metadata
            for cases already in the database (keyed by case.id). This avoids
-           repeated database queries for the canonical simulation of a case
+           repeated database queries for the baseline simulation of a case
            when processing multiple runs for the same case in a single ingest
            operation.
 
@@ -167,16 +166,16 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-    canonical_cache: dict[str, SimulationConfigSnapshot] = {}
-    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+    baseline_cache: dict[str, SimulationConfigSnapshot] = {}
+    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
 
     for parsed_simulation in parsed_simulations:
         try:
             simulation, is_duplicate = _process_simulation_for_ingest(
                 parsed_simulation=parsed_simulation,
                 db=db,
-                canonical_cache=canonical_cache,
-                persisted_canonical_cache=persisted_canonical_cache,
+                baseline_cache=baseline_cache,
+                persisted_baseline_cache=persisted_baseline_cache,
             )
 
             if is_duplicate:
@@ -216,8 +215,8 @@ def ingest_archive(
 def _process_simulation_for_ingest(
     parsed_simulation: ParsedSimulation,
     db: Session,
-    canonical_cache: dict[str, SimulationConfigSnapshot],
-    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
+    baseline_cache: dict[str, SimulationConfigSnapshot],
+    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
 ) -> tuple[SimulationCreate | None, bool]:
     """Process one parsed simulation entry.
 
@@ -227,10 +226,10 @@ def _process_simulation_for_ingest(
         Parsed archive-derived metadata for the simulation.
     db : Session
         Active database session for lookups and case resolution.
-    canonical_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of canonical config values per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of canonical metadata loaded from the database by case_id.
+    baseline_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of baseline config values per case_name for the current batch.
+    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of baseline metadata loaded from the database by case_id.
 
     Returns
     -------
@@ -245,8 +244,8 @@ def _process_simulation_for_ingest(
     case = _resolve_case(parsed_simulation, case_name, db)
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
-        _seed_canonical_cache_from_duplicate(
-            case_name, parsed_simulation, canonical_cache
+        _seed_baseline_cache_from_duplicate(
+            case_name, parsed_simulation, baseline_cache
         )
         return None, True
 
@@ -254,8 +253,8 @@ def _process_simulation_for_ingest(
         parsed_simulation=parsed_simulation,
         machine_id=machine_id,
         case=case,
-        canonical_cache=canonical_cache,
-        persisted_canonical_cache=persisted_canonical_cache,
+        baseline_cache=baseline_cache,
+        persisted_baseline_cache=persisted_baseline_cache,
         db=db,
     )
 
@@ -302,25 +301,25 @@ def _is_duplicate_simulation(
     return True
 
 
-def _seed_canonical_cache_from_duplicate(
+def _seed_baseline_cache_from_duplicate(
     case_name: str,
     parsed_simulation: ParsedSimulation,
-    canonical_cache: dict[str, SimulationConfigSnapshot],
+    baseline_cache: dict[str, SimulationConfigSnapshot],
 ) -> None:
-    """Seed per-case canonical cache using duplicate metadata when needed."""
-    if case_name not in canonical_cache:
-        canonical_cache[case_name] = _build_config_snapshot(parsed_simulation)
+    """Seed per-case baseline cache using duplicate metadata when needed."""
+    if case_name not in baseline_cache:
+        baseline_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
 
 def _build_simulation_create(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case: Case,
-    canonical_cache: dict[str, SimulationConfigSnapshot],
-    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
+    baseline_cache: dict[str, SimulationConfigSnapshot],
+    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
 ) -> SimulationCreate:
-    """Create a SimulationCreate using canonical baseline semantics.
+    """Create a SimulationCreate using baseline simulation semantics.
 
     Parameters
     ----------
@@ -330,24 +329,24 @@ def _build_simulation_create(
         Resolved machine ID from the database.
     case : Case
         Resolved Case object for this simulation.
-    canonical_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of canonical metadata per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of canonical metadata loaded from the database by case_id.
+    baseline_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of baseline metadata per case_name for the current batch.
+    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of baseline metadata loaded from the database by case_id.
     db : Session
         Active database session for lookups and case resolution.
     """
     case_name = case.name
-    canonical_snapshot = _get_canonical_metadata_for_case(
+    baseline_snapshot = _get_baseline_metadata_for_case(
         case=case,
         case_name=case_name,
-        canonical_cache=canonical_cache,
-        persisted_canonical_cache=persisted_canonical_cache,
+        baseline_cache=baseline_cache,
+        persisted_baseline_cache=persisted_baseline_cache,
         db=db,
     )
 
-    if canonical_snapshot is None:
-        canonical_cache[case_name] = _build_config_snapshot(parsed_simulation)
+    if baseline_snapshot is None:
+        baseline_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
         simulation = _validate_simulation_create(
             _build_simulation_create_draft(
@@ -357,14 +356,14 @@ def _build_simulation_create(
             )
         )
         logger.info(
-            "Mapped canonical simulation from %s: %s",
+            "Mapped baseline simulation from %s: %s",
             parsed_simulation.execution_dir,
             case_name,
         )
 
         return simulation
 
-    delta = canonical_snapshot.diff(_build_config_snapshot(parsed_simulation))
+    delta = baseline_snapshot.diff(_build_config_snapshot(parsed_simulation))
     run_config_deltas = delta if delta else None
     simulation_draft = _build_simulation_create_draft(
         parsed_simulation=parsed_simulation,
@@ -376,67 +375,67 @@ def _build_simulation_create(
 
     if delta:
         logger.info(
-            "Non-canonical run in '%s' has config differences from canonical: %s",
+            "Non-baseline run in '%s' has config differences from the baseline: %s",
             parsed_simulation.execution_dir,
             list(delta.keys()),
         )
     else:
         logger.info(
-            "Non-canonical run in '%s' has identical configuration to canonical.",
+            "Non-baseline run in '%s' has identical configuration to the baseline.",
             parsed_simulation.execution_dir,
         )
 
     return simulation
 
 
-def _get_canonical_metadata_for_case(
+def _get_baseline_metadata_for_case(
     case: Case,
     case_name: str,
-    canonical_cache: dict[str, SimulationConfigSnapshot],
-    persisted_canonical_cache: dict[UUID, SimulationConfigSnapshot | None],
+    baseline_cache: dict[str, SimulationConfigSnapshot],
+    persisted_baseline_cache: dict[UUID, SimulationConfigSnapshot | None],
     db: Session,
 ) -> SimulationConfigSnapshot | None:
-    """Resolve canonical metadata from persisted canonical or batch cache.
+    """Resolve baseline metadata from persisted baseline or batch cache.
 
     This function is useful for ensuring that all simulations of the same case
-    within a batch are compared against a consistent canonical baseline.
+    within a batch are compared against a consistent baseline simulation.
 
     Parameters
     ----------
     case : Case
-        The Case object for which to retrieve canonical metadata.
+        The Case object for which to retrieve baseline metadata.
     case_name : str
         The name of the case, used for in-memory cache lookup.
-    canonical_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of canonical metadata per case_name for the current batch.
-    persisted_canonical_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of canonical metadata loaded from the database by case_id.
+    baseline_cache : dict[str, SimulationConfigSnapshot]
+        In-memory cache of baseline metadata per case_name for the current batch.
+    persisted_baseline_cache : dict[UUID, SimulationConfigSnapshot | None]
+        Cache of baseline metadata loaded from the database by case_id.
 
     Returns
     -------
     SimulationConfigSnapshot | None
-        The canonical config snapshot for the case, or None if no canonical run exists.
+        The baseline config snapshot for the case, or None if no baseline run exists.
     """
-    if case.canonical_simulation_id is not None:
-        if case.id in persisted_canonical_cache:
-            return persisted_canonical_cache[case.id]
+    if case.baseline_simulation_id is not None:
+        if case.id in persisted_baseline_cache:
+            return persisted_baseline_cache[case.id]
 
-        canonical_sim = (
+        baseline_simulation = (
             db.query(Simulation)
-            .filter(Simulation.id == case.canonical_simulation_id)
+            .filter(Simulation.id == case.baseline_simulation_id)
             .first()
         )
 
-        if canonical_sim:
-            canonical_snapshot = _build_config_snapshot(canonical_sim)
-            persisted_canonical_cache[case.id] = canonical_snapshot
+        if baseline_simulation:
+            baseline_snapshot = _build_config_snapshot(baseline_simulation)
+            persisted_baseline_cache[case.id] = baseline_snapshot
 
-            return canonical_snapshot
+            return baseline_snapshot
 
-        persisted_canonical_cache[case.id] = None
+        persisted_baseline_cache[case.id] = None
         return None
 
-    return canonical_cache.get(case_name)
+    return baseline_cache.get(case_name)
 
 
 def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -> Case:
@@ -448,7 +447,7 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
         Active database session.
     name : str
         Case name derived from the execution (e.g. from timing files).
-        Used as the canonical identity for case grouping.
+        Used as the stable identity for case grouping.
     case_group : str | None
         Optional CASE_GROUP from env_case.xml.  Stored on ``Case``
         if present.  An existing non-null value is never overwritten
@@ -484,7 +483,7 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
 def _build_config_snapshot(
     source: ParsedSimulation | Simulation,
 ) -> SimulationConfigSnapshot:
-    """Return a normalized config snapshot for canonical delta comparison."""
+    """Return a normalized config snapshot for baseline delta comparison."""
     snapshot_values: dict[str, str | None] = {}
 
     for field_name in SimulationConfigSnapshot.field_names():
@@ -640,7 +639,7 @@ def _build_simulation_create_draft(
     case_id : UUID
         ID of the Case this simulation belongs to.
     run_config_deltas : dict | None
-        Configuration differences vs canonical baseline, or None.
+        Configuration differences vs the baseline simulation, or None.
 
     Returns
     -------
