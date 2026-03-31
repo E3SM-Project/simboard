@@ -297,6 +297,34 @@ class TestMainParser:
         assert result == []
         assert skipped == 1
 
+    def test_missing_required_files_raise_incomplete_archive_error(
+        self, tmp_path: Path
+    ) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(
+            execution_dir,
+            "001.001",
+            case_status_content=None,
+        )
+
+        with pytest.raises(parser.IncompleteArchiveError) as exc_info:
+            parser._locate_metadata_files(str(execution_dir))
+
+        assert issubclass(parser.IncompleteArchiveError, FileNotFoundError)
+        assert exc_info.value.errors == [
+            {
+                "code": "missing_required_file",
+                "execution_dir": str(execution_dir),
+                "file_spec": "CaseStatus..*.gz",
+                "location": "archive root",
+                "message": (
+                    f"Missing required 'CaseStatus..*.gz' in archive root for "
+                    f"'{execution_dir}'."
+                ),
+            }
+        ]
+
     def test_multiple_matching_timing_files_raises_error(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
         execution_dir = archive_base / "1.0-0"
@@ -330,6 +358,7 @@ class TestMainParser:
         with pytest.raises(parser.ArchiveValidationError) as exc_info:
             parser.main_parser(archive_path, extract_dir, strict_validation=True)
 
+        assert not isinstance(exc_info.value, FileNotFoundError)
         assert exc_info.value.errors == [
             {
                 "code": "multiple_matching_files",
@@ -342,6 +371,116 @@ class TestMainParser:
                 ),
             }
         ]
+
+    def test_process_execution_dir_skips_invalid_archive_when_not_strict(
+        self,
+    ) -> None:
+        exec_dir = "/tmp/execution"
+        validation_errors = [{"message": "duplicate metadata"}]
+
+        with (
+            patch(
+                "app.features.ingestion.parsers.parser._locate_metadata_files",
+                side_effect=parser.ArchiveValidationError(validation_errors),
+            ),
+            patch(
+                "app.features.ingestion.parsers.parser.logger.warning"
+            ) as mock_warning,
+        ):
+            parsed_simulation, errors, skipped = parser._process_execution_dir(
+                exec_dir, strict_validation=False
+            )
+
+        assert parsed_simulation is None
+        assert errors == []
+        assert skipped == 1
+        mock_warning.assert_called_once_with(
+            "Skipping invalid run in '%s': %s",
+            exec_dir,
+            "duplicate metadata",
+        )
+
+    def test_process_execution_dir_reports_generic_file_not_found_when_strict(
+        self,
+    ) -> None:
+        exec_dir = "/tmp/execution"
+
+        with (
+            patch(
+                "app.features.ingestion.parsers.parser._locate_metadata_files",
+                return_value={},
+            ),
+            patch(
+                "app.features.ingestion.parsers.parser._parse_all_files",
+                side_effect=FileNotFoundError("metadata file disappeared"),
+            ),
+        ):
+            parsed_simulation, errors, skipped = parser._process_execution_dir(
+                exec_dir, strict_validation=True
+            )
+
+        assert parsed_simulation is None
+        assert errors == [
+            {
+                "code": "file_not_found",
+                "execution_dir": exec_dir,
+                "message": "metadata file disappeared",
+            }
+        ]
+        assert skipped == 0
+
+    def test_build_file_not_found_validation_error_for_missing_timing_lid(
+        self,
+    ) -> None:
+        exec_dir = "/tmp/execution"
+        error = parser._build_file_not_found_validation_error(
+            exec_dir,
+            FileNotFoundError(
+                f"Required timing-file LID missing for execution directory '{exec_dir}'"
+            ),
+        )
+
+        assert error == {
+            "code": "missing_required_value",
+            "execution_dir": exec_dir,
+            "file_spec": "e3sm_timing..*..*",
+            "location": "archive root",
+            "message": (
+                f"Required timing-file LID missing for execution directory '{exec_dir}'"
+            ),
+        }
+
+    def test_process_execution_dir_skips_generic_file_not_found_when_not_strict(
+        self,
+    ) -> None:
+        exec_dir = "/tmp/execution"
+        missing_file = FileNotFoundError("metadata file disappeared")
+
+        with (
+            patch(
+                "app.features.ingestion.parsers.parser._locate_metadata_files",
+                return_value={},
+            ),
+            patch(
+                "app.features.ingestion.parsers.parser._parse_all_files",
+                side_effect=missing_file,
+            ),
+            patch(
+                "app.features.ingestion.parsers.parser.logger.warning"
+            ) as mock_warning,
+        ):
+            parsed_simulation, errors, skipped = parser._process_execution_dir(
+                exec_dir, strict_validation=False
+            )
+
+        assert parsed_simulation is None
+        assert errors == []
+        assert skipped == 1
+        mock_warning.assert_called_once_with(
+            "Skipping incomplete run in '%s': %s",
+            exec_dir,
+            missing_file,
+        )
 
     def test_unsupported_archive_format_raises_error(self, tmp_path: Path) -> None:
         archive_path = tmp_path / "archive.rar"

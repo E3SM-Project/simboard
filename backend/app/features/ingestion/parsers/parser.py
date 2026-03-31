@@ -68,6 +68,14 @@ class ArchiveValidationError(ValueError):
         super().__init__("Archive validation failed.")
 
 
+class IncompleteArchiveError(FileNotFoundError):
+    """Missing required metadata for an execution directory."""
+
+    def __init__(self, errors: list[dict[str, str]]):
+        self.errors = errors
+        super().__init__("; ".join(error["message"] for error in errors))
+
+
 FILE_SPECS: dict[str, FileSpec] = {
     "case_docs_env_case": {
         "pattern": r"env_case\.xml\..*\.gz",
@@ -231,12 +239,18 @@ def _process_execution_dir(
     try:
         metadata_files = _locate_metadata_files(exec_dir)
         return _parse_all_files(exec_dir, metadata_files), [], 0
+    except IncompleteArchiveError as exc:
+        if strict_validation:
+            return None, exc.errors, 0
+
+        logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
+        return None, [], 1
     except ArchiveValidationError as exc:
         if strict_validation:
             return None, exc.errors, 0
 
         logger.warning(
-            "Skipping incomplete run in '%s': %s",
+            "Skipping invalid run in '%s': %s",
             exec_dir,
             "; ".join(error["message"] for error in exc.errors),
         )
@@ -371,7 +385,8 @@ def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
 def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
     """Locate required and optional files in the execution directory."""
     files: SimulationFiles = {key: None for key in FILE_SPECS}
-    validation_errors: list[dict[str, str]] = []
+    invalid_archive_errors: list[dict[str, str]] = []
+    missing_required_errors: list[dict[str, str]] = []
     missing_optional: list[str] = []
     casedocs_dirs = _find_casedocs_dirs(exp_dir)
 
@@ -379,7 +394,7 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
         matches = _find_spec_matches(exp_dir, casedocs_dirs, spec)
 
         if len(matches) > 1:
-            validation_errors.append(
+            invalid_archive_errors.append(
                 {
                     "code": "multiple_matching_files",
                     "execution_dir": exp_dir,
@@ -398,7 +413,7 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
             continue
 
         if spec.get("required", False):
-            validation_errors.append(
+            missing_required_errors.append(
                 {
                     "code": "missing_required_file",
                     "execution_dir": exp_dir,
@@ -414,8 +429,11 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
 
         missing_optional.append(key)
 
-    if validation_errors:
-        raise ArchiveValidationError(validation_errors)
+    if invalid_archive_errors:
+        raise ArchiveValidationError(invalid_archive_errors + missing_required_errors)
+
+    if missing_required_errors:
+        raise IncompleteArchiveError(missing_required_errors)
 
     if missing_optional:
         logger.warning(
@@ -468,18 +486,28 @@ def _build_file_not_found_validation_error(
     exec_dir: str, exc: FileNotFoundError
 ) -> dict[str, str]:
     message = str(exc)
+    if "timing-file LID" in message:
+        return _build_missing_timing_lid_error(exec_dir)
+
     error = {
         "code": "file_not_found",
         "execution_dir": exec_dir,
         "message": message,
     }
 
-    if "timing-file LID" in message:
-        error["code"] = "missing_required_value"
-        error["file_spec"] = FILE_SPECS["e3sm_timing"]["display_pattern"]
-        error["location"] = _location_label(FILE_SPECS["e3sm_timing"]["location"])
-
     return error
+
+
+def _build_missing_timing_lid_error(exec_dir: str) -> dict[str, str]:
+    return {
+        "code": "missing_required_value",
+        "execution_dir": exec_dir,
+        "file_spec": FILE_SPECS["e3sm_timing"]["display_pattern"],
+        "location": _location_label(FILE_SPECS["e3sm_timing"]["location"]),
+        "message": (
+            f"Required timing-file LID missing for execution directory '{exec_dir}'"
+        ),
+    }
 
 
 def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:
@@ -549,15 +577,11 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
 def _resolve_execution_id(execution_id: str | None, exec_dir: str) -> str:
     """Return a stable execution_id or treat the run as incomplete."""
     if execution_id is None:
-        raise FileNotFoundError(
-            f"Required timing-file LID missing for execution directory '{exec_dir}'"
-        )
+        raise IncompleteArchiveError([_build_missing_timing_lid_error(exec_dir)])
 
     normalized = execution_id.strip()
     if not normalized:
-        raise FileNotFoundError(
-            f"Required timing-file LID missing for execution directory '{exec_dir}'"
-        )
+        raise IncompleteArchiveError([_build_missing_timing_lid_error(exec_dir)])
 
     exec_dir_basename = os.path.basename(exec_dir)
     if exec_dir_basename and exec_dir_basename != normalized:

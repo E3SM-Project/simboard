@@ -46,11 +46,7 @@ export const uploadSimulationArchive = async ({
     formData.append('hpc_username', hpcUsername);
   }
 
-  const response = await api.post<IngestionUploadResponse>('/ingestions/from-upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  const response = await api.post<IngestionUploadResponse>('/ingestions/from-upload', formData);
 
   return response.data;
 };

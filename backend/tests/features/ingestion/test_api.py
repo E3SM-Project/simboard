@@ -1082,6 +1082,61 @@ class TestIngestFromUploadEndpoint:
             simulation.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         )
 
+    def test_persist_simulations_with_hpc_username(self, client, db: Session, tmp_path):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        archive_path = self._create_archive_file(
+            tmp_path, "archive_with_hpc_username.tar.gz"
+        )
+        payload = {
+            "archive_path": str(archive_path),
+            "machine_name": machine.name,
+            "hpc_username": "nersc-user",
+        }
+
+        case = Case(name="test_case_hpc_username")
+        db.add(case)
+        db.flush()
+
+        mock_simulations = [
+            SimulationCreate.model_validate(
+                {
+                    "caseId": str(case.id),
+                    "executionId": "exec-hpc-username-1",
+                    "compset": "AQUAPLANET",
+                    "compsetAlias": "QPC4",
+                    "gridName": "f19_f19",
+                    "gridResolution": "1.9x2.5",
+                    "initializationType": "startup",
+                    "simulationType": "experimental",
+                    "status": "created",
+                    "machineId": str(machine.id),
+                    "simulationStartDate": "2023-01-01T00:00:00Z",
+                    "gitTag": "v1.0",
+                    "gitCommitHash": "abc123",
+                }
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 201
+
+        simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
+
+        assert simulation is not None
+        assert simulation.hpc_username == "nersc-user"
+
 
 class TestIngestionApiCoverage:
     def test_set_canonical_simulations_skips_non_uuid_case_id(self):
@@ -1166,6 +1221,56 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Filename is required"
+
+    def test_ingest_from_upload_ignores_file_close_errors(
+        self, db: Session, normal_user_sync: dict
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        user = User(
+            id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+        raw_file = MagicMock()
+        raw_file.close.side_effect = RuntimeError("close failed")
+        upload_file = UploadFile(file=raw_file, filename="archive.zip")
+        response = MagicMock()
+
+        with (
+            patch(
+                "app.features.ingestion.api._validate_upload_file", return_value=None
+            ),
+            patch(
+                "app.features.ingestion.api._save_uploaded_file_and_hash",
+                return_value="deadbeef",
+            ),
+            patch(
+                "app.features.ingestion.api._run_ingest_archive",
+                return_value=IngestArchiveResult(
+                    simulations=[],
+                    created_count=0,
+                    duplicate_count=0,
+                    errors=[],
+                ),
+            ),
+            patch(
+                "app.features.ingestion.api._process_ingestion",
+                return_value=response,
+            ),
+        ):
+            result = ingest_from_upload(
+                file=upload_file,
+                machine_name=machine.name,
+                db=db,
+                user=user,
+            )
+
+        assert result is response
+        raw_file.close.assert_called_once_with()
 
     def test_validate_archive_path_not_file_or_dir(self, tmp_path):
         """Covers the branch where path exists but is neither file nor dir."""
