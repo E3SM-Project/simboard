@@ -99,6 +99,9 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = `${location.pathname}${location.search}`;
+  const navigateToSimulationDetails = (simulationId: string) => {
+    navigate(`/simulations/${simulationId}`, { state: { from: currentPath } });
+  };
 
   // Derive unique case names and case groups for filter dropdowns.
   const caseNames = useMemo(
@@ -498,7 +501,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                 <TableRow
                   key={row.id}
                   className="hover:bg-muted/40 cursor-pointer"
-                  onClick={() => navigate(`/simulations/${row.original.id}`)}
+                  onClick={() => navigateToSimulationDetails(row.original.id)}
                 >
                   {/* Sticky checkbox cell */}
                   <TableCell

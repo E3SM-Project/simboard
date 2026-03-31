@@ -131,6 +131,23 @@ const parsePageSize = (params: URLSearchParams): number => {
   return PAGE_SIZE_OPTIONS.includes(ps) ? ps : 25;
 };
 
+const decodeFilterValue = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const deserializeArrayFilter = (value: string): string[] =>
+  value
+    .split(',')
+    .filter(Boolean)
+    .map(decodeFilterValue);
+
+const serializeArrayFilter = (values: string[]): string =>
+  values.map((value) => encodeURIComponent(value)).join(',');
+
 export const BrowsePage = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
@@ -338,7 +355,7 @@ export const BrowsePage = ({
     MULTI_SELECT_FILTER_KEYS.forEach((key) => {
       const value = searchParams.get(key);
       if (value !== null) {
-        next[key] = value.split(',').filter(Boolean) as FilterState[typeof key];
+        next[key] = deserializeArrayFilter(value) as FilterState[typeof key];
       }
     });
 
@@ -398,7 +415,7 @@ export const BrowsePage = ({
         for (const key of FILTER_KEYS) {
           const value = appliedFilters[key];
           if (Array.isArray(value) && value.length) {
-            next.set(key, value.join(','));
+            next.set(key, serializeArrayFilter(value));
           } else if (typeof value === 'string' && value) {
             next.set(key, value);
           } else {
