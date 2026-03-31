@@ -162,9 +162,10 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold">Upload an E3SM Performance Archive</h1>
+          <h1 className="text-2xl font-bold">Upload a Case or Run</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Submit a packaged performance archive instead of entering simulation metadata manually.
+            Upload either a full E3SM performance case archive or a single execution directory packaged as
+            <code className="ml-1 rounded bg-gray-100 px-1 py-0.5 text-xs">&lt;execution_id&gt;/...</code>.
           </p>
         </header>
 
@@ -292,6 +293,30 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               You can upload a full case archive or a single execution directory at archive root. Files must live either
               at the execution-directory root or under <code>casedocs/</code> in the expected locations.
             </p>
+
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-medium">Example</h3>
+              <pre className="mt-2 overflow-x-auto text-xs text-gray-700">
+{`qa/
+└── performance_archive/
+    └── v3.LR.historical_0121/
+        └── 1081156.251218-200923/
+            ├── e3sm_timing.001.001
+            ├── CaseStatus.001.gz
+            ├── GIT_DESCRIBE.001.gz
+            ├── GIT_CONFIG.001.gz
+            ├── GIT_STATUS.001.gz
+            └── CaseDocs/
+                ├── README.case.001.gz
+                ├── env_case.xml.001.gz
+                ├── env_build.xml.001.gz
+                └── env_run.xml.001.gz`}
+              </pre>
+              <p className="mt-2 text-xs text-gray-500">
+                A full case archive includes the case directory above. A single-run archive can start directly at
+                <code className="mx-1 rounded bg-gray-100 px-1 py-0.5">1081156.251218-200923/</code>.
+              </p>
+            </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
