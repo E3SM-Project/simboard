@@ -1,11 +1,23 @@
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 
 import { SimulationDetailsView } from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 
 export const SimulationDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const { data: simulation, loading, error } = useSimulation(id ?? '');
+
+  const state = location.state as { from?: string } | null;
+  const backHref = typeof state?.from === 'string' ? state.from : '/browse';
+  const normalizedBackHref = backHref.split(/[?#]/)[0];
+  const backLabel = normalizedBackHref.startsWith('/cases/')
+    ? 'Back to Case'
+    : normalizedBackHref === '/cases'
+      ? 'Back to Cases'
+      : normalizedBackHref.startsWith('/simulations')
+        ? 'Back to Simulations'
+        : 'Back to Runs';
 
   if (!id) {
     return (
@@ -39,5 +51,7 @@ export const SimulationDetailsPage = () => {
     );
   }
 
-  return <SimulationDetailsView simulation={simulation} />;
+  return (
+    <SimulationDetailsView simulation={simulation} backHref={backHref} backLabel={backLabel} />
+  );
 };

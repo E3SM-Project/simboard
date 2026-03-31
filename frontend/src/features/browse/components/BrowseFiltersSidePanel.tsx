@@ -12,8 +12,6 @@ interface FilterPanelProps {
   machineOptions: { value: string; label: string }[];
   creatorOptions: { value: string; label: string }[];
   caseOptions: { value: string; label: string }[];
-  selectedCaseName: string;
-  onCaseNameChange: (caseName: string) => void;
 }
 
 export const BrowseFiltersSidePanel = ({
@@ -23,8 +21,6 @@ export const BrowseFiltersSidePanel = ({
   machineOptions,
   creatorOptions,
   caseOptions,
-  selectedCaseName,
-  onCaseNameChange,
 }: FilterPanelProps) => {
   const filterLabelClassName =
     'mb-1.5 block text-xs font-semibold tracking-[0.08em] text-slate-500';
@@ -51,22 +47,15 @@ export const BrowseFiltersSidePanel = ({
       <div>
         <label className={filterLabelClassName}>Case</label>
         <p className="mb-2 text-xs leading-5 text-slate-500">
-          Only one case can be selected at a time. Choosing a new case resets the other filters.
+          Select one or more cases to narrow the run workspace without leaving cross-case browsing.
         </p>
       </div>
       <MultiSelect
-        options={
-          selectedCaseName && !caseOptions.some((o) => o.value === selectedCaseName)
-            ? [...caseOptions, { value: selectedCaseName, label: selectedCaseName }]
-            : caseOptions
-        }
-        maxSelected={1}
-        maxCount={1}
-        defaultValue={selectedCaseName ? [selectedCaseName] : []}
-        onValueChange={(next) => onCaseNameChange(next[0] ?? '')}
-        placeholder="Select one case"
+        options={caseOptions}
+        defaultValue={appliedFilters.caseName || []}
+        onValueChange={(next) => handleChange('caseName', next as string[])}
+        placeholder="Select cases"
         hideSelectAll={true}
-        closeOnSelect={true}
         resetOnDefaultValueChange={true}
       />
 

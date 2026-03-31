@@ -34,6 +34,14 @@ export const listCases = async (url: string = CASES_URL): Promise<CaseOut[]> => 
   return res.data;
 };
 
+export const getCaseById = async (id: string): Promise<CaseOut> => {
+  const res = await api.get<CaseOut>(`${CASES_URL}/${id}`, {
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+
+  return res.data;
+};
+
 export const listCaseNames = async (): Promise<string[]> => {
   const res = await api.get<string[]>(`${CASES_URL}/names`, {
     headers: { 'Cache-Control': 'no-cache' },

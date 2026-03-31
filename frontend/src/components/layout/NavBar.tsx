@@ -17,14 +17,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { label: 'Home', href: '/', description: 'Overview and featured simulations' },
-  { label: 'Browse', href: '/browse', description: 'Guided discovery with filters' },
+  { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
+  { label: 'Cases', href: '/cases', description: 'Primary case-centric discovery and detail pages' },
+  { label: 'Runs', href: '/browse', description: 'Advanced execution-level discovery workspace' },
   { label: 'Compare', href: '/compare', description: 'Side-by-side view of selected runs' },
-  {
-    label: 'All Simulations',
-    href: '/simulations',
-    description: 'Complete catalog in a sortable table',
-  },
   { label: 'Upload', href: '/upload', description: 'Add a new simulation to the catalog' },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];
@@ -67,7 +63,10 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
         <nav className="hidden md:flex gap-3 ml-6">
           {navItems.map((item) => {
             const isCompare = item.label === 'Compare';
-            const isActive = location.pathname === item.href;
+            const isActive =
+              item.href === '/'
+                ? location.pathname === item.href
+                : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
 
             return (
               <TooltipProvider delayDuration={150} key={item.href}>

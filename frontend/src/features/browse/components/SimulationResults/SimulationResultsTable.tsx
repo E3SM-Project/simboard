@@ -15,7 +15,7 @@ import {
 } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -83,6 +83,8 @@ const shouldIgnoreRowSelection = (target: EventTarget | null): boolean =>
 
 const SimulationTableActions = ({ simulation }: { simulation: SimulationOut }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = `${location.pathname}${location.search}`;
 
   return (
     <div className="flex items-center justify-end gap-2" data-prevent-selection="true">
@@ -98,7 +100,7 @@ const SimulationTableActions = ({ simulation }: { simulation: SimulationOut }) =
         className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
         onClick={(event) => {
           event.stopPropagation();
-          navigate(`/simulations/${simulation.id}`);
+          navigate(`/simulations/${simulation.id}`, { state: { from: currentPath } });
         }}
       >
         All Details
