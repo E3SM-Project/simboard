@@ -14,6 +14,12 @@ interface UploadPageProps {
   machines: Machine[];
 }
 
+interface UploadStatus {
+  tone: 'info' | 'success' | 'error';
+  title: string;
+  description: string;
+}
+
 const MAX_ARCHIVE_SIZE_BYTES = 50 * 1024 * 1024;
 const SUPPORTED_ARCHIVE_EXTENSIONS = ['.tar.gz', '.tgz', '.zip'];
 const FILE_INPUT_ACCEPT = '.tar.gz,.tgz,.zip,application/gzip,application/zip';
@@ -64,6 +70,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   const [hpcUsername, setHpcUsername] = useState('');
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [archiveFileError, setArchiveFileError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [validationErrors, setValidationErrors] = useState<ArchiveUploadValidationError[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -79,6 +86,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
     setArchiveFile(nextFile);
     setArchiveFileError(nextError);
+    setUploadStatus(null);
     setValidationErrors([]);
   };
 
@@ -97,15 +105,20 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     }
 
     if (!selectedMachine) {
-      toast({
+      setUploadStatus({
+        tone: 'error',
         title: 'Machine required',
-        description: 'Select the machine that produced this performance archive.',
-        variant: 'destructive',
+        description: 'Select the machine that produced this performance archive before uploading.',
       });
       return;
     }
 
     setIsUploading(true);
+    setUploadStatus({
+      tone: 'info',
+      title: 'Uploading and validating archive',
+      description: 'The archive is being uploaded, extracted, and checked against the required file specs.',
+    });
     setValidationErrors([]);
 
     try {
@@ -117,7 +130,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
       resetFileSelection();
 
-      toast({
+      setUploadStatus({
+        tone: 'success',
         title: 'Archive ingested',
         description:
           response.created_count > 0
@@ -130,27 +144,32 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
         if (isArchiveUploadValidationDetail(detail)) {
           setValidationErrors(detail.errors);
-          toast({
+          setUploadStatus({
+            tone: 'error',
             title: 'Archive validation failed',
             description: detail.message,
-            variant: 'destructive',
           });
           return;
         }
 
         if (typeof detail === 'string') {
-          toast({
+          setUploadStatus({
+            tone: 'error',
             title: 'Upload failed',
             description: detail,
-            variant: 'destructive',
           });
           return;
         }
       }
 
-      toast({
+      setUploadStatus({
+        tone: 'error',
         title: 'Upload failed',
         description: 'We could not ingest the archive. Please review the archive and try again.',
+      });
+      toast({
+        title: 'Upload failed',
+        description: 'An unexpected server or network error occurred while uploading the archive.',
         variant: 'destructive',
       });
     } finally {
@@ -298,6 +317,32 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 {isUploading ? 'Uploading archive...' : 'Upload archive'}
               </button>
             </div>
+
+            {uploadStatus ? (
+              <div
+                className={`mt-5 rounded-md border p-4 text-sm ${
+                  uploadStatus.tone === 'success'
+                    ? 'border-green-200 bg-green-50 text-green-800'
+                    : uploadStatus.tone === 'error'
+                      ? 'border-red-200 bg-red-50 text-red-800'
+                      : 'border-blue-200 bg-blue-50 text-blue-900'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  {uploadStatus.tone === 'success' ? (
+                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  ) : uploadStatus.tone === 'error' ? (
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  ) : (
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                  )}
+                  <div>
+                    <p className="font-medium">{uploadStatus.title}</p>
+                    <p className="mt-1">{uploadStatus.description}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-xl border bg-white p-6 shadow-sm">
