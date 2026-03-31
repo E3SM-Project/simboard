@@ -30,9 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import {
-  formatCaseDate,
-} from '@/features/simulations/caseUtils';
+import { formatCaseDate } from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
 import type { CaseOut, SimulationOut } from '@/types';
@@ -97,7 +95,9 @@ const sortCaseSimulations = (caseSimulations: SimulationOut[]) =>
       return left.isCanonical ? -1 : 1;
     }
 
-    return new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime();
+    return (
+      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime()
+    );
   });
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {
@@ -106,8 +106,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const currentPath = `${location.pathname}${location.search}`;
   const [caseNameFilter, setCaseNameFilter] = useState('');
   const [caseGroupFilter, setCaseGroupFilter] = useState('');
-  const [simulationFilters, setSimulationFilters] =
-    useState<CaseSimulationFilters>(createEmptySimulationFilters);
+  const [simulationFilters, setSimulationFilters] = useState<CaseSimulationFilters>(
+    createEmptySimulationFilters,
+  );
   const [canonicalFilter, setCanonicalFilter] = useState<CanonicalFilter>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
@@ -222,41 +223,37 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   }, [simulations]);
   const campaigns = useMemo(
     () =>
-      sortStringValues(
-        [...new Set(simulations.map((simulation) => simulation.campaign).filter(Boolean))] as string[],
-      ),
+      sortStringValues([
+        ...new Set(simulations.map((simulation) => simulation.campaign).filter(Boolean)),
+      ] as string[]),
     [simulations],
   );
   const simulationTypes = useMemo(
     () =>
-      sortStringValues(
-        [...new Set(simulations.map((simulation) => simulation.simulationType).filter(Boolean))] as string[],
-      ),
+      sortStringValues([
+        ...new Set(simulations.map((simulation) => simulation.simulationType).filter(Boolean)),
+      ] as string[]),
     [simulations],
   );
   const initializationTypes = useMemo(
     () =>
-      sortStringValues(
-        [
-          ...new Set(
-            simulations.map((simulation) => simulation.initializationType).filter(Boolean),
-          ),
-        ] as string[],
-      ),
+      sortStringValues([
+        ...new Set(simulations.map((simulation) => simulation.initializationType).filter(Boolean)),
+      ] as string[]),
     [simulations],
   );
   const compilers = useMemo(
     () =>
-      sortStringValues(
-        [...new Set(simulations.map((simulation) => simulation.compiler).filter(Boolean))] as string[],
-      ),
+      sortStringValues([
+        ...new Set(simulations.map((simulation) => simulation.compiler).filter(Boolean)),
+      ] as string[]),
     [simulations],
   );
   const gitTags = useMemo(
     () =>
-      sortStringValues(
-        [...new Set(simulations.map((simulation) => simulation.gitTag).filter(Boolean))] as string[],
-      ),
+      sortStringValues([
+        ...new Set(simulations.map((simulation) => simulation.gitTag).filter(Boolean)),
+      ] as string[]),
     [simulations],
   );
   const hasActiveSimulationFilters = useMemo(
@@ -393,7 +390,14 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     }
 
     return filters;
-  }, [canonicalFilter, caseGroupFilter, caseNameFilter, creatorOptions, machineOptions, simulationFilters]);
+  }, [
+    canonicalFilter,
+    caseGroupFilter,
+    caseNameFilter,
+    creatorOptions,
+    machineOptions,
+    simulationFilters,
+  ]);
 
   const setSimulationFilter = (key: keyof CaseSimulationFilters, value: string) => {
     setSimulationFilters((current) => ({
@@ -468,7 +472,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           return count + (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0);
         }
 
-        return count + (simulationsByCaseId.get(caseRecord.id)?.length ?? caseRecord.simulations.length);
+        return (
+          count + (simulationsByCaseId.get(caseRecord.id)?.length ?? caseRecord.simulations.length)
+        );
       }, 0),
     [filteredCases, hasActiveSimulationFilters, matchingSimulationsByCaseId, simulationsByCaseId],
   );
@@ -491,10 +497,16 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
               aria-label={isExpanded ? 'Collapse simulations' : 'Expand simulations'}
               onClick={(event) => {
                 event.stopPropagation();
-                setExpandedCaseId((current) => (current === row.original.id ? null : row.original.id));
+                setExpandedCaseId((current) =>
+                  current === row.original.id ? null : row.original.id,
+                );
               }}
             >
-              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
             </Button>
           );
         },
@@ -564,13 +576,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         ),
       },
     ],
-    [
-      caseHpcUserSummaries,
-      caseMachineSummaries,
-      currentPath,
-      expandedCaseId,
-      simulationsByCaseId,
-    ],
+    [caseHpcUserSummaries, caseMachineSummaries, currentPath, expandedCaseId, simulationsByCaseId],
   );
 
   const table = useReactTable({
@@ -627,8 +633,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     const matchingCaseSimulations = sortCaseSimulations(
       matchingSimulationsByCaseId.get(caseRecord.id) ?? [],
     );
-    const simulations =
-      hasActiveSimulationFilters ? matchingCaseSimulations : allCaseSimulations;
+    const visibleCaseSimulations = hasActiveSimulationFilters
+      ? matchingCaseSimulations
+      : allCaseSimulations;
 
     return (
       <div className="space-y-3 bg-muted/20 p-4">
@@ -659,7 +666,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {simulations.map((simulation) => (
+                {visibleCaseSimulations.map((simulation) => (
                   <TableRow key={simulation.id}>
                     <TableCell className="align-top">
                       <Link
@@ -741,8 +748,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                  Find the cases behind your runs. Start with HPC username or machine, then
-                  refine by campaign, version context, and canonical state.
+                  Find the cases behind your runs. Start with HPC username or machine, then refine
+                  by campaign, version context, and canonical state.
                 </p>
               </div>
             </div>
@@ -765,7 +772,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                   {visibleRunCount}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {hasActiveSimulationFilters ? 'matching runs in visible cases' : 'runs across visible cases'}
+                  {hasActiveSimulationFilters
+                    ? 'matching runs in visible cases'
+                    : 'runs across visible cases'}
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
@@ -807,9 +816,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                   </div>
 
                   {renderSelectField({
-                      label: 'HPC Username',
-                      value: simulationFilters.hpcUsername,
-                      placeholder: 'All HPC usernames',
+                    label: 'HPC Username',
+                    value: simulationFilters.hpcUsername,
+                    placeholder: 'All HPC usernames',
                     options: hpcUsernames.map((username) => ({
                       value: username,
                       label: username,
@@ -874,7 +883,10 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                           label: 'Campaign',
                           value: simulationFilters.campaign,
                           placeholder: 'All campaigns',
-                          options: campaigns.map((campaign) => ({ value: campaign, label: campaign })),
+                          options: campaigns.map((campaign) => ({
+                            value: campaign,
+                            label: campaign,
+                          })),
                           onValueChange: (value) =>
                             setSimulationFilter('campaign', value === '__all__' ? '' : value),
                         })}
