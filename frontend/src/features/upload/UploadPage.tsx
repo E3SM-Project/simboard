@@ -182,6 +182,10 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                   Maximum upload size: <span className="font-medium">50 MB</span>. The backend validates archive layout
                   against the required E3SM performance-file specs before ingestion.
                 </p>
+                <p>
+                  You can upload either a case archive containing one or more execution directories, or a single
+                  execution packaged directly as <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">&lt;execution_id&gt;/...</code>.
+                </p>
               </div>
             </div>
 
@@ -285,7 +289,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             <h2 className="text-lg font-semibold">Archive Layout</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               The uploader is intended for packaged E3SM performance archives from systems such as Chrysalis and NERSC.
-              Files must live either at the archive root or under <code>casedocs/</code> in the expected locations.
+              You can upload a full case archive or a single execution directory at archive root. Files must live either
+              at the execution-directory root or under <code>casedocs/</code> in the expected locations.
             </p>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
