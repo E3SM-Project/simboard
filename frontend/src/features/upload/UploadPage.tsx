@@ -82,6 +82,25 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     () => machines.find((machine) => machine.id === selectedMachineId) ?? null,
     [machines, selectedMachineId],
   );
+  const createdCaseSummary = useMemo(() => {
+    if (createdSimulations.length === 0) {
+      return null;
+    }
+
+    const firstSimulation = createdSimulations[0];
+    const allSameCase = createdSimulations.every(
+      (simulation) => simulation.case_id === firstSimulation.case_id,
+    );
+
+    if (!allSameCase) {
+      return null;
+    }
+
+    return {
+      id: firstSimulation.case_id,
+      name: firstSimulation.case_name,
+    };
+  }, [createdSimulations]);
 
   const handleArchiveChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFile = event.target.files?.[0] ?? null;
@@ -355,31 +374,65 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             ) : null}
 
             {createdSimulations.length > 0 ? (
-              <div className="mt-5 rounded-md border border-green-200 bg-white p-4 text-sm">
-                <p className="font-medium text-gray-900">Created simulations</p>
-                <ul className="mt-3 space-y-2">
-                  {createdSimulations.map((simulation) => (
-                    <li
-                      key={simulation.id}
-                      className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
+              <div className="mt-5 rounded-md border border-gray-200 bg-white text-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-gray-50/60 px-4 py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      Created simulations ({createdSimulations.length})
+                    </p>
+                    {createdCaseSummary ? (
+                      <p className="mt-1 text-sm text-gray-700" title={createdCaseSummary.name}>
+                        Case: {createdCaseSummary.name}
+                      </p>
+                    ) : null}
+                  </div>
+                  {createdCaseSummary ? (
+                    <Link
+                      className="shrink-0 text-sm font-medium text-blue-700 hover:underline"
+                      to={`/cases/${createdCaseSummary.id}`}
                     >
-                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="font-medium text-gray-900">{simulation.execution_id}</p>
-                          <p className="text-xs text-gray-600">Case: {simulation.case_name}</p>
-                        </div>
-                        <div className="flex gap-3 text-xs">
-                          <Link className="text-blue-700 hover:underline" to={`/simulations/${simulation.id}`}>
-                            View simulation
-                          </Link>
-                          <Link className="text-blue-700 hover:underline" to={`/cases/${simulation.case_id}`}>
-                            View case
-                          </Link>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      View case
+                    </Link>
+                  ) : null}
+                </div>
+
+                <div className="max-h-96 overflow-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 text-xs text-gray-600">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium">Execution ID</th>
+                        <th className="px-4 py-3 text-right font-medium">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {createdSimulations.map((simulation) => (
+                        <tr className="hover:bg-gray-50" key={simulation.id}>
+                          <td className="px-4 py-4">
+                            <Link
+                              className="block truncate font-medium text-blue-700 hover:underline"
+                              title={simulation.execution_id}
+                              to={`/simulations/${simulation.id}`}
+                            >
+                              {simulation.execution_id}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-4 text-right text-sm">
+                            <div className="flex justify-end gap-3">
+                              <Link className="text-blue-700 hover:underline" to={`/simulations/${simulation.id}`}>
+                                Open
+                              </Link>
+                              {!createdCaseSummary ? (
+                                <Link className="text-blue-700 hover:underline" to={`/cases/${simulation.case_id}`}>
+                                  View case
+                                </Link>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : null}
           </section>

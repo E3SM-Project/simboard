@@ -129,34 +129,14 @@ export const CaseDetailsPage = ({
     summary: simulation,
     details: simulationDetailsById.get(simulation.id),
   }));
-  const machineSummary = (() => {
-    const names = [
-      ...new Set(
-        simulations
-          .map(({ details }) => details?.machine?.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+  const summarizeValues = (values: string[]) => {
+    if (values.length === 0) return '—';
+    if (values.length === 1) return values[0];
 
-    if (names.length === 0) return '—';
-    if (names.length === 1) return names[0];
-
-    return `${names[0]} +${names.length - 1}`;
-  })();
-  const hpcUsernameSummary = (() => {
-    const usernames = [
-      ...new Set(
-        simulations
-          .map(({ details }) => details?.hpcUsername)
-          .filter((username): username is string => Boolean(username)),
-      ),
-    ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-
-    if (usernames.length === 0) return '—';
-    if (usernames.length === 1) return usernames[0];
-
-    return `${usernames[0]} +${usernames.length - 1}`;
-  })();
+    return `${values[0]} +${values.length - 1}`;
+  };
+  const machineSummary = summarizeValues(caseRecord.machineNames);
+  const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
 
   const toggleSimulationSelection = (simulationId: string) => {

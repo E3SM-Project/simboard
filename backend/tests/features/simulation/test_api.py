@@ -126,6 +126,8 @@ class TestListCases:
         case_data = data[0]
         assert case_data["name"] == "test_case_nested"
         assert case_data["canonicalSimulationId"] == str(sim1.id)
+        assert case_data["machineNames"] == [machine.name]
+        assert case_data["hpcUsernames"] == []
 
         # Verify nested simulations are SimulationSummaryOut (lightweight)
         sims = case_data["simulations"]
@@ -224,6 +226,8 @@ class TestGetCase:
         data = res.json()
         assert data["name"] == "test_case_detail"
         assert len(data["simulations"]) == 1
+        assert data["machineNames"] == [machine.name]
+        assert data["hpcUsernames"] == []
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["isCanonical"] is True
 

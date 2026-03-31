@@ -348,6 +348,20 @@ class CaseOut(CamelOutBaseModel):
             description="Simulation executions belonging to this case.",
         ),
     ]
+    machine_names: Annotated[
+        list[str],
+        Field(
+            default_factory=list,
+            description="Unique machine names represented across this case's simulations.",
+        ),
+    ]
+    hpc_usernames: Annotated[
+        list[str],
+        Field(
+            default_factory=list,
+            description="Unique HPC usernames represented across this case's simulations.",
+        ),
+    ]
     created_at: Annotated[
         datetime, Field(..., description="Timestamp when the case was created")
     ]

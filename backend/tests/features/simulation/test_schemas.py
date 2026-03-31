@@ -474,12 +474,16 @@ class TestCaseOutSchema:
                     simulation_end_date=None,
                 ),
             ],
+            machine_names=["chrysalis"],
+            hpc_usernames=["ac.tvo"],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
         assert case_out.name == "v3.LR.historical_0121"
         assert case_out.case_group == "ensemble_v3"
         assert len(case_out.simulations) == 2
+        assert case_out.machine_names == ["chrysalis"]
+        assert case_out.hpc_usernames == ["ac.tvo"]
         assert case_out.simulations[0].is_canonical is True
         assert case_out.simulations[1].change_count == 2
 
@@ -490,8 +494,12 @@ class TestCaseOutSchema:
             case_group=None,
             canonical_simulation_id=None,
             simulations=[],
+            machine_names=[],
+            hpc_usernames=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
         assert case_out.canonical_simulation_id is None
         assert case_out.simulations == []
+        assert case_out.machine_names == []
+        assert case_out.hpc_usernames == []

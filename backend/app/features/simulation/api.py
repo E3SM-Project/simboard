@@ -47,7 +47,7 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
     """
     cases = (
         db.query(Case)
-        .options(selectinload(Case.simulations))
+        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
         .order_by(Case.created_at.desc())
         .all()
     )
@@ -114,7 +114,7 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     """
     case = (
         db.query(Case)
-        .options(selectinload(Case.simulations))
+        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
         .filter(Case.id == case_id)
         .first()
     )
@@ -142,6 +142,18 @@ def _case_to_out(case: Case) -> CaseOut:
         SimulationSummaryOut
     """
     summaries = []
+    machine_names = sorted(
+        {
+            sim.machine.name
+            for sim in case.simulations
+            if sim.machine is not None and sim.machine.name
+        },
+        key=lambda name: name.lower(),
+    )
+    hpc_usernames = sorted(
+        {sim.hpc_username for sim in case.simulations if sim.hpc_username},
+        key=lambda username: username.lower(),
+    )
 
     for sim in case.simulations:
         is_canonical = sim.id == case.canonical_simulation_id
@@ -165,6 +177,8 @@ def _case_to_out(case: Case) -> CaseOut:
         case_group=case.case_group,
         canonical_simulation_id=case.canonical_simulation_id,
         simulations=summaries,
+        machine_names=machine_names,
+        hpc_usernames=hpc_usernames,
         created_at=case.created_at,
         updated_at=case.updated_at,
     )

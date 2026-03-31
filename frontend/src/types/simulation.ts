@@ -18,6 +18,8 @@ export interface CaseOut {
   caseGroup: string | null;
   canonicalSimulationId: string | null;
   simulations: SimulationSummaryOut[];
+  machineNames: string[];
+  hpcUsernames: string[];
   createdAt: string;
   updatedAt: string;
 }
