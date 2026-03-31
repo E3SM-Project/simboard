@@ -18,6 +18,7 @@ from app.features.ingestion.schemas import (
     IngestFromPathRequest,
     IngestionCreate,
     IngestionResponse,
+    IngestionSimulationSummary,
     IngestionStatus,
 )
 from app.features.machine.utils import resolve_machine_by_name
@@ -184,7 +185,7 @@ def ingest_from_upload(
 
         response = _process_ingestion(
             ingest_result=ingest_result,
-            source_type=IngestionSourceType.HPC_UPLOAD,
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
             source_reference=filename,
             machine_id=machine.id,
             user=user,
@@ -361,14 +362,14 @@ def _process_ingestion(
         db.add(ingestion)
         db.flush()
 
-        _persist_simulations(
+        created_sims = _persist_simulations(
             ingestion.id, ingest_result.simulations, db, user, hpc_username
         )
 
     return IngestionResponse(
         created_count=ingest_result.created_count,
         duplicate_count=ingest_result.duplicate_count,
-        simulations=ingest_result.simulations,
+        simulations=_build_ingestion_simulation_summaries(created_sims, db),
         errors=ingest_result.errors,
     )
 
@@ -409,7 +410,7 @@ def _persist_simulations(
     db: Session,
     user: User,
     hpc_username: str | None = None,
-) -> None:
+) -> list[Simulation]:
     """Persist simulation records with artifacts and links to the database.
 
     After all simulations are flushed, sets the canonical simulation on
@@ -482,4 +483,27 @@ def _persist_simulations(
 
     _set_canonical_simulations(db, created_sims)
 
-    db.flush()
+    return created_sims
+
+
+def _build_ingestion_simulation_summaries(
+    created_sims: list[Simulation], db: Session
+) -> list[IngestionSimulationSummary]:
+    if not created_sims:
+        return []
+
+    case_ids = list({sim.case_id for sim in created_sims})
+    cases = {
+        case.id: case for case in db.query(Case).filter(Case.id.in_(case_ids)).all()
+    }
+
+    return [
+        IngestionSimulationSummary(
+            id=sim.id,
+            case_id=sim.case_id,
+            case_name=cases[sim.case_id].name,
+            execution_id=sim.execution_id,
+        )
+        for sim in created_sims
+        if sim.id is not None and sim.case_id in cases
+    ]

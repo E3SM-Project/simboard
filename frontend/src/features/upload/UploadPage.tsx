@@ -1,10 +1,12 @@
 import axios from 'axios';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { ChangeEvent, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   ArchiveUploadValidationDetail,
   ArchiveUploadValidationError,
+  IngestionUploadSimulationSummary,
   uploadSimulationArchive,
 } from '@/features/upload/api/api';
 import { toast } from '@/hooks/use-toast';
@@ -71,6 +73,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [archiveFileError, setArchiveFileError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
+  const [createdSimulations, setCreatedSimulations] = useState<IngestionUploadSimulationSummary[]>([]);
   const [validationErrors, setValidationErrors] = useState<ArchiveUploadValidationError[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -87,6 +90,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     setArchiveFile(nextFile);
     setArchiveFileError(nextError);
     setUploadStatus(null);
+    setCreatedSimulations([]);
     setValidationErrors([]);
   };
 
@@ -105,6 +109,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     }
 
     if (!selectedMachine) {
+      setCreatedSimulations([]);
       setUploadStatus({
         tone: 'error',
         title: 'Machine required',
@@ -119,6 +124,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       title: 'Uploading and validating archive',
       description: 'The archive is being uploaded, extracted, and checked against the required file specs.',
     });
+    setCreatedSimulations([]);
     setValidationErrors([]);
 
     try {
@@ -129,6 +135,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       });
 
       resetFileSelection();
+      setCreatedSimulations(response.simulations);
 
       setUploadStatus({
         tone: 'success',
@@ -143,6 +150,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         const detail = error.response?.data?.detail;
 
         if (isArchiveUploadValidationDetail(detail)) {
+          setCreatedSimulations([]);
           setValidationErrors(detail.errors);
           setUploadStatus({
             tone: 'error',
@@ -153,6 +161,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         }
 
         if (typeof detail === 'string') {
+          setCreatedSimulations([]);
           setUploadStatus({
             tone: 'error',
             title: 'Upload failed',
@@ -162,6 +171,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         }
       }
 
+      setCreatedSimulations([]);
       setUploadStatus({
         tone: 'error',
         title: 'Upload failed',
@@ -341,6 +351,35 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                     <p className="mt-1">{uploadStatus.description}</p>
                   </div>
                 </div>
+              </div>
+            ) : null}
+
+            {createdSimulations.length > 0 ? (
+              <div className="mt-5 rounded-md border border-green-200 bg-white p-4 text-sm">
+                <p className="font-medium text-gray-900">Created simulations</p>
+                <ul className="mt-3 space-y-2">
+                  {createdSimulations.map((simulation) => (
+                    <li
+                      key={simulation.id}
+                      className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
+                    >
+                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{simulation.execution_id}</p>
+                          <p className="text-xs text-gray-600">Case: {simulation.case_name}</p>
+                        </div>
+                        <div className="flex gap-3 text-xs">
+                          <Link className="text-blue-700 hover:underline" to={`/simulations/${simulation.id}`}>
+                            View simulation
+                          </Link>
+                          <Link className="text-blue-700 hover:underline" to={`/cases/${simulation.case_id}`}>
+                            View case
+                          </Link>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
           </section>

@@ -5,7 +5,17 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
-from app.features.simulation.schemas import SimulationCreate
+
+
+class IngestionSimulationSummary(BaseModel):
+    """Lightweight summary of a persisted simulation created by ingestion."""
+
+    id: Annotated[UUID, Field(..., description="ID of the created simulation")]
+    case_id: Annotated[UUID, Field(..., description="ID of the associated case")]
+    case_name: Annotated[str, Field(..., description="Name of the associated case")]
+    execution_id: Annotated[
+        str, Field(..., description="Execution identifier for the created simulation")
+    ]
 
 
 class IngestFromPathRequest(BaseModel):
@@ -38,8 +48,8 @@ class IngestionResponse(BaseModel):
         int, Field(..., description="Number of duplicate simulations detected")
     ]
     simulations: Annotated[
-        list[SimulationCreate],
-        Field(..., description="List of created simulation objects"),
+        list[IngestionSimulationSummary],
+        Field(..., description="List of created simulation summaries"),
     ]
     errors: Annotated[
         list[dict[str, str]],

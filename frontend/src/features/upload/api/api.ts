@@ -16,8 +16,15 @@ export interface ArchiveUploadValidationDetail {
 export interface IngestionUploadResponse {
   created_count: number;
   duplicate_count: number;
-  simulations: unknown[];
+  simulations: IngestionUploadSimulationSummary[];
   errors: Record<string, string>[];
+}
+
+export interface IngestionUploadSimulationSummary {
+  id: string;
+  case_id: string;
+  case_name: string;
+  execution_id: string;
 }
 
 interface UploadSimulationArchiveParams {

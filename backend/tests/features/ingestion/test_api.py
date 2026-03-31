@@ -230,6 +230,14 @@ class TestIngestFromPathEndpoint:
         assert data["errors"] == mock_errors
 
         assert len(data["simulations"]) == 2
+        assert {simulation["execution_id"] for simulation in data["simulations"]} == {
+            "exec-errors-1",
+            "exec-errors-2",
+        }
+        assert {simulation["case_name"] for simulation in data["simulations"]} == {
+            "test_case_errors",
+            "case2_errors",
+        }
 
     def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""
@@ -455,6 +463,9 @@ class TestIngestFromUploadEndpoint:
         data = res.json()
         assert data["created_count"] == 1
         assert data["duplicate_count"] == 0
+        assert len(data["simulations"]) == 1
+        assert data["simulations"][0]["execution_id"] == "exec-zip-1"
+        assert data["simulations"][0]["case_name"] == "test_case_zip"
 
     def test_upload_valid_tar_gz_file(self, client, db: Session):
         """Test uploading a valid .tar.gz archive."""
@@ -504,6 +515,7 @@ class TestIngestFromUploadEndpoint:
             )
 
         assert res.status_code == 201
+        assert res.json()["simulations"][0]["execution_id"] == "exec-targz-1"
 
     def test_upload_invalid_file_extension(self, client, db: Session):
         """Test that invalid file extensions are rejected."""
@@ -592,7 +604,7 @@ class TestIngestFromUploadEndpoint:
         )
 
         assert ingestion is not None
-        assert str(ingestion.source_type) == "hpc_upload"
+        assert str(ingestion.source_type) == "browser_upload"
         assert ingestion.status == "success"
         assert ingestion.archive_sha256 is not None
         assert len(ingestion.archive_sha256) == 64  # SHA256 hex length
