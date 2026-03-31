@@ -20,9 +20,10 @@ interface HomePageProps {
 }
 
 export const HomePage = ({ simulations, machines }: HomePageProps) => {
-  const totalCases = useMemo(() => new Set(simulations.map((simulation) => simulation.caseId)).size, [
-    simulations,
-  ]);
+  const totalCases = useMemo(
+    () => new Set(simulations.map((simulation) => simulation.caseId)).size,
+    [simulations],
+  );
   const latestSubmission = useMemo(
     () =>
       [...simulations]
@@ -96,7 +97,10 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
     };
 
     return [...casesById.values()]
-      .sort((left, right) => new Date(right.lastUpdated).getTime() - new Date(left.lastUpdated).getTime())
+      .sort(
+        (left, right) =>
+          new Date(right.lastUpdated).getTime() - new Date(left.lastUpdated).getTime(),
+      )
       .slice(0, 6)
       .map((caseRecord) => ({
         ...caseRecord,
@@ -121,14 +125,16 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
   const workflows = [
     {
       title: 'Browse Cases',
-      description: 'Browse grouped simulation work, scan related runs, and open deeper case details.',
+      description:
+        'Browse grouped simulation work, scan related runs, and open deeper case details.',
       to: '/cases',
       action: 'Open Cases',
       icon: FolderOpen,
     },
     {
       title: 'Explore Runs',
-      description: 'Use the advanced run browser when you need detailed filters, selection, and compare setup.',
+      description:
+        'Use the advanced run browser when you need detailed filters, selection, and compare setup.',
       to: '/browse',
       action: 'Open Runs',
       icon: Search,
@@ -166,12 +172,17 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Browse simulation collections, open case pages, and inspect the runs connected to them.
+              Browse simulation collections, open case pages, and inspect the runs connected to
+              them.
             </li>
             <li>
-              Jump into run-level views when you need machine, version, user, or date-specific context.
+              Jump into run-level views when you need machine, version, user, or date-specific
+              context.
             </li>
-            <li>Compare simulations side by side and share specific case or run pages with collaborators.</li>
+            <li>
+              Compare simulations side by side and share specific case or run pages with
+              collaborators.
+            </li>
           </ul>
 
           <div className="flex flex-wrap gap-3">
@@ -273,7 +284,8 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
           <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recent Cases</h2>
             <p className="text-muted-foreground">
-              Open recently active case pages and move from grouped simulation context into run details.
+              Open recently active case pages and move from grouped simulation context into run
+              details.
             </p>
           </div>
           <Button asChild variant="secondary">

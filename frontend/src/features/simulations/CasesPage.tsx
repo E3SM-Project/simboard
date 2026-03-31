@@ -104,6 +104,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const location = useLocation();
   const { data: cases, loading, error } = useCases();
   const currentPath = `${location.pathname}${location.search}`;
+
   const [caseNameFilter, setCaseNameFilter] = useState('');
   const [caseGroupFilter, setCaseGroupFilter] = useState('');
   const [simulationFilters, setSimulationFilters] = useState<CaseSimulationFilters>(
@@ -128,6 +129,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' })),
     [cases],
   );
+
   const simulationsByCaseId = useMemo(() => {
     const caseMap = new Map<string, SimulationOut[]>();
     for (const simulation of simulations) {
@@ -138,6 +140,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     return caseMap;
   }, [simulations]);
+
   const caseMachineSummaries = useMemo(() => {
     const summaries = new Map<string, string>();
 
@@ -161,6 +164,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     return summaries;
   }, [simulationsByCaseId]);
+
   const caseHpcUserSummaries = useMemo(() => {
     const summaries = new Map<string, string>();
 
@@ -197,6 +201,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' })),
     [simulations],
   );
+
   const machineOptions = useMemo(() => {
     const machineMap = new Map<string, string>();
 
@@ -209,6 +214,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }),
     );
   }, [simulations]);
+
   const creatorOptions = useMemo(() => {
     const creatorMap = new Map<string, string>();
 
@@ -221,41 +227,33 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }),
     );
   }, [simulations]);
-  const campaigns = useMemo(
-    () =>
-      sortStringValues([
-        ...new Set(simulations.map((simulation) => simulation.campaign).filter(Boolean)),
-      ] as string[]),
-    [simulations],
-  );
-  const simulationTypes = useMemo(
-    () =>
-      sortStringValues([
-        ...new Set(simulations.map((simulation) => simulation.simulationType).filter(Boolean)),
-      ] as string[]),
-    [simulations],
-  );
-  const initializationTypes = useMemo(
-    () =>
-      sortStringValues([
-        ...new Set(simulations.map((simulation) => simulation.initializationType).filter(Boolean)),
-      ] as string[]),
-    [simulations],
-  );
-  const compilers = useMemo(
-    () =>
-      sortStringValues([
-        ...new Set(simulations.map((simulation) => simulation.compiler).filter(Boolean)),
-      ] as string[]),
-    [simulations],
-  );
-  const gitTags = useMemo(
-    () =>
-      sortStringValues([
-        ...new Set(simulations.map((simulation) => simulation.gitTag).filter(Boolean)),
-      ] as string[]),
-    [simulations],
-  );
+
+  const { campaigns, simulationTypes, initializationTypes, compilers, gitTags } = useMemo(() => {
+    const campaigns = new Set<string>();
+    const simulationTypes = new Set<string>();
+    const initializationTypes = new Set<string>();
+    const compilers = new Set<string>();
+    const gitTags = new Set<string>();
+
+    for (const simulation of simulations) {
+      if (simulation.campaign) campaigns.add(simulation.campaign);
+      if (simulation.simulationType) simulationTypes.add(simulation.simulationType);
+      if (simulation.initializationType) {
+        initializationTypes.add(simulation.initializationType);
+      }
+      if (simulation.compiler) compilers.add(simulation.compiler);
+      if (simulation.gitTag) gitTags.add(simulation.gitTag);
+    }
+
+    return {
+      campaigns: sortStringValues([...campaigns]),
+      simulationTypes: sortStringValues([...simulationTypes]),
+      initializationTypes: sortStringValues([...initializationTypes]),
+      compilers: sortStringValues([...compilers]),
+      gitTags: sortStringValues([...gitTags]),
+    };
+  }, [simulations]);
+
   const hasActiveSimulationFilters = useMemo(
     () => Object.values(simulationFilters).some(Boolean),
     [simulationFilters],
@@ -331,14 +329,18 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     return matchingMap;
   }, [simulationFilters, simulations]);
+
   const activeFilterPills = useMemo(() => {
     const filters: ActiveFilterPill[] = [];
+
     if (caseNameFilter.trim()) {
       filters.push({ key: 'caseName', label: 'Case', value: caseNameFilter.trim() });
     }
+
     if (simulationFilters.hpcUsername) {
       filters.push({ key: 'hpcUsername', label: 'HPC', value: simulationFilters.hpcUsername });
     }
+
     if (simulationFilters.machineId) {
       filters.push({
         key: 'machineId',
@@ -348,6 +350,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           simulationFilters.machineId,
       });
     }
+
     if (simulationFilters.campaign) {
       filters.push({ key: 'campaign', label: 'Campaign', value: simulationFilters.campaign });
     }
@@ -358,6 +361,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         value: simulationFilters.simulationType,
       });
     }
+
     if (simulationFilters.initializationType) {
       filters.push({
         key: 'initializationType',
@@ -365,12 +369,15 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         value: simulationFilters.initializationType,
       });
     }
+
     if (simulationFilters.compiler) {
       filters.push({ key: 'compiler', label: 'Compiler', value: simulationFilters.compiler });
     }
+
     if (simulationFilters.gitTag) {
       filters.push({ key: 'gitTag', label: 'Tag', value: simulationFilters.gitTag });
     }
+
     if (simulationFilters.createdBy) {
       filters.push({
         key: 'createdBy',
@@ -380,7 +387,9 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           simulationFilters.createdBy,
       });
     }
+
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
+
     if (canonicalFilter !== 'all') {
       filters.push({
         key: 'canonical',
@@ -465,6 +474,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     hasActiveSimulationFilters,
     matchingSimulationsByCaseId,
   ]);
+
   const visibleRunCount = useMemo(
     () =>
       filteredCases.reduce((count, caseRecord) => {
