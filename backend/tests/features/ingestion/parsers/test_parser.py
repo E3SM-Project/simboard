@@ -533,6 +533,38 @@ class TestMainParser:
         assert result == []
         assert skipped == 1
 
+    def test_strict_validation_reports_missing_timing_lid(self, tmp_path: Path) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
+
+        with self._mock_all_parsers(
+            parse_e3sm_timing={
+                "execution_id": None,
+                "run_start_date": "2025-12-18T20:09:33",
+                "run_end_date": "2025-12-18T20:54:58",
+            }
+        ):
+            with pytest.raises(parser.ArchiveValidationError) as exc_info:
+                parser.main_parser(
+                    tmp_path,
+                    tmp_path / "unused_output",
+                    strict_validation=True,
+                )
+
+        assert exc_info.value.errors == [
+            {
+                "code": "missing_required_value",
+                "execution_dir": str(execution_dir),
+                "file_spec": "e3sm_timing..*..*",
+                "location": "archive root",
+                "message": (
+                    "Required timing-file LID missing for execution directory "
+                    f"'{execution_dir}'"
+                ),
+            }
+        ]
+
     def test_mismatched_timing_lid_falls_back_to_directory_basename(
         self, tmp_path: Path
     ) -> None:

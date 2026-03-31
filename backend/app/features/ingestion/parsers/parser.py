@@ -242,7 +242,10 @@ def _process_execution_dir(
         )
         return None, [], 1
     except FileNotFoundError as exc:
-        logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
+        if strict_validation:
+            return None, [_build_file_not_found_validation_error(exec_dir, exc)], 0
+
+        logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
         return None, [], 1
 
 
@@ -459,6 +462,24 @@ def _location_label(location: str) -> str:
         return "archive root"
 
     return "casedocs/"
+
+
+def _build_file_not_found_validation_error(
+    exec_dir: str, exc: FileNotFoundError
+) -> dict[str, str]:
+    message = str(exc)
+    error = {
+        "code": "file_not_found",
+        "execution_dir": exec_dir,
+        "message": message,
+    }
+
+    if "timing-file LID" in message:
+        error["code"] = "missing_required_value"
+        error["file_spec"] = FILE_SPECS["e3sm_timing"]["display_pattern"]
+        error["location"] = _location_label(FILE_SPECS["e3sm_timing"]["location"])
+
+    return error
 
 
 def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:
