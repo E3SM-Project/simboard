@@ -129,6 +129,34 @@ export const CaseDetailsPage = ({
     summary: simulation,
     details: simulationDetailsById.get(simulation.id),
   }));
+  const machineSummary = (() => {
+    const names = [
+      ...new Set(
+        simulations
+          .map(({ details }) => details?.machine?.name)
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+
+    if (names.length === 0) return '—';
+    if (names.length === 1) return names[0];
+
+    return `${names[0]} +${names.length - 1}`;
+  })();
+  const hpcUsernameSummary = (() => {
+    const usernames = [
+      ...new Set(
+        simulations
+          .map(({ details }) => details?.hpcUsername)
+          .filter((username): username is string => Boolean(username)),
+      ),
+    ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+
+    if (usernames.length === 0) return '—';
+    if (usernames.length === 1) return usernames[0];
+
+    return `${usernames[0]} +${usernames.length - 1}`;
+  })();
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
 
   const toggleSimulationSelection = (simulationId: string) => {
@@ -176,6 +204,8 @@ export const CaseDetailsPage = ({
           <CardContent>
             <MetadataRow label="Case Group" value={caseRecord.caseGroup ?? '—'} />
             <MetadataRow label="Total Simulations" value={caseRecord.simulations.length} />
+            <MetadataRow label="Machines" value={machineSummary} />
+            <MetadataRow label="HPC Usernames" value={hpcUsernameSummary} />
             <MetadataRow label="Created" value={formatCaseDate(caseRecord.createdAt)} />
             <MetadataRow label="Last Updated" value={formatCaseDate(caseRecord.updatedAt)} />
           </CardContent>
@@ -264,8 +294,6 @@ export const CaseDetailsPage = ({
                   <TableHead>Execution ID</TableHead>
                   <TableHead>Changes</TableHead>
                   <TableHead>Initialization</TableHead>
-                  <TableHead>Machine</TableHead>
-                  <TableHead>HPC Username</TableHead>
                   <TableHead>Git Tag</TableHead>
                   <TableHead>Simulation Dates</TableHead>
                   <TableHead>Run Dates</TableHead>
@@ -312,12 +340,6 @@ export const CaseDetailsPage = ({
                     </TableCell>
                     <TableCell className="align-top">
                       <TableCellText value={details?.initializationType ?? '—'} lines={1} />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <TableCellText value={details?.machine?.name ?? '—'} lines={1} />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <TableCellText value={details?.hpcUsername ?? '—'} lines={1} />
                     </TableCell>
                     <TableCell className="align-top">
                       <TableCellText value={details?.gitTag ?? '—'} lines={1} />

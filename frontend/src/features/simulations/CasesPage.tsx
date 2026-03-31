@@ -648,14 +648,13 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           </Button>
         </div>
 
-        <div className="overflow-hidden rounded-md border bg-background">
+        <div className="max-w-4xl overflow-hidden rounded-md border bg-background">
           <div className="max-h-[26rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Machine</TableHead>
-                  <TableHead>HPC Username</TableHead>
+                  <TableHead>Changes</TableHead>
                   <TableHead>Simulation Dates</TableHead>
                 </TableRow>
               </TableHeader>
@@ -681,10 +680,26 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
-                      <TableCellText value={simulation.machine?.name ?? '—'} lines={1} />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <TableCellText value={simulation.hpcUsername ?? '—'} lines={1} />
+                      {simulation.isCanonical ? (
+                        <span
+                          className="text-sm font-medium text-slate-700"
+                          title="Baseline simulation"
+                        >
+                          Baseline
+                        </span>
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          title={
+                            simulation.runConfigDeltas &&
+                            Object.keys(simulation.runConfigDeltas).length > 0
+                              ? `Changed fields: ${Object.keys(simulation.runConfigDeltas).join(', ')}`
+                              : `${simulation.changeCount} changes from baseline`
+                          }
+                        >
+                          {simulation.changeCount}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="align-top">
                       {`${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(
