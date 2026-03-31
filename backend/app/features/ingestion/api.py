@@ -2,6 +2,7 @@ import hashlib
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -12,6 +13,7 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
 from app.features.ingestion.models import Ingestion, IngestionSourceType
+from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.schemas import (
     IngestFromPathRequest,
     IngestionCreate,
@@ -25,6 +27,8 @@ from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
+
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
 
 
 def _resolve_request_machine(db: Session, machine_name: str):
@@ -169,8 +173,14 @@ def ingest_from_upload(
             sha256_hex = _save_uploaded_file_and_hash(file, archive_path)
 
             ingest_result = _run_ingest_archive(
-                archive_path=str(archive_path), output_dir=tmpdir, db=db
+                archive_path=str(archive_path),
+                output_dir=tmpdir,
+                db=db,
+                strict_validation=True,
             )
+
+        if ingest_result.errors:
+            _raise_archive_validation_error(ingest_result.errors)
 
         response = _process_ingestion(
             ingest_result=ingest_result,
@@ -185,7 +195,10 @@ def ingest_from_upload(
 
         return response
     finally:
-        file.file.close()
+        try:
+            file.file.close()
+        except Exception:
+            pass
 
 
 def _validate_archive_path(archive_path: Path) -> None:
@@ -217,18 +230,20 @@ def _validate_upload_file(file: UploadFile) -> None:
             status_code=400, detail="File must be a .zip, .tar.gz, or .tgz archive"
         )
 
-    if hasattr(file, "size") and file.size and file.size > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large")
-
 
 def _save_uploaded_file_and_hash(
     file: UploadFile,
     archive_path: Path,
 ) -> str:
     sha256_hash = hashlib.sha256()
+    total_bytes = 0
 
     with archive_path.open("wb") as out_file:
         for chunk in iter(lambda: file.file.read(8192), b""):
+            total_bytes += len(chunk)
+            if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large")
+
             out_file.write(chunk)
             sha256_hash.update(chunk)
 
@@ -236,10 +251,21 @@ def _save_uploaded_file_and_hash(
 
 
 def _run_ingest_archive(
-    archive_path: str, output_dir: str, db: Session
+    archive_path: str,
+    output_dir: str,
+    db: Session,
+    *,
+    strict_validation: bool = False,
 ) -> IngestArchiveResult:
     try:
-        return ingest_archive(archive_path=archive_path, output_dir=output_dir, db=db)
+        return ingest_archive(
+            archive_path=archive_path,
+            output_dir=output_dir,
+            db=db,
+            strict_validation=strict_validation,
+        )
+    except ArchiveValidationError as exc:
+        _raise_archive_validation_error(exc.errors)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
@@ -256,6 +282,16 @@ def _run_ingest_archive(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
+
+
+def _raise_archive_validation_error(errors: list[dict[str, str]]) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "message": "Archive validation failed.",
+            "errors": errors,
+        },
+    )
 
 
 def _process_ingestion(

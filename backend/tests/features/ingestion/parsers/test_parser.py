@@ -25,7 +25,7 @@ class TestMainParser:
         *,
         include_env_run: bool = True,
         include_timing: bool = True,
-        case_status_content: str | None = None,
+        case_status_content: str | None = "2025-01-01 00:00:00: case.run success",
     ) -> None:
         """Create standard execution files for testing."""
         version_base = version.split(".")[0]
@@ -163,7 +163,7 @@ class TestMainParser:
         assert "case_status" in parser.FILE_SPECS
         assert "case_docs_env_run" in parser.FILE_SPECS
         assert "e3sm_timing" in parser.FILE_SPECS
-        assert parser.FILE_SPECS["case_status"]["required"] is False
+        assert parser.FILE_SPECS["case_status"]["required"] is True
         assert parser.FILE_SPECS["case_docs_env_run"]["required"] is True
         assert parser.FILE_SPECS["e3sm_timing"]["required"] is True
 
@@ -288,6 +288,10 @@ class TestMainParser:
             f.write('<config><entry id="CASE" value="test_case" /></config>')
         with gzip.open(casedocs / "env_build.xml.001.gz", "wt") as f:
             f.write('<config><entry id="COMPILER" value="gnu" /></config>')
+        with gzip.open(casedocs / "env_run.xml.001.gz", "wt") as f:
+            f.write('<config><entry id="RUN_TYPE" value="startup" /></config>')
+        with gzip.open(execution_dir / "CaseStatus.001.gz", "wt") as f:
+            f.write("2025-01-01 00:00:00: case.run success")
         with gzip.open(execution_dir / "GIT_DESCRIBE.001.gz", "wt") as f:
             f.write("describe")
 
@@ -296,9 +300,23 @@ class TestMainParser:
 
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
+        extracted_execution_dir = extract_dir / "1.0-0"
 
-        with pytest.raises(ValueError, match="Multiple files matching pattern"):
-            parser.main_parser(archive_path, extract_dir)
+        with pytest.raises(parser.ArchiveValidationError) as exc_info:
+            parser.main_parser(archive_path, extract_dir, strict_validation=True)
+
+        assert exc_info.value.errors == [
+            {
+                "code": "multiple_matching_files",
+                "execution_dir": str(extracted_execution_dir),
+                "file_spec": "e3sm_timing..*..*",
+                "location": "archive root",
+                "message": (
+                    f"Multiple files matched 'e3sm_timing..*..*' in archive root for "
+                    f"'{extracted_execution_dir}'."
+                ),
+            }
+        ]
 
     def test_unsupported_archive_format_raises_error(self, tmp_path: Path) -> None:
         archive_path = tmp_path / "archive.rar"
@@ -370,6 +388,51 @@ class TestMainParser:
         assert result == []
         assert skipped == 1
 
+    def test_missing_case_status_skips_incomplete_run(self, tmp_path: Path) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(
+            execution_dir,
+            "001.001",
+            case_status_content=None,
+        )
+
+        result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
+
+        assert result == []
+        assert skipped == 1
+
+    def test_strict_validation_reports_missing_required_spec(
+        self, tmp_path: Path
+    ) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(
+            execution_dir,
+            "001.001",
+            case_status_content=None,
+        )
+
+        with pytest.raises(parser.ArchiveValidationError) as exc_info:
+            parser.main_parser(
+                tmp_path,
+                tmp_path / "unused_output",
+                strict_validation=True,
+            )
+
+        assert exc_info.value.errors == [
+            {
+                "code": "missing_required_file",
+                "execution_dir": str(execution_dir),
+                "file_spec": "CaseStatus..*.gz",
+                "location": "archive root",
+                "message": (
+                    f"Missing required 'CaseStatus..*.gz' in archive root for "
+                    f"'{execution_dir}'."
+                ),
+            }
+        ]
+
     def test_case_status_is_merged(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"
         execution_dir.mkdir(parents=True)
@@ -413,14 +476,16 @@ class TestMainParser:
         assert result[0].run_start_date == "2025-01-01 00:00:00"
         assert result[0].run_end_date is None
 
-    def test_missing_case_status_defaults_status_to_unknown(
-        self, tmp_path: Path
-    ) -> None:
+    def test_empty_case_status_defaults_status_to_unknown(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"
         execution_dir.mkdir(parents=True)
-        self._create_execution_metadata_files(execution_dir, "001.001")
+        self._create_execution_metadata_files(
+            execution_dir,
+            "001.001",
+            case_status_content="2025-01-01 00:00:00: case.run",
+        )
 
-        with self._mock_all_parsers():
+        with self._mock_all_parsers(parse_case_status={}):
             result, skipped = parser.main_parser(tmp_path, tmp_path / "unused_output")
 
         assert skipped == 0

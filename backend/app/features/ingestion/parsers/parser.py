@@ -54,62 +54,80 @@ class FileSpec(TypedDict, total=False):
     """Specifications for each file type to be parsed."""
 
     pattern: str
+    display_pattern: str
     location: str
     parser: Callable
     required: bool
 
 
+class ArchiveValidationError(ValueError):
+    """Structured archive validation failure."""
+
+    def __init__(self, errors: list[dict[str, str]]):
+        self.errors = errors
+        super().__init__("Archive validation failed.")
+
+
 FILE_SPECS: dict[str, FileSpec] = {
     "case_docs_env_case": {
         "pattern": r"env_case\.xml\..*\.gz",
+        "display_pattern": "env_case.xml..*.gz",
         "location": "casedocs",
         "parser": parse_env_case,
         "required": True,
     },
     "case_docs_env_build": {
         "pattern": r"env_build\.xml\..*\.gz",
+        "display_pattern": "env_build.xml..*.gz",
         "location": "casedocs",
         "parser": parse_env_build,
         "required": True,
     },
     "case_docs_env_run": {
         "pattern": r"env_run\.xml\..*",
+        "display_pattern": "env_run.xml..*",
         "location": "casedocs",
         "parser": parse_env_run,
         "required": True,
     },
     "readme_case": {
         "pattern": r"README\.case\..*\.gz",
+        "display_pattern": "README.case..*.gz",
         "location": "casedocs",
         "parser": parse_readme_case,
         "required": True,
     },
     "case_status": {
         "pattern": r"CaseStatus\..*\.gz",
+        "display_pattern": "CaseStatus..*.gz",
         "location": "root",
         "parser": parse_case_status,
-        "required": False,
+        "required": True,
     },
     "e3sm_timing": {
         "pattern": r"e3sm_timing\..*",
+        "display_pattern": "e3sm_timing..*..*",
         "location": "root",
         "parser": parse_e3sm_timing,
         "required": True,
     },
     "git_describe": {
         "pattern": r"GIT_DESCRIBE\..*\.gz",
+        "display_pattern": "GIT_DESCRIBE..*.gz",
         "location": "root",
         "parser": parse_git_describe,
         "required": True,
     },
     "git_config": {
         "pattern": r"GIT_CONFIG\..*\.gz",
+        "display_pattern": "GIT_CONFIG..*.gz",
         "location": "root",
         "parser": parse_git_config,
         "required": False,
     },
     "git_status": {
         "pattern": r"GIT_STATUS\..*\.gz",
+        "display_pattern": "GIT_STATUS..*.gz",
         "location": "root",
         "parser": parse_git_status,
         "required": False,
@@ -118,7 +136,10 @@ FILE_SPECS: dict[str, FileSpec] = {
 
 
 def main_parser(
-    archive_path: str | Path, output_dir: str | Path
+    archive_path: str | Path,
+    output_dir: str | Path,
+    *,
+    strict_validation: bool = False,
 ) -> tuple[list[ParsedSimulation], int]:
     """Main entrypoint for parser workflow.
 
@@ -172,6 +193,8 @@ def main_parser(
     results: list[ParsedSimulation] = []
     skipped_count = 0
 
+    validation_errors: list[dict[str, str]] = []
+
     for case_dir, exec_dirs in case_to_executions_dirs.items():
         sorted_exec_dirs = sorted(exec_dirs)
         logger.info(
@@ -180,14 +203,17 @@ def main_parser(
         )
 
         for exec_dir in sorted_exec_dirs:
-            try:
-                metadata_files = _locate_metadata_files(exec_dir)
-                results.append(_parse_all_files(exec_dir, metadata_files))
-            except FileNotFoundError as exc:
-                logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
-                skipped_count += 1
+            parsed_simulation, exec_validation_errors, exec_skipped_count = (
+                _process_execution_dir(exec_dir, strict_validation=strict_validation)
+            )
+            skipped_count += exec_skipped_count
+            validation_errors.extend(exec_validation_errors)
 
-                continue
+            if parsed_simulation is not None:
+                results.append(parsed_simulation)
+
+    if validation_errors:
+        raise ArchiveValidationError(validation_errors)
 
     if skipped_count:
         logger.info(
@@ -197,6 +223,27 @@ def main_parser(
     logger.info("Completed parsing all execution directories.")
 
     return results, skipped_count
+
+
+def _process_execution_dir(
+    exec_dir: str, *, strict_validation: bool
+) -> tuple[ParsedSimulation | None, list[dict[str, str]], int]:
+    try:
+        metadata_files = _locate_metadata_files(exec_dir)
+        return _parse_all_files(exec_dir, metadata_files), [], 0
+    except ArchiveValidationError as exc:
+        if strict_validation:
+            return None, exc.errors, 0
+
+        logger.warning(
+            "Skipping incomplete run in '%s': %s",
+            exec_dir,
+            "; ".join(error["message"] for error in exc.errors),
+        )
+        return None, [], 1
+    except FileNotFoundError as exc:
+        logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
+        return None, [], 1
 
 
 def _extract_archive(archive_path: str, output_dir: str) -> None:
@@ -275,6 +322,13 @@ def _is_within_directory(base_dir: Path, target_path: Path) -> bool:
     return True
 
 
+def _location_label(location: str) -> str:
+    if location == "root":
+        return "archive root"
+
+    return "casedocs/"
+
+
 def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
     """Maps case directories to their execution subdirectories.
 
@@ -321,85 +375,90 @@ def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
 def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
     """Locate required and optional files in the execution directory."""
     files: SimulationFiles = {key: None for key in FILE_SPECS}
+    validation_errors: list[dict[str, str]] = []
+    missing_optional: list[str] = []
+    casedocs_dirs = _find_casedocs_dirs(exp_dir)
 
-    files = _find_root_files(exp_dir, files)
-    files = _find_casedocs_files(exp_dir, files)
-
-    _check_missing_files(files, exp_dir)
-
-    return files
-
-
-def _find_file_in_dir(directory: str, pattern: str) -> str | None:
-    """Find a file matching the pattern in the specified directory.
-
-    Raises
-    ------
-    ValueError
-        If multiple files match the pattern.
-    """
-    matches = []
-    for fname in os.listdir(directory):
-        if re.match(pattern, fname):
-            matches.append(os.path.join(directory, fname))
-
-    if len(matches) > 1:
-        raise ValueError(
-            f"Multiple files matching pattern '{pattern}' found in {directory}: {matches}"
-        )
-
-    return matches[0] if matches else None
-
-
-def _find_root_files(exp_dir: str, files: SimulationFiles) -> SimulationFiles:
-    """Find files located in the root of the execution directory."""
     for key, spec in FILE_SPECS.items():
-        if spec["location"] == "root":
-            pattern = str(spec["pattern"])
-            files[key] = _find_file_in_dir(exp_dir, pattern)
+        matches = _find_spec_matches(exp_dir, casedocs_dirs, spec)
 
-    return files
+        if len(matches) > 1:
+            validation_errors.append(
+                {
+                    "code": "multiple_matching_files",
+                    "execution_dir": exp_dir,
+                    "file_spec": spec["display_pattern"],
+                    "location": _location_label(spec["location"]),
+                    "message": (
+                        f"Multiple files matched '{spec['display_pattern']}' in "
+                        f"{_location_label(spec['location'])} for '{exp_dir}'."
+                    ),
+                }
+            )
+            continue
 
+        if matches:
+            files[key] = matches[0]
+            continue
 
-def _find_casedocs_files(exp_dir: str, files: SimulationFiles) -> SimulationFiles:
-    for key, spec in FILE_SPECS.items():
-        if spec["location"] == "casedocs":
-            pattern = str(spec["pattern"])
+        if spec.get("required", False):
+            validation_errors.append(
+                {
+                    "code": "missing_required_file",
+                    "execution_dir": exp_dir,
+                    "file_spec": spec["display_pattern"],
+                    "location": _location_label(spec["location"]),
+                    "message": (
+                        f"Missing required '{spec['display_pattern']}' in "
+                        f"{_location_label(spec['location'])} for '{exp_dir}'."
+                    ),
+                }
+            )
+            continue
 
-            for subdir in os.listdir(exp_dir):
-                subdir_path = os.path.join(exp_dir, subdir)
+        missing_optional.append(key)
 
-                if os.path.isdir(subdir_path) and subdir.startswith("CaseDocs"):
-                    match = _find_file_in_dir(subdir_path, pattern)
+    if validation_errors:
+        raise ArchiveValidationError(validation_errors)
 
-                    if match:
-                        files[key] = match
-                        break
-    return files
-
-
-def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
-    missing_required = [
-        key
-        for key, spec in FILE_SPECS.items()
-        if spec.get("required", False) and not files.get(key)
-    ]
-    if missing_required:
-        raise FileNotFoundError(
-            "Required files not found in execution directory "
-            f"'{exp_dir}': {', '.join(missing_required)}"
-        )
-
-    missing_optional = [
-        key
-        for key, spec in FILE_SPECS.items()
-        if not spec.get("required", False) and not files.get(key)
-    ]
     if missing_optional:
         logger.warning(
             "Optional files missing in execution directory "
             f"'{exp_dir}': {', '.join(missing_optional)}"
         )
+
+    return files
+
+
+def _find_casedocs_dirs(exp_dir: str) -> list[str]:
+    casedocs_dirs: list[str] = []
+
+    for subdir in os.listdir(exp_dir):
+        subdir_path = os.path.join(exp_dir, subdir)
+
+        if os.path.isdir(subdir_path) and subdir.lower().startswith("casedocs"):
+            casedocs_dirs.append(subdir_path)
+
+    return casedocs_dirs
+
+
+def _find_spec_matches(
+    exp_dir: str, casedocs_dirs: list[str], spec: FileSpec
+) -> list[str]:
+    if spec["location"] == "root":
+        directories = [exp_dir]
+    else:
+        directories = casedocs_dirs
+
+    matches: list[str] = []
+    pattern = str(spec["pattern"])
+
+    for directory in directories:
+        for fname in os.listdir(directory):
+            if re.match(pattern, fname):
+                matches.append(os.path.join(directory, fname))
+
+    return matches
 
 
 def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:

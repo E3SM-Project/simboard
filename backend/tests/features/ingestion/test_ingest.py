@@ -2213,3 +2213,39 @@ class TestIngestHelpers:
         assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         assert draft.simulation_start_date is not None
         assert draft.run_start_date is not None
+
+    def test_build_simulation_create_draft_falls_back_without_env_run(self) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082006.260305-120006",
+            execution_id="1082006.260305-120006",
+            case_name="case1",
+            case_group=None,
+            machine="machine",
+            hpc_username="test-user",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign="campaign",
+            experiment_type="historical",
+            initialization_type=None,
+            simulation_start_date=None,
+            simulation_end_date=None,
+            run_start_date="2020-01-02T03:04:05Z",
+            run_end_date=None,
+            compiler="gcc",
+            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+            git_branch="main",
+            git_tag="v1.0.0",
+            git_commit_hash="abc123",
+            status="completed",
+        )
+
+        draft = _build_simulation_create_draft(
+            parsed_simulation=parsed,
+            machine_id=uuid4(),
+            case_id=uuid4(),
+        )
+
+        assert draft.initialization_type == "unknown"
+        assert draft.simulation_start_date == draft.run_start_date

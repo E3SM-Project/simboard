@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
     _run_ingest_archive,
+    _save_uploaded_file_and_hash,
     _set_canonical_simulations,
     _validate_archive_path,
     _validate_upload_file,
@@ -24,6 +25,7 @@ from app.features.ingestion.api import (
 )
 from app.features.ingestion.ingest import IngestArchiveResult
 from app.features.ingestion.models import Ingestion
+from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.machine.models import Machine
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
@@ -595,8 +597,8 @@ class TestIngestFromUploadEndpoint:
         assert ingestion.archive_sha256 is not None
         assert len(ingestion.archive_sha256) == 64  # SHA256 hex length
 
-    def test_upload_partial_success_status(self, client, db: Session):
-        """Test that partial success is recorded correctly."""
+    def test_upload_rejects_partial_ingestion_results(self, client, db: Session):
+        """Upload endpoint should fail instead of persisting partial ingestion results."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -643,22 +645,21 @@ class TestIngestFromUploadEndpoint:
                 files={"file": ("test_partial.zip", file, "application/zip")},
             )
 
-        assert res.status_code == 201
+        assert res.status_code == 400
+        assert res.json()["detail"] == {
+            "message": "Archive validation failed.",
+            "errors": mock_errors,
+        }
 
-        # Verify partial status
         ingestion = (
             db.query(Ingestion)
             .filter(Ingestion.source_reference == "test_partial.zip")
             .first()
         )
+        assert ingestion is None
 
-        assert ingestion is not None
-        assert ingestion.status == "partial"
-        assert ingestion.created_count == 1
-        assert ingestion.error_count == 1
-
-    def test_upload_failed_status(self, client, db: Session):
-        """Test that failed ingestion is recorded correctly."""
+    def test_upload_rejects_failed_ingestion_results(self, client, db: Session):
+        """Upload endpoint should fail instead of persisting failed ingestion results."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -682,19 +683,18 @@ class TestIngestFromUploadEndpoint:
                 files={"file": ("test_failed.zip", file, "application/zip")},
             )
 
-        assert res.status_code == 201
+        assert res.status_code == 400
+        assert res.json()["detail"] == {
+            "message": "Archive validation failed.",
+            "errors": mock_errors,
+        }
 
-        # Verify failed status
         ingestion = (
             db.query(Ingestion)
             .filter(Ingestion.source_reference == "test_failed.zip")
             .first()
         )
-
-        assert ingestion is not None
-        assert ingestion.status == "failed"
-        assert ingestion.created_count == 0
-        assert ingestion.error_count == 2
+        assert ingestion is None
 
     def test_upload_without_filename(self, client, db: Session):
         """Test that upload without filename is rejected."""
@@ -791,27 +791,46 @@ class TestIngestFromUploadEndpoint:
         assert ingestion.created_count == 0
         assert ingestion.error_count == 2
 
-    def test_upload_file_size_too_large(self, client, db: Session):
-        """Test that files exceeding size limit are rejected."""
+    def test_save_uploaded_file_rejects_large_files(self, tmp_path: Path):
+        file_content = b"x" * (51 * 1024 * 1024)  # 51MB
+        upload_file = UploadFile(file=BytesIO(file_content), filename="large_file.zip")
+
+        with pytest.raises(HTTPException) as exc_info:
+            _save_uploaded_file_and_hash(upload_file, tmp_path / "large_file.zip")
+
+        assert exc_info.value.status_code == 413
+        assert exc_info.value.detail == "File too large"
+
+    def test_upload_returns_structured_validation_errors(self, client, db: Session):
         machine = db.query(Machine).first()
         assert machine is not None
 
-        # Create a large file to test the size limit
-        file_content = b"x" * (21 * 1024 * 1024)  # 21MB
-        file = BytesIO(file_content)
+        file = BytesIO(b"PK\x03\x04")
+        validation_errors = [
+            {
+                "code": "missing_required_file",
+                "execution_dir": "/tmp/archive/1.0-0",
+                "file_spec": "env_case.xml..*.gz",
+                "location": "casedocs/",
+                "message": "Missing required 'env_case.xml..*.gz' in casedocs/ for '/tmp/archive/1.0-0'.",
+            }
+        ]
 
-        # Note: TestClient doesn't set the size attribute on UploadFile,
-        # so this test may not fully exercise the size check in production.
-        # The size check would need to be tested with real HTTP multipart uploads.
-        res = client.post(
-            f"{API_BASE}/ingestions/from-upload",
-            data={"machine_name": machine.name},
-            files={"file": ("large_file.zip", file, "application/zip")},
-        )
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            side_effect=ArchiveValidationError(validation_errors),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
+                files={"file": ("invalid.zip", file, "application/zip")},
+            )
 
-        # Since TestClient doesn't expose file.size, this may succeed
-        # In production with real uploads, this would return 413
-        assert res.status_code in [201, 413]
+        assert res.status_code == 400
+        assert res.json()["detail"] == {
+            "message": "Archive validation failed.",
+            "errors": validation_errors,
+        }
 
     def test_upload_handles_lookup_error(self, client, db: Session):
         """Test that LookupError in upload is handled with 400 response."""
@@ -1081,6 +1100,30 @@ class TestIngestionApiCoverage:
                 _run_ingest_archive("/tmp/archive.tar.gz", "/tmp", db)
 
         assert exc_info.value.status_code == 400
+
+    def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):
+        validation_errors = [
+            {
+                "code": "missing_required_file",
+                "execution_dir": "/tmp/archive/1.0-0",
+                "file_spec": "CaseStatus..*.gz",
+                "location": "archive root",
+                "message": "Missing required 'CaseStatus..*.gz' in archive root for '/tmp/archive/1.0-0'.",
+            }
+        ]
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            side_effect=ArchiveValidationError(validation_errors),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                _run_ingest_archive("/tmp/archive.tar.gz", "/tmp", db)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == {
+            "message": "Archive validation failed.",
+            "errors": validation_errors,
+        }
 
     def test_ingest_from_upload_defensive_filename_none_branch(
         self, db: Session, normal_user_sync: dict
