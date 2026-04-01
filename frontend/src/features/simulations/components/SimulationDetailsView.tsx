@@ -163,9 +163,6 @@ export const SimulationDetailsView = ({
                 <FieldRow label="Reference">
                   <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
                 </FieldRow>
-                <FieldRow label="Canonical">
-                  <span className="text-sm">{simulation.isCanonical ? 'Yes' : 'No'}</span>
-                </FieldRow>
                 {!simulation.isReference && (
                   <FieldRow label="Changes vs reference">
                     <span className="text-sm">{simulation.changeCount}</span>
@@ -191,9 +188,6 @@ export const SimulationDetailsView = ({
                 </FieldRow>
                 <FieldRow label="Compiler">
                   <ReadonlyInput value={simulation.compiler ?? undefined} />
-                </FieldRow>
-                <FieldRow label="Parent Simulation ID">
-                  <ReadonlyInput value={simulation.parentSimulationId ?? undefined} />
                 </FieldRow>
                 {simulation.description && (
                   <div className="pt-2">
