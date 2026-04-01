@@ -48,15 +48,15 @@ Environment variable keys:
 
 `simboard-db`:
 
-| Key                 | Required | Example/Allowed Value             | Used By |
-| ------------------- | -------- | --------------------------------- | ------- |
-| `POSTGRES_USER`     | Yes      | DB username                       | `db`    |
-| `POSTGRES_PASSWORD` | Yes      | DB password                       | `db`    |
-| `POSTGRES_DB`       | Yes      | DB name                           | `db`    |
-| `POSTGRES_PORT`     | Yes      | `5432`                            | `db`    |
-| `POSTGRES_SERVER`   | Yes      | `db`                              | `db`    |
-| `PGDATA`            | Yes      | `/var/lib/postgresql/data/pgdata` | `db`    |
-| `PGTZ`              | Yes      | timezone string                   | `db`    |
+| Key                 | Required | Example/Allowed Value       | Used By |
+| ------------------- | -------- | --------------------------- | ------- |
+| `POSTGRES_USER`     | Yes      | DB username                 | `db`    |
+| `POSTGRES_PASSWORD` | Yes      | DB password                 | `db`    |
+| `POSTGRES_DB`       | Yes      | DB name                     | `db`    |
+| `POSTGRES_PORT`     | Yes      | `5432`                      | `db`    |
+| `POSTGRES_SERVER`   | Yes      | `db`                        | `db`    |
+| `PGDATA`            | Yes      | `/var/lib/postgresql/data/` | `db`    |
+| `PGTZ`              | Yes      | timezone string             | `db`    |
 
 ## Workload Configurations
 
@@ -78,14 +78,14 @@ Workloads -> Deployments -> Create (top-right)
 
 Create a PersistentVolumeClaim volume for Postgres data.
 
-| Rancher field                | Value                                                  |
-| ---------------------------- | ------------------------------------------------------ |
-| Volume type                  | `PersistentVolumeClaim`                                |
-| Volume name                  | `db-data` (or your naming standard)                    |
-| Persistent Volume Claim Name | `pvc-simboard-db` (or existing claim)                  |
-| Access mode                  | `Single-Node Read/Write`                               |
-| Capacity                     | `1Gi` minimum (or larger per policy)                   |
-| Storage class                | Namespace/default class (example: `nfs-client-vast`)   |
+| Rancher field                | Value                                                |
+| ---------------------------- | ---------------------------------------------------- |
+| Volume type                  | `PersistentVolumeClaim`                              |
+| Volume name                  | `db-data` (or your naming standard)                  |
+| Persistent Volume Claim Name | `pvc-simboard-db` (or existing claim)                |
+| Access mode                  | `Single-Node Read/Write`                             |
+| Capacity                     | `1Gi` minimum (or larger per policy)                 |
+| Storage class                | Namespace/default class (example: `nfs-client-vast`) |
 
 #### 3. Container tab (`db`)
 
@@ -123,7 +123,7 @@ Create a PersistentVolumeClaim volume for Postgres data.
 | Mount path    | `/var/lib/postgresql/data` |
 | Read only     | `false`                    |
 
-Keep `PGDATA=/var/lib/postgresql/data/pgdata` in the `simboard-db` secret. Mount the claim at `/var/lib/postgresql/data`, not at `PGDATA`, so Postgres initializes inside the `pgdata` subdirectory instead of the volume root. This avoids `initdb` failures on storage backends that pre-create files such as `lost+found` at the claim root.
+Keep `PGDATA=/var/lib/postgresql/` in the `simboard-db` secret. Mount the claim at `/var/lib/postgresql/data`, not at `PGDATA`, so Postgres initializes inside the `pgdata` subdirectory instead of the volume root. This avoids `initdb` failures on storage backends that pre-create files such as `lost+found` at the claim root.
 
 ### Workload 2: Backend Deployment (`backend`)
 
@@ -232,14 +232,14 @@ Prerequisites for this section:
 1. **Create admin account (if one does not already exist)**
    - This script must run in the deployed backend environment (so it has the correct DB connection and app settings).
    - In Rancher UI, open target namespace -> **Workloads** -> **Pods** -> backend pod -> **Execute Shell** (`backend` container).
-   - Run:
+   - Run and enter email/password when prompted:
 
      ```bash
      cd /app
      python -m app.scripts.users.create_admin_account
      ```
 
-   - Enter admin email/password when prompted.
+   - Example email: `simboard-dev.e3sm.org`
    - Use this admin account in step 2 for service-account provisioning.
 
 2. **Provision ingestion service-account token**
