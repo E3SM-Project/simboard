@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Mapping
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -28,14 +29,14 @@ from app.features.ingestion.models import (
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
 from app.features.simulation.config_delta import SimulationConfigSnapshot
-from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import User
 
 
 def _parsed_simulations_from_mapping(
-    simulations_by_dir: dict[str, dict[str, str | None]],
+    simulations_by_dir: Mapping[str, Mapping[str, str | None]],
 ) -> list[ParsedSimulation]:
     parsed_simulations: list[ParsedSimulation] = []
 
@@ -65,13 +66,19 @@ def _parsed_simulations_from_mapping(
                 git_tag=metadata.get("git_tag"),
                 git_commit_hash=metadata.get("git_commit_hash"),
                 status=metadata.get("status"),
+                output_path=metadata.get("output_path"),
+                archive_path=metadata.get("archive_path"),
+                case_root=metadata.get("case_root"),
+                postprocessing_script=metadata.get("postprocessing_script"),
             )
         )
 
     return parsed_simulations
 
 
-def _require_execution_id(metadata: dict[str, str | None], execution_dir: str) -> str:
+def _require_execution_id(
+    metadata: Mapping[str, str | None], execution_dir: str
+) -> str:
     execution_id = metadata.get("execution_id")
     if not execution_id:
         raise AssertionError(
@@ -119,7 +126,7 @@ class TestIngestArchive:
         """Test that ingest_archive returns list of SimulationCreate objects."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_simulations: dict[str, dict[str, str | None]] = {
             "/path/to/1081156.251218-200923": {
                 "execution_id": "1081156.251218-200923",
                 "case_name": "case1",
@@ -167,7 +174,7 @@ class TestIngestArchive:
         """Test ingesting archive with multiple simulations."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_simulations: dict[str, dict[str, str | None]] = {
             "/path/to/1081157.251218-200924": {
                 "execution_id": "1081157.251218-200924",
                 "case_name": "case1",
@@ -2345,3 +2352,117 @@ class TestIngestHelpers:
         assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         assert draft.simulation_start_date is not None
         assert draft.run_start_date is not None
+
+    def test_ingest_maps_path_artifacts_for_existing_paths(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        machine = Machine(
+            name="artifact-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+        db.commit()
+        db.refresh(machine)
+
+        output_path = tmp_path / "run"
+        output_path.mkdir()
+        archive_path = tmp_path / "archive"
+        archive_path.mkdir()
+        case_root = tmp_path / "case_root"
+        case_root.mkdir()
+        run_script = case_root / ".case.run"
+        run_script.write_text("#!/bin/sh\n")
+        post_script = tmp_path / "post.sh"
+        post_script.write_text("#!/bin/sh\n")
+
+        mock_simulations = {
+            "/path/to/1082010.260305-120010": {
+                "execution_id": "1082010.260305-120010",
+                "case_name": "case-artifacts",
+                "compset": "FHIST",
+                "compset_alias": "test_alias",
+                "grid_name": "grid1",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "status": "completed",
+                "output_path": str(output_path),
+                "archive_path": str(archive_path),
+                "case_root": str(case_root),
+                "postprocessing_script": f"{post_script} --flag value",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert len(ingest_result.simulations) == 1
+        simulation = ingest_result.simulations[0]
+        assert len(simulation.artifacts) == 4
+
+        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        assert by_kind[ArtifactKind.OUTPUT] == str(output_path)
+        assert by_kind[ArtifactKind.ARCHIVE] == str(archive_path)
+        assert by_kind[ArtifactKind.RUN_SCRIPT] == str(run_script)
+        assert by_kind[ArtifactKind.POSTPROCESS_SCRIPT] == str(post_script)
+
+    def test_ingest_omits_missing_path_artifacts_and_warns(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        machine = Machine(
+            name="missing-artifact-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+        db.commit()
+        db.refresh(machine)
+
+        missing_output = tmp_path / "missing-run"
+        missing_archive = tmp_path / "missing-archive"
+        missing_case_root = tmp_path / "missing-case-root"
+        missing_post_script = tmp_path / "missing-post.sh"
+
+        mock_simulations = {
+            "/path/to/1082011.260305-120011": {
+                "execution_id": "1082011.260305-120011",
+                "case_name": "case-missing-artifacts",
+                "compset": "FHIST",
+                "compset_alias": "test_alias",
+                "grid_name": "grid1",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "status": "completed",
+                "output_path": str(missing_output),
+                "archive_path": str(missing_archive),
+                "case_root": str(missing_case_root),
+                "postprocessing_script": f"{missing_post_script} --foo",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
+                ingest_result = ingest_archive(
+                    Path("/tmp/archive.zip"), Path("/tmp/out"), db
+                )
+
+        assert len(ingest_result.simulations) == 1
+        simulation = ingest_result.simulations[0]
+        assert simulation.artifacts == []
+        assert mock_warning.call_count >= 4
