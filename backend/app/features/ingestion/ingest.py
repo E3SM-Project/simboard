@@ -24,7 +24,7 @@ from pathlib import Path
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logger import _setup_custom_logger
@@ -37,6 +37,10 @@ from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
+
+_STRING_ADAPTER = TypeAdapter(str)
+_DATETIME_ADAPTER = TypeAdapter(datetime)
+_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 @dataclass
@@ -88,37 +92,6 @@ class SimulationCreateDraft:
     run_end_date: datetime | None
     compiler: str | None
     git_repository_url: str | None
-    git_branch: str | None
-    git_tag: str | None
-    git_commit_hash: str | None
-    created_by: UUID | None
-    last_updated_by: UUID | None
-    hpc_username: str | None
-    run_config_deltas: dict[str, dict[str, str | None]] | None = None
-
-
-class SimulationCreateDraftPreCaseValidation(BaseModel):
-    """Pydantic validation model for draft fields available before case lookup."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    execution_id: str
-    compset: str
-    compset_alias: str
-    grid_name: str
-    grid_resolution: str
-    simulation_type: SimulationType
-    status: SimulationStatus
-    campaign: str | None
-    experiment_type: str | None
-    initialization_type: str
-    machine_id: UUID
-    simulation_start_date: datetime
-    simulation_end_date: datetime | None
-    run_start_date: datetime | None
-    run_end_date: datetime | None
-    compiler: str | None
-    git_repository_url: HttpUrl | None
     git_branch: str | None
     git_tag: str | None
     git_commit_hash: str | None
@@ -426,12 +399,27 @@ def _prevalidate_simulation_create(
         case_id=None,
     )
 
-    SimulationCreateDraftPreCaseValidation.model_validate(
-        draft,
-        from_attributes=True,
-    )
+    _validate_pre_case_draft(draft)
 
     return draft
+
+
+def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
+    """Validate the draft fields that must succeed before case creation."""
+    for field_name in (
+        "execution_id",
+        "compset",
+        "compset_alias",
+        "grid_name",
+        "grid_resolution",
+        "initialization_type",
+    ):
+        _STRING_ADAPTER.validate_python(getattr(draft, field_name))
+
+    _DATETIME_ADAPTER.validate_python(draft.simulation_start_date)
+
+    if draft.git_repository_url is not None:
+        _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
 
 
 def _get_reference_metadata_for_case(
