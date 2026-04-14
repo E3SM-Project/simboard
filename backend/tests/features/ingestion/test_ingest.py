@@ -11,12 +11,14 @@ from app.features.ingestion.ingest import (
     SimulationCreateDraft,
     _build_config_snapshot,
     _build_simulation_create_draft,
+    _get_case_hash_baseline,
     _get_or_create_case,
     _get_reference_metadata_for_case,
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
     _stringify_config_value,
+    _track_case_hash_observation,
     _validate_simulation_create,
     ingest_archive,
 )
@@ -2148,6 +2150,80 @@ class TestIngestHelpers:
                 db=db,
             )
         assert second == first
+
+    def test_get_case_hash_baseline_uses_persisted_cache_on_second_lookup(
+        self,
+    ) -> None:
+        case = MagicMock(spec=Case)
+        case.id = uuid4()
+        case.name = "case_hash_cache_case"
+        case.reference_simulation_id = uuid4()
+
+        db = MagicMock(spec=Session)
+        case_hash_cache: dict[str, str] = {}
+        persisted_case_hash_cache: dict[UUID, str | None] = {case.id: "baseline-hash"}
+
+        with patch.object(db, "query", side_effect=AssertionError):
+            result = _get_case_hash_baseline(
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+
+        assert result == "baseline-hash"
+
+    def test_track_case_hash_observation_skips_warning_for_matching_baseline(
+        self,
+    ) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082002.260305-120002",
+            execution_id="1082002.260305-120002",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="matching-hash",
+        )
+        case = MagicMock(spec=Case)
+        case.name = "case_hash_case"
+
+        case_hash_cache: dict[str, str] = {}
+
+        with (
+            patch(
+                "app.features.ingestion.ingest._get_case_hash_baseline",
+                return_value="matching-hash",
+            ),
+            patch("app.features.ingestion.ingest.logger.warning") as mock_warning,
+        ):
+            _track_case_hash_observation(
+                parsed_simulation=parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache={},
+                db=MagicMock(spec=Session),
+            )
+
+        assert case_hash_cache == {"case_hash_case": "matching-hash"}
+        mock_warning.assert_not_called()
 
     def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(
