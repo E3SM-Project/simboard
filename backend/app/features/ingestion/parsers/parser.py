@@ -571,6 +571,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
         git_tag=metadata.get("git_tag"),
         git_commit_hash=metadata.get("git_commit_hash"),
         status=metadata.get("status") or SimulationStatus.UNKNOWN.value,
+        case_hash=metadata.get("case_hash"),
     )
 
 

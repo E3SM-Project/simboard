@@ -23,6 +23,7 @@ class TestSimulationCreateSchema:
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
+            "caseHash": "abc123",
             "compset": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
@@ -113,6 +114,7 @@ class TestSimulationOutSchema:
             "case_id": case_id,
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
+            "case_hash": "abc123",
             "is_reference": True,
             "change_count": 0,
             "compset": "AQUAPLANET",
@@ -192,6 +194,7 @@ class TestSimulationOutSchema:
             "case_id": case_id,
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
+            "case_hash": "abc123",
             "is_reference": False,
             "change_count": 2,
             "compset": "AQUAPLANET",

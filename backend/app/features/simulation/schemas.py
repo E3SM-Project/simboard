@@ -114,6 +114,16 @@ class SimulationCreate(CamelInBaseModel):
             ),
         ),
     ]
+    case_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional CASE_HASH parsed from env_case.xml. Informational for "
+                "ingestion consistency checks; not currently the grouping key."
+            ),
+        ),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
@@ -401,6 +411,16 @@ class SimulationOut(CamelOutBaseModel):
             ...,
             description=(
                 "Unique identifier for this execution, derived from the timing-file LID"
+            ),
+        ),
+    ]
+    case_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional CASE_HASH parsed from env_case.xml. Informational for "
+                "ingestion consistency checks; not currently the grouping key."
             ),
         ),
     ]
