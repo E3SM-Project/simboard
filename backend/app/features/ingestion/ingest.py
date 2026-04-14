@@ -334,9 +334,7 @@ def _get_case_hash_baseline(
             .filter(Simulation.id == case.reference_simulation_id)
             .first()
         )
-        baseline_hash = (
-            reference_simulation.case_hash if reference_simulation else None
-        )
+        baseline_hash = reference_simulation.case_hash if reference_simulation else None
         persisted_case_hash_cache[case.id] = baseline_hash
         if baseline_hash is not None:
             case_hash_cache.setdefault(case.name, baseline_hash)
