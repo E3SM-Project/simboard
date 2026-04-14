@@ -18,13 +18,13 @@ Caching for reference lookup:
     keyed by case.id, to avoid repeated DB queries.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import ValidationError
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logger import _setup_custom_logger
@@ -37,6 +37,10 @@ from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
+
+_STRING_ADAPTER = TypeAdapter(str)
+_DATETIME_ADAPTER = TypeAdapter(datetime)
+_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 @dataclass
@@ -70,7 +74,7 @@ class IngestArchiveResult:
 class SimulationCreateDraft:
     """Normalized internal payload validated into ``SimulationCreate``."""
 
-    case_id: UUID
+    case_id: UUID | None
     execution_id: str
     compset: str | None
     compset_alias: str | None
@@ -241,7 +245,6 @@ def _process_simulation_for_ingest(
     execution_id = parsed_simulation.execution_id
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
-    case = _resolve_case(parsed_simulation, case_name, db)
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
         _seed_reference_cache_from_duplicate(
@@ -249,9 +252,12 @@ def _process_simulation_for_ingest(
         )
         return None, True
 
+    prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
+    case = _resolve_case(parsed_simulation, case_name, db)
+
     simulation = _build_simulation_create(
         parsed_simulation=parsed_simulation,
-        machine_id=machine_id,
+        prevalidated_draft=prevalidated_draft,
         case=case,
         reference_cache=reference_cache,
         persisted_reference_cache=persisted_reference_cache,
@@ -313,7 +319,7 @@ def _seed_reference_cache_from_duplicate(
 
 def _build_simulation_create(
     parsed_simulation: ParsedSimulation,
-    machine_id: UUID,
+    prevalidated_draft: SimulationCreateDraft,
     case: Case,
     reference_cache: dict[str, SimulationConfigSnapshot],
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
@@ -325,8 +331,8 @@ def _build_simulation_create(
     ----------
     parsed_simulation : ParsedSimulation
         Parsed archive-derived metadata for the simulation.
-    machine_id : UUID
-        Resolved machine ID from the database.
+    prevalidated_draft : SimulationCreateDraft
+        Draft with normalized fields already parsed and prevalidated.
     case : Case
         Resolved Case object for this simulation.
     reference_cache : dict[str, SimulationConfigSnapshot]
@@ -349,11 +355,7 @@ def _build_simulation_create(
         reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
 
         simulation = _validate_simulation_create(
-            _build_simulation_create_draft(
-                parsed_simulation=parsed_simulation,
-                machine_id=machine_id,
-                case_id=case.id,
-            )
+            replace(prevalidated_draft, case_id=case.id)
         )
         logger.info(
             "Mapped reference simulation from %s: %s",
@@ -364,12 +366,10 @@ def _build_simulation_create(
         return simulation
 
     delta = reference_snapshot.diff(_build_config_snapshot(parsed_simulation))
-    run_config_deltas = delta if delta else None
-    simulation_draft = _build_simulation_create_draft(
-        parsed_simulation=parsed_simulation,
-        machine_id=machine_id,
+    simulation_draft = replace(
+        prevalidated_draft,
         case_id=case.id,
-        run_config_deltas=run_config_deltas,
+        run_config_deltas=delta if delta else None,
     )
     simulation = _validate_simulation_create(simulation_draft)
 
@@ -386,6 +386,40 @@ def _build_simulation_create(
         )
 
     return simulation
+
+
+def _prevalidate_simulation_create(
+    parsed_simulation: ParsedSimulation,
+    machine_id: UUID,
+) -> SimulationCreateDraft:
+    """Build and validate non-case simulation fields before creating a new case."""
+    draft = _build_simulation_create_draft(
+        parsed_simulation=parsed_simulation,
+        machine_id=machine_id,
+        case_id=None,
+    )
+
+    _validate_pre_case_draft(draft)
+
+    return draft
+
+
+def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
+    """Validate the draft fields that must succeed before case creation."""
+    for field_name in (
+        "execution_id",
+        "compset",
+        "compset_alias",
+        "grid_name",
+        "grid_resolution",
+        "initialization_type",
+    ):
+        _STRING_ADAPTER.validate_python(getattr(draft, field_name))
+
+    _DATETIME_ADAPTER.validate_python(draft.simulation_start_date)
+
+    if draft.git_repository_url is not None:
+        _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
 
 
 def _get_reference_metadata_for_case(
@@ -625,7 +659,7 @@ def _normalize_git_url(url: str | None) -> str | None:
 def _build_simulation_create_draft(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
-    case_id: UUID,
+    case_id: UUID | None,
     run_config_deltas: dict[str, dict[str, str | None]] | None = None,
 ) -> SimulationCreateDraft:
     """Build a normalized internal draft for ``SimulationCreate`` validation.
