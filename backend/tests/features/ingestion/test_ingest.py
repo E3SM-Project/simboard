@@ -2225,6 +2225,97 @@ class TestIngestHelpers:
         assert case_hash_cache == {"case_hash_case": "matching-hash"}
         mock_warning.assert_not_called()
 
+    def test_track_case_hash_observation_uses_in_batch_baseline_when_reference_hash_missing(
+        self,
+    ) -> None:
+        first_parsed = ParsedSimulation(
+            execution_dir="/path/to/1082003.260305-120003",
+            execution_id="1082003.260305-120003",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="first-hash",
+        )
+        second_parsed = ParsedSimulation(
+            execution_dir="/path/to/1082004.260305-120004",
+            execution_id="1082004.260305-120004",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-06-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="second-hash",
+        )
+        case = MagicMock(spec=Case)
+        case.id = uuid4()
+        case.name = "case_hash_case"
+        case.reference_simulation_id = uuid4()
+
+        reference_simulation = MagicMock(spec=Simulation)
+        reference_simulation.case_hash = None
+
+        db = MagicMock(spec=Session)
+        db.query.return_value.filter.return_value.first.return_value = (
+            reference_simulation
+        )
+
+        case_hash_cache: dict[str, str] = {}
+        persisted_case_hash_cache: dict[UUID, str | None] = {}
+
+        with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
+            _track_case_hash_observation(
+                parsed_simulation=first_parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+            _track_case_hash_observation(
+                parsed_simulation=second_parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+
+        assert case_hash_cache == {"case_hash_case": "first-hash"}
+        assert persisted_case_hash_cache == {case.id: None}
+        mock_warning.assert_called_once()
+
     def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(
             execution_dir="/path/to/1082001.260305-120001",

@@ -326,20 +326,22 @@ def _get_case_hash_baseline(
 ) -> str | None:
     """Return the CASE_HASH baseline for drift detection."""
     if case.reference_simulation_id is not None:
-        if case.id in persisted_case_hash_cache:
-            return persisted_case_hash_cache[case.id]
+        if case.id not in persisted_case_hash_cache:
+            reference_simulation = (
+                db.query(Simulation)
+                .filter(Simulation.id == case.reference_simulation_id)
+                .first()
+            )
+            baseline_hash = (
+                reference_simulation.case_hash if reference_simulation else None
+            )
+            persisted_case_hash_cache[case.id] = baseline_hash
+            if baseline_hash is not None:
+                case_hash_cache.setdefault(case.name, baseline_hash)
 
-        reference_simulation = (
-            db.query(Simulation)
-            .filter(Simulation.id == case.reference_simulation_id)
-            .first()
-        )
-        baseline_hash = reference_simulation.case_hash if reference_simulation else None
-        persisted_case_hash_cache[case.id] = baseline_hash
+        baseline_hash = persisted_case_hash_cache[case.id]
         if baseline_hash is not None:
-            case_hash_cache.setdefault(case.name, baseline_hash)
-
-        return baseline_hash
+            return baseline_hash
 
     return case_hash_cache.get(case.name)
 
