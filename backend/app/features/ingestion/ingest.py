@@ -38,6 +38,8 @@ from app.features.simulation.schemas import SimulationCreate
 
 logger = _setup_custom_logger(__name__)
 
+PLACEHOLDER_CASE_ID = UUID(int=0)
+
 
 @dataclass
 class IngestArchiveResult:
@@ -241,13 +243,15 @@ def _process_simulation_for_ingest(
     execution_id = parsed_simulation.execution_id
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
-    case = _resolve_case(parsed_simulation, case_name, db)
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
         _seed_reference_cache_from_duplicate(
             case_name, parsed_simulation, reference_cache
         )
         return None, True
+
+    _prevalidate_simulation_create(parsed_simulation, machine_id)
+    case = _resolve_case(parsed_simulation, case_name, db)
 
     simulation = _build_simulation_create(
         parsed_simulation=parsed_simulation,
@@ -386,6 +390,20 @@ def _build_simulation_create(
         )
 
     return simulation
+
+
+def _prevalidate_simulation_create(
+    parsed_simulation: ParsedSimulation,
+    machine_id: UUID,
+) -> None:
+    """Validate non-case simulation fields before creating a new case."""
+    _validate_simulation_create(
+        _build_simulation_create_draft(
+            parsed_simulation=parsed_simulation,
+            machine_id=machine_id,
+            case_id=PLACEHOLDER_CASE_ID,
+        )
+    )
 
 
 def _get_reference_metadata_for_case(

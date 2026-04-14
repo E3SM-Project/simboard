@@ -790,6 +790,138 @@ class TestIngestArchiveContinued(TestIngestArchive):
             # Duplicate should be skipped, result should be empty
             assert len(ingest_result.simulations) == 0
 
+    def test_validation_error_does_not_persist_empty_case(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081175.251218-200940": {
+                "execution_id": "1081175.251218-200940",
+                "case_name": "orphan_case_validation",
+                "compset": "FHIST",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": None,
+                "initialization_type": "test",
+                "simulation_type": "test",
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": None,
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "ValidationError"
+        assert (
+            db.query(Case).filter(Case.name == "orphan_case_validation").first() is None
+        )
+
+    def test_duplicate_does_not_persist_new_empty_case(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            id=uuid4(), email="test@example.com", is_active=True, is_superuser=False
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="test_duplicate_does_not_persist_new_empty_case",
+            machine_id=machine.id,
+            triggered_by=user.id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        case = Case(name="existing_case")
+        db.add(case)
+        db.flush()
+
+        existing_sim = Simulation(
+            case_id=case.id,
+            execution_id="1081175.251218-200941",
+            compset="FHIST",
+            compset_alias="FHIST_f09_fe",
+            grid_name="grid",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            simulation_type="test",
+            status=SimulationStatus.CREATED,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(existing_sim)
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081175.251218-200941": {
+                "execution_id": "1081175.251218-200941",
+                "case_name": "orphan_case_duplicate",
+                "compset": "FHIST",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "simulation_type": "test",
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": None,
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert ingest_result.created_count == 0
+        assert ingest_result.duplicate_count == 1
+        assert ingest_result.simulations == []
+        assert (
+            db.query(Case).filter(Case.name == "orphan_case_duplicate").first() is None
+        )
+
     def test_ingest_archive_counts(self, db: Session) -> None:
         """Test that summary counts reflect created and duplicate simulations."""
         machine = self._create_machine(db, "test-machine")

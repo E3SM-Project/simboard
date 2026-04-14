@@ -26,6 +26,7 @@ from app.features.ingestion.api import (
 from app.features.ingestion.ingest import IngestArchiveResult
 from app.features.ingestion.models import Ingestion
 from app.features.ingestion.parsers.parser import ArchiveValidationError
+from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
@@ -802,6 +803,62 @@ class TestIngestFromUploadEndpoint:
         assert ingestion.status == "failed"
         assert ingestion.created_count == 0
         assert ingestion.error_count == 2
+
+    def test_path_endpoint_does_not_persist_empty_case_on_ingest_error(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        archive_path = self._create_archive_file(tmp_path, "orphan_case.tar.gz")
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
+
+        parsed_simulation = ParsedSimulation(
+            execution_dir="/path/to/1081175.251218-200942",
+            execution_id="1081175.251218-200942",
+            case_name="orphan_case_endpoint",
+            case_group=None,
+            machine=machine.name,
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date=None,
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+        )
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=([parsed_simulation], 0),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 201
+        assert res.json()["created_count"] == 0
+        assert len(res.json()["errors"]) == 1
+
+        ingestion = (
+            db.query(Ingestion)
+            .filter(Ingestion.source_reference == str(archive_path))
+            .first()
+        )
+        assert ingestion is not None
+        assert ingestion.status == "failed"
+        assert (
+            db.query(Case).filter(Case.name == "orphan_case_endpoint").first() is None
+        )
 
     def test_save_uploaded_file_rejects_large_files(self, tmp_path: Path):
         file_content = b"x" * (51 * 1024 * 1024)  # 51MB
