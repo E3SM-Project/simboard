@@ -9,6 +9,19 @@ from app.features.ingestion.parsers.case_docs import (
 
 
 class TestParseEnvCase:
+    def test_extracts_case_root(self, tmp_path):
+        xml_case = """
+        <config>
+            <entry id="CASEROOT" value="/tmp/case_root" />
+        </config>
+        """
+        tmp_case = tmp_path / "env_case_caseroot.xml"
+        tmp_case.write_text(xml_case)
+
+        result = parse_env_case(tmp_case)
+
+        assert result["case_root"] == "/tmp/case_root"
+
     def test_value(self, tmp_path):
         xml_case = """
         <config>
@@ -139,6 +152,41 @@ class TestParseEnvBuild:
 
 
 class TestParseEnvRun:
+    def test_extracts_path_artifact_values(self, tmp_path):
+        xml_run = """
+        <config>
+            <entry id="RUN_TYPE" value="startup" />
+            <entry id="RUN_STARTDATE" value="2020-01-01" />
+            <entry id="RUNDIR" value="/tmp/run" />
+            <entry id="DOUT_S_ROOT" value="/tmp/archive" />
+            <entry id="POSTRUN_SCRIPT">/tmp/post.sh --flag value</entry>
+        </config>
+        """
+        tmp_run = tmp_path / "env_run_paths.xml"
+        tmp_run.write_text(xml_run)
+
+        result = parse_env_run(tmp_run)
+
+        assert result["output_path"] == "/tmp/run"
+        assert result["archive_path"] == "/tmp/archive"
+        assert result["postprocessing_script"] == "/tmp/post.sh --flag value"
+
+    def test_missing_path_entries_return_none(self, tmp_path):
+        xml_run = """
+        <config>
+            <entry id="RUN_TYPE" value="startup" />
+            <entry id="RUN_STARTDATE" value="2020-01-01" />
+        </config>
+        """
+        tmp_run = tmp_path / "env_run_missing_paths.xml"
+        tmp_run.write_text(xml_run)
+
+        result = parse_env_run(tmp_run)
+
+        assert result["output_path"] is None
+        assert result["archive_path"] is None
+        assert result["postprocessing_script"] is None
+
     def test_branch_uses_run_refdate(self, tmp_path):
         xml_run = """
         <config>
