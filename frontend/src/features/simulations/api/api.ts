@@ -3,6 +3,12 @@ import type { CaseOut, SimulationCreate, SimulationOut } from '@/types';
 
 export const SIMULATIONS_URL = '/simulations';
 export const CASES_URL = '/cases';
+export const PACE_URL = '/pace';
+
+export interface PaceResolutionOut {
+  executionId: string;
+  experimentId: string | null;
+}
 
 export const createSimulation = async (data: SimulationCreate): Promise<SimulationOut> => {
   const res = await api.post<SimulationOut>(SIMULATIONS_URL, data);
@@ -21,6 +27,15 @@ export const listSimulations = async (url: string = SIMULATIONS_URL): Promise<Si
 export const getSimulationById = async (id: string): Promise<SimulationOut> => {
   const res = await api.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
+  });
+
+  return res.data;
+};
+
+export const resolvePaceExecution = async (executionId: string): Promise<PaceResolutionOut> => {
+  const res = await api.get<PaceResolutionOut>(`${PACE_URL}/resolve`, {
+    headers: { 'Cache-Control': 'no-cache' },
+    params: { execution_id: executionId },
   });
 
   return res.data;
