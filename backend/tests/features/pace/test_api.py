@@ -35,6 +35,10 @@ class _FakeHttpError(urllib.error.HTTPError):
 
 
 class TestResolvePaceExecution:
+    @pytest.fixture(autouse=True)
+    def clear_cache(self) -> None:
+        pace_api._PACE_CACHE.clear()
+
     def test_endpoint_returns_experiment_id_on_success(
         self, client, monkeypatch
     ) -> None:
@@ -60,6 +64,20 @@ class TestResolvePaceExecution:
         assert captured_request[0].full_url == (
             "https://pace.ornl.gov/ajax/specificSearch/lid:52448807.260505-035011/expid"
         )
+
+    def test_endpoint_returns_experiment_id_on_direct_numeric_payload(
+        self, client, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            pace_api.urllib.request,
+            "urlopen",
+            lambda *args, **kwargs: _FakeHttpResponse(200, "214043"),
+        )
+
+        response = client.get(f"{API_BASE}/pace/resolve", params={"execution_id": "x"})
+
+        assert response.status_code == 200
+        assert response.json() == {"executionId": "x", "experimentId": "214043"}
 
     def test_endpoint_encodes_only_execution_id_portion(
         self, client, monkeypatch
@@ -197,6 +215,75 @@ class TestResolvePaceExecution:
 
         assert response.status_code == 200
         assert response.json() == {"executionId": "x", "experimentId": None}
+
+    def test_endpoint_caches_successful_resolutions(self, client, monkeypatch) -> None:
+        call_count = 0
+
+        def fake_urlopen(request: urllib.request.Request, timeout: float):
+            nonlocal call_count
+            call_count += 1
+            return _FakeHttpResponse(200, json.dumps([{"expid": "228920"}]))
+
+        monkeypatch.setattr(pace_api.urllib.request, "urlopen", fake_urlopen)
+
+        first_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-exec"}
+        )
+        second_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-exec"}
+        )
+
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+        assert first_response.json()["experimentId"] == "228920"
+        assert second_response.json()["experimentId"] == "228920"
+        assert call_count == 1
+
+    def test_endpoint_caches_unresolved_resolutions(self, client, monkeypatch) -> None:
+        call_count = 0
+
+        def fake_urlopen(request: urllib.request.Request, timeout: float):
+            nonlocal call_count
+            call_count += 1
+            return _FakeHttpResponse(200, "[]")
+
+        monkeypatch.setattr(pace_api.urllib.request, "urlopen", fake_urlopen)
+
+        first_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-miss"}
+        )
+        second_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-miss"}
+        )
+
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+        assert first_response.json()["experimentId"] is None
+        assert second_response.json()["experimentId"] is None
+        assert call_count == 1
+
+    def test_endpoint_caches_timeouts(self, client, monkeypatch) -> None:
+        call_count = 0
+
+        def fake_urlopen(request: urllib.request.Request, timeout: float):
+            nonlocal call_count
+            call_count += 1
+            raise TimeoutError()
+
+        monkeypatch.setattr(pace_api.urllib.request, "urlopen", fake_urlopen)
+
+        first_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-timeout"}
+        )
+        second_response = client.get(
+            f"{API_BASE}/pace/resolve", params={"execution_id": "cached-timeout"}
+        )
+
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+        assert first_response.json()["experimentId"] is None
+        assert second_response.json()["experimentId"] is None
+        assert call_count == 1
 
     def test_endpoint_rejects_missing_execution_id(self, client) -> None:
         response = client.get(f"{API_BASE}/pace/resolve")

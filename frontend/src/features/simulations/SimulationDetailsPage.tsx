@@ -23,7 +23,8 @@ export const SimulationDetailsPage = () => {
       : normalizedBackHref.startsWith('/simulations')
         ? 'Back to Simulations'
         : 'Back to Runs';
-  const executionId = simulation?.executionId?.trim() ?? '';
+  const currentSimulation = simulation?.id === id ? simulation : null;
+  const executionId = currentSimulation?.executionId?.trim() ?? '';
 
   useEffect(() => {
     if (!executionId) {
@@ -69,7 +70,7 @@ export const SimulationDetailsPage = () => {
     );
   }
 
-  if (loading) {
+  if (loading || (simulation !== null && currentSimulation === null)) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-gray-500">Loading simulation details…</div>
@@ -85,7 +86,7 @@ export const SimulationDetailsPage = () => {
     );
   }
 
-  if (!simulation) {
+  if (!currentSimulation) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-gray-500">Simulation not found</div>
@@ -107,7 +108,7 @@ export const SimulationDetailsPage = () => {
 
   return (
     <SimulationDetailsView
-      simulation={simulation}
+      simulation={currentSimulation}
       backHref={backHref}
       backLabel={backLabel}
       paceLink={paceLink}
