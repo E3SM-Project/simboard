@@ -19,33 +19,37 @@ class PaceResolutionOut(CamelOutBaseModel):
     experiment_id: str | None
 
 
+@router.get(
+    "/resolve",
+    response_model=PaceResolutionOut,
+    responses={
+        200: {"description": "PACE resolution result."},
+        422: {"description": "Validation error."},
+    },
+)
+def resolve_pace_execution(
+    execution_id: Annotated[
+        str,
+        Query(
+            ...,
+            description="Simulation execution ID to resolve to a PACE experiment ID.",
+        ),
+    ],
+) -> PaceResolutionOut:
+    normalized_execution_id = _normalize_execution_id(execution_id)
+
+    return PaceResolutionOut(
+        execution_id=normalized_execution_id,
+        experiment_id=_resolve_experiment_id(normalized_execution_id),
+    )
+
+
 def _normalize_execution_id(execution_id: str) -> str:
     normalized_execution_id = execution_id.strip()
     if not normalized_execution_id:
         raise HTTPException(status_code=422, detail="execution_id must not be blank")
 
     return normalized_execution_id
-
-
-def _build_pace_lookup_url(execution_id: str) -> str:
-    encoded_execution_id = urllib.parse.quote(execution_id, safe="")
-    return f"{PACE_BASE_URL}/ajax/specificSearch/lid:{encoded_execution_id}/expid"
-
-
-def _extract_experiment_id(payload: Any) -> str | None:
-    if not isinstance(payload, list) or not payload:
-        return None
-
-    first_item = payload[0]
-    if not isinstance(first_item, dict):
-        return None
-
-    experiment_id = first_item.get("expid")
-    if not isinstance(experiment_id, str):
-        return None
-
-    normalized_experiment_id = experiment_id.strip()
-    return normalized_experiment_id or None
 
 
 def _resolve_experiment_id(execution_id: str) -> str | None:
@@ -78,26 +82,22 @@ def _resolve_experiment_id(execution_id: str) -> str | None:
     return _extract_experiment_id(payload)
 
 
-@router.get(
-    "/resolve",
-    response_model=PaceResolutionOut,
-    responses={
-        200: {"description": "PACE resolution result."},
-        422: {"description": "Validation error."},
-    },
-)
-def resolve_pace_execution(
-    execution_id: Annotated[
-        str,
-        Query(
-            ...,
-            description="Simulation execution ID to resolve to a PACE experiment ID.",
-        ),
-    ],
-) -> PaceResolutionOut:
-    normalized_execution_id = _normalize_execution_id(execution_id)
+def _build_pace_lookup_url(execution_id: str) -> str:
+    encoded_execution_id = urllib.parse.quote(execution_id, safe="")
+    return f"{PACE_BASE_URL}/ajax/specificSearch/lid:{encoded_execution_id}/expid"
 
-    return PaceResolutionOut(
-        execution_id=normalized_execution_id,
-        experiment_id=_resolve_experiment_id(normalized_execution_id),
-    )
+
+def _extract_experiment_id(payload: Any) -> str | None:
+    if not isinstance(payload, list) or not payload:
+        return None
+
+    first_item = payload[0]
+    if not isinstance(first_item, dict):
+        return None
+
+    experiment_id = first_item.get("expid")
+    if not isinstance(experiment_id, str):
+        return None
+
+    normalized_experiment_id = experiment_id.strip()
+    return normalized_experiment_id or None
