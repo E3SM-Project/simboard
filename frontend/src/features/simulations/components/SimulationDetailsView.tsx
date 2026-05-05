@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CircleHelp } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -9,8 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
@@ -23,6 +25,12 @@ interface SimulationDetailsViewProps {
   canEdit?: boolean;
   backHref?: string;
   backLabel?: string;
+  paceLink?: {
+    href: string;
+    label: string;
+  } | null;
+  isResolvingPace?: boolean;
+  showPaceFallbackInfo?: boolean;
 }
 
 // -------------------- Small UI helpers --------------------
@@ -52,9 +60,13 @@ export const SimulationDetailsView = ({
   canEdit = false,
   backHref = '/browse',
   backLabel = 'Back to Runs',
+  paceLink = null,
+  isResolvingPace = false,
+  showPaceFallbackInfo = false,
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
+  const performanceLinks = simulation.groupedLinks.performance ?? [];
 
   // Temporary local-only comments
   const [newComment, setNewComment] = useState('');
@@ -428,9 +440,9 @@ export const SimulationDetailsView = ({
                 </div>
                 <div>
                   <Label className="mb-1 block text-sm">Performance</Label>
-                  {simulation.groupedLinks.performance?.length ? (
+                  {performanceLinks.length || paceLink ? (
                     <ul className="list-disc pl-5 text-sm">
-                      {simulation.groupedLinks.performance.map((p) => (
+                      {performanceLinks.map((p) => (
                         <li key={p.url} className="flex items-center gap-2">
                           <a
                             className="text-blue-600 hover:underline flex items-center gap-1"
@@ -458,6 +470,74 @@ export const SimulationDetailsView = ({
                           </a>
                         </li>
                       ))}
+                      {paceLink && (
+                        <li className="flex items-center gap-2">
+                          <a
+                            className="text-blue-600 hover:underline flex items-center gap-1"
+                            href={paceLink.href}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              className="inline-block"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                              />
+                            </svg>
+                            {paceLink.label}
+                          </a>
+                          {isResolvingPace && (
+                            <>
+                              <Spinner className="size-3 text-muted-foreground" />
+                              <TooltipProvider delayDuration={150}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      aria-label="PACE link resolution status"
+                                      className="text-muted-foreground hover:text-foreground"
+                                    >
+                                      <CircleHelp className="size-3" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Checking for a direct PACE experiment link
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </>
+                          )}
+                          {!isResolvingPace && showPaceFallbackInfo && (
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="PACE link fallback information"
+                                    className="text-muted-foreground hover:text-foreground"
+                                  >
+                                    <CircleHelp className="size-3" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Direct PACE experiment link not found. Search results may
+                                  still contain this run.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </li>
+                      )}
                     </ul>
                   ) : (
                     <div className="mb-2 text-sm text-muted-foreground">
