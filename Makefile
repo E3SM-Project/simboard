@@ -55,7 +55,7 @@ help:
 	@echo "  make backend-seed                          # Run DB seed script"
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
-	@echo "  make backend-provision-service             # Provision service account (interactive)"
+	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -252,9 +252,6 @@ frontend-install:
 
 frontend-clean:
 	cd $(FRONTEND_DIR) && rm -rf node_modules dist .turbo
-
-frontend-local:
-	cd $(FRONTEND_DIR) && pnpm dev
 
 frontend-build:
 	cd $(FRONTEND_DIR) && pnpm build
