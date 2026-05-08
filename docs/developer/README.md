@@ -61,7 +61,28 @@ For token-based ingestion and service-account details, see [docs/hpc_api_token_a
 
 ## Architecture
 
-<!-- DIAGRAM PLACEHOLDER: High-level SimBoard architecture. Maintainer will add diagram context. -->
+```mermaid
+flowchart LR
+  user[Browser User]
+  ingest[Archive Uploads and Privileged Ingestion Requests]
+
+  subgraph mono[SimBoard Monorepo]
+    direction LR
+    fe[Frontend\nReact + Vite SPA\nBrowse, details, compare, auth, upload]
+    be[Backend\nFastAPI /api/v1\nParsing, validation, reference rules, persistence]
+    db[(PostgreSQL\nCases, simulations, ingestions, machines, users,\ntokens, artifacts, links)]
+  end
+
+  gh[GitHub OAuth]
+  pace[PACE Lookup Requests]
+
+  user --> fe
+  fe -- HTTPS via frontend/src/api/api.ts\ncredentials enabled for cookie auth --> be
+  ingest --> be
+  be --> db
+  be --> gh
+  be --> pace
+```
 
 SimBoard is a monorepo with a React frontend, a FastAPI backend, and PostgreSQL as the primary datastore.
 
@@ -76,12 +97,38 @@ SimBoard is a monorepo with a React frontend, a FastAPI backend, and PostgreSQL 
 - external dependencies:
   PostgreSQL, GitHub OAuth, and PACE lookup requests from the backend
 
-High-level data flow:
+### High-Level Automated Ingestion Flow
 
-1. An archive is uploaded from the UI or referenced by path for a privileged ingestion.
-2. Backend parsers extract simulation metadata, group runs into cases, compute reference/delta semantics, and create ingestion audit records.
-3. PostgreSQL stores cases, simulations, artifacts, links, machines, users, tokens, and ingestion metadata.
-4. The frontend reads that data back through `/api/v1` endpoints and renders cases, runs, details, and comparison views.
+This overview focuses on automated ingestion paths and the normalized records they produce. The UI consumes those persisted records after ingestion completes.
+
+```mermaid
+flowchart TD
+  request[Automated ingestion request]
+  choice{Path reference\nor archive upload?}
+  path[Parse metadata\nin place]
+  upload[Extract archive\nand stage artifacts]
+  normalize[Validate metadata\nGroup runs into cases\nCompute ref and delta semantics]
+  persist[(Store cases, simulations,\ningestions, artifacts,\nlinks, machines,\nusers, and tokens)]
+  frontend[UI reads /api/v1\ncatalog data later]
+
+  request --> choice
+  choice --> path
+  choice --> upload
+  path --> normalize
+  upload --> normalize
+  normalize --> persist --> frontend
+```
+
+1. Automated ingestion starts with a privileged path-based request or an uploaded archive.
+2. Backend parsing validates simulation metadata, groups runs into cases, computes reference and delta semantics, and creates ingestion audit records.
+3. PostgreSQL stores the normalized cases, simulations, artifacts, links, machines, users, tokens, and ingestion metadata.
+4. After ingestion completes, the frontend reads the catalog back through `/api/v1` endpoints and renders cases, runs, details, and comparison views.
+
+### Detailed Ingestion API Flow
+
+The detailed diagram below shows the token-authenticated HPC and service-account ingestion paths, including the distinct path-based and archive-upload branches.
+
+![Detailed SimBoard ingestion API flow](./simboard_ingestion_hpc.svg)
 
 ## Repo Workflow
 

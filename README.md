@@ -16,23 +16,29 @@ SimBoard exists so researchers and maintainers do not have to reconstruct simula
 
 ## Current Capabilities
 
-- ingest packaged simulation archives into normalized case and simulation records
-- browse runs and cases from the UI
-- view case details, simulation details, artifacts, and external links
-- compare selected simulations side by side
-- preserve provenance such as machine, Git metadata, HPC username, artifacts, and external links
-- resolve PACE experiment links from execution IDs
-- support browser-based GitHub auth and service-account token auth for privileged automation
+- Ingest packaged simulation archives into normalized case and simulation records
+- Browse runs and cases from the UI
+- View case details, simulation details, artifacts, and external links
+- Compare selected simulations side by side
+- Preserve provenance such as machine, Git metadata, HPC username, artifacts, and external links
+- Resolve PACE experiment links from execution IDs
+- Support browser-based GitHub auth and service-account token auth for privileged automation
 
-`TODO/VERIFY`: the frontend includes an AI comparison widget that posts to `/analyze-simulations`, but no matching backend route was found under `backend/app/`. Do not treat AI-assisted comparison as a supported feature until that endpoint exists.
+<!-- `TODO/VERIFY`: the frontend includes an AI comparison widget that posts to `/analyze-simulations`, but no matching backend route was found under `backend/app/`. Do not treat AI-assisted comparison as a supported feature until that endpoint exists. -->
+
+## System Summary
+
+SimBoard is organized as a React frontend, a FastAPI backend, and PostgreSQL-backed persistence. Together they handle metadata ingestion, normalization, browsing, comparison, provenance, and authenticated upload workflows.
+
+For architecture diagrams, API/data-flow detail, and contributor-oriented system context, see [docs/developer/README.md](docs/developer/README.md).
 
 ## Technology At A Glance
 
-- frontend: React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS, shadcn/ui
-- backend: FastAPI, Pydantic, SQLAlchemy, Alembic
-- database: PostgreSQL
-- auth: GitHub OAuth for browser flows, API tokens for service accounts
-- tooling: `uv`, `pnpm`, Ruff, mypy, ESLint, Prettier, pre-commit
+- Frontend: React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS, shadcn/ui
+- Backend: FastAPI, Pydantic, SQLAlchemy, Alembic
+- Database: PostgreSQL
+- Auth: GitHub OAuth for browser flows, API tokens for service accounts
+- Tooling: `uv`, `pnpm`, `ruff`, `mypy`, `eslint`, `prettier`, `pre-commit`
 - CI/CD: GitHub Actions plus NERSC-focused deployment/build docs under `docs/`
 
 ## Documentation Map
