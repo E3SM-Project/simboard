@@ -21,7 +21,7 @@ The frontend uses feature-based organization and enforces import boundaries with
 - `src/components/shared/` is for reusable shared components.
 - `src/components/ui/` is for lower-level UI primitives.
 
-Feature modules should not import directly from other feature modules.
+Feature modules should not import directly from other feature modules. This is enforced at lint time by `eslint-plugin-boundaries` — if you see an ESLint error about an invalid cross-feature import, move the shared code to `src/components/shared/` or `src/lib/`.
 
 ## Important Locations
 

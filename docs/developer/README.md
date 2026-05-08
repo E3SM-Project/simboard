@@ -6,9 +6,9 @@ Use this guide for local setup, repo-wide development workflow, and contributor-
 
 Prerequisites:
 
-- Docker Desktop or compatible local Docker runtime
-- `uv`
-- Node.js and `pnpm`
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or compatible local Docker runtime
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — fast Python package manager (replaces pip/venv)
+- [Node.js](https://nodejs.org/) and [`pnpm`](https://pnpm.io/installation) — JavaScript runtime and package manager
 
 Recommended first-run flow from the repository root:
 
@@ -35,18 +35,18 @@ What `make setup-local` does:
 Useful commands:
 
 ```bash
-make backend-test
-make frontend-lint
-make pre-commit-run
-pnpm --dir frontend run type-check
-make help
+make backend-test          # run backend pytest suite
+make frontend-lint         # lint frontend with ESLint
+make pre-commit-run        # run all pre-commit hooks (formatting, linting, etc.)
+pnpm --dir frontend run type-check  # TypeScript type checking (no Makefile wrapper yet)
+make help                  # list all available Makefile targets
 ```
 
 ## GitHub Auth Setup
 
 If you need authenticated browser flows such as upload:
 
-1. Create a GitHub OAuth app with homepage `https://127.0.0.1:5173`.
+1. [Create a GitHub OAuth app](https://github.com/settings/developers) with homepage `https://127.0.0.1:5173`.
 2. Set the callback URL to `https://127.0.0.1:8000/api/v1/auth/github/callback`.
 3. Put the GitHub credentials in `.envs/local/backend.env`.
 4. Restart `make backend-run`.
@@ -61,94 +61,95 @@ For token-based ingestion and service-account details, see [docs/hpc_api_token_a
 
 ## Architecture
 
+SimBoard is a web application for cataloging and comparing E3SM simulation metadata. The full application (frontend, backend, and database) is hosted on NERSC Spin. Automated ingestion jobs running on HPC sites collect metadata from an E3SM performance archive and push it to SimBoard, where the backend normalizes it and the frontend lets researchers browse, compare, and analyze results.
+
 ```mermaid
 flowchart LR
   user[Browser User]
-  ingest[Archive Uploads and Privileged Ingestion Requests]
+  ingest([Automated Ingestion])
 
-  subgraph mono[SimBoard Monorepo]
+  subgraph mono[SimBoard — hosted on NERSC Spin]
     direction LR
-    fe[Frontend\nReact + Vite SPA\nBrowse, details, compare, auth, upload]
-    be[Backend\nFastAPI /api/v1\nParsing, validation, reference rules, persistence]
-    db[(PostgreSQL\nCases, simulations, ingestions, machines, users,\ntokens, artifacts, links)]
+    fe[Frontend\nReact + Vite SPA]
+    be[Backend\nFastAPI /api/v1]
+    db[(PostgreSQL)]
   end
 
   gh[GitHub OAuth]
-  pace[PACE Lookup Requests]
+  pace[PACE Lookup]
 
   user --> fe
-  fe -- HTTPS via frontend/src/api/api.ts\ncredentials enabled for cookie auth --> be
+  fe -- HTTPS + cookie auth --> be
   ingest --> be
   be --> db
   be --> gh
   be --> pace
 ```
 
-SimBoard is a monorepo with a React frontend, a FastAPI backend, and PostgreSQL as the primary datastore.
+- **Frontend** — browse, detail, compare, auth, and upload views. Calls the backend over HTTPS via `frontend/src/api/api.ts` with credentials enabled for cookie auth.
+- **Backend** — parses ingested archives, applies validation and reference-simulation rules, persists normalized records, and exposes `/api/v1` endpoints.
+- **PostgreSQL** — stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.
+- **External services** — GitHub OAuth (user login) and PACE (performance lookup).
 
-- backend responsibility:
-  parse ingested archives, apply validation and reference-simulation rules, persist cases/simulations/ingestions/machines/users, and expose `/api/v1` endpoints
-- frontend responsibility:
-  fetch catalog data from the API, manage navigation and selection state, and render browsing, details, compare, auth, and upload flows
-- database responsibility:
-  store normalized case, simulation, machine, user, token, artifact, link, and ingestion records
-- API boundary:
-  the frontend uses `frontend/src/api/api.ts` to call the backend over HTTPS with credentials enabled for cookie auth
-- external dependencies:
-  PostgreSQL, GitHub OAuth, and PACE lookup requests from the backend
+## Automated HPC Metadata Ingestion
 
-### High-Level Automated Ingestion Flow
+HPC sites automatically produce `performance_archive` metadata. Automated ingestion jobs running on those sites collect the metadata and push it to SimBoard through one of two ingestion modes:
 
-This overview focuses on automated ingestion paths and the normalized records they produce. The UI consumes those persisted records after ingestion completes.
+- **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem (used when the site's storage is accessible to NERSC Spin, e.g., NERSC / Perlmutter).
+- **Archive upload** — an ingestion job packages the archive and uploads it to SimBoard over HTTPS (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
 
 ```mermaid
 flowchart TD
-  request[Automated ingestion request]
-  choice{Path reference\nor archive upload?}
-  path[Parse metadata\nin place]
-  upload[Extract archive\nand stage artifacts]
-  normalize[Validate metadata\nGroup runs into cases\nCompute ref and delta semantics]
-  persist[(Store cases, simulations,\ningestions, artifacts,\nlinks, machines,\nusers, and tokens)]
-  frontend[UI reads /api/v1\ncatalog data later]
+  subgraph SOURCES["Source Archives"]
+    NERSC_SRC["NERSC / Perlmutter"]
+    LCRC_SRC["LCRC / Chrysalis"]
+    ADDL_SRC["Additional HPC Sites"]
+  end
 
-  request --> choice
-  choice --> path
-  choice --> upload
-  path --> normalize
-  upload --> normalize
-  normalize --> persist --> frontend
+  subgraph AUTOMATION["Site-Side Automation"]
+    NERSC_WRAP["Ingestion Job\npushes path reference"]
+    UPLOAD_WRAP["Ingestion Job\npackages and uploads archive"]
+  end
+
+  subgraph BACKEND["SimBoard Backend"]
+    PATH["Path Ingestion\nvalidate token, parse in place"]
+    UPLOAD["Archive Upload Ingestion\nvalidate token, stage and parse"]
+    NORMALIZE["Normalize and Validate"]
+    AUDIT["Ingestion Audit Record"]
+    DB[("PostgreSQL")]
+  end
+
+  NERSC_SRC --> NERSC_WRAP -->|"path reference"| PATH
+  LCRC_SRC --> UPLOAD_WRAP
+  ADDL_SRC -.-> UPLOAD_WRAP
+  UPLOAD_WRAP -->|"archive upload"| UPLOAD
+
+  PATH --> NORMALIZE
+  UPLOAD --> NORMALIZE
+  NORMALIZE --> AUDIT --> DB
 ```
 
-1. Automated ingestion starts with a privileged path-based request or an uploaded archive.
-2. Backend parsing validates simulation metadata, groups runs into cases, computes reference and delta semantics, and creates ingestion audit records.
-3. PostgreSQL stores the normalized cases, simulations, artifacts, links, machines, users, tokens, and ingestion metadata.
-4. After ingestion completes, the frontend reads the catalog back through `/api/v1` endpoints and renders cases, runs, details, and comparison views.
+All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, state path, dry-run flag, and the token.
 
-### Detailed Ingestion API Flow
+After ingestion completes, the backend stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. The frontend reads the resulting catalog data through `/api/v1` endpoints.
 
-The detailed diagram below shows the token-authenticated HPC and service-account ingestion paths, including the distinct path-based and archive-upload branches.
+| Site                 | Ingestion mode            | Source archive location                                                |
+| -------------------- | ------------------------- | ---------------------------------------------------------------------- |
+| NERSC / Perlmutter   | Path reference            | `/global/cfs/projectdirs/e3sm/performance_archive`                     |
+| LCRC / Chrysalis     | Archive upload            | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`                  |
+| Additional HPC sites | Archive upload by default | Site-specific `performance_archive` path, packaged by the site wrapper |
 
-![Detailed SimBoard ingestion API flow](./simboard_ingestion_hpc.svg)
+## Contributing
 
-## Repo Workflow
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for issue, branch, commit, and PR expectations.
 
-- start from an issue when the work is not trivial
-- branch from `main`
-- keep commits focused and reviewable
-- use the PR template in `.github/pull_request_template.md`
-- run validation from the repository root before opening a PR
-
-Primary workflow details live in [CONTRIBUTING.md](../../CONTRIBUTING.md).
-
-## Making Safe, Reviewable Changes
+Key habits for safe changes:
 
 - read the touched feature before editing it
-- prefer minimal diffs over broad cleanup
-- keep frontend feature boundaries intact
-- update the nearest backend tests when behavior changes
-- add migrations when schema or persistence behavior changes
-- verify both parser behavior and UI expectations when changing ingestion flows
-- run pre-commit from the repository root, not from subdirectories
+- keep frontend feature boundaries intact (`eslint-plugin-boundaries` enforces this)
+- update backend tests when behavior changes
+- add Alembic migrations when schema changes
+- run `make pre-commit-run` from the repository root, not from subdirectories
 
 ## Where Important Details Live
 

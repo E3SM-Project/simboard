@@ -4,7 +4,11 @@
   </span>
 </p>
 
-# SimBoard
+<p align="center">
+  <a href="https://github.com/E3SM-Project/simboard/actions/workflows/build-backend-dev.yml"><img src="https://github.com/E3SM-Project/simboard/actions/workflows/build-backend-dev.yml/badge.svg" alt="Backend CI"></a>
+  <a href="https://github.com/E3SM-Project/simboard/actions/workflows/build-frontend-dev.yml"><img src="https://github.com/E3SM-Project/simboard/actions/workflows/build-frontend-dev.yml/badge.svg" alt="Frontend CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
+</p>
 
 ## Overview
 
@@ -51,3 +55,7 @@ For architecture diagrams, API/data-flow detail, and contributor-oriented system
 ## How to Contribute
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) for issue, branch, commit, PR, and validation expectations. If you are new to the repo, use the contributor guide at [docs/developer/README.md](docs/developer/README.md) for local setup, architecture, and development workflow.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
