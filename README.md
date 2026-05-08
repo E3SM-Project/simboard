@@ -24,8 +24,6 @@ SimBoard exists so researchers and maintainers do not have to reconstruct simula
 - Resolve PACE experiment links from execution IDs
 - Support browser-based GitHub auth and service-account token auth for privileged automation
 
-<!-- `TODO/VERIFY`: the frontend includes an AI comparison widget that posts to `/analyze-simulations`, but no matching backend route was found under `backend/app/`. Do not treat AI-assisted comparison as a supported feature until that endpoint exists. -->
-
 ## System Summary
 
 SimBoard is organized as a React frontend, a FastAPI backend, and PostgreSQL-backed persistence. Together they handle metadata ingestion, normalization, browsing, comparison, provenance, and authenticated upload workflows.
