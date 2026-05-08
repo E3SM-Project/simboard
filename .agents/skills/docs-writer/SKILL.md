@@ -5,49 +5,35 @@ description: Write or improve SimBoard documentation for developers and users, k
 
 # Docs Writer
 
-## Purpose
+## Overview
 
-Write durable human-facing documentation for SimBoard. Cover onboarding, architecture, workflows, features, deployment notes, and developer usage guidance based on what the repository actually does today.
+Write durable SimBoard documentation that matches the repository as it exists now. Prefer code, manifests, the Makefile, and current routes over stale prose.
 
-## When To Use
+## Use When
 
-- Updating READMEs after behavior or workflow changes
-- Writing feature docs, onboarding steps, architecture notes, or usage documentation
-- Clarifying developer setup, validation commands, or deployment/development workflows
-- Cleaning up stale docs so they match the codebase
+- Updating READMEs or `docs/**` after behavior, workflow, or architecture changes
+- Writing onboarding, setup, feature, or developer workflow documentation
+- Correcting drift between documentation and the codebase
 
-## Inputs Expected
+## Workflow
 
-- The audience and documentation goal
-- The behavior, workflow, or architecture being documented
-- Source files or commands that should be treated as authoritative
-- Scope constraints such as README-only, docs-only, or feature-local docs
+1. Inspect the relevant code, commands, and existing docs before writing.
+2. Treat code, manifests, workflows, and `Makefile` targets as authoritative when prose disagrees.
+3. Update the most specific existing doc instead of duplicating content.
+4. Keep commands, paths, and terminology aligned with the repo.
+5. Note anything that could not be verified directly.
 
-## Outputs Required
+## Repo Rules
 
-- Updated Markdown in the right repo location
-- Accurate commands, paths, and file references
-- Clear note of any behavior that could not be verified directly
-- Minimal duplication across docs
-
-## Repo-Specific Conventions
-
-- Use the repo's existing documentation locations first: `README.md`, `frontend/README.md`, `backend/README.md`, and `docs/**`.
-- Follow the anti-drift policy in `AGENTS.md`: do not hardcode dependency versions, counts, or volatile config when the authoritative source is a manifest, lockfile, workflow file, or source default.
-- When setup or development steps are involved, prefer the repo make targets from `Makefile`.
+- Prefer existing doc locations: `README.md`, `backend/README.md`, `frontend/README.md`, and `docs/**`.
+- Follow the anti-drift policy in `AGENTS.md`: do not hardcode volatile versions, counts, or config values.
 - Document backend tooling as `uv`-based and frontend tooling as `pnpm`-based.
-- When environment setup matters, reference `.envs/example/*` as templates and `.envs/local/*` as developer-local values.
-- Keep pre-commit guidance rooted at the repository root, matching the current repo instructions.
-- If a change affects user-facing flows, keep terminology consistent with SimBoard's domain: simulations, cases, machines, ingestion, compare, upload, and E3SM metadata.
+- Prefer repo make targets for setup, dev, lint, test, and pre-commit flows.
+- Reference `.envs/example/*` for templates and `.envs/local/*` for developer-local values.
+- Keep terminology consistent with the current product and routes, including cases, runs, compare, upload, docs, and simulation metadata.
 
-## Constraints / Anti-Patterns
+## Guardrails
 
-- Do not turn planning notes into durable docs; that belongs to `feature-planner`.
-- Do not document unimplemented behavior or aspirational architecture as if it already exists.
-- Do not duplicate the same long workflow in multiple files unless one file is serving as navigation.
-- Do not invent operational steps that are not backed by the repository.
-- Do not hardcode versions or other volatile values when a referenced source is the stable answer.
-
-## Example Task
-
-Update `README.md` and `docs/README.md` after a new local development workflow is added, using existing make targets and environment file locations rather than embedding fragile, version-specific setup details.
+- Do not document unimplemented or aspirational behavior as current behavior.
+- Do not copy the same long workflow into multiple files unless one document is acting as navigation.
+- Do not invent setup or operational steps that are not backed by the repo.

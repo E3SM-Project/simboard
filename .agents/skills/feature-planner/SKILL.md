@@ -5,50 +5,36 @@ description: Turn SimBoard product or engineering requests into concrete impleme
 
 # Feature Planner
 
-## Purpose
+## Overview
 
-Convert a request into an executable SimBoard implementation plan. Produce scope, sequencing, and risk analysis, not durable human documentation and not production code.
+Turn a request into an executable SimBoard plan. Produce scoped implementation steps, affected modules, validation, and risks without drifting into code or durable user docs.
 
-## When To Use
+## Use When
 
-- A request is ambiguous or spans multiple parts of the monorepo
-- The user wants a concrete execution plan before implementation
-- A feature may affect backend APIs, frontend routes, auth, migrations, or docs
-- The work needs decomposition into PR-sized steps
+- The request spans backend, frontend, docs, or multiple features
+- The user wants a plan before implementation
+- The work needs decomposition into reviewable steps
 
-## Inputs Expected
+## Workflow
 
-- The feature or problem statement
-- Target users or workflows
-- Any constraints on scope, timing, dependencies, or rollout
-- Known affected areas in backend, frontend, docs, or deployment
+1. Inspect the relevant features, routes, APIs, and tests before planning.
+2. Scope the request against the existing monorepo structure and feature boundaries.
+3. Name the concrete files, modules, and commands likely to change.
+4. Call out backend, frontend, tests, docs, migrations, and rollout implications.
+5. State open questions, assumptions, and validation commands.
 
-## Outputs Required
+## Repo Rules
 
-- A scoped implementation plan with phases or milestones
-- Expected files/directories or modules to touch
-- Backend, frontend, test, and docs impacts
-- Risks, open questions, and assumptions
-- Recommended validation commands and rollout order
+- Plan in terms of the existing split across `backend/`, `frontend/`, and `docs/`.
+- Respect backend feature modules under `backend/app/features/*`.
+- Respect frontend feature isolation and route composition in `frontend/src/features/*` and `frontend/src/routes/routes.tsx`.
+- Account for app-level shared state when relevant, especially data and compare selection threaded through `frontend/src/App.tsx`.
+- Include router registration, schema/model changes, and Alembic work when backend contracts or persistence change.
+- Include README or docs updates when developer workflows or user-facing behavior change.
+- Prefer repo commands such as `make backend-test`, `make frontend-lint`, `pnpm --dir frontend run type-check`, and `make pre-commit-run`.
 
-## Repo-Specific Conventions
+## Guardrails
 
-- Plan in terms of the existing monorepo split: `backend/`, `frontend/`, and `docs/`.
-- Respect the frontend feature-boundary rules and route composition model.
-- Respect the backend feature modules under `backend/app/features/*`.
-- Call out router registration, schema/model changes, and Alembic migrations when backend contracts or persistence change.
-- If a change affects developer setup or behavior, include README/docs updates in the plan.
-- Prefer repo commands and make targets in the execution plan rather than ad hoc shell steps.
-- Treat pre-commit, backend tests, frontend linting, and type-checking as part of the definition of done.
-
-## Constraints / Anti-Patterns
-
-- Do not drift into writing durable docs for humans; that belongs to `docs-writer`.
-- Do not drift into implementation details that assume code already exists when it does not.
-- Do not invent new architecture layers or service splits without strong evidence from the repo.
-- Do not ignore auth, role, migration, or environment impacts for features that touch upload, tokens, or ingestion.
-- Do not produce a generic checklist with no file/module specificity.
-
-## Example Task
-
-Plan a feature that lets users save and revisit comparison sets by outlining required backend persistence changes, frontend route/state updates, test coverage, migration needs, and README/docs follow-up before anyone writes code.
+- Do not invent new architecture layers or dependency additions without strong repo evidence.
+- Do not ignore auth, role, migration, or environment impacts for upload, ingestion, or token work.
+- Do not produce a generic checklist with no file or module specificity.

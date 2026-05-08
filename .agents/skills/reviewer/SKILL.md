@@ -5,54 +5,36 @@ description: Review SimBoard changes for correctness, maintainability, architect
 
 # Reviewer
 
-## Purpose
+## Overview
 
-Review proposed or completed SimBoard changes with a code-review mindset. Optimize for correctness, architecture fit, maintainability, and regression risk before style nits.
+Review SimBoard changes with a code-review mindset. Prioritize correctness, architecture fit, regression risk, API compatibility, and missing validation over style.
 
-## When To Use
+## Use When
 
 - Reviewing a branch, diff, or PR before merge
-- Auditing whether a change fits SimBoard's backend/frontend architecture
-- Checking whether a change needs tests, docs, migrations, or follow-up cleanup
-- Verifying that a fix did not break auth, data contracts, or feature boundaries
+- Auditing whether a change fits SimBoard backend or frontend architecture
+- Checking whether work needs tests, docs, migrations, or follow-up cleanup
 
-## Inputs Expected
+## Workflow
 
-- The user intent or ticket summary
-- The changed files or git diff
-- Any commands already run and their results
-- Known risk areas such as auth, ingestion, migrations, or compare/browse workflows
+1. Inspect the diff and the surrounding code before judging the change.
+2. Check correctness first: behavior, failure modes, auth, contracts, and persistence.
+3. Check repo fit next: feature boundaries, router registration, model imports, and shared state patterns.
+4. Check validation coverage: tests, lint, type-check, docs, migrations, and seed impacts.
+5. Report prioritized findings first, with file references and concrete risk.
 
-## Outputs Required
+## Repo Rules
 
-- Prioritized findings, highest severity first
-- File references for each finding
-- Clear explanation of the risk or likely regression
-- Missing tests, docs, or validation gaps
-- If there are no findings, say so explicitly and note residual risk
+- Treat the repo `AGENTS.md` as policy, but prefer current code when stale prose conflicts with implementation details.
+- Backend work should stay within `backend/app/features/*`, `backend/app/common/*`, and `backend/app/core/*`, with tests under `backend/tests/*`.
+- Review API contract drift carefully because frontend payloads generally expect camelCase schemas.
+- Frontend work must respect `frontend/eslint.config.js` boundaries and current route composition in `frontend/src/routes/routes.tsx`.
+- When reviewing frontend behavior, account for shared selection and top-level data ownership in `frontend/src/App.tsx`.
+- Validation should match repo workflows such as `make backend-test`, `make frontend-lint`, `pnpm --dir frontend run type-check`, and `make pre-commit-run`.
 
-## Repo-Specific Conventions
+## Guardrails
 
-- Treat `AGENTS.md` in the repo root as authoritative for repo behavior.
-- Backend work should stay inside `backend/app/features/*`, `backend/app/common/*`, `backend/app/core/*`, and related tests under `backend/tests/*`.
-- New backend routers belong in feature modules and must be registered in `backend/app/main.py`.
-- Backend request/response schemas use `CamelInBaseModel` and `CamelOutBaseModel`; review API contract drift carefully because the frontend expects camelCase payloads.
-- Backend writes commonly use the sync SQLAlchemy session plus `transaction(db)` from `backend/app/core/database.py`.
-- Frontend work must respect `frontend/eslint.config.js` architectural boundaries.
-- Frontend features may use shared/UI/lib/types/api layers, but features must not import other features directly.
-- Frontend API code belongs in `frontend/src/features/*/api/`; hooks belong in `frontend/src/features/*/hooks/`; reusable cross-feature UI belongs in `frontend/src/components/shared/`.
-- Ignore stylistic churn inside generated/vendor-style UI primitives under `frontend/src/components/ui/**` unless the change breaks behavior.
-- Validation commands should match the repo workflow: `make backend-test`, `make frontend-lint`, `pnpm --dir frontend run type-check`, and `make pre-commit-run` from the repo root.
-
-## Constraints / Anti-Patterns
-
-- Do not lead with summaries. Findings come first.
-- Do not suggest refactors that are larger than the problem unless the current design is the bug.
-- Do not ignore missing migrations, missing router registration, or missing model imports in `backend/app/models/__init__.py`.
-- Do not ignore frontend boundary violations just because the code "works".
-- Do not accept new dependencies, new testing frameworks, or new architecture layers without a concrete repo-specific reason.
-- Do not review only happy paths. Check failure handling, auth/role checks, empty states, and API shape compatibility.
-
-## Example Task
-
-Review a branch that adds a new simulation upload flow touching `frontend/src/features/upload/**`, `backend/app/features/ingestion/**`, and `backend/tests/features/ingestion/**`. Identify correctness issues, boundary violations, missing tests, and documentation gaps before the PR is opened.
+- Do not lead with summaries; findings come first.
+- Do not waive missing migrations, router registration, model imports, or boundary violations.
+- Do not review only happy paths; check empty states, error paths, role checks, and compatibility.
+- Do not recommend large refactors unless the design itself is the bug.
