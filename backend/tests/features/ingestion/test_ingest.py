@@ -2415,8 +2415,59 @@ class TestIngestHelpers:
         assert by_kind[ArtifactKind.RUN_SCRIPT] == str(run_script)
         assert by_kind[ArtifactKind.POSTPROCESS_SCRIPT] == str(post_script)
 
-    def test_ingest_omits_missing_path_artifacts_and_warns(
-        self, db: Session, tmp_path: Path
+    def test_ingest_metadata_only_preserves_relative_path_artifacts(
+        self, db: Session
+    ) -> None:
+        machine = Machine(
+            name="metadata-only-artifact-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="SLURM",
+            gpu=False,
+        )
+        db.add(machine)
+        db.commit()
+        db.refresh(machine)
+
+        mock_simulations = {
+            "/path/to/1082010.260305-120010": {
+                "execution_id": "1082010.260305-120010",
+                "case_name": "case-artifacts",
+                "compset": "FHIST",
+                "compset_alias": "test_alias",
+                "grid_name": "grid1",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "status": "completed",
+                "output_path": "run",
+                "archive_path": "archive",
+                "case_root": "case_root",
+                "postprocessing_script": "scripts/post.sh --flag value",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert len(ingest_result.simulations) == 1
+        by_kind = {
+            artifact.kind: artifact.uri
+            for artifact in ingest_result.simulations[0].artifacts
+        }
+        assert by_kind[ArtifactKind.OUTPUT] == "run"
+        assert by_kind[ArtifactKind.ARCHIVE] == "archive"
+        assert by_kind[ArtifactKind.RUN_SCRIPT] == "case_root/.case.run"
+        assert by_kind[ArtifactKind.POSTPROCESS_SCRIPT] == "scripts/post.sh"
+
+    def test_ingest_metadata_only_preserves_missing_remote_like_paths(
+        self, db: Session
     ) -> None:
         machine = Machine(
             name="missing-artifact-machine",
@@ -2428,11 +2479,6 @@ class TestIngestHelpers:
         db.add(machine)
         db.commit()
         db.refresh(machine)
-
-        missing_output = tmp_path / "missing-run"
-        missing_archive = tmp_path / "missing-archive"
-        missing_case_root = tmp_path / "missing-case-root"
-        missing_post_script = tmp_path / "missing-post.sh"
 
         mock_simulations = {
             "/path/to/1082011.260305-120011": {
@@ -2446,10 +2492,10 @@ class TestIngestHelpers:
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
                 "status": "completed",
-                "output_path": str(missing_output),
-                "archive_path": str(missing_archive),
-                "case_root": str(missing_case_root),
-                "postprocessing_script": f"{missing_post_script} --foo",
+                "output_path": "/lcrc/group/e3sm/missing-run",
+                "archive_path": "/lcrc/group/e3sm/missing-archive",
+                "case_root": "/lcrc/group/e3sm/missing-case-root",
+                "postprocessing_script": "/global/homes/a/ac.golaz/missing-post.sh --foo",
             }
         }
 
@@ -2463,6 +2509,18 @@ class TestIngestHelpers:
                 )
 
         assert len(ingest_result.simulations) == 1
-        simulation = ingest_result.simulations[0]
-        assert simulation.artifacts == []
-        assert mock_warning.call_count >= 4
+        by_kind = {
+            artifact.kind: artifact.uri
+            for artifact in ingest_result.simulations[0].artifacts
+        }
+        assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/missing-run"
+        assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/missing-archive"
+        assert (
+            by_kind[ArtifactKind.RUN_SCRIPT]
+            == "/lcrc/group/e3sm/missing-case-root/.case.run"
+        )
+        assert (
+            by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
+            == "/global/homes/a/ac.golaz/missing-post.sh"
+        )
+        mock_warning.assert_not_called()

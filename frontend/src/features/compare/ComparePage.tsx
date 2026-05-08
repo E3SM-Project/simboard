@@ -6,6 +6,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
+import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
@@ -86,7 +87,22 @@ export const ComparePage = ({
     return { label, values, renderMode };
   };
 
-  const makeGroupedMetricRow = (
+  const makeArtifactMetricRow = (
+    label: string,
+    kind: ArtifactKind,
+    fallback: unknown[] = [],
+  ): CompareMetricRow => {
+    const values = selectedSimulationIds.map((id) => {
+      const sim = selectedSimulations.find((s) => s.id === id);
+      if (!sim) return fallback;
+
+      return getArtifactsByKind(sim.artifacts, sim.groupedArtifacts, kind);
+    });
+
+    return { label, values };
+  };
+
+  const makeGroupedLinkMetricRow = (
     label: string,
     kind: string,
     fallback: unknown[] = [],
@@ -95,7 +111,7 @@ export const ComparePage = ({
       const sim = selectedSimulations.find((s) => s.id === id);
       if (!sim) return fallback;
 
-      return sim.groupedArtifacts[kind] ?? sim.groupedLinks[kind] ?? fallback;
+      return sim.groupedLinks[kind] ?? fallback;
     });
 
     return { label, values };
@@ -185,13 +201,13 @@ export const ComparePage = ({
     keyFeatures: [makeMetricRow('Key Features', 'keyFeatures', '')],
     knownIssues: [makeMetricRow('Known Issues', 'knownIssues', '')],
     locations: [
-      makeGroupedMetricRow('Output Paths', 'output'),
-      makeGroupedMetricRow('Archive Paths', 'archive'),
-      makeGroupedMetricRow('Run Script Paths', 'runScript'),
-      makeGroupedMetricRow('Batch Logs', 'batchLog'),
+      makeArtifactMetricRow('Output Paths', 'output'),
+      makeArtifactMetricRow('Archive Paths', 'archive'),
+      makeArtifactMetricRow('Run Script Paths', 'run_script'),
+      makeArtifactMetricRow('Post-processing Scripts', 'postprocessing_script'),
     ],
-    diagnostics: [makeGroupedMetricRow('Diagnostic Links', 'diagnostic')],
-    performance: [makeGroupedMetricRow('PACE Links', 'performance')],
+    diagnostics: [makeGroupedLinkMetricRow('Diagnostic Links', 'diagnostic')],
+    performance: [makeGroupedLinkMetricRow('PACE Links', 'performance')],
     notes: [makeMetricRow('Notes', 'notesMarkdown', '')],
     versionControl: [
       makeMetricRow('Repository URL', 'gitRepositoryUrl', '', 'rich'),
@@ -292,9 +308,10 @@ export const ComparePage = ({
     }
 
     const lines =
-      sectionKey === 'notes' || sectionKey === 'keyFeatures' || sectionKey === 'knownIssues' ? 3 : 2;
-    const textValue =
-      value === null || value === undefined || value === '' ? '—' : String(value);
+      sectionKey === 'notes' || sectionKey === 'keyFeatures' || sectionKey === 'knownIssues'
+        ? 3
+        : 2;
+    const textValue = value === null || value === undefined || value === '' ? '—' : String(value);
 
     return <TableCellText value={textValue} lines={lines} fullValueMode="tooltip" />;
   };

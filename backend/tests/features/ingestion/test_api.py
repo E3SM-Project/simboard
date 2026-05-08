@@ -28,6 +28,7 @@ from app.features.ingestion.models import Ingestion
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
+from app.features.simulation.enums import ArtifactKind
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
@@ -731,6 +732,73 @@ class TestIngestFromUploadEndpoint:
         # Should either reject or handle gracefully
         assert res.status_code in [400, 422]
 
+    def test_upload_persists_remote_hpc_path_artifacts_as_metadata(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        file = BytesIO(b"PK\x03\x04")
+        execution_id = "1083010.260305-120010"
+        parsed_simulations = [
+            ParsedSimulation(
+                execution_dir="/tmp/uploaded/archive/case/1083010.260305-120010",
+                execution_id=execution_id,
+                case_name="v3.LR.historical_0121",
+                case_group=None,
+                machine=machine.name,
+                hpc_username="ac.golaz",
+                compset="FHIST",
+                compset_alias="test_alias",
+                grid_name="grid1",
+                grid_resolution="0.9x1.25",
+                campaign="v3.LR.historical",
+                experiment_type="historical",
+                initialization_type="branch",
+                simulation_start_date="2020-01-01",
+                simulation_end_date=None,
+                run_start_date=None,
+                run_end_date=None,
+                compiler="gnu",
+                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_branch="main",
+                git_tag="v3",
+                git_commit_hash="abc123",
+                status="completed",
+                output_path="/lcrc/group/e3sm/run",
+                archive_path="/lcrc/group/e3sm/archive",
+                case_root="/lcrc/group/e3sm/case_scripts",
+                postprocessing_script="/global/homes/a/ac.golaz/post.sh --flag value",
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(parsed_simulations, 0),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-upload",
+                data={"machine_name": machine.name},
+                files={"file": ("remote-paths.zip", file, "application/zip")},
+            )
+
+        assert res.status_code == 201
+        simulation = (
+            db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
+        )
+        assert simulation is not None
+        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/run"
+        assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/archive"
+        assert (
+            by_kind[ArtifactKind.RUN_SCRIPT]
+            == "/lcrc/group/e3sm/case_scripts/.case.run"
+        )
+        assert (
+            by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
+            == "/global/homes/a/ac.golaz/post.sh"
+        )
+
     def test_path_endpoint_handles_lookup_error(self, client, db: Session, tmp_path):
         """Test that LookupError is handled with 400 response."""
         machine = db.query(Machine).first()
@@ -747,6 +815,70 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine not found"
+
+    def test_path_endpoint_persists_remote_hpc_path_artifacts_as_metadata(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        archive_path = self._create_archive_file(tmp_path, "remote-paths.tar.gz")
+        payload = {"archive_path": str(archive_path), "machine_name": machine.name}
+        execution_id = "1083011.260305-120011"
+        parsed_simulations = [
+            ParsedSimulation(
+                execution_dir=str(tmp_path / "archive" / "case" / execution_id),
+                execution_id=execution_id,
+                case_name="v3.LR.historical_0121",
+                case_group=None,
+                machine=machine.name,
+                hpc_username="ac.golaz",
+                compset="FHIST",
+                compset_alias="test_alias",
+                grid_name="grid1",
+                grid_resolution="0.9x1.25",
+                campaign="v3.LR.historical",
+                experiment_type="historical",
+                initialization_type="branch",
+                simulation_start_date="2020-01-01",
+                simulation_end_date=None,
+                run_start_date=None,
+                run_end_date=None,
+                compiler="gnu",
+                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_branch="main",
+                git_tag="v3",
+                git_commit_hash="abc123",
+                status="completed",
+                output_path="/pscratch/sd/a/ac.golaz/run",
+                archive_path="/pscratch/sd/a/ac.golaz/archive",
+                case_root="/pscratch/sd/a/ac.golaz/case_scripts",
+                postprocessing_script="/pscratch/sd/a/ac.golaz/post.sh --flag value",
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(parsed_simulations, 0),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 201
+        simulation = (
+            db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
+        )
+        assert simulation is not None
+        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        assert by_kind[ArtifactKind.OUTPUT] == "/pscratch/sd/a/ac.golaz/run"
+        assert by_kind[ArtifactKind.ARCHIVE] == "/pscratch/sd/a/ac.golaz/archive"
+        assert (
+            by_kind[ArtifactKind.RUN_SCRIPT]
+            == "/pscratch/sd/a/ac.golaz/case_scripts/.case.run"
+        )
+        assert (
+            by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
+            == "/pscratch/sd/a/ac.golaz/post.sh"
+        )
 
     def test_path_endpoint_handles_generic_exception(
         self, client, db: Session, tmp_path
@@ -1224,6 +1356,33 @@ class TestIngestionApiCoverage:
                 _run_ingest_archive("/tmp/archive.tar.gz", "/tmp", db)
 
         assert exc_info.value.status_code == 400
+
+    def test_run_ingest_archive_forwards_strict_validation(self, db: Session):
+        expected_result = IngestArchiveResult(
+            simulations=[],
+            created_count=0,
+            duplicate_count=0,
+            errors=[],
+        )
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=expected_result,
+        ) as mock_ingest_archive:
+            result = _run_ingest_archive(
+                "/tmp/archive.tar.gz",
+                "/tmp",
+                db,
+                strict_validation=True,
+            )
+
+        assert result == expected_result
+        mock_ingest_archive.assert_called_once_with(
+            archive_path="/tmp/archive.tar.gz",
+            output_dir="/tmp",
+            db=db,
+            strict_validation=True,
+        )
 
     def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):
         validation_errors = [

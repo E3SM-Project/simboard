@@ -25,3 +25,23 @@ export interface ArtifactOut extends ArtifactIn {
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }
+
+const ARTIFACT_GROUP_KEYS: Record<ArtifactKind, string[]> = {
+  output: ['output'],
+  archive: ['archive'],
+  run_script: ['run_script', 'runScript'],
+  postprocessing_script: ['postprocessing_script', 'postprocessingScript', 'postProcessingScript'],
+};
+
+export const getArtifactsByKind = (
+  artifacts: ArtifactOut[],
+  groupedArtifacts: Record<string, ArtifactOut[]>,
+  kind: ArtifactKind,
+): ArtifactOut[] => {
+  for (const key of ARTIFACT_GROUP_KEYS[kind]) {
+    const grouped = groupedArtifacts[key];
+    if (grouped?.length) return grouped;
+  }
+
+  return artifacts.filter((artifact) => artifact.kind === kind);
+};

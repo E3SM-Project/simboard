@@ -65,6 +65,8 @@ def ingest_from_path(
     NOTE: Arbitrary filesystem paths are currently permitted to support HPC
     ingestion workflows (e.g., NERSC). This endpoint is restricted to users with
     the ADMIN or SERVICE_ACCOUNT role.
+    Path artifacts parsed from the archive are treated as opaque provenance
+    metadata and stored exactly as they appear in the archive metadata.
 
     TODO: Consider enforcing that archive_path must reside within a configured
     base directory (e.g., a designated HPC storage or ingestion directory)
@@ -100,7 +102,9 @@ def ingest_from_path(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ingest_result = _run_ingest_archive(
-            archive_path=str(archive_path), output_dir=tmpdir, db=db
+            archive_path=str(archive_path),
+            output_dir=tmpdir,
+            db=db,
         )
 
     response = _process_ingestion(
@@ -138,6 +142,10 @@ def ingest_from_upload(
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
     """Ingest an archive via file upload and persist simulations.
+
+    Path artifacts parsed from uploaded archives are treated as opaque remote
+    provenance metadata. SimBoard stores the filesystem paths exactly as
+    reported in the archive metadata without validating them on the API host.
 
     Parameters
     ----------

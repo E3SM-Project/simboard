@@ -30,6 +30,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         - ``experiment_type``: Derived experiment type, constrained to
           KNOWN_EXPERIMENT_TYPES when possible
         - ``compset_alias``: Compset alias (``COMPSET``)
+        - ``case_root``: Case root directory (``CASEROOT``)
     """
     env_case_path = Path(env_case_path)
 
@@ -88,7 +89,15 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with runtime initialization and simulation date metadata.
+        Dictionary with runtime initialization, simulation date metadata,
+        and path-based artifact metadata, including:
+
+        - ``initialization_type``: Run type (``RUN_TYPE``)
+        - ``simulation_start_date``: Effective start date for the run
+        - ``simulation_end_date``: Derived end date for the run
+        - ``output_path``: Run directory path (``RUNDIR``)
+        - ``archive_path``: Short-term archive root (``DOUT_S_ROOT``)
+        - ``postprocessing_script``: Post-run script command (``POSTRUN_SCRIPT``)
     """
     env_run_path = Path(env_run_path)
     initialization_type = _extract_value_from_file(env_run_path, "RUN_TYPE")

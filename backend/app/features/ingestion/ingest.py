@@ -138,7 +138,6 @@ def ingest_archive(
         Directory where extracted files will be stored.
     db : Session
         SQLAlchemy database session for machine and simulation lookups.
-
     Returns
     -------
     IngestArchiveResult
@@ -399,37 +398,20 @@ def _attach_path_artifacts(
     if not path_artifacts:
         return simulation
 
-    return simulation.model_copy(update={"artifacts": path_artifacts})
+    return simulation.model_copy(
+        update={"artifacts": [*simulation.artifacts, *path_artifacts]}
+    )
 
 
 def _build_path_artifacts(parsed_simulation: ParsedSimulation) -> list[ArtifactCreate]:
-    execution_dir = parsed_simulation.execution_dir
     path_artifacts: list[ArtifactCreate] = []
 
-    output_path = _validate_existing_path(
-        parsed_simulation.output_path,
-        source_name="RUNDIR",
-        execution_dir=execution_dir,
-    )
-    archive_path = _validate_existing_path(
-        parsed_simulation.archive_path,
-        source_name="DOUT_S_ROOT",
-        execution_dir=execution_dir,
-    )
+    output_path = _normalize_path_candidate(parsed_simulation.output_path)
+    archive_path = _normalize_path_candidate(parsed_simulation.archive_path)
     run_script_path = _derive_case_run_script_path(parsed_simulation.case_root)
-    run_script_path = _validate_existing_path(
-        run_script_path,
-        source_name="CASEROOT/.case.run",
-        execution_dir=execution_dir,
-    )
     postprocessing_path = _extract_postprocessing_script_path(
         parsed_simulation.postprocessing_script,
-        execution_dir=execution_dir,
-    )
-    postprocessing_path = _validate_existing_path(
-        postprocessing_path,
-        source_name="POSTRUN_SCRIPT",
-        execution_dir=execution_dir,
+        execution_dir=parsed_simulation.execution_dir,
     )
 
     _append_path_artifact(path_artifacts, ArtifactKind.OUTPUT, output_path)
@@ -483,29 +465,6 @@ def _extract_postprocessing_script_path(
         return None
 
     return tokens[0]
-
-
-def _validate_existing_path(
-    path_value: str | None,
-    *,
-    source_name: str,
-    execution_dir: str,
-) -> str | None:
-    normalized_path = _normalize_path_candidate(path_value)
-    if normalized_path is None:
-        return None
-
-    candidate_path = Path(normalized_path).expanduser()
-    if not candidate_path.exists():
-        logger.warning(
-            "Skipping %s artifact for '%s': path does not exist on ingest host: %s",
-            source_name,
-            execution_dir,
-            normalized_path,
-        )
-        return None
-
-    return str(candidate_path)
 
 
 def _normalize_path_candidate(path_value: str | None) -> str | None:
