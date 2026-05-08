@@ -1,5 +1,7 @@
 # Deployment Guide
 
+Audience: maintainers operating deployments and release rollouts.
+
 Complete reference for CI/CD pipelines and NERSC Spin deployments.
 
 ## Table of Contents
@@ -34,7 +36,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 ## Quick Links
 
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
-- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
+- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/home>
 - **GitHub Actions:** <https://github.com/E3SM-Project/simboard/actions>
 - **NERSC Spin Runbook (Rancher UI):** [docs/deploy/spin.md](../deploy/spin.md)
 
@@ -53,10 +55,10 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 | Component | Hosting           | Image            | Pull Policy  |
 | --------- | ----------------- | ---------------- | ------------ |
-| Backend   | NERSC Spin (prod) | `backend:1.0.0`  | IfNotPresent |
-| Frontend  | NERSC Spin (prod) | `frontend:2.1.0` | IfNotPresent |
+| Backend   | NERSC Spin (prod) | `backend:X.Y.Z`  | IfNotPresent |
+| Frontend  | NERSC Spin (prod) | `frontend:X.Y.Z` | IfNotPresent |
 
-**Trigger:** Component-scoped GitHub Release tag (e.g., `backend-v1.0.0`, `frontend-v2.1.0`)
+**Trigger:** Component-scoped GitHub Release tag (for example, `backend-vX.Y.Z`, `frontend-vX.Y.Z`)
 
 > **Note:** Frontend and backend are versioned independently. Each component can be released on its own schedule without affecting the other.
 
@@ -66,7 +68,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 Dev workflows build and push images tagged with `:dev` and `:sha-<commit>` whenever changes are pushed to `main`. These do **not** affect production images.
 
-#### Backend Dev (`build-backend-dev.yml`)
+#### Backend Dev Workflow
 
 **Triggers:** Push to `main` (backend changes) or manual dispatch
 
@@ -74,7 +76,7 @@ Dev workflows build and push images tagged with `:dev` and `:sha-<commit>` whene
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/backend`
 
-#### Frontend Dev (`build-frontend-dev.yml`)
+#### Frontend Dev Workflow
 
 **Triggers:** Push to `main` (frontend changes) or manual dispatch
 
@@ -90,7 +92,7 @@ Dev workflows build and push images tagged with `:dev` and `:sha-<commit>` whene
 
 Release workflows are triggered by component-scoped Git tags created through GitHub Releases. Each component has its own workflow and tag namespace. Release builds do **not** modify the `:dev` image.
 
-#### Backend Prod (`build-backend-prod.yml`)
+#### Backend Prod Workflow
 
 **Triggers:** Tag push matching `backend-v*`
 
@@ -98,7 +100,7 @@ Release workflows are triggered by component-scoped Git tags created through Git
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/backend`
 
-#### Frontend Prod (`build-frontend-prod.yml`)
+#### Frontend Prod Workflow
 
 **Triggers:** Tag push matching `frontend-v*`
 
@@ -112,7 +114,7 @@ Release workflows are triggered by component-scoped Git tags created through Git
 
 ### Build Flow Summary
 
-```
+```text
 Dev builds:     push to main     → :dev, :sha-<short>
 Release builds: component tag    → :X.Y.Z, :sha-<short>, :latest
 ```
@@ -139,7 +141,7 @@ docker login registry.nersc.gov
 **Security:**
 
 - Use service account tokens when available
-- Rotate credentials every 90 days
+- Rotate credentials on a schedule that matches current NERSC and project policy
 - Never commit credentials to source code
 
 ## Image Tagging Strategy
@@ -155,7 +157,7 @@ docker login registry.nersc.gov
 
 | Tag       | Description    | Use Case                 |
 | --------- | -------------- | ------------------------ |
-| `:1.2.0`  | Full version   | Production (recommended) |
+| `:X.Y.Z`  | Full version   | Production (recommended) |
 | `:latest` | Latest release | Reference only           |
 
 **Best practice:** Use full semantic versions (`:X.Y.Z`) in production for reproducibility.
@@ -164,8 +166,8 @@ docker login registry.nersc.gov
 
 | Git Tag           | Component | Docker Image Tag                                  |
 | ----------------- | --------- | ------------------------------------------------- |
-| `backend-v1.0.0`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:1.0.0`  |
-| `frontend-v2.1.0` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:2.1.0` |
+| `backend-vX.Y.Z`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`  |
+| `frontend-vX.Y.Z` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z` |
 
 ## Development Deployment
 
@@ -212,34 +214,36 @@ make frontend-lint
 1. Navigate to [Releases](https://github.com/E3SM-Project/simboard/releases/new)
 2. Click **Draft a new release**
 3. In **Choose a tag**, enter a new tag following the convention:
+
+   ```text
+   frontend-vX.Y.Z
    ```
-   frontend-v1.2.0
-   ```
+
 4. Ensure the **Target** branch is `main`
-5. Set the release title (e.g., `Frontend v1.2.0`)
+5. Set the release title (for example, `Frontend vX.Y.Z`)
 6. Add release notes summarizing the changes
 7. Click **Publish release**
 
 Publishing the release creates the Git tag, which:
 
-- Triggers the `frontend-v*` workflow (`build-frontend-prod.yml`)
+- Triggers the frontend release workflow for `frontend-v*` tags
 - Builds the Docker image
-- Pushes versioned tags (`:1.2.0`, `:sha-<short>`, `:latest`) to the registry
+- Pushes versioned tags (`:X.Y.Z`, `:sha-<short>`, `:latest`) to the registry
 - Does **not** modify the `:dev` image
 
 ### Step 2b: Create GitHub Release (Backend)
 
 Follow the same steps as above, but use a backend-scoped tag:
 
-```
-backend-v1.0.0
+```text
+backend-vX.Y.Z
 ```
 
-This triggers `build-backend-prod.yml` and pushes backend-specific versioned tags.
+This triggers the backend release workflow and pushes backend-specific versioned tags.
 
 ### Step 3: Monitor Builds
 
-Check the [Actions tab](https://github.com/E3SM-Project/simboard/actions) — only the workflow matching the component tag will trigger. Build typically completes in ~10-15 minutes.
+Check the [Actions tab](https://github.com/E3SM-Project/simboard/actions) and confirm that only the workflow matching the component tag triggers.
 
 ### Step 4: Deploy to Production
 
@@ -248,8 +252,8 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 1. Navigate to **Workloads → Deployments** in the prod namespace
 2. Click the target deployment → **⋮ → Edit Config**
 3. Update the **Image** field to the new versioned image, e.g.:
-   - Backend: `registry.nersc.gov/e3sm/simboard/backend:1.0.0`
-   - Frontend: `registry.nersc.gov/e3sm/simboard/frontend:1.2.0`
+   - Backend: `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
+   - Frontend: `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
 4. Set **Pull Policy** to `IfNotPresent`
 5. Click **Save** — Rancher will roll out the new version
 
@@ -325,7 +329,7 @@ Rolling back the backend container image does not roll back database schema auto
 
 ## Rollback Procedure
 
-Version-tagged images are **immutable** — once published, a version tag (e.g., `:1.0.0`) always refers to the same image. This makes rollbacks safe and predictable.
+Version-tagged images are **immutable** — once published, a version tag (for example, `:X.Y.Z`) always refers to the same image. This makes rollbacks safe and predictable.
 
 ### Rolling Back via Rancher
 
@@ -333,8 +337,8 @@ Version-tagged images are **immutable** — once published, a version tag (e.g.,
 2. Navigate to **Workloads → Deployments** in the prod namespace
 3. Click the deployment to roll back → **⋮ → Edit Config**
 4. Change the **Image** tag to the previous known-good version, e.g.:
-   - `registry.nersc.gov/e3sm/simboard/backend:0.9.0`
-   - `registry.nersc.gov/e3sm/simboard/frontend:1.1.0`
+   - `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
+   - `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
 5. Click **Save** to trigger the rollout
 
 Alternatively, use the built-in Rancher rollback:
@@ -344,7 +348,7 @@ Alternatively, use the built-in Rancher rollback:
 
 ### Key Rollback Principles
 
-- **Version tags are immutable:** `:1.0.0` always points to the same image digest. You can safely redeploy any previously released version.
+- **Version tags are immutable:** A published `:X.Y.Z` tag always points to the same image digest. You can safely redeploy any previously released version.
 - **Components are independent:** Rolling back the frontend does not require rolling back the backend, and vice versa.
 - **`:dev` is unaffected:** Release rollbacks have no impact on the dev environment.
 - **Use commit-based tags for precision:** If you need to deploy a specific build, use the `:sha-<short>` tag from the GitHub Actions build log.
@@ -416,10 +420,12 @@ docker buildx build \
 
 1. Check workflow logs in Actions tab
 2. Test Dockerfile locally:
+
    ```bash
    cd backend && docker build .
    cd frontend && docker build --build-arg VITE_API_BASE_URL=https://example.com .
    ```
+
 3. Verify all dependencies are pinned
 
 ### Dev Image Not Updating
@@ -461,8 +467,8 @@ docker buildx build \
 **Solutions:**
 
 1. Verify the tag follows the component convention:
-   - Backend: `backend-vX.Y.Z` (e.g., `backend-v1.0.0`)
-   - Frontend: `frontend-vX.Y.Z` (e.g., `frontend-v1.2.0`)
+   - Backend: `backend-vX.Y.Z`
+   - Frontend: `frontend-vX.Y.Z`
 2. Ensure the tag was created via a published GitHub Release (draft releases do not create tags)
 3. Check the [Actions tab](https://github.com/E3SM-Project/simboard/actions) for the corresponding workflow
 

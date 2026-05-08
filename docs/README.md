@@ -1,48 +1,23 @@
-# SimBoard Documentation
+# SimBoard Docs
 
-Documentation for the SimBoard project.
+Use this directory as the documentation router by audience.
 
----
+## For Contributors
 
-## 📁 Documentation Structure
+- Developer guide: [developer/README.md](developer/README.md)
+- Contribution workflow: [../CONTRIBUTING.md](../CONTRIBUTING.md)
 
-```bash
-docs/
-├── README.md           # This file
-├── cicd/               # CI/CD and deployment
-│   ├── README.md       # Quick start and overview
-│   └── DEPLOYMENT.md   # Complete reference guide
-└── deploy/             # Environment-specific deployment runbooks
-    └── spin.md         # Spin backend migration rollout + frontend/db/ingress config
-```
+## For Backend Developers
 
----
+- Backend guide: [../backend/README.md](../backend/README.md)
 
-## 🚀 CI/CD Quick Links
+## For Frontend Developers
 
-**New to CI/CD setup?**
+- Frontend guide: [../frontend/README.md](../frontend/README.md)
 
-- [cicd/README.md](cicd/README.md) - Quick start guide
+## For Operations and Deployment
 
-**Need deployment details?**
-
-- [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md) - Complete reference
-- [deploy/spin.md](deploy/spin.md) - Spin backend/frontend/db/ingress workload runbook
-
----
-
-## 📚 CI/CD Documentation
-
-All CI/CD and deployment documentation is in the [`cicd/`](cicd/) directory:
-
-- **[cicd/README.md](cicd/README.md)** - Quick start, overview, and common operations
-- **[cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md)** - Complete deployment guide with workflows, Kubernetes examples, and troubleshooting
-- **[deploy/spin.md](deploy/spin.md)** - Spin-specific backend migration-first plus frontend/db/ingress runbook
-
----
-
-## 🔗 External Links
-
-- [NERSC Registry](https://registry.nersc.gov/harbor/projects)
-- [NERSC Spin Dashboard](https://rancher2.spin.nersc.gov/)
-- [GitHub Actions](https://github.com/E3SM-Project/simboard/actions)
+- CI/CD overview: [cicd/README.md](cicd/README.md)
+- Deployment reference: [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md)
+- NERSC Spin runbook: [deploy/spin.md](deploy/spin.md)
+- HPC token and service-account auth: [hpc_api_token_authentication.md](hpc_api_token_authentication.md)

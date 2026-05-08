@@ -1,5 +1,7 @@
 # CI/CD Automation for NERSC Container Builds
 
+Audience: maintainers operating CI/CD and release image builds.
+
 Automated multi-arch container builds to NERSC Registry with dev/prod separation.
 
 ---
@@ -36,12 +38,14 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 
 ## 📋 Workflows
 
-| Workflow                  | Trigger                           | Image Tags                          |
-| ------------------------- | --------------------------------- | ----------------------------------- |
-| `build-backend-dev.yml`   | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>`            |
-| `build-frontend-dev.yml`  | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>`            |
-| `build-backend-prod.yml`  | Tag `backend-v*`                  | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
-| `build-frontend-prod.yml` | Tag `frontend-v*`                 | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+Current workflow files and exact trigger filters live under [`../../.github/workflows/`](../../.github/workflows/).
+
+| Workflow               | Trigger                           | Image Tags                           |
+| ---------------------- | --------------------------------- | ------------------------------------ |
+| Backend dev build      | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>`              |
+| Frontend dev build     | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>`              |
+| Backend release build  | Tag `backend-v*`                  | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+| Frontend release build | Tag `frontend-v*`                 | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
 
 **Registry:** `registry.nersc.gov/e3sm/simboard/{backend,frontend}`
 
@@ -56,7 +60,7 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 
 ## 🏗️ Architecture
 
-```
+```text
 Development:
   main branch → :dev tag → NERSC Spin dev namespace
 
@@ -73,8 +77,8 @@ Production:
 
 **Prod Environment:**
 
-- Backend: `registry.nersc.gov/e3sm/simboard/backend:1.0.0`
-- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:2.1.0`
+- Backend: `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
+- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
 - Independently versioned via component-scoped GitHub Releases
 
 ---
@@ -93,8 +97,8 @@ Frontend and backend are released independently using component-scoped tags.
 2. **Create release on GitHub:**
    - Go to [Releases](https://github.com/E3SM-Project/simboard/releases/new)
    - Create tag using component convention:
-     - Frontend: `frontend-v1.2.0`
-     - Backend: `backend-v1.0.0`
+     - Frontend: `frontend-vX.Y.Z`
+     - Backend: `backend-vX.Y.Z`
    - Target: `main`
    - Write release notes
    - Publish release
@@ -107,7 +111,7 @@ Frontend and backend are released independently using component-scoped tags.
    - Backend migrations run automatically in the backend initContainer via `/app/migrate.sh` during rollout
    - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
    - Navigate to **Workloads → Deployments** in the prod namespace
-   - Edit the deployment's image tag to the new version (e.g., `1.0.0`)
+   - Edit the deployment's image tag to the new release version (for example, `X.Y.Z`)
    - Set **Pull Policy** to `IfNotPresent`
    - Save to trigger the rollout
 
@@ -130,7 +134,7 @@ To redeploy with the latest image, use the [Rancher UI](https://rancher2.spin.ne
 
 ```yaml
 # Prod deployments use explicit versions with IfNotPresent
-image: registry.nersc.gov/e3sm/simboard/backend:1.0.0
+image: registry.nersc.gov/e3sm/simboard/backend:X.Y.Z
 imagePullPolicy: IfNotPresent
 ```
 

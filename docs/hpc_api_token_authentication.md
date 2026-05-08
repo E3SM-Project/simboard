@@ -1,5 +1,7 @@
 # API Token Authentication Guide
 
+Audience: maintainers configuring service-account and token-based ingestion for HPC or privileged automation.
+
 ## Overview
 
 API token authentication enables secure programmatic access to ingestion endpoints from external HPC systems without requiring browser-based GitHub OAuth flows.
