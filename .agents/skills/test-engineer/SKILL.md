@@ -28,7 +28,7 @@ Reduce regression risk in SimBoard by adding or tightening automated validation 
 - Backend tests live under `backend/tests/**`, generally mirroring feature areas.
 - Reuse fixtures from `backend/tests/conftest.py` before adding new setup helpers.
 - Keep backend tests compatible with the existing PostgreSQL plus Alembic test flow.
-- Frontend does not have an established unit or e2e harness in this repo; use `make frontend-lint` and `pnpm --dir frontend run type-check` as baseline validation for frontend-only work.
+- For frontend-only changes, use the repo's current frontend validation path for the touched area; at minimum run `make frontend-lint` and `pnpm --dir frontend run type-check` when no more specific automated tests are present.
 - If frontend behavior depends on backend contracts, prefer strengthening backend tests around the contract.
 - Use repo commands such as `make backend-test`, `make frontend-lint`, and `make pre-commit-run` from the repo root.
 
