@@ -1,5 +1,5 @@
 import { TooltipTrigger } from '@radix-ui/react-tooltip';
-import { Archive, ClipboardList, FileText, Info, Link2, Package } from 'lucide-react';
+import { Archive, ClipboardList, Copy, ExternalLink, FileText, Info, Package } from 'lucide-react';
 import React, { JSX } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,16 @@ export const SimulationPathCard = ({
   description,
 }: SimulationPathCard) => {
   const hasPaths = paths && paths.length > 0;
+  const copyPath = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // Clipboard access is best-effort for local path convenience.
+    }
+  };
+
+  const isExternalPath = (value: string) =>
+    value.startsWith('http://') || value.startsWith('https://') || value.startsWith('file:');
 
   return (
     <Card
@@ -70,16 +80,31 @@ export const SimulationPathCard = ({
               const url = typeof path === 'string' ? path : path.url;
               const label = typeof path === 'string' ? path : path.label;
               return (
-                <li key={url || label} className="flex items-center gap-2">
-                  <a
-                    className="text-blue-600 hover:underline flex items-center gap-1"
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Link2 size={16} className="inline-block" />
-                    {label}
-                  </a>
+                <li key={url || label} className="flex items-start gap-2">
+                  {isExternalPath(url) ? (
+                    <a
+                      className="text-blue-600 hover:underline flex items-center gap-1 break-all"
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink size={16} className="inline-block shrink-0" />
+                      {label}
+                    </a>
+                  ) : (
+                    <div className="flex items-start gap-2 text-foreground">
+                      <code className="break-all rounded bg-muted px-2 py-1 text-xs">{label}</code>
+                      <button
+                        type="button"
+                        onClick={() => copyPath(url)}
+                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Copy path"
+                        title="Copy full path"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })}

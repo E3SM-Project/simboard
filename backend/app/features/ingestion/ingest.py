@@ -18,6 +18,7 @@ Caching for reference lookup:
     keyed by case.id, to avoid repeated DB queries.
 """
 
+import shlex
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,9 +33,9 @@ from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.config_delta import SimulationConfigSnapshot
-from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
-from app.features.simulation.schemas import SimulationCreate
+from app.features.simulation.schemas import ArtifactCreate, SimulationCreate
 
 logger = _setup_custom_logger(__name__)
 
@@ -137,7 +138,6 @@ def ingest_archive(
         Directory where extracted files will be stored.
     db : Session
         SQLAlchemy database session for machine and simulation lookups.
-
     Returns
     -------
     IngestArchiveResult
@@ -357,6 +357,7 @@ def _build_simulation_create(
         simulation = _validate_simulation_create(
             replace(prevalidated_draft, case_id=case.id)
         )
+        simulation = _attach_path_artifacts(simulation, parsed_simulation)
         logger.info(
             "Mapped reference simulation from %s: %s",
             parsed_simulation.execution_dir,
@@ -372,6 +373,7 @@ def _build_simulation_create(
         run_config_deltas=delta if delta else None,
     )
     simulation = _validate_simulation_create(simulation_draft)
+    simulation = _attach_path_artifacts(simulation, parsed_simulation)
 
     if delta:
         logger.info(
@@ -386,6 +388,94 @@ def _build_simulation_create(
         )
 
     return simulation
+
+
+def _attach_path_artifacts(
+    simulation: SimulationCreate,
+    parsed_simulation: ParsedSimulation,
+) -> SimulationCreate:
+    path_artifacts = _build_path_artifacts(parsed_simulation)
+    if not path_artifacts:
+        return simulation
+
+    return simulation.model_copy(
+        update={"artifacts": [*simulation.artifacts, *path_artifacts]}
+    )
+
+
+def _build_path_artifacts(parsed_simulation: ParsedSimulation) -> list[ArtifactCreate]:
+    path_artifacts: list[ArtifactCreate] = []
+
+    output_path = _normalize_path_candidate(parsed_simulation.output_path)
+    archive_path = _normalize_path_candidate(parsed_simulation.archive_path)
+    run_script_path = _derive_case_run_script_path(parsed_simulation.case_root)
+    postprocessing_path = _extract_postprocessing_script_path(
+        parsed_simulation.postprocessing_script,
+        execution_dir=parsed_simulation.execution_dir,
+    )
+
+    _append_path_artifact(path_artifacts, ArtifactKind.OUTPUT, output_path)
+    _append_path_artifact(path_artifacts, ArtifactKind.ARCHIVE, archive_path)
+    _append_path_artifact(path_artifacts, ArtifactKind.RUN_SCRIPT, run_script_path)
+    _append_path_artifact(
+        path_artifacts,
+        ArtifactKind.POSTPROCESS_SCRIPT,
+        postprocessing_path,
+    )
+
+    return path_artifacts
+
+
+def _append_path_artifact(
+    artifacts: list[ArtifactCreate], kind: ArtifactKind, uri: str | None
+) -> None:
+    if uri is None:
+        return
+
+    artifacts.append(ArtifactCreate(kind=kind, uri=uri))
+
+
+def _derive_case_run_script_path(case_root: str | None) -> str | None:
+    normalized_case_root = _normalize_path_candidate(case_root)
+    if normalized_case_root is None:
+        return None
+
+    return str(Path(normalized_case_root) / ".case.run")
+
+
+def _extract_postprocessing_script_path(
+    postprocessing_script: str | None,
+    execution_dir: str,
+) -> str | None:
+    normalized_script = _normalize_path_candidate(postprocessing_script)
+    if normalized_script is None:
+        return None
+
+    try:
+        tokens = shlex.split(normalized_script)
+    except ValueError:
+        logger.warning(
+            "Skipping POSTRUN_SCRIPT artifact for '%s': could not parse value '%s'.",
+            execution_dir,
+            normalized_script,
+        )
+        return None
+
+    if not tokens:
+        return None
+
+    return tokens[0]
+
+
+def _normalize_path_candidate(path_value: str | None) -> str | None:
+    if path_value is None:
+        return None
+
+    normalized = path_value.strip()
+    if not normalized:
+        return None
+
+    return normalized
 
 
 def _prevalidate_simulation_create(

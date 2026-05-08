@@ -10,9 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  suppressNextBrowseInteraction,
-} from '@/features/browse/components/SimulationResults/selectionGuard';
+import { suppressNextBrowseInteraction } from '@/features/browse/components/SimulationResults/selectionGuard';
+import { getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
 
 interface SimulationBrowseDetailsDialogProps {
@@ -54,12 +53,26 @@ export const SimulationBrowseDetailsDialog = ({
   const updatedAtStr = new Date(simulation.updatedAt).toISOString().slice(0, 10);
   const diagnosticLinks = simulation.groupedLinks.diagnostic ?? [];
   const performanceLinks = simulation.groupedLinks.performance ?? [];
-  const runScripts = simulation.groupedArtifacts.runScript ?? [];
-  const archivePaths = simulation.groupedArtifacts.archive ?? [];
-  const postprocessingScripts =
-    simulation.groupedArtifacts.postProcessingScript ??
-    simulation.groupedArtifacts.postprocessingScript ??
-    [];
+  const outputPaths = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'output',
+  );
+  const archivePaths = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'archive',
+  );
+  const runScripts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'run_script',
+  );
+  const postprocessingScripts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'postprocessing_script',
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -88,7 +101,8 @@ export const SimulationBrowseDetailsDialog = ({
           <DialogHeader className="border-b border-slate-200 px-6 py-5 text-left">
             <DialogTitle className="text-xl text-slate-950">{simulation.executionId}</DialogTitle>
             <DialogDescription className="mt-2 text-sm leading-6 text-slate-600">
-              Additional browse details for <span className="font-medium">{simulation.caseName}</span>.
+              Additional browse details for{' '}
+              <span className="font-medium">{simulation.caseName}</span>.
             </DialogDescription>
           </DialogHeader>
 
@@ -346,7 +360,8 @@ export const SimulationBrowseDetailsDialog = ({
               </section>
             )}
 
-            {(runScripts.length > 0 ||
+            {(outputPaths.length > 0 ||
+              runScripts.length > 0 ||
               archivePaths.length > 0 ||
               postprocessingScripts.length > 0) && (
               <section className="space-y-3">
@@ -354,15 +369,29 @@ export const SimulationBrowseDetailsDialog = ({
                   Artifact Paths
                 </h3>
                 <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                  {outputPaths.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                        Output Paths
+                      </p>
+                      <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                        {outputPaths.map((item) => (
+                          <li key={item.id} className="break-all">
+                            {item.label ?? item.uri}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {runScripts.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                         Run Scripts
                       </p>
                       <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                        {runScripts.map((item, index) => (
-                          <li key={index} className="break-all">
-                            {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                        {runScripts.map((item) => (
+                          <li key={item.id} className="break-all">
+                            {item.label ?? item.uri}
                           </li>
                         ))}
                       </ul>
@@ -374,9 +403,9 @@ export const SimulationBrowseDetailsDialog = ({
                         Archive Paths
                       </p>
                       <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                        {archivePaths.map((item, index) => (
-                          <li key={index} className="break-all">
-                            {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                        {archivePaths.map((item) => (
+                          <li key={item.id} className="break-all">
+                            {item.label ?? item.uri}
                           </li>
                         ))}
                       </ul>
@@ -388,9 +417,9 @@ export const SimulationBrowseDetailsDialog = ({
                         Postprocessing Scripts
                       </p>
                       <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                        {postprocessingScripts.map((item, index) => (
-                          <li key={index} className="break-all">
-                            {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                        {postprocessingScripts.map((item) => (
+                          <li key={item.id} className="break-all">
+                            {item.label ?? item.uri}
                           </li>
                         ))}
                       </ul>

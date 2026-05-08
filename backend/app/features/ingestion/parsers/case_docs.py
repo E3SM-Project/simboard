@@ -30,6 +30,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         - ``experiment_type``: Derived experiment type, constrained to
           KNOWN_EXPERIMENT_TYPES when possible
         - ``compset_alias``: Compset alias (``COMPSET``)
+        - ``case_root``: Case root directory (``CASEROOT``)
     """
     env_case_path = Path(env_case_path)
 
@@ -38,6 +39,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     machine = _extract_value_from_file(env_case_path, "MACH")
     user = _extract_value_from_file(env_case_path, "REALUSER")
     compset_alias = _extract_value_from_file(env_case_path, "COMPSET")
+    case_root = _extract_value_from_file(env_case_path, "CASEROOT")
 
     # Extract metadata that requires special handling
     campaign, experiment_type = _extract_campaign_and_experiment_type(case_name)
@@ -50,6 +52,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         "campaign": campaign,
         "experiment_type": experiment_type,
         "compset_alias": compset_alias,
+        "case_root": case_root,
     }
 
 
@@ -86,7 +89,15 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with runtime initialization and simulation date metadata.
+        Dictionary with runtime initialization, simulation date metadata,
+        and path-based artifact metadata, including:
+
+        - ``initialization_type``: Run type (``RUN_TYPE``)
+        - ``simulation_start_date``: Effective start date for the run
+        - ``simulation_end_date``: Derived end date for the run
+        - ``output_path``: Run directory path (``RUNDIR``)
+        - ``archive_path``: Short-term archive root (``DOUT_S_ROOT``)
+        - ``postprocessing_script``: Post-run script command (``POSTRUN_SCRIPT``)
     """
     env_run_path = Path(env_run_path)
     initialization_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
@@ -95,6 +106,9 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     stop_option = _extract_value_from_file(env_run_path, "STOP_OPTION")
     stop_n = _extract_value_from_file(env_run_path, "STOP_N")
     stop_date = _extract_value_from_file(env_run_path, "STOP_DATE")
+    output_path = _extract_value_from_file(env_run_path, "RUNDIR")
+    archive_path = _extract_value_from_file(env_run_path, "DOUT_S_ROOT")
+    postprocessing_script = _extract_value_from_file(env_run_path, "POSTRUN_SCRIPT")
 
     simulation_start_date = (
         run_ref_date if initialization_type == "branch" else run_start_date
@@ -110,6 +124,9 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         "initialization_type": initialization_type,
         "simulation_start_date": simulation_start_date,
         "simulation_end_date": simulation_end_date,
+        "output_path": output_path,
+        "archive_path": archive_path,
+        "postprocessing_script": postprocessing_script,
     }
 
 

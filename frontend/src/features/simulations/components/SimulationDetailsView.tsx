@@ -6,11 +6,7 @@ import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -22,6 +18,7 @@ import { SimulationPathCard } from '@/features/simulations/components/Simulation
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
 import type { SimulationOut } from '@/types';
+import { getArtifactsByKind } from '@/types/artifact';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
@@ -74,13 +71,7 @@ const formatDisplayValue = (value: unknown) => {
   }
 };
 
-const ReadonlyTextBlock = ({
-  value,
-  className,
-}: {
-  value?: string | null;
-  className?: string;
-}) => (
+const ReadonlyTextBlock = ({ value, className }: { value?: string | null; className?: string }) => (
   <div
     className={cn(
       'min-h-[80px] whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-sm break-words',
@@ -113,26 +104,38 @@ export const SimulationDetailsView = ({
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
   const performanceLinks = simulation.groupedLinks.performance ?? [];
-  const outputArtifacts =
-    simulation.groupedArtifacts.output?.map((artifact) => ({
-      url: artifact.uri,
-      label: artifact.label?.trim() || artifact.uri,
-    })) ?? [];
-  const archiveArtifacts =
-    simulation.groupedArtifacts.archive?.map((artifact) => ({
-      url: artifact.uri,
-      label: artifact.label?.trim() || artifact.uri,
-    })) ?? [];
-  const runScriptArtifacts =
-    simulation.groupedArtifacts.run_script?.map((artifact) => ({
-      url: artifact.uri,
-      label: artifact.label?.trim() || artifact.uri,
-    })) ?? [];
-  const postprocessingScriptArtifacts =
-    simulation.groupedArtifacts.postprocessing_script?.map((artifact) => ({
-      url: artifact.uri,
-      label: artifact.label?.trim() || artifact.uri,
-    })) ?? [];
+  const outputArtifacts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'output',
+  ).map((artifact) => ({
+    url: artifact.uri,
+    label: artifact.label?.trim() || artifact.uri,
+  }));
+  const archiveArtifacts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'archive',
+  ).map((artifact) => ({
+    url: artifact.uri,
+    label: artifact.label?.trim() || artifact.uri,
+  }));
+  const runScriptArtifacts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'run_script',
+  ).map((artifact) => ({
+    url: artifact.uri,
+    label: artifact.label?.trim() || artifact.uri,
+  }));
+  const postprocessingScriptArtifacts = getArtifactsByKind(
+    simulation.artifacts,
+    simulation.groupedArtifacts,
+    'postprocessing_script',
+  ).map((artifact) => ({
+    url: artifact.uri,
+    label: artifact.label?.trim() || artifact.uri,
+  }));
 
   // Temporary local-only comments
   const [newComment, setNewComment] = useState('');
@@ -251,9 +254,7 @@ export const SimulationDetailsView = ({
                 </FieldRow>
                 {simulation.description && (
                   <div className="pt-2">
-                    <Label className="text-xs text-muted-foreground mb-1 block">
-                      Description
-                    </Label>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Description</Label>
                     <ReadonlyTextBlock value={simulation.description} />
                   </div>
                 )}
@@ -332,9 +333,7 @@ export const SimulationDetailsView = ({
                     </table>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No configuration differences.
-                  </p>
+                  <p className="text-sm text-muted-foreground">No configuration differences.</p>
                 )}
               </CardContent>
             </Card>
@@ -453,9 +452,7 @@ export const SimulationDetailsView = ({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground min-w-[100px]">
-                    Machine ID:
-                  </Label>
+                  <Label className="text-xs text-muted-foreground min-w-[100px]">Machine ID:</Label>
                   <ReadonlyInput
                     value={
                       simulation.machineId
@@ -526,17 +523,13 @@ export const SimulationDetailsView = ({
               <CardContent className="space-y-4">
                 {simulation.keyFeatures && (
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">
-                      Key Features
-                    </Label>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Key Features</Label>
                     <ReadonlyTextBlock value={simulation.keyFeatures} />
                   </div>
                 )}
                 {simulation.knownIssues && (
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">
-                      Known Issues
-                    </Label>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Known Issues</Label>
                     <ReadonlyTextBlock value={simulation.knownIssues} />
                   </div>
                 )}
@@ -546,10 +539,7 @@ export const SimulationDetailsView = ({
 
           {/* Advanced Metadata (Collapsible) */}
           {simulation.extra && Object.keys(simulation.extra).length > 0 && (
-            <Collapsible
-              open={isAdvancedMetadataOpen}
-              onOpenChange={setIsAdvancedMetadataOpen}
-            >
+            <Collapsible open={isAdvancedMetadataOpen} onOpenChange={setIsAdvancedMetadataOpen}>
               <Card>
                 <CardHeader className="pb-2">
                   <CollapsibleTrigger className="flex w-full items-center justify-between [&[data-state=open]>svg]:rotate-180">
@@ -709,8 +699,8 @@ export const SimulationDetailsView = ({
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Direct PACE experiment link not found. Search results may
-                                  still contain this run.
+                                  Direct PACE experiment link not found. Search results may still
+                                  contain this run.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
