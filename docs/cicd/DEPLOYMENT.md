@@ -1,5 +1,7 @@
 # Deployment Guide
 
+Audience: maintainers operating deployments and release rollouts.
+
 Complete reference for CI/CD pipelines and NERSC Spin deployments.
 
 ## Table of Contents

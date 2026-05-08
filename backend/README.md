@@ -1,18 +1,37 @@
 # SimBoard Backend
 
-This backend uses [UV](https://uv-py.github.io/) for dependency management and [FastAPI](https://fastapi.tiangolo.com/) as the web framework.
+The backend is a FastAPI service that ingests simulation archives, stores normalized metadata in PostgreSQL, and exposes the `/api/v1` REST API used by the frontend and service-account tooling.
 
-It provides a REST API for managing and querying simulation metadata, including endpoints for browsing, comparing, and analyzing **E3SM** (Energy Exascale Earth System Model) simulation data.
+## Responsibilities
 
-## Tech Stack
+- archive ingestion and validation
+- case, simulation, machine, and ingestion persistence
+- GitHub OAuth and API-token authentication
+- PACE execution lookup
+- API schemas and routing
 
-> ℹ️ **Note:** The backend runs as a Docker container.
+## Important Locations
 
-- **FastAPI** — Web framework for building APIs
-- **UV** — Python dependency and environment management
-- **SQLAlchemy** — ORM and database toolkit, with **Alembic** for database migrations
-- **PostgreSQL** — Primary relational database
+```text
+backend/app/main.py                 FastAPI app and router registration
+backend/app/features/ingestion/     ingestion endpoints and parser integration
+backend/app/features/simulation/    cases, simulations, schemas, delta logic
+backend/app/features/machine/       machine models and API
+backend/app/features/user/          auth, tokens, user models
+backend/app/core/                   config, DB setup, exceptions, logging
+backend/migrations/                 Alembic migrations
+backend/tests/                      pytest coverage
+```
 
-## License
+## Developer Commands
 
-For license information, see the [root LICENSE file](../LICENSE).
+Run these from the repo root:
+
+```bash
+make backend-run
+make backend-test
+make backend-migrate m='message'
+make backend-upgrade
+```
+
+For repo-wide setup and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).

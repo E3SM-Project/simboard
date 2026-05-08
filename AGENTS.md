@@ -135,6 +135,7 @@ docker compose -f docker-compose.local.yml up --build
 | Topic | File |
 |---|---|
 | Project overview | `README.md` |
+| Developer onboarding | `docs/developer/README.md` |
 | Backend details | `backend/README.md` |
 | Frontend architecture | `frontend/README.md` |
 | CI/CD & deployment | `docs/cicd/DEPLOYMENT.md` |

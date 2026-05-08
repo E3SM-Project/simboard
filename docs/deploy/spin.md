@@ -1,5 +1,7 @@
 # NERSC Spin Workloads (Backend InitContainer Migrations)
 
+Audience: operators deploying SimBoard on NERSC Spin.
+
 This runbook defines the NERSC Spin workload baseline and backend rollout flow using an initContainer for automatic Alembic migrations.
 This runbook uses the Rancher UI as the primary deployment workflow.
 

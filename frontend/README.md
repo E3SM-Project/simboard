@@ -1,68 +1,50 @@
 # SimBoard Frontend
 
-The **SimBoard Frontend** is a modern web application built with **React**, **TypeScript**, and **Vite**.
+The frontend is a React single-page application for browsing, comparing, and uploading E3SM simulation metadata.
 
-It provides the user interface for browsing, comparing, and analyzing **E3SM** (Energy Exascale
-Earth System Model) simulation metadata.
+## Responsibilities
 
-## Tech Stack
+- route composition and page-level UI
+- case and simulation browsing
+- side-by-side comparison
+- authenticated upload flow
+- cookie-based browser auth integration
 
-- **React 19** — Core UI library
-- **TypeScript** — Type-safe development
-- **Vite 6** — Lightning-fast build and dev environment
-- **Tailwind CSS** + **shadcn** — Styling and components
-- **ESLint + Prettier** — Code linting, formatting, and architectural enforcement
-- **pnpm** — Dependency management
+## Architecture Notes
 
-## Development Guide
+The frontend uses feature-based organization and enforces import boundaries with ESLint.
 
-For the development guide, see the [root README.md file](../README.md).
-It includes information on how to get the frontend service started via bare-metal or Docker.
+- `src/routes/` composes top-level routes.
+- `src/features/*/` contains feature modules such as `browse`, `simulations`, `compare`, and `upload`.
+- `src/features/*/api/` contains feature-specific API calls.
+- `src/features/*/hooks/` contains feature-specific hooks.
+- `src/components/shared/` is for reusable shared components.
+- `src/components/ui/` is for lower-level UI primitives.
 
-## Architecture
+Feature modules should not import directly from other feature modules.
 
-This frontend follows a **feature-based architecture** enforced by **ESLint architectural boundaries**.
+## Important Locations
 
-### Feature Organization
+```text
+frontend/src/routes/            top-level route composition
+frontend/src/features/browse/   run browser and filters
+frontend/src/features/simulations/
+                                cases, runs, and detail pages
+frontend/src/features/compare/  side-by-side comparison UI
+frontend/src/features/upload/   authenticated archive upload flow
+frontend/src/auth/              auth provider, callback, protected routes
+frontend/src/components/        layout, shared, and UI components
+frontend/src/api/               shared Axios client and auth-state glue
+```
 
-- **Features are the primary unit of organization** (e.g. `features/browse`, `features/upload`)
-- Domain features such as **`simulations`** and **`machines`** represent core application data
-- UI-oriented features (browse, compare, home) may depend on domain features
-- **Features must not depend on other features directly**
-- API logic lives under `features/*/api`
-- Feature-specific hooks live under `features/*/hooks`
-- Shared components must be genuinely reusable and belong under `components/shared`
+## Developer Commands
 
-### Architectural Boundaries (ESLint)
+Run these from the repo root:
 
-The project uses **`eslint-plugin-boundaries`** to enforce architectural rules at import time.
+```bash
+make frontend-run
+make frontend-lint
+pnpm --dir frontend run type-check
+```
 
-Each file is classified into a single architectural layer based on its path:
-
-- **`routes`** — Application routing and top-level composition
-- **`feature`** — Feature modules (browse, upload, compare, etc.)
-- **`ui`** — Design-system primitives and low-level UI components
-- **`shared`** — Reusable composite components
-- **`lib`** — Generic utilities and helpers
-- **`types`** — Domain and API contract types
-- **`api`** — API clients and adapters
-
-#### Dependency Rules
-
-- **Features are isolated**
-  Features may not import or depend on other features directly.
-
-- **Routes compose the application**
-  Routes may import features, shared/UI components, and domain types.
-
-- **UI remains presentation-only**
-  UI components may depend only on utilities and types.
-
-- **Types are globally safe**
-  Type definitions may be imported from any layer.
-
-Any import that violates these rules is reported as an ESLint error, preventing invalid architectural dependencies from being introduced.
-
-## License
-
-For license information, see the [root LICENSE file](../LICENSE).
+For repo-wide setup and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).

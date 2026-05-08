@@ -1,5 +1,7 @@
 # CI/CD Automation for NERSC Container Builds
 
+Audience: maintainers operating CI/CD and release image builds.
+
 Automated multi-arch container builds to NERSC Registry with dev/prod separation.
 
 ---
