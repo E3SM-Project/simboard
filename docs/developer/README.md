@@ -133,6 +133,12 @@ All ingestion requests require a bearer API token. Site-side ingestion jobs are 
 
 After ingestion completes, the backend stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. The frontend reads the resulting catalog data through `/api/v1` endpoints.
 
+> **Note**
+>
+> SimBoard records artifact references, including output directories, source archive locations, run scripts, and batch logs, to support reproducibility.
+>
+> Referenced case directories under source archive locations are periodically cleaned up by scheduled site-side jobs outside of SimBoard to limit storage growth.
+
 | Site                 | Ingestion mode            | Source archive location                                                |
 | -------------------- | ------------------------- | ---------------------------------------------------------------------- |
 | NERSC / Perlmutter   | Path reference            | `/global/cfs/projectdirs/e3sm/performance_archive`                     |
