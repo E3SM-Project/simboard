@@ -12,9 +12,11 @@ from app.features.ingestion.ingest import (
     SimulationCreateDraft,
     _build_config_snapshot,
     _build_simulation_create_draft,
+    _extract_postprocessing_script_path,
     _get_or_create_case,
     _get_reference_metadata_for_case,
     _normalize_git_url,
+    _normalize_path_candidate,
     _normalize_simulation_status,
     _normalize_simulation_type,
     _stringify_config_value,
@@ -1924,6 +1926,38 @@ class TestReferenceRunIngestion:
 
 
 class TestIngestHelpers:
+    def test_extract_postprocessing_script_path_returns_none_for_unparseable_value(
+        self,
+    ) -> None:
+        with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
+            result = _extract_postprocessing_script_path(
+                postprocessing_script="'",
+                execution_dir="/tmp/execution",
+            )
+
+        assert result is None
+        mock_warning.assert_called_once()
+
+    def test_extract_postprocessing_script_path_returns_none_for_empty_tokens(
+        self,
+    ) -> None:
+        with patch(
+            "app.features.ingestion.ingest.shlex.split", return_value=[]
+        ) as mock_split:
+            result = _extract_postprocessing_script_path(
+                postprocessing_script="/tmp/post.sh",
+                execution_dir="/tmp/execution",
+            )
+
+        assert result is None
+        mock_split.assert_called_once_with("/tmp/post.sh")
+
+    @pytest.mark.parametrize("value", [None, "", "   "])
+    def test_normalize_path_candidate_returns_none_for_blank_values(
+        self, value: str | None
+    ) -> None:
+        assert _normalize_path_candidate(value) is None
+
     def test_get_or_create_case_sets_missing_case_group(self, db: Session) -> None:
         case = Case(name="case_group_test", case_group=None)
         db.add(case)

@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.features.ingestion.parsers.case_docs import (
+    _substitute_path_variables,
     parse_env_build,
     parse_env_case,
     parse_env_run,
@@ -113,6 +114,7 @@ class TestParseEnvBuild:
         <config>
             <entry id="COMPILER" value="intel" />
             <entry id="MPILIB" value="mpt" />
+            <entry id="CIME_OUTPUT_ROOT" value="/global/cfs/cdirs/e3sm" />
         </config>
         """
         tmp_build = tmp_path / "env_build.xml"
@@ -121,6 +123,7 @@ class TestParseEnvBuild:
 
         assert result["compiler"] == "intel"
         assert result["mpilib"] == "mpt"
+        assert result["cime_output_root"] == "/global/cfs/cdirs/e3sm"
 
     def test_text(self, tmp_path):
         xml_build = """
@@ -149,6 +152,36 @@ class TestParseEnvBuild:
 
         assert result["compiler"] == "intel"
         assert result["mpilib"] is None
+
+
+class TestSubstitutePathVariables:
+    def test_replaces_supported_variables(self):
+        result = _substitute_path_variables(
+            "$CIME_OUTPUT_ROOT/archive/${CASE}/run/$CASE",
+            {
+                "CIME_OUTPUT_ROOT": "/global/cfs/cdirs/e3sm",
+                "CASE": "v3.LR.historical_0121",
+            },
+        )
+
+        assert (
+            result == "/global/cfs/cdirs/e3sm/archive/v3.LR.historical_0121/run/"
+            "v3.LR.historical_0121"
+        )
+
+    def test_leaves_unknown_values_unsubstituted(self):
+        result = _substitute_path_variables(
+            "$CIME_OUTPUT_ROOT/archive/$CASE",
+            {
+                "CIME_OUTPUT_ROOT": None,
+                "CASE": "v3.LR.historical_0121",
+            },
+        )
+
+        assert result == "$CIME_OUTPUT_ROOT/archive/v3.LR.historical_0121"
+
+    def test_none_input_returns_none(self):
+        assert _substitute_path_variables(None, {"CASE": "case"}) is None
 
 
 class TestParseEnvRun:

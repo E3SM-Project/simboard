@@ -612,6 +612,39 @@ class TestMainParser:
         assert skipped == 0
         assert result[0].status == "failed"
 
+    def test_parse_all_files_substitutes_archive_and_output_paths(self) -> None:
+        exec_dir = "/tmp/test_case/1.0-0"
+        files: dict[str, str | None] = {key: f"/tmp/{key}" for key in parser.FILE_SPECS}
+
+        with self._mock_all_parsers(
+            parse_env_case={
+                "case_name": "v3.LR.historical_0121",
+                "campaign": "v3.LR.historical",
+                "machine": "test",
+            },
+            parse_env_build={
+                "compiler": "gnu",
+                "cime_output_root": "/global/cfs/cdirs/e3sm",
+            },
+            parse_env_run={
+                "simulation_start_date": "2020-01-01",
+                "output_path": "${CIME_OUTPUT_ROOT}/run/$CASE",
+                "archive_path": "$CIME_OUTPUT_ROOT/archive/${CASE}",
+            },
+            parse_e3sm_timing={
+                "execution_id": "1.0-0",
+                "run_start_date": "2025-12-18T20:09:33",
+                "run_end_date": "2025-12-18T20:54:58",
+            },
+        ):
+            parsed = parser._parse_all_files(exec_dir, files)
+
+        assert parsed.output_path == "/global/cfs/cdirs/e3sm/run/v3.LR.historical_0121"
+        assert (
+            parsed.archive_path
+            == "/global/cfs/cdirs/e3sm/archive/v3.LR.historical_0121"
+        )
+
     def test_case_status_run_dates_override_timing_dates(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"
         execution_dir.mkdir(parents=True)
