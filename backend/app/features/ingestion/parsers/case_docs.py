@@ -244,7 +244,7 @@ def _substitute_path_variables(
         return None
 
     pattern = re.compile(
-        r"\$(?:{(?P<braced>CIME_OUTPUT_ROOT|CASE)}|(?P<plain>CIME_OUTPUT_ROOT|CASE))"
+        r"\$(?:{(?P<braced>CIME_OUTPUT_ROOT|CASE)}|(?P<plain>CIME_OUTPUT_ROOT|CASE)\b)"
     )
 
     def replace(match: re.Match[str]) -> str:
