@@ -162,6 +162,20 @@ class TestResolvePaceExecution:
         assert response.status_code == 200
         assert response.json() == {"executionId": "x", "experimentId": None}
 
+    def test_endpoint_returns_null_on_non_200_response_object(
+        self, client, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            pace_api.urllib.request,
+            "urlopen",
+            lambda *args, **kwargs: _FakeHttpResponse(503, "retry later"),
+        )
+
+        response = client.get(f"{API_BASE}/pace/resolve", params={"execution_id": "x"})
+
+        assert response.status_code == 200
+        assert response.json() == {"executionId": "x", "experimentId": None}
+
     def test_endpoint_returns_null_on_malformed_json(self, client, monkeypatch) -> None:
         monkeypatch.setattr(
             pace_api.urllib.request,
@@ -284,6 +298,20 @@ class TestResolvePaceExecution:
         assert first_response.json()["experimentId"] is None
         assert second_response.json()["experimentId"] is None
         assert call_count == 1
+
+    def test_extract_experiment_id_returns_none_for_non_dict_first_item(self) -> None:
+        assert pace_api._extract_experiment_id(["228920"]) is None
+
+    def test_get_cached_experiment_id_expires_entries(self, monkeypatch) -> None:
+        monkeypatch.setattr(pace_api.time, "monotonic", lambda: 100.0)
+        pace_api._set_cached_experiment_id("expired-exec", "228920")
+
+        monkeypatch.setattr(pace_api.time, "monotonic", lambda: 1000.0)
+        cache_hit, experiment_id = pace_api._get_cached_experiment_id("expired-exec")
+
+        assert cache_hit is False
+        assert experiment_id is None
+        assert "expired-exec" not in pace_api._PACE_CACHE
 
     def test_endpoint_rejects_missing_execution_id(self, client) -> None:
         response = client.get(f"{API_BASE}/pace/resolve")
