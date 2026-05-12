@@ -67,15 +67,22 @@ def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with keys 'grid_resolution', 'compiler', 'mpilib' (str or None)
+        Dictionary with keys 'grid_resolution', 'compiler', 'mpilib',
+        and 'cime_output_root' (str or None)
     """
     env_build_path = Path(env_build_path)
 
     grid_resolution = _extract_value_from_file(env_build_path, "GRID")
     compiler = _extract_value_from_file(env_build_path, "COMPILER")
     mpilib = _extract_value_from_file(env_build_path, "MPILIB")
+    cime_output_root = _extract_value_from_file(env_build_path, "CIME_OUTPUT_ROOT")
 
-    return {"grid_resolution": grid_resolution, "compiler": compiler, "mpilib": mpilib}
+    return {
+        "grid_resolution": grid_resolution,
+        "compiler": compiler,
+        "mpilib": mpilib,
+        "cime_output_root": cime_output_root,
+    }
 
 
 def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
@@ -226,6 +233,26 @@ def _extract_campaign_and_experiment_type(
             experiment_type = candidate
 
     return campaign, experiment_type
+
+
+def _substitute_path_variables(
+    path: str | None,
+    variables: dict[str, str | None],
+) -> str | None:
+    """Substitute supported shell-style path variables when values are known."""
+    if path is None:
+        return None
+
+    pattern = re.compile(
+        r"\$(?:{(?P<braced>CIME_OUTPUT_ROOT|CASE)}|(?P<plain>CIME_OUTPUT_ROOT|CASE))"
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        variable_name = match.group("braced") or match.group("plain")
+        value = variables.get(variable_name)
+        return value if value is not None else match.group(0)
+
+    return pattern.sub(replace, path)
 
 
 def _calculate_simulation_end_date(

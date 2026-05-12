@@ -30,6 +30,7 @@ from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.case_docs import (
+    _substitute_path_variables,
     parse_env_build,
     parse_env_case,
     parse_env_run,
@@ -544,6 +545,19 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
     # timestamps should override timing-file values when the artifact exists.
     if case_status_metadata is not None:
         metadata.update(case_status_metadata)
+
+    path_variables = {
+        "CASE": metadata.get("case_name"),
+        "CIME_OUTPUT_ROOT": metadata.get("cime_output_root"),
+    }
+    metadata["output_path"] = _substitute_path_variables(
+        metadata.get("output_path"),
+        path_variables,
+    )
+    metadata["archive_path"] = _substitute_path_variables(
+        metadata.get("archive_path"),
+        path_variables,
+    )
 
     execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
 
