@@ -7,6 +7,7 @@ Use this file for contribution workflow. For local setup, architecture, and deve
 Start from an issue when the work is not trivial.
 
 - bug reports: `.github/ISSUE_TEMPLATE/bug_report.yml`
+- docs updates: `.github/ISSUE_TEMPLATE/docs_update.yml`
 - enhancements: `.github/ISSUE_TEMPLATE/enhancement_request.yml`
 - planning work: `.github/ISSUE_TEMPLATE/planning_task.yml`
 - DevOps work: `.github/ISSUE_TEMPLATE/devops.yml`

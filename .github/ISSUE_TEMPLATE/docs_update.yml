@@ -1,0 +1,39 @@
+name: Docs Update
+description: Report missing, wrong, stale, or unclear documentation.
+title: "[Docs]: "
+labels: ["type: doc"]
+assignees: []
+
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Doc location
+      description: Path, page, or link.
+      placeholder: docs/developer/README.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+      description: Describe gap briefly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested update
+      description: Optional proposed wording or direction.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Related links or examples.
+    validations:
+      required: false
