@@ -801,6 +801,20 @@ def test_module_main_guard_exits_via_system_exit_on_configuration_error(
     assert exc_info.value.code == 1
 
 
+def test_generic_hpc_module_main_guard_delegates_to_ingestor(monkeypatch) -> None:
+    script_path = (
+        Path(__file__).resolve().parents[3]
+        / "app/scripts/ingestion/hpc_archive_ingestor.py"
+    )
+    monkeypatch.setenv("MAX_ATTEMPTS", "0")
+    monkeypatch.setattr(logging.Logger, "info", lambda *args, **kwargs: None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(script_path), run_name="__main__")
+
+    assert exc_info.value.code == 1
+
+
 @pytest.mark.parametrize(
     ("value", "default", "expected"),
     [
