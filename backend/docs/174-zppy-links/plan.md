@@ -12,7 +12,8 @@ MVP is NERSC-only.
 
 - Add required zppy provenance fields: `case_name`, `machine`, `hpc_username`
 - Add required diagnostics URLs in zppy provenance
-- Discover zppy diagnostics provenance files from configured NERSC filesystem roots
+- Require standardized zppy diagnostics output locations for NERSC production runs
+- Discover zppy diagnostics provenance files from configured NERSC production filesystem roots
 - Confirm diagnostics completion from index page plus status files
 - Match diagnostics to SimBoard records using `(case_name, machine, hpc_username)`
 - Create idempotent case-scoped diagnostic links
@@ -91,6 +92,12 @@ If any required field is missing, SimBoard skips the provenance file and logs it
 
 For MVP, zppy should reuse existing top-level cfg fields rather than emit a new versioned normalized block.
 
+### Require standardized output locations for production runs
+
+For MVP, NERSC production runs must use standardized zppy diagnostics output locations. SimBoard relies on those known production roots for provenance discovery.
+
+Custom or ad hoc layouts do not block the overall design, but they are not the required path for MVP.
+
 ### Require explicit diagnostics URLs in provenance
 
 For MVP, SimBoard should not derive diagnostics URLs from path conventions. zppy should emit explicit diagnostics URLs in provenance cfg.
@@ -113,6 +120,8 @@ Implement in order: provenance contract -> scanner -> storage target -> resolver
 
 #### 1. Emit required provenance fields
 
+For MVP, production runs must write diagnostics outputs and provenance cfg files to the standardized NERSC zppy output locations.
+
 | Field          | Source                    |
 | -------------- | ------------------------- |
 | `case_name`    | `env_case.xml` `CASE`     |
@@ -127,6 +136,7 @@ Implementation note:
 
 Tests:
 
+- uses standardized NERSC production output locations
 - emits `case_name`, `machine`, `hpc_username`
 - emits explicit diagnostics URLs
 - can construct explicit diagnostics URLs from cfg `www` plus `mache` machine metadata
@@ -143,7 +153,7 @@ Add `diagnostics_link_scanner.py`.
 
 Responsibilities:
 
-- scan configured NERSC diagnostics roots for `provenance*.cfg`
+- scan configured NERSC production diagnostics roots for `provenance*.cfg`
 - dedup with state file
 - verify diagnostics completion from index page plus status files
 - parse `case_name`, `machine`, `hpc_username`
