@@ -9,6 +9,29 @@ export interface SimulationUserPreview {
   full_name?: string | null;
 }
 
+export type SummaryCitationSourceType =
+  | 'simulation_field'
+  | 'case_field'
+  | 'machine_field'
+  | 'artifact'
+  | 'external_link';
+
+export interface SimulationSummaryCitationOut {
+  sourceType: SummaryCitationSourceType;
+  path: string;
+  label: string;
+}
+
+export interface SimulationSummaryResponseOut {
+  answer: string;
+  citations: SimulationSummaryCitationOut[];
+  assumptions: string[];
+  caveats: string[];
+  limitations: string[];
+  suggestedFollowups: string[];
+  traceId: string;
+}
+
 /**
  * API response model for a Case with nested simulation summaries.
  */
@@ -129,6 +152,8 @@ export interface SimulationOut extends SimulationCreate {
 
   // Relationships
   // ~~~~~~~~~~~~~~
+  artifacts: ArtifactOut[];
+  links: ExternalLinkOut[];
   machine: Machine;
 
   // Computed fields

@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, CircleHelp } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CircleHelp, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
-import type { SimulationOut } from '@/types';
+import type { SimulationOut, SimulationSummaryResponseOut } from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
@@ -33,6 +33,14 @@ interface SimulationDetailsViewProps {
   } | null;
   isResolvingPace?: boolean;
   showPaceFallbackInfo?: boolean;
+  summary?: SimulationSummaryResponseOut | null;
+  summaryLoading?: boolean;
+  summaryError?: string | null;
+  summaryRequested?: boolean;
+  onGenerateSummary?: () => void | Promise<void>;
+  canGenerateSummary?: boolean;
+  isCheckingAuth?: boolean;
+  onLoginForSummary?: () => void;
 }
 
 // -------------------- Small UI helpers --------------------
@@ -99,6 +107,14 @@ export const SimulationDetailsView = ({
   paceLink = null,
   isResolvingPace = false,
   showPaceFallbackInfo = false,
+  summary = null,
+  summaryLoading = false,
+  summaryError = null,
+  summaryRequested = false,
+  onGenerateSummary,
+  canGenerateSummary = false,
+  isCheckingAuth = false,
+  onLoginForSummary,
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
@@ -209,6 +225,149 @@ export const SimulationDetailsView = ({
 
         {/* SUMMARY TAB */}
         <TabsContent value="summary" className="space-y-6">
+          <Card className="border-blue-200/80 bg-gradient-to-br from-blue-50/60 via-white to-slate-50">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                    AI Summary
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Generate a read-only summary for this simulation using the metadata already
+                    recorded in SimBoard.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (!canGenerateSummary) {
+                      onLoginForSummary?.();
+                      return;
+                    }
+
+                    void onGenerateSummary?.();
+                  }}
+                  disabled={summaryLoading || isCheckingAuth || (!canGenerateSummary && !onLoginForSummary)}
+                  className="shrink-0 border-blue-200 bg-white text-blue-900 hover:bg-blue-50"
+                >
+                  {isCheckingAuth ? (
+                    'Checking login...'
+                  ) : summaryLoading ? (
+                    <>
+                      <Spinner className="mr-2 size-4" />
+                      Generating...
+                    </>
+                  ) : !canGenerateSummary ? (
+                    'Log In To Generate AI Summary'
+                  ) : summary ? (
+                    'Regenerate AI Summary'
+                  ) : (
+                    'Generate AI Summary'
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!summaryRequested && !summary && !summaryError && (
+                <div className="rounded-md border border-dashed border-blue-200 bg-white/80 px-4 py-5 text-sm text-muted-foreground">
+                  {canGenerateSummary
+                    ? 'Generate a summary to review key metadata, caveats, citations, limitations, and suggested follow-up questions for this run.'
+                    : 'Log in with GitHub to generate a read-only AI summary for this simulation.'}
+                </div>
+              )}
+
+              {summaryError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  Error generating AI summary: {summaryError}
+                </div>
+              )}
+
+              {summaryLoading && !summary && (
+                <div className="rounded-md border bg-white/80 px-4 py-5">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner className="size-4" />
+                    Building deterministic summary from SimBoard metadata...
+                  </div>
+                </div>
+              )}
+
+              {summary && (
+                <div className="space-y-4">
+                  <div>
+                    <Label className="mb-1 block text-xs text-muted-foreground">Summary</Label>
+                    <ReadonlyTextBlock value={summary.answer} className="min-h-[120px] bg-white" />
+                  </div>
+
+                  {summary.caveats.length > 0 && (
+                    <div>
+                      <Label className="mb-2 block text-xs text-muted-foreground">Caveats</Label>
+                      <ul className="space-y-2 rounded-md border bg-white px-4 py-3 text-sm">
+                        {summary.caveats.map((caveat) => (
+                          <li key={caveat} className="list-none">
+                            {caveat}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {summary.limitations.length > 0 && (
+                    <div>
+                      <Label className="mb-2 block text-xs text-muted-foreground">
+                        Limitations
+                      </Label>
+                      <ul className="space-y-2 rounded-md border bg-white px-4 py-3 text-sm">
+                        {summary.limitations.map((limitation) => (
+                          <li key={limitation} className="list-none">
+                            {limitation}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {summary.citations.length > 0 && (
+                    <div>
+                      <Label className="mb-2 block text-xs text-muted-foreground">Citations</Label>
+                      <div className="rounded-md border bg-white">
+                        <div className="divide-y">
+                          {summary.citations.map((citation) => (
+                            <div
+                              key={`${citation.sourceType}-${citation.path}`}
+                              className="flex flex-col gap-1 px-4 py-3 text-sm md:flex-row md:items-start md:justify-between"
+                            >
+                              <div className="font-medium text-foreground">{citation.label}</div>
+                              <code className="text-xs text-muted-foreground">
+                                {citation.path}
+                              </code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {summary.suggestedFollowups.length > 0 && (
+                    <div>
+                      <Label className="mb-2 block text-xs text-muted-foreground">
+                        Suggested Follow-up Questions
+                      </Label>
+                      <ul className="space-y-2 rounded-md border bg-white px-4 py-3 text-sm">
+                        {summary.suggestedFollowups.map((followup) => (
+                          <li key={followup} className="list-none">
+                            {followup}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader className="pb-2">
