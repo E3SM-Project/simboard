@@ -1,126 +1,233 @@
 # Plan: Connect zppy Diagnostics to SimBoard Simulations
 
-## Task
+## Goal
 
-Replace manual diagnostic URL-pasting with automated, metadata-based linking of zppy diagnostics outputs to SimBoard simulation records.
+Replace manual diagnostics URL entry with automated linking from zppy diagnostics outputs to existing SimBoard simulation records.
 
 ## Scope
 
-**In:** matching strategy (`case_name` + `machine` + `hpc_username`), persistence model, discovery mechanism, zppy manifest spec.
-**Out:** frontend UI redesign, PACE changes, existing manual link workflow, Case uniqueness refactor (issue #136), diagnostics data ingestion (Phase 2+).
+### In
 
-## Key Decisions
+- Add required zppy provenance fields: `case_name`, `machine`, `hpc_username`
+- Discover zppy diagnostics provenance files from configured filesystem roots
+- Confirm diagnostics completion before linking
+- Match diagnostics to SimBoard records using `(case_name, machine, hpc_username)`
+- Create idempotent diagnostic `ExternalLink` rows
+- Maintain scanner state to avoid repeated processing
 
-### Do NOT parse public HTML directories
+### Out
 
-- **Fragility** — HTML layouts vary by web server; breaks on config changes.
-- **Security** — SSRF and content-injection attack surface.
-- **Coupling** — SimBoard depends on external web server availability/structure.
-- **Latency** — Network crawling is slow and unreliable for production.
+- Frontend redesign
+- Changes to manual external-link workflows
+- PACE integration changes
+- Case identity or uniqueness refactor
+- Diagnostics content ingestion or indexing
+- Public HTML directory scraping
+- Historical backfill beyond configured provenance roots
+- Optional build/campaign metadata ingestion
 
-### zppy writes a manifest file (no API call)
+## Core Decisions
 
-zppy runs as a user-level Python package on HPC machines. SimBoard's API requires `SERVICE_ACCOUNT` or `ADMIN` bearer tokens — it is not feasible for each user to obtain and configure an API token in zppy.
+### Match diagnostics at case scope
 
-**Instead, zppy writes a small manifest file to a well-known location within its output directory.** This requires zero authentication, zero network access from zppy, and trivial zppy-side changes.
+zppy runs against a full case output tree, not a single execution/LID. Use case identity as the primary join key:
 
-```jsonc
-// <zppy_output_dir>/.simboard-diagnostics.json
-{
-  "case_name": "v3.LR.historical_0201",
-  "machine": "chrysalis",
-  "hpc_username": "user123",
-  "diagnostics": [
-    {
-      "kind": "e3sm_diags",
-      "url": "https://web.lcrc.anl.gov/...",
-      "label": "E3SM Diags",
-    },
-    {
-      "kind": "mpas_analysis",
-      "url": "https://web.lcrc.anl.gov/...",
-      "label": "MPAS-Analysis",
-    },
-  ],
-}
+```text
+(case_name, machine, hpc_username)
 ```
 
-zppy already knows `case_name`, `machine`, and the running user from its cfg. `mache` resolves machine-specific public web URL prefixes to construct the URLs.
+All three fields are required. `case_name` alone is not globally safe, and `CASE_HASH` is not reliable across executions.
 
-### SimBoard discovers manifests via filesystem scanning (not API push)
+### Do not parse public HTML directories
 
-SimBoard already has a CronJob-based filesystem scanner (`nersc_archive_ingestor.py`) that:
+Avoid public directory scraping. It is fragile, web-server-coupled, slow, and expands the SSRF/content-injection attack surface.
 
-- Walks mounted HPC directories every 15 min
-- Uses state-based incremental dedup
-- Authenticates with a single service account token
-- Calls `POST /ingestions/from-path` internally
+### Use zppy provenance cfg as the primary input
 
-The diagnostics linking should follow the same pattern: a SimBoard-side scanner discovers `.simboard-diagnostics.json` manifests, reads them, matches to existing Cases, and creates `ExternalLink` rows. **No per-user tokens needed.**
+Do not require zppy to call the SimBoard API. zppy runs as a user-level HPC package, while SimBoard API writes require `SERVICE_ACCOUNT` or `ADMIN` tokens.
 
-### Persist links in database (not query-time resolution)
+Instead, SimBoard discovers zppy provenance files from configured filesystem roots. Newer zppy runs already emit provenance cfg files under diagnostics output paths, for example:
 
-Store `ExternalLink` rows on match. No remote calls during frontend queries. Same model as manually-added links — frontend works with zero changes. `ExternalLink.created_at` provides audit trail.
+```text
+post/scripts/provenance.20260303_230804_991619.cfg
+```
 
-## Approach
+Current cfg examples expose useful fields:
 
-1. **Join key:** `(case_name, machine, hpc_username)` — all three required. `case_name` alone is not globally unique (`Case.name` has a unique index but different users can reuse names). Adding `machine` + `hpc_username` disambiguates. `CASE_HASH` is unreliable across executions (see issue #136). zppy has all three values.
+- `case`: case name
+- `input`: case run directory
+- `output`: diagnostics filesystem root
+- `www`: public diagnostics root
+- `campaign`: optional campaign metadata
 
-2. **Matching query:** Machine is on `Simulation` not `Case`, so the resolver joins: `Case.name == X AND Simulation.machine_id == Y AND Simulation.hpc_username == Z`. All simulations in a case share the same machine in practice.
+But current cfg is not yet an authoritative join source because it may lack:
 
-3. **zppy-side (minimal change):** After diagnostics complete, zppy writes `.simboard-diagnostics.json` to its output directory. `mache` resolves public URL prefixes. No API call, no token.
+- `machine`
+- execution `LID`
+- canonical simulation owner
+- unambiguous `hpc_username`
 
-4. **SimBoard diagnostics scanner** — two options:
+Path-derived usernames are unsafe. Example ambiguity:
 
-   **Option A — Extend NERSC archive ingestor (recommended for MVP):** Add a post-scan phase to the existing `nersc_archive_ingestor.py` that also walks known diagnostics output directories (or the same archive tree) looking for `.simboard-diagnostics.json` files. On discovery, it calls a new internal endpoint or directly creates `ExternalLink` rows via the existing service account token.
+```text
+input  path owner: ac.wlin
+output path owner: ac.zhang40
+```
 
-   **Option B — Separate diagnostics scanner script:** A new lightweight CronJob script (`diagnostics_link_scanner.py`) that walks diagnostics output directories. Same pattern as `nersc_archive_ingestor.py` — env-configured, state-file dedup, service account auth. Better separation of concerns, but more operational overhead.
+Therefore, zppy must enrich provenance cfg with required case identity copied from `case_scripts/env_case.xml`:
 
-5. **API endpoint** (extend `backend/app/features/simulation/api.py`):
+| XML field  | Provenance field |
+| ---------- | ---------------- |
+| `CASE`     | `case_name`      |
+| `MACH`     | `machine`        |
+| `REALUSER` | `hpc_username`   |
 
-   ```
-   POST /api/v1/diagnostics/link
-   Body: { "case_name": "...", "machine": "...", "hpc_username": "...", "diagnostics": [...] }
-   ```
+If any required field is missing, SimBoard skips the provenance file and logs it as invalid for linking.
 
-   Restricted to `ADMIN` / `SERVICE_ACCOUNT` roles (same as ingestion). Resolves the triple → `Case` → creates `ExternalLink` rows with `kind = diagnostic`. The scanner calls this endpoint; users don't call it directly.
+### Persist links, do not resolve at query time
 
-6. **Schema:** Add `DiagnosticsLinkRequest` to `backend/app/features/simulation/schemas.py`.
+Create database rows when diagnostics are discovered. Frontend queries should not crawl filesystems or remote URLs.
 
-7. **Migration:** None if linking to existing FK targets. Required if adding `case_id` FK to `ExternalLink` (see open question #1).
+Use the existing manual-link rendering path where possible: diagnostics links become `ExternalLink` rows with `kind = diagnostic`.
 
-8. **Frontend:** No changes. Existing `grouped_links` rendering picks up new diagnostic links automatically.
+## Implementation
 
-### Alternative: Convention-based URL derivation (no zppy changes)
+Implement in order: provenance contract -> scanner -> storage target -> resolver/API -> frontend verification.
 
-For production runs with enforced path conventions, SimBoard could derive diagnostic URLs from simulation metadata + `mache` without any zppy changes or manifest files. Per issue #174, zppy outputs follow a fixed directory structure and `mache` resolves per-machine URL prefixes.
+### zppy
 
-This works only when path conventions are strict. The manifest approach is more robust for custom user paths. Could combine both: derive URLs for production campaigns, manifest for custom runs.
+#### 1. Emit required provenance fields
 
-## Tests
+| Field          | Source                    |
+| -------------- | ------------------------- |
+| `case_name`    | `env_case.xml` `CASE`     |
+| `machine`      | `env_case.xml` `MACH`     |
+| `hpc_username` | `env_case.xml` `REALUSER` |
 
-- `backend/tests/features/simulation/test_api.py` — endpoint tests:
-  - Happy path: matching `(case_name, machine, hpc_username)` → links created
-  - Different user, same case_name + machine → no cross-linking (isolation test)
-  - No matching case → 404
-  - Duplicate link idempotency
-  - Invalid payload → 422
-- Scanner tests: manifest discovery, state dedup, malformed manifest handling
-- Run: `make backend-test && make pre-commit-run`
+Tests:
 
-## Risk
+- emits `case_name`, `machine`, `hpc_username`
+- parses values from `env_case.xml`
+- handles missing `env_case.xml`
+- preserves existing provenance behavior
 
-**Score: 3 (normal)**
+### SimBoard
 
-1. **zppy adoption lag** — No data until zppy emits manifests. Mitigate with convention-based derivation for production runs.
-2. **Case name collision** — `Case.name` is unique in DB but not globally meaningful. The `(case_name, machine, hpc_username)` triple mitigates. Broader fix tracked in issue #136.
-3. **Diagnostics output path visibility** — Scanner must have filesystem access to zppy output directories. On NERSC this requires mounting the relevant CFS paths into the SimBoard container (same pattern as performance archive).
-4. **Timing gap** — Scanner-based approach has up to 15-min latency. Acceptable for diagnostics linking.
+#### 1. Add diagnostics scanner
 
-## Open Questions (ask colleagues)
+Add `diagnostics_link_scanner.py`.
 
-1. **Case-level vs execution-level linking?** zppy diagnostics run across simulation output in time increments — they're inherently case-scoped, not tied to a specific execution/LID. Current `ExternalLink` only has `simulation_id` FK. Options: (a) add optional `case_id` FK to `ExternalLink`, (b) create a separate `CaseLink` model, (c) link to reference simulation only as a pragmatic shortcut. This is the key schema decision.
-2. **Case uniqueness long-term?** The `(case_name, machine, hpc_username)` triple is a pragmatic join key but `Case.name` as the sole DB unique constraint is fragile. Issue #136 is evaluating `CASE_HASH` but it's unstable across executions. Should Case uniqueness be strengthened in the model itself?
-3. **Diagnostics output directory location?** Where are zppy outputs stored on each machine? Need the path pattern to configure the scanner. Per issue #174, the coupled group stores results on machine web servers — need the exact filesystem mount paths for NERSC (and other machines if applicable).
-4. **Retroactive linking needed?** If yes, plan a one-time bulk-linking script (or convention-based derivation) for existing diagnostics that predate this feature.
-5. **Convention-based derivation viable for MVP?** If zppy output paths are predictable enough from `(case_name, machine, hpc_username)` + `mache`, SimBoard could derive diagnostic URLs without any zppy changes. Worth evaluating as a faster MVP path.
+Responsibilities:
+
+- scan configured diagnostics roots for `provenance*.cfg`
+- dedup with state file
+- verify diagnostics completion
+- parse `case_name`, `machine`, `hpc_username`
+- call internal API with service-account auth
+- skip and log if full join key is unavailable
+
+Tests:
+
+- discovers cfgs
+- parses required cfg identity
+- handles malformed cfgs
+- skips missing identity
+- checks completion marker
+- dedups state
+- handles duplicate links idempotently
+
+#### 2. Resolve link storage
+
+Add `DiagnosticsLinkRequest` in `backend/app/features/simulation/schemas.py`.
+
+Storage options:
+
+1. Preferred: add `case_id` to `ExternalLink`.
+2. Alternative: add `CaseLink`.
+3. Shortcut: attach to reference simulation.
+
+#### 3. Add matching resolver
+
+| Input          | Match                     |
+| -------------- | ------------------------- |
+| `case_name`    | `Case.name`               |
+| `machine`      | `Simulation.machine_id`   |
+| `hpc_username` | `Simulation.hpc_username` |
+
+Outcomes:
+
+- 1 match: create/update links
+- 0 matches: `404`
+- multiple matches: `409`
+
+Tests:
+
+- matching triple creates links
+- same case/machine under different user does not cross-link
+- no match returns `404`
+- ambiguous match returns `409`
+
+#### 4. Add internal API endpoint
+
+Endpoint: `POST /api/v1/diagnostics/link`
+
+Roles: `ADMIN`, `SERVICE_ACCOUNT`
+
+Request:
+
+| Field          | Required |
+| -------------- | -------- |
+| `case_name`    | yes      |
+| `machine`      | yes      |
+| `hpc_username` | yes      |
+| `diagnostics`  | yes      |
+
+Diagnostics item:
+
+| Field               | Required |
+| ------------------- | -------- |
+| `name`              | yes      |
+| `url`               | yes      |
+| `kind = diagnostic` | yes      |
+
+Tests:
+
+- duplicate request is idempotent
+- invalid payload returns `422`
+- auth required
+
+#### 5. Keep frontend unchanged
+
+Existing external-link rendering should display diagnostic links once rows exist.
+
+## Fallbacks
+
+### Curated backfill
+
+Allow convention-based URL derivation only for controlled campaigns. Do not use as the primary MVP path.
+
+### Validation command
+
+```bash
+make backend-test && make pre-commit-run
+```
+
+## Risks
+
+- **Storage gap**: diagnostics are case-scoped, but `ExternalLink` currently points at `simulation_id`.
+  Mitigation: decide storage target before implementing resolver/API behavior.
+- **Missing identity**: SimBoard cannot link a provenance file without `case_name`, `machine`, and `hpc_username`.
+  Mitigation: require zppy provenance enrichment; skip and log invalid files.
+- **Deployment variability**: zppy roots and public URL prefixes vary by machine/campaign.
+  Mitigation: use env-configured scanner roots and machine/public-prefix mappings.
+- **Provenance drift**: cfg layout and required-field coverage may vary across zppy versions.
+  Mitigation: add parser tests, schema/version detection, and a documented support window.
+
+## Remaining Open Questions
+
+1. **Storage target:** Should diagnostics links attach to `Case`, `Simulation`, or a new link table?
+2. **Provenance schema:** Should zppy emit a versioned normalized block or reuse existing top-level cfg fields?
+3. **Completion signal:** Which artifact should SimBoard treat as authoritative completion: status file, generated index, or explicit provenance field?
+4. **Deployment scope:** Which scanner roots, machines, and public URL prefixes are supported in MVP?
+5. **Retroactive linking:** Does MVP include historical backfill, or only provenance files with the required join key?
+6. **Case identity hardening:** Is `(case_name, machine, hpc_username)` sufficient until issue #136 is resolved?
