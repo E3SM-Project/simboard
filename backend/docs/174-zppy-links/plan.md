@@ -23,7 +23,6 @@ MVP is NERSC-only.
 
 - Frontend redesign
 - Changes to manual external-link workflows
-- PACE integration changes
 - Case identity or uniqueness refactor
 - Diagnostics content ingestion or indexing
 - Public HTML directory scraping
