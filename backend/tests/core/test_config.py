@@ -158,31 +158,11 @@ class TestSettings:
             github_client_secret="github-client-secret",
             github_redirect_url="http://localhost:8000/auth/github/callback",
             github_state_secret_key="state-secret",
-            ASSISTANT_LIVAI_BASE_URL=" https://api.livai.llnl.gov/v1  ",
-            ASSISTANT_LIVAI_API_KEY="livai-key",
+            assistant_livai_base_url=" https://livai-api.llnl.gov/  ",
+            assistant_livai_api_key="livai-key",
         )
 
-        assert configured.assistant_livai_base_url == "https://api.livai.llnl.gov/v1"
-        assert configured.assistant_livai_api_key is not None
-        assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
-
-    def test_legacy_livai_env_aliases_remain_supported(self):
-        configured = Settings(
-            _env_file=None,
-            FRONTEND_ORIGIN="http://localhost:3000",
-            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
-            FRONTEND_ORIGINS="http://localhost:3000",
-            database_url="postgresql+psycopg://user:password@localhost/simboard",
-            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
-            github_client_id="github-client-id",
-            github_client_secret="github-client-secret",
-            github_redirect_url="http://localhost:8000/auth/github/callback",
-            github_state_secret_key="state-secret",
-            LIVAI_BASE_URL=" https://api.livai.llnl.gov/v1  ",
-            LIVAI_API_KEY="livai-key",
-        )
-
-        assert configured.assistant_livai_base_url == "https://api.livai.llnl.gov/v1"
+        assert configured.assistant_livai_base_url == "https://livai-api.llnl.gov/"
         assert configured.assistant_livai_api_key is not None
         assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
 
@@ -192,7 +172,7 @@ class TestSettings:
             FRONTEND_ORIGIN="http://localhost:3000",
             FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
             FRONTEND_ORIGINS="http://localhost:3000",
-            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            database_url="postgresql+psycopopg://user:password@localhost/simboard",
             test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
             github_client_id="github-client-id",
             github_client_secret="github-client-secret",

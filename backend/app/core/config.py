@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -147,15 +147,9 @@ class Settings(BaseSettings):
     assistant_openai_model: str | None = None
     assistant_anthropic_api_key: SecretStr | None = None
     assistant_anthropic_model: str | None = None
-    assistant_livai_api_key: SecretStr | None = Field(
-        default=None,
-        validation_alias=AliasChoices("ASSISTANT_LIVAI_API_KEY", "LIVAI_API_KEY"),
-    )
+    assistant_livai_api_key: SecretStr | None = None
     assistant_livai_model: str | None = None
-    assistant_livai_base_url: str = Field(
-        default="https://livai-api.llnl.gov/",
-        validation_alias=AliasChoices("ASSISTANT_LIVAI_BASE_URL", "LIVAI_BASE_URL"),
-    )
+    assistant_livai_base_url: str = "https://livai-api.llnl.gov/"
     assistant_llm_timeout_seconds: float = 30.0
     assistant_llm_temperature: float = 0.2
     assistant_llm_max_tokens: int = 2048
