@@ -107,7 +107,7 @@ ASSISTANT_LLM_MAX_TOKENS=2048
 
 If `ASSISTANT_LLM_ENABLED=false`, or the selected provider is misconfigured, the backend automatically returns the deterministic metadata summary instead of an LLM-generated one.
 
-For LivAI, `ASSISTANT_LIVAI_API_KEY` and `ASSISTANT_LIVAI_BASE_URL` are the canonical names. The backend still accepts legacy aliases `LIVAI_API_KEY` and `LIVAI_BASE_URL` for backward compatibility.
+For LivAI, `ASSISTANT_LIVAI_API_KEY` and `ASSISTANT_LIVAI_BASE_URL` are the canonical names.
 For the current LivAI OpenAI-compatible chat endpoint, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter; `ASSISTANT_LLM_MAX_TOKENS` still applies.
 
 If summary generation still falls back:

@@ -50,7 +50,7 @@ Assistant summary configuration uses the `ASSISTANT_*` namespace:
 - `ASSISTANT_LLM_MAX_TOKENS`
 - `ASSISTANT_SNAPSHOT_MAX_CHARS`
 
-For LivAI, `ASSISTANT_LIVAI_*` names are canonical. Legacy aliases `LIVAI_API_KEY` and `LIVAI_BASE_URL` are still accepted for backward compatibility.
+For LivAI, `ASSISTANT_LIVAI_*` names are canonical.
 For the current LivAI OpenAI-compatible chat path, SimBoard omits `temperature` for `gpt-5*` models because that endpoint rejects the parameter.
 For step-by-step local setup and provider examples, see [docs/developer/README.md](../docs/developer/README.md#assistant-llm-env-setup).
 
