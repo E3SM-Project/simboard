@@ -59,6 +59,57 @@ make backend-create-admin
 
 For token-based ingestion and service-account details, see [docs/hpc_api_token_authentication.md](../hpc_api_token_authentication.md).
 
+## Assistant LLM Env Setup
+
+If you want the simulation details page to use LLM-backed summaries instead of deterministic fallback, configure the assistant env values in `.envs/local/backend.env`.
+
+Canonical assistant env names:
+
+- `ASSISTANT_LLM_ENABLED`
+- `ASSISTANT_LLM_PROVIDER` with `openai`, `anthropic`, or `livai`
+- `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
+- `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
+- `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
+
+Recommended setup flow:
+
+1. Open `.envs/local/backend.env`.
+2. Set `ASSISTANT_LLM_ENABLED=true`.
+3. Choose exactly one provider in `ASSISTANT_LLM_PROVIDER`.
+4. Fill only that provider's required env vars.
+5. Restart the backend with `make backend-run`.
+6. Generate an AI Summary from the simulation details page and confirm it does not fall back to deterministic mode.
+
+Recommended local default for this repo:
+
+```env
+ASSISTANT_LLM_ENABLED=true
+ASSISTANT_LLM_PROVIDER=livai
+ASSISTANT_LIVAI_API_KEY=
+ASSISTANT_LIVAI_MODEL=
+ASSISTANT_LIVAI_BASE_URL=https://livai-api.llnl.gov/
+```
+
+Direct OpenAI setup:
+
+```env
+ASSISTANT_LLM_ENABLED=true
+ASSISTANT_LLM_PROVIDER=openai
+ASSISTANT_OPENAI_API_KEY=
+ASSISTANT_OPENAI_MODEL=
+```
+
+If `ASSISTANT_LLM_ENABLED=false`, or the selected provider is misconfigured, the backend automatically returns the deterministic metadata summary instead of an LLM-generated one.
+
+For LivAI, `ASSISTANT_LIVAI_API_KEY` and `ASSISTANT_LIVAI_BASE_URL` are the canonical names. The backend still accepts legacy aliases `LIVAI_API_KEY` and `LIVAI_BASE_URL` for backward compatibility.
+
+If summary generation still falls back:
+
+- `fallback_reason=openai_misconfigured` means the backend is still configured for `openai`, but `ASSISTANT_OPENAI_API_KEY` or `ASSISTANT_OPENAI_MODEL` is missing.
+- `fallback_reason=anthropic_misconfigured` means `ASSISTANT_ANTHROPIC_API_KEY` or `ASSISTANT_ANTHROPIC_MODEL` is missing.
+- `fallback_reason=livai_misconfigured` means `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL` is missing.
+- If you edit `.envs/local/backend.env`, restart `make backend-run` before testing again.
+
 ## Architecture
 
 SimBoard is a web application for cataloging and comparing E3SM simulation metadata. The full application (frontend, backend, and database) is hosted on NERSC Spin. Automated ingestion jobs running on HPC sites collect metadata from an E3SM performance archive and push it to SimBoard, where the backend normalizes it and the frontend lets researchers browse, compare, and analyze results.

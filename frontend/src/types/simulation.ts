@@ -29,6 +29,9 @@ export interface SimulationSummaryResponseOut {
   caveats: string[];
   limitations: string[];
   suggestedFollowups: string[];
+  generationMode?: 'llm' | 'deterministic';
+  generationProvider?: 'openai' | 'anthropic' | 'livai' | null;
+  generationModel?: string | null;
   traceId: string;
 }
 

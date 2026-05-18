@@ -34,4 +34,21 @@ make backend-migrate m='message'
 make backend-upgrade
 ```
 
+## Configuration
+
+Backend env templates live in `.envs/example/backend.env.example` and local developer values live in `.envs/local/backend.env`.
+
+Assistant summary configuration uses the `ASSISTANT_*` namespace:
+
+- `ASSISTANT_LLM_ENABLED`
+- `ASSISTANT_LLM_PROVIDER` with `openai`, `anthropic`, or `livai`
+- `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
+- `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
+- `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
+- `ASSISTANT_LLM_TIMEOUT_SECONDS`
+- `ASSISTANT_SNAPSHOT_MAX_CHARS`
+
+For LivAI, `ASSISTANT_LIVAI_*` names are canonical. Legacy aliases `LIVAI_API_KEY` and `LIVAI_BASE_URL` are still accepted for backward compatibility.
+For step-by-step local setup and provider examples, see [docs/developer/README.md](../docs/developer/README.md#assistant-llm-env-setup).
+
 For repo-wide setup and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).

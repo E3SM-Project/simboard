@@ -7,7 +7,7 @@ from app.common.schemas.base import CamelOutBaseModel
 
 
 class SummaryCitationOut(CamelOutBaseModel):
-    """Metadata citation for a deterministic simulation summary."""
+    """Metadata citation for a simulation summary."""
 
     source_type: Literal[
         "simulation_field",
@@ -23,11 +23,15 @@ class SummaryCitationOut(CamelOutBaseModel):
     label: str = Field(..., description="Human-readable label for the cited source.")
 
 
-class SimulationSummaryResponse(CamelOutBaseModel):
-    """Structured response returned by the deterministic summary endpoint."""
+SummaryGenerationMode = Literal["llm", "deterministic"]
+SummaryGenerationProvider = Literal["openai", "anthropic", "livai"]
+
+
+class SimulationSummaryContent(CamelOutBaseModel):
+    """Structured simulation summary content."""
 
     answer: str = Field(
-        ..., description="Deterministic summary prose for the simulation."
+        ..., description="Metadata-grounded summary prose for the simulation."
     )
     citations: list[SummaryCitationOut] = Field(
         default_factory=list,
@@ -48,5 +52,22 @@ class SimulationSummaryResponse(CamelOutBaseModel):
     suggested_followups: list[str] = Field(
         default_factory=list,
         description="Non-agentic follow-up checks derived from available metadata.",
+    )
+
+
+class SimulationSummaryResponse(SimulationSummaryContent):
+    """Structured response returned by the simulation summary endpoint."""
+
+    generation_mode: SummaryGenerationMode = Field(
+        ...,
+        description="Whether the summary came from the LLM path or deterministic fallback.",
+    )
+    generation_provider: SummaryGenerationProvider | None = Field(
+        ...,
+        description="Provider name when LLM generation succeeds; otherwise null.",
+    )
+    generation_model: str | None = Field(
+        ...,
+        description="Configured provider model when LLM generation succeeds; otherwise null.",
     )
     trace_id: UUID = Field(..., description="Trace ID for request review and logs.")

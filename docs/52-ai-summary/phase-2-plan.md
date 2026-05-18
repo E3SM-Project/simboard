@@ -2,7 +2,7 @@
 
 ## Summary
 
-Add backend-managed LLM summary generation to the existing simulation summary flow while preserving the current endpoint and detail-page summary panel. Use **Pydantic AI** as the adapter/orchestration layer, support **OpenAI and Anthropic** behind a **backend config switch**, and keep the current deterministic summary generator as the mandatory fallback whenever LLM generation is disabled, misconfigured, invalid, or fails.
+Add backend-managed LLM summary generation to the existing simulation summary flow while preserving the current endpoint and detail-page summary panel. Use **Pydantic AI** as the adapter/orchestration layer, support **OpenAI**, **Anthropic**, and **LivAI** behind a **backend config switch**, and keep the current deterministic summary generator as the mandatory fallback whenever LLM generation is disabled, misconfigured, invalid, or fails.
 
 ## Key Changes
 
@@ -33,11 +33,14 @@ This keeps metadata extraction centralized, prevents divergence between determin
 Add assistant LLM settings in `backend/app/core/config.py` and corresponding example env templates:
 
 - `assistant_llm_enabled`
-- `assistant_llm_provider` with values `openai` or `anthropic`
+- `assistant_llm_provider` with values `openai`, `anthropic`, or `livai`
 - `assistant_openai_api_key` (declare as `pydantic.SecretStr` to prevent leaking in repr/logs)
 - `assistant_openai_model`
 - `assistant_anthropic_api_key` (declare as `pydantic.SecretStr`)
 - `assistant_anthropic_model`
+- `assistant_livai_api_key` (canonical env name `ASSISTANT_LIVAI_API_KEY`; legacy alias `LIVAI_API_KEY` accepted)
+- `assistant_livai_model`
+- `assistant_livai_base_url` (canonical env name `ASSISTANT_LIVAI_BASE_URL`; legacy alias `LIVAI_BASE_URL` accepted)
 - `assistant_llm_timeout_seconds`
 - `assistant_snapshot_max_chars` (optional, default sensible limit e.g. 12000)
 
@@ -64,7 +67,7 @@ Preserve the existing endpoint path:
 Keep the existing response fields and add generation metadata with **deterministic nullability rules**:
 
 - `generation_mode`: `"llm"` or `"deterministic"` — always present, never null.
-- `generation_provider`: `"openai"`, `"anthropic"`, or `null` — **always `null` when `generation_mode` is `"deterministic"`** (including fallback). Provider identity on fallback is captured only in server logs, not in the response.
+- `generation_provider`: `"openai"`, `"anthropic"`, `"livai"`, or `null` — **always `null` when `generation_mode` is `"deterministic"`** (including fallback). Provider identity on fallback is captured only in server logs, not in the response.
 - `generation_model`: configured model name or `null` — same nullability rule as `generation_provider`.
 
 Existing fields remain:
@@ -141,6 +144,7 @@ Add or update assistant tests to cover:
 - LLM disabled returns deterministic output with `generation_mode="deterministic"`, `generation_provider=null`, `generation_model=null`
 - config switch selects OpenAI path; mock returns valid structured output
 - config switch selects Anthropic path; mock returns valid structured output
+- config switch selects LivAI path; mock returns valid structured output
 - provider misconfiguration falls back deterministically with standardized caveat
 - provider exception falls back deterministically with standardized caveat
 - schema-invalid LLM output falls back deterministically
@@ -178,7 +182,7 @@ Update existing frontend typing/render coverage to verify:
 ## Assumptions
 
 - Phase 2 uses **Pydantic AI** as the thin LLM orchestration layer.
-- Support for OpenAI and Anthropic means **one provider selected by backend config**, not per-request choice and not automatic provider failover.
+- Support for OpenAI, Anthropic, and LivAI means **one provider selected by backend config**, not per-request choice and not automatic provider failover.
 - Deterministic fallback remains mandatory and automatic.
 - No retrieval, RAG, curated document indexing, compare workflows, persistence, chat UI, or frontend interaction redesign is included in this phase.
 - Public API shape should remain stable aside from the minimal generation metadata additions above.

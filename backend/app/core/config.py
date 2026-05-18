@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -139,6 +139,30 @@ class Settings(BaseSettings):
     cookie_httponly: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_max_age: int = 3600
+
+    # --- Assistant LLM config ---
+    assistant_llm_enabled: bool = False
+    assistant_llm_provider: Literal["openai", "anthropic", "livai"] = "openai"
+    assistant_openai_api_key: SecretStr | None = None
+    assistant_openai_model: str | None = None
+    assistant_anthropic_api_key: SecretStr | None = None
+    assistant_anthropic_model: str | None = None
+    assistant_livai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ASSISTANT_LIVAI_API_KEY", "LIVAI_API_KEY"),
+    )
+    assistant_livai_model: str | None = None
+    assistant_livai_base_url: str = Field(
+        default="https://livai-api.llnl.gov/",
+        validation_alias=AliasChoices("ASSISTANT_LIVAI_BASE_URL", "LIVAI_BASE_URL"),
+    )
+    assistant_llm_timeout_seconds: float = 30.0
+    assistant_snapshot_max_chars: int = 12000
+
+    @field_validator("assistant_livai_base_url", mode="before")
+    @classmethod
+    def _strip_livai_base_url(cls, value: str) -> str:
+        return value.strip()
 
 
 settings = Settings()

@@ -3,6 +3,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.features.assistant.service import build_simulation_summary
+from app.features.assistant.snapshot import (
+    SimulationSnapshot,
+    SnapshotCaseFields,
+    SnapshotSimulationFields,
+)
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
@@ -229,5 +234,62 @@ class TestBuildSimulationSummary:
             in summary.caveats
         )
         assert summary.limitations == [
-            "This v1 summary uses only metadata already stored in SimBoard. It does not use retrieval, diagnostics interpretation, or LLM reasoning."
+            "This summary uses only metadata already stored in SimBoard. It does not use retrieval, diagnostics interpretation, or LLM reasoning."
+        ]
+
+    def test_non_reference_without_deltas_adds_explicit_caveat(self) -> None:
+        summary = build_simulation_summary(
+            SimulationSnapshot(
+                simulation=SnapshotSimulationFields(
+                    id="simulation-1",
+                    execution_id="assistant-nonref-no-deltas",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    simulation_type="experimental",
+                    status="completed",
+                    initialization_type="startup",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                ),
+                case=SnapshotCaseFields(
+                    name="assistant_case",
+                    reference_simulation_id="reference-1",
+                ),
+            )
+        )
+
+        assert (
+            "It is a non-reference run, but SimBoard does not currently record any configuration deltas for it."
+            in summary.answer
+        )
+        assert (
+            "This non-reference simulation has no recorded configuration deltas in SimBoard metadata."
+            in summary.caveats
+        )
+
+    def test_missing_start_date_adds_caveat_and_default_followup(self) -> None:
+        summary = build_simulation_summary(
+            SimulationSnapshot(
+                simulation=SnapshotSimulationFields(
+                    id="simulation-1",
+                    execution_id="assistant-no-start-date",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    simulation_type="experimental",
+                    status="completed",
+                    initialization_type="startup",
+                ),
+                case=SnapshotCaseFields(name="assistant_case"),
+            )
+        )
+
+        assert (
+            "Simulation start date is not recorded in SimBoard metadata."
+            in summary.caveats
+        )
+        assert summary.suggested_followups == [
+            "Review the simulation detail page metadata for additional provenance and run context."
         ]

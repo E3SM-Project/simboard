@@ -4,12 +4,14 @@ from time import perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 
-from app.common.dependencies import get_database_session
+from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
+from app.features.assistant.orchestrator import generate_simulation_summary
 from app.features.assistant.schemas import SimulationSummaryResponse
-from app.features.assistant.service import build_simulation_summary
 from app.features.simulation.models import Simulation
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
@@ -22,56 +24,70 @@ logger = _setup_custom_logger(__name__)
     "/{sim_id}/summary",
     response_model=SimulationSummaryResponse,
     responses={
-        200: {"description": "Deterministic summary generated successfully."},
+        200: {"description": "Simulation summary generated successfully."},
         401: {"description": "Unauthorized."},
         404: {"description": "Simulation not found."},
     },
 )
-def summarize_simulation(
+async def summarize_simulation(
     sim_id: UUID,
-    db: Session = Depends(get_database_session),
+    db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ) -> SimulationSummaryResponse:
-    """Generate a deterministic read-only summary for one simulation."""
+    """Generate a metadata-grounded read-only summary for one simulation."""
 
     start = perf_counter()
     trace_id = uuid4()
 
-    simulation = (
-        db.query(Simulation)
+    stmt = (
+        select(Simulation)
         .options(
             joinedload(Simulation.case),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )
-        .filter(Simulation.id == sim_id)
-        .one_or_none()
+        .where(Simulation.id == sim_id)
     )
+    result = await db.execute(stmt)
+    simulation = result.scalars().unique().one_or_none()
 
     if simulation is None:
         duration_ms = (perf_counter() - start) * 1000
         logger.info(
             "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=false "
-            "status=not_found latency_ms=%.2f citation_count=0 caveat_count=0",
+            "status=not_found latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
+            "generation_provider=%s generation_model=%s fallback_reason=%s "
+            "citation_count=0 caveat_count=0",
             trace_id,
             sim_id,
             user.id,
             duration_ms,
+            0.0,
+            "deterministic",
+            "null",
+            "null",
+            "simulation_not_found",
         )
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    summary = build_simulation_summary(simulation)
-    summary = summary.model_copy(update={"trace_id": trace_id})
+    generation = await generate_simulation_summary(simulation)
+    summary = generation.summary.model_copy(update={"trace_id": trace_id})
 
     duration_ms = (perf_counter() - start) * 1000
     logger.info(
         "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=true "
-        "latency_ms=%.2f citation_count=%d caveat_count=%d",
+        "latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s generation_provider=%s "
+        "generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
         trace_id,
         simulation.id,
         user.id,
         duration_ms,
+        generation.llm_latency_ms,
+        summary.generation_mode,
+        generation.attempted_provider or "null",
+        generation.attempted_model or "null",
+        generation.fallback_reason or "null",
         len(summary.citations),
         len(summary.caveats),
     )

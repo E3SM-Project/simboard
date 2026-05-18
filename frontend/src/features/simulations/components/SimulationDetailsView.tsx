@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -119,6 +120,11 @@ export const SimulationDetailsView = ({
   const [activeTab, setActiveTab] = useState('summary');
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
+  const summaryGenerationMode = summary?.generationMode ?? 'deterministic';
+  const summaryGenerationProvider =
+    summaryGenerationMode === 'llm' ? summary?.generationProvider ?? null : null;
+  const summaryGenerationModel =
+    summaryGenerationMode === 'llm' ? summary?.generationModel ?? null : null;
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -288,13 +294,32 @@ export const SimulationDetailsView = ({
                 <div className="rounded-md border bg-white/80 px-4 py-5">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Spinner className="size-4" />
-                    Building deterministic summary from SimBoard metadata...
+                    Generating summary from SimBoard metadata...
                   </div>
                 </div>
               )}
 
               {summary && (
                 <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border bg-white px-4 py-3">
+                    <Badge
+                      variant="secondary"
+                      className={
+                        summaryGenerationMode === 'llm'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-100 text-slate-700'
+                      }
+                    >
+                      {summaryGenerationMode === 'llm' ? 'LLM Summary' : 'Deterministic Summary'}
+                    </Badge>
+                    {summaryGenerationProvider && (
+                      <span className="text-sm text-muted-foreground">
+                        Provider: {summaryGenerationProvider}
+                        {summaryGenerationModel ? ` · ${summaryGenerationModel}` : ''}
+                      </span>
+                    )}
+                  </div>
+
                   <div>
                     <Label className="mb-1 block text-xs text-muted-foreground">Summary</Label>
                     <ReadonlyTextBlock value={summary.answer} className="min-h-[120px] bg-white" />
