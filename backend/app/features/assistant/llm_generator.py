@@ -77,11 +77,16 @@ class SummaryLLMGenerator:
             provider=AnthropicProvider(api_key=api_key, http_client=http_client),
         )
 
-    def _build_model_settings(self) -> ModelSettings:
-        return {
-            "temperature": self.config.temperature,
+    def _build_model_settings(self) -> ModelSettings | None:
+        settings: ModelSettings = {
             "max_tokens": self.config.max_tokens,
         }
+        if not (
+            self.config.provider == "livai"
+            and self.config.model_name.startswith("gpt-5")
+        ):
+            settings["temperature"] = self.config.temperature
+        return settings or None
 
     def _build_user_prompt(self, snapshot: SimulationSnapshot) -> str:
         allowed_citations = "\n".join(

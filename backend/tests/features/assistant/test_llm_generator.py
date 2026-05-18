@@ -67,6 +67,52 @@ class TestSummaryLLMGenerator:
 
         assert model.__class__.__name__ == "AnthropicModel"
 
+    def test_build_model_settings_omits_temperature_for_livai_gpt5(self) -> None:
+        config = AssistantLLMConfig(
+            provider="livai",
+            model_name="gpt-5.4-mini",
+            api_key=SecretStr("livai-key"),
+            timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
+            base_url="https://example.livai.test/v1",
+        )
+
+        assert SummaryLLMGenerator(config)._build_model_settings() == {
+            "max_tokens": 2048,
+        }
+
+    def test_build_model_settings_keeps_tuning_for_non_gpt5_livai(self) -> None:
+        config = AssistantLLMConfig(
+            provider="livai",
+            model_name="gpt-4.1-mini",
+            api_key=SecretStr("livai-key"),
+            timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
+            base_url="https://example.livai.test/v1",
+        )
+
+        assert SummaryLLMGenerator(config)._build_model_settings() == {
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
+
+    def test_build_model_settings_includes_tuning_for_openai(self) -> None:
+        config = AssistantLLMConfig(
+            provider="openai",
+            model_name="gpt-test",
+            api_key=SecretStr("openai-key"),
+            timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
+        )
+
+        assert SummaryLLMGenerator(config)._build_model_settings() == {
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
+
     def test_build_user_prompt_includes_snapshot_and_allowed_citations(self) -> None:
         prompt = SummaryLLMGenerator(
             AssistantLLMConfig(
