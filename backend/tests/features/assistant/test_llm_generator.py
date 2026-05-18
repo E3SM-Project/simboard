@@ -41,6 +41,8 @@ class TestSummaryLLMGenerator:
             model_name="livai-model",
             api_key=SecretStr("livai-key"),
             timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
             base_url="https://example.livai.test/v1",
         )
 
@@ -56,6 +58,8 @@ class TestSummaryLLMGenerator:
             model_name="claude-test",
             api_key=SecretStr("anthropic-key"),
             timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
         )
 
         async with AsyncClient() as http_client:
@@ -70,6 +74,8 @@ class TestSummaryLLMGenerator:
                 model_name="gpt-test",
                 api_key=SecretStr("openai-key"),
                 timeout_seconds=30.0,
+                temperature=0.2,
+                max_tokens=2048,
             )
         )._build_user_prompt(_make_snapshot())
 
@@ -98,10 +104,13 @@ class TestSummaryLLMGenerator:
         captured: dict[str, object] = {}
 
         class FakeAgent:
-            def __init__(self, model, output_type, system_prompt) -> None:
+            def __init__(
+                self, model, output_type, system_prompt, model_settings=None
+            ) -> None:
                 captured["model"] = model
                 captured["output_type"] = output_type
                 captured["system_prompt"] = system_prompt
+                captured["model_settings"] = model_settings
 
             async def run(self, prompt: str):
                 captured["prompt"] = prompt
@@ -115,6 +124,8 @@ class TestSummaryLLMGenerator:
                 model_name="gpt-test",
                 api_key=SecretStr("openai-key"),
                 timeout_seconds=30.0,
+                temperature=0.2,
+                max_tokens=2048,
             )
         )
 
@@ -123,4 +134,8 @@ class TestSummaryLLMGenerator:
         assert result == expected
         assert captured["output_type"] is SimulationSummaryContent
         assert captured["system_prompt"] == llm_generator.SUMMARY_SYSTEM_PROMPT
+        assert captured["model_settings"] == {
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        }
         assert "Allowed citation paths:" in str(captured["prompt"])

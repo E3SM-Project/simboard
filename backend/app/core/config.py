@@ -157,6 +157,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ASSISTANT_LIVAI_BASE_URL", "LIVAI_BASE_URL"),
     )
     assistant_llm_timeout_seconds: float = 30.0
+    assistant_llm_temperature: float = 0.2
+    assistant_llm_max_tokens: int = 2048
     assistant_snapshot_max_chars: int = 12000
 
     @field_validator("assistant_livai_base_url", mode="before")

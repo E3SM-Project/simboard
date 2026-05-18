@@ -156,6 +156,8 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             model_name=settings.assistant_openai_model,
             api_key=settings.assistant_openai_api_key,
             timeout_seconds=settings.assistant_llm_timeout_seconds,
+            temperature=settings.assistant_llm_temperature,
+            max_tokens=settings.assistant_llm_max_tokens,
         )
 
     if provider == "anthropic":
@@ -169,6 +171,8 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             model_name=settings.assistant_anthropic_model,
             api_key=settings.assistant_anthropic_api_key,
             timeout_seconds=settings.assistant_llm_timeout_seconds,
+            temperature=settings.assistant_llm_temperature,
+            max_tokens=settings.assistant_llm_max_tokens,
         )
 
     if provider == "livai":
@@ -183,6 +187,8 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             model_name=settings.assistant_livai_model,
             api_key=settings.assistant_livai_api_key,
             timeout_seconds=settings.assistant_llm_timeout_seconds,
+            temperature=settings.assistant_llm_temperature,
+            max_tokens=settings.assistant_llm_max_tokens,
             base_url=settings.assistant_livai_base_url,
         )
 

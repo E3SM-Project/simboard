@@ -9,6 +9,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
 from app.features.assistant.registry import CITATION_REGISTRY
 from app.features.assistant.schemas import (
@@ -37,6 +38,8 @@ class AssistantLLMConfig:
     model_name: str
     api_key: SecretStr
     timeout_seconds: float
+    temperature: float
+    max_tokens: int
     base_url: str | None = None
 
 
@@ -51,6 +54,7 @@ class SummaryLLMGenerator:
                 model,
                 output_type=SimulationSummaryContent,
                 system_prompt=SUMMARY_SYSTEM_PROMPT,
+                model_settings=self._build_model_settings(),
             )
             result = await agent.run(self._build_user_prompt(snapshot))
             return result.output
@@ -72,6 +76,12 @@ class SummaryLLMGenerator:
             self.config.model_name,
             provider=AnthropicProvider(api_key=api_key, http_client=http_client),
         )
+
+    def _build_model_settings(self) -> ModelSettings:
+        return {
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
 
     def _build_user_prompt(self, snapshot: SimulationSnapshot) -> str:
         allowed_citations = "\n".join(

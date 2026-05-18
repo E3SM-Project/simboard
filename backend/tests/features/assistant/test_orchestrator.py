@@ -84,6 +84,8 @@ def _set_livai_settings(
     monkeypatch.setattr(settings, "assistant_livai_model", model)
     monkeypatch.setattr(settings, "assistant_livai_base_url", base_url)
     monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 30.0)
+    monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
+    monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
 
 
 class TestResolveLLMConfig:
@@ -96,12 +98,16 @@ class TestResolveLLMConfig:
         )
         monkeypatch.setattr(settings, "assistant_openai_model", "gpt-test")
         monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 20.0)
+        monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
+        monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
 
         config = orchestrator._resolve_llm_config()
 
         assert config.provider == "openai"
         assert config.model_name == "gpt-test"
         assert config.api_key.get_secret_value() == "openai-key"
+        assert config.temperature == 0.2
+        assert config.max_tokens == 2048
 
     def test_resolve_llm_config_for_livai_uses_wrapper_key_and_base_url(
         self, monkeypatch: pytest.MonkeyPatch
@@ -124,12 +130,16 @@ class TestResolveLLMConfig:
         )
         monkeypatch.setattr(settings, "assistant_anthropic_model", "claude-test")
         monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 15.0)
+        monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
+        monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
 
         config = orchestrator._resolve_llm_config()
 
         assert config.provider == "anthropic"
         assert config.model_name == "claude-test"
         assert config.api_key.get_secret_value() == "anthropic-key"
+        assert config.temperature == 0.2
+        assert config.max_tokens == 2048
 
     def test_resolve_llm_config_rejects_openai_misconfiguration(
         self, monkeypatch: pytest.MonkeyPatch

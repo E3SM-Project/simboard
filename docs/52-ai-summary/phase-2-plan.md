@@ -42,6 +42,8 @@ Add assistant LLM settings in `backend/app/core/config.py` and corresponding exa
 - `assistant_livai_model`
 - `assistant_livai_base_url` (canonical env name `ASSISTANT_LIVAI_BASE_URL`; legacy alias `LIVAI_BASE_URL` accepted)
 - `assistant_llm_timeout_seconds`
+- `assistant_llm_temperature`
+- `assistant_llm_max_tokens`
 - `assistant_snapshot_max_chars` (optional, default sensible limit e.g. 12000)
 
 Use **one active provider at runtime** selected by config. Do not add per-request provider selection, provider fan-out, or UI provider controls.

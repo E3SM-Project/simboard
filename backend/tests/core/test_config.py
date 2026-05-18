@@ -185,3 +185,22 @@ class TestSettings:
         assert configured.assistant_livai_base_url == "https://api.livai.llnl.gov/v1"
         assert configured.assistant_livai_api_key is not None
         assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
+
+    def test_assistant_llm_tuning_env_values_load_from_settings(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            ASSISTANT_LLM_TEMPERATURE="0.2",
+            ASSISTANT_LLM_MAX_TOKENS="2048",
+        )
+
+        assert configured.assistant_llm_temperature == 0.2
+        assert configured.assistant_llm_max_tokens == 2048
