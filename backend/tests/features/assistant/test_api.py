@@ -243,7 +243,7 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
 
         assert response.answer == "Deterministic assistant summary."
         assert response.trace_id == trace_id
@@ -277,7 +277,7 @@ class TestSummarizeSimulationUnit:
         )
 
         with pytest.raises(assistant_api.HTTPException) as exc_info:
-            await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+            await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Simulation not found"
