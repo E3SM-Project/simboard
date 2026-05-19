@@ -20,6 +20,7 @@ from app.features.assistant.service import (
 )
 from app.features.assistant.snapshot import (
     SimulationSnapshot,
+    SnapshotBudgetExceededError,
     build_simulation_snapshot,
 )
 from app.features.simulation.models import Simulation
@@ -206,7 +207,28 @@ def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
 async def generate_simulation_summary(
     simulation: Simulation,
 ) -> SummaryGenerationResult:
-    snapshot = build_simulation_snapshot(simulation)
+    attempted_provider: SummaryGenerationProvider | None = None
+    attempted_model: str | None = None
+
+    if settings.assistant_llm_enabled:
+        attempted_provider = settings.assistant_llm_provider
+        attempted_model = _configured_model_name(settings.assistant_llm_provider)
+
+    try:
+        snapshot = build_simulation_snapshot(simulation)
+    except SnapshotBudgetExceededError as exc:
+        return SummaryGenerationResult(
+            summary=_build_deterministic_response(
+                exc.snapshot,
+                include_fallback_caveat=settings.assistant_llm_enabled,
+            ),
+            fallback_reason=str(exc)
+            if settings.assistant_llm_enabled
+            else "llm_disabled",
+            llm_latency_ms=0.0,
+            attempted_provider=attempted_provider,
+            attempted_model=attempted_model,
+        )
 
     if not settings.assistant_llm_enabled:
         return SummaryGenerationResult(
@@ -219,13 +241,6 @@ async def generate_simulation_summary(
             attempted_provider=None,
             attempted_model=None,
         )
-
-    attempted_provider: SummaryGenerationProvider | None = (
-        settings.assistant_llm_provider
-    )
-    attempted_model: str | None = _configured_model_name(
-        settings.assistant_llm_provider
-    )
 
     try:
         config = _resolve_llm_config()

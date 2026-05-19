@@ -10,6 +10,7 @@ from app.features.assistant.service import LLM_FALLBACK_CAVEAT
 from app.features.assistant.snapshot import (
     SimulationSnapshot,
     SnapshotArtifact,
+    SnapshotBudgetExceededError,
     SnapshotCaseFields,
     SnapshotLink,
     SnapshotSimulationFields,
@@ -353,6 +354,55 @@ class TestGenerateSimulationSummary:
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_falls_back_when_snapshot_budget_exceeded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_livai_settings(monkeypatch)
+
+        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+            raise SnapshotBudgetExceededError(snapshot, 10)
+
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            fail_snapshot_build,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason is not None
+        assert result.fallback_reason.startswith("Snapshot size ")
+        assert result.summary.generation_mode == "deterministic"
+        assert result.attempted_provider == "livai"
+        assert result.attempted_model == "livai-model"
+        assert LLM_FALLBACK_CAVEAT in result.summary.caveats
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_keeps_deterministic_mode_when_llm_disabled_and_snapshot_budget_exceeded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_livai_settings(monkeypatch, enabled=False)
+
+        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+            raise SnapshotBudgetExceededError(snapshot, 10)
+
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            fail_snapshot_build,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason == "llm_disabled"
+        assert result.summary.generation_mode == "deterministic"
+        assert result.attempted_provider is None
+        assert result.attempted_model is None
+        assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
 
     @pytest.mark.asyncio
     async def test_generate_simulation_summary_falls_back_on_invalid_llm_content(

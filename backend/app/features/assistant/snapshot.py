@@ -91,6 +91,18 @@ class SimulationSnapshot(BaseModel):
     snapshot_caveats: list[str] = Field(default_factory=list)
 
 
+class SnapshotBudgetExceededError(ValueError):
+    def __init__(self, snapshot: SimulationSnapshot, max_chars: int) -> None:
+        size = _snapshot_size(snapshot)
+        super().__init__(
+            f"Snapshot size {size} exceeds budget {max_chars} even after all "
+            "trimming. Required fields are too large to fit within the configured "
+            "limit."
+        )
+        self.snapshot = snapshot
+        self.max_chars = max_chars
+
+
 @dataclass(frozen=True)
 class _SnapshotSizeBudget:
     max_chars: int
@@ -178,7 +190,12 @@ def _apply_size_budget(
     if _snapshot_size(trimmed) > budget.max_chars and trimmed.links:
         trimmed = trimmed.model_copy(update={"links": []})
 
-    return _add_truncation_caveat(trimmed)
+    trimmed = _add_truncation_caveat(trimmed)
+
+    if _snapshot_size(trimmed) > budget.max_chars:
+        raise SnapshotBudgetExceededError(trimmed, budget.max_chars)
+
+    return trimmed
 
 
 def build_simulation_snapshot(

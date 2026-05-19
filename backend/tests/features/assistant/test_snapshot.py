@@ -7,6 +7,7 @@ from app.features.assistant.snapshot import (
     SNAPSHOT_TRUNCATED_CAVEAT,
     SimulationSnapshot,
     SnapshotArtifact,
+    SnapshotBudgetExceededError,
     SnapshotCaseFields,
     SnapshotLink,
     SnapshotMachineFields,
@@ -79,6 +80,14 @@ class TestSnapshotHelpers:
         snapshot = _make_snapshot()
 
         def fake_snapshot_size(current_snapshot: SimulationSnapshot) -> int:
+            # After all trimming and caveat, return size within budget
+            if (
+                current_snapshot.simulation.notes_markdown is None
+                and not current_snapshot.artifacts
+                and not current_snapshot.links
+                and SNAPSHOT_TRUNCATED_CAVEAT in current_snapshot.snapshot_caveats
+            ):
+                return 5
             if current_snapshot.simulation.notes_markdown is None:
                 return 200
             if (
@@ -154,3 +163,38 @@ class TestSnapshotHelpers:
         )
 
         assert trimmed.links == []
+
+    def test_apply_size_budget_raises_when_required_fields_too_large(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot().model_copy(
+            update={
+                "artifacts": [],
+                "links": [],
+            }
+        )
+
+        monkeypatch.setattr(
+            snapshot_module,
+            "_snapshot_size",
+            lambda current_snapshot: 200,
+        )
+
+        with pytest.raises(
+            SnapshotBudgetExceededError,
+            match=r"Snapshot size 200 exceeds budget 10.*Required fields are too large",
+        ) as exc_info:
+            snapshot_module._apply_size_budget(
+                snapshot,
+                _SnapshotSizeBudget(max_chars=10),
+            )
+
+        assert exc_info.value.snapshot.artifacts == []
+        assert exc_info.value.snapshot.links == []
+        assert exc_info.value.snapshot.simulation.notes_markdown is None
+        assert exc_info.value.snapshot.simulation.description is None
+        assert exc_info.value.snapshot.simulation.key_features is None
+        assert exc_info.value.snapshot.simulation.known_issues is None
+        assert exc_info.value.snapshot.simulation.extra == {}
+        assert exc_info.value.snapshot.simulation.run_config_deltas is None
+        assert SNAPSHOT_TRUNCATED_CAVEAT in exc_info.value.snapshot.snapshot_caveats
