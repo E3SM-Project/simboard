@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/hooks/useAuth';
 import { resolvePaceExecution } from '@/features/simulations/api/api';
 import { SimulationDetailsView } from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
+import { useSimulationSummary } from '@/features/simulations/hooks/useSimulationSummary';
 
 export const SimulationDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { data: simulation, loading, error } = useSimulation(id ?? '');
+  const { isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
+  const summary = useSimulationSummary(id ?? '');
   const [paceExperimentId, setPaceExperimentId] = useState<string | null>(null);
   const [isResolvingPace, setIsResolvingPace] = useState(false);
   const [paceResolutionAttempted, setPaceResolutionAttempted] = useState(false);
@@ -114,6 +118,14 @@ export const SimulationDetailsPage = () => {
       paceLink={paceLink}
       isResolvingPace={isResolvingPace}
       showPaceFallbackInfo={paceResolutionAttempted && !paceExperimentId}
+      summary={summary.data}
+      summaryLoading={summary.loading}
+      summaryError={summary.error}
+      summaryRequested={summary.requested}
+      onGenerateSummary={summary.generate}
+      canGenerateSummary={isAuthenticated}
+      isCheckingAuth={authLoading}
+      onLoginForSummary={loginWithGithub}
     />
   );
 };

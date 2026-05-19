@@ -1,5 +1,10 @@
 import { api } from '@/api/api';
-import type { CaseOut, SimulationCreate, SimulationOut } from '@/types';
+import type {
+  CaseOut,
+  SimulationCreate,
+  SimulationOut,
+  SimulationSummaryResponseOut,
+} from '@/types';
 
 export const SIMULATIONS_URL = '/simulations';
 export const CASES_URL = '/cases';
@@ -28,6 +33,14 @@ export const getSimulationById = async (id: string): Promise<SimulationOut> => {
   const res = await api.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
+
+  return res.data;
+};
+
+export const generateSimulationSummary = async (
+  id: string,
+): Promise<SimulationSummaryResponseOut> => {
+  const res = await api.post<SimulationSummaryResponseOut>(`${SIMULATIONS_URL}/${id}/summary`);
 
   return res.data;
 };
