@@ -13,8 +13,9 @@ export const AuthCallback: React.FC = () => {
 
   useEffect(() => {
     const completeLogin = async () => {
+      const storedReturnTarget = consumePostLoginReturnTarget();
       const returnTarget =
-        readPostLoginReturnTarget(window.location.search) ?? consumePostLoginReturnTarget();
+        readPostLoginReturnTarget(window.location.search) ?? storedReturnTarget;
 
       try {
         // NOTE: FastAPI Users exchanges the OAuth code and sets the cookie.

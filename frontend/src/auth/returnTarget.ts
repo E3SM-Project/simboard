@@ -3,9 +3,7 @@ const AUTH_CALLBACK_PATH = '/auth/callback';
 const DEFAULT_RETURN_TARGET = '/';
 
 const isAuthCallbackTarget = (target: string): boolean =>
-  target === AUTH_CALLBACK_PATH ||
-  target.startsWith(`${AUTH_CALLBACK_PATH}?`) ||
-  target.startsWith(`${AUTH_CALLBACK_PATH}#`);
+  target === AUTH_CALLBACK_PATH || target.startsWith(`${AUTH_CALLBACK_PATH}/`);
 
 const isValidReturnPath = (target: string): boolean =>
   target.startsWith('/') && !target.startsWith('//') && !isAuthCallbackTarget(target);

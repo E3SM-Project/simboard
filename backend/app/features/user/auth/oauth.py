@@ -102,7 +102,7 @@ def _normalize_post_login_return_to(return_to: str | None) -> str | None:
     path = parsed.path or DEFAULT_POST_LOGIN_REDIRECT_PATH
     if not path.startswith("/") or path.startswith("//"):
         return None
-    if path == "/auth/callback":
+    if path == "/auth/callback" or path.startswith("/auth/callback/"):
         return None
 
     return return_to

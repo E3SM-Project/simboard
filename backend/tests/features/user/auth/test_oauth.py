@@ -110,6 +110,21 @@ def test_normalize_post_login_return_to_rejects_unapproved_origin(monkeypatch):
     )
 
 
+@pytest.mark.parametrize(
+    "return_to",
+    [
+        "https://127.0.0.1:5173/auth/callback/",
+        "https://127.0.0.1:5173/auth/callback/anything",
+    ],
+)
+def test_normalize_post_login_return_to_rejects_callback_prefixed_paths(
+    monkeypatch, return_to: str
+):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    assert _normalize_post_login_return_to(return_to) is None
+
+
 def test_build_frontend_auth_redirect_url_appends_return_to(monkeypatch):
     monkeypatch.setattr(
         settings, "frontend_auth_redirect_url", "https://127.0.0.1:5173/auth/callback"
