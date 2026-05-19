@@ -4,6 +4,11 @@ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'reac
 import { api, registerLogoutHandler } from '@/api/api';
 import { setAuthenticated } from '@/api/authState';
 import { AuthContext, AuthContextType } from '@/auth/context';
+import {
+  buildCurrentReturnPath,
+  buildCurrentReturnTarget,
+  savePostLoginReturnTarget,
+} from '@/auth/returnTarget';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/types/user';
 
@@ -11,14 +16,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const refreshUser = useCallback(async (): Promise<void> => {
+  const refreshUser = useCallback(async (): Promise<boolean> => {
     try {
       const { data } = await api.get<User>('/users/me');
       setUser(data);
       setAuthenticated(true);
+      return true;
     } catch {
       setUser(null);
       setAuthenticated(false);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -26,8 +33,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginWithGithub = async () => {
     try {
-      const { data } = await api.get<{ authorization_url: string }>('/auth/github/authorize');
+      const returnTo = buildCurrentReturnTarget();
+      const { data } = await api.get<{ authorization_url: string }>('/auth/github/authorize', {
+        params: { return_to: returnTo },
+      });
       const { authorization_url } = data;
+
+      savePostLoginReturnTarget(buildCurrentReturnPath());
 
       // Redirect browser to GitHub authorization URL to initiate OAuth flow.
       window.location.href = authorization_url;

@@ -3,7 +3,11 @@ from fastapi import Response
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.features.user.auth.oauth import CustomCookieTransport
+from app.features.user.auth.oauth import (
+    CustomCookieTransport,
+    build_frontend_auth_redirect_url,
+    normalize_post_login_return_to,
+)
 
 
 @pytest.mark.asyncio
@@ -80,3 +84,43 @@ async def test_get_login_response_with_different_settings(monkeypatch):
     assert "HttpOnly" not in set_cookie
     assert "Max-Age=100" in set_cookie
     assert "SameSite=strict" in set_cookie
+
+
+def test_normalize_post_login_return_to_accepts_allowed_frontend_origin(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "frontend_origins",
+        "https://127.0.0.1:5173,https://localhost:5173",
+    )
+
+    assert (
+        normalize_post_login_return_to(
+            "https://127.0.0.1:5173/simulations/123?tab=1#rail"
+        )
+        == "https://127.0.0.1:5173/simulations/123?tab=1#rail"
+    )
+
+
+def test_normalize_post_login_return_to_rejects_unapproved_origin(monkeypatch):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    assert (
+        normalize_post_login_return_to("https://evil.example.com/simulations/123")
+        is None
+    )
+
+
+def test_build_frontend_auth_redirect_url_appends_return_to(monkeypatch):
+    monkeypatch.setattr(
+        settings, "frontend_auth_redirect_url", "https://127.0.0.1:5173/auth/callback"
+    )
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    redirect_url = build_frontend_auth_redirect_url(
+        "https://127.0.0.1:5173/simulations/123?tab=summary"
+    )
+
+    assert (
+        redirect_url
+        == "https://127.0.0.1:5173/auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fsimulations%2F123%3Ftab%3Dsummary"
+    )

@@ -1,10 +1,12 @@
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi import status
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
+from fastapi_users.router.oauth import STATE_TOKEN_AUDIENCE, decode_jwt
 from httpx import AsyncClient
 
 from app.api.version import API_BASE
@@ -52,6 +54,27 @@ class TestAuthRoutes:
             status.HTTP_307_TEMPORARY_REDIRECT,
         )
         assert "github" in response.text.lower() or "oauth" in response.text.lower()
+
+    async def test_github_oauth_authorize_embeds_return_to_in_state(
+        self, async_client: AsyncClient
+    ) -> None:
+        return_to = "https://127.0.0.1:5173/simulations/test-run?tab=summary"
+
+        response = await async_client.get(
+            f"{API_BASE}/auth/github/authorize",
+            params={"return_to": return_to},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        authorization_url = response.json()["authorization_url"]
+        state = parse_qs(urlparse(authorization_url).query)["state"][0]
+        state_data = decode_jwt(
+            state,
+            settings.github_state_secret_key,
+            [STATE_TOKEN_AUDIENCE],
+        )
+
+        assert state_data["return_to"] == return_to
 
     async def test_github_oauth_callback_invalid_state(
         self, async_client: AsyncClient

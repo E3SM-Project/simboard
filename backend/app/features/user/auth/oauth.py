@@ -1,3 +1,5 @@
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
 from fastapi import Response
 from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import AuthenticationBackend, CookieTransport
@@ -5,6 +7,49 @@ from httpx_oauth.clients.github import GitHubOAuth2
 
 from app.core.config import settings
 from app.features.user.auth.utils import get_jwt_strategy
+
+DEFAULT_POST_LOGIN_REDIRECT_PATH = "/"
+
+
+def normalize_post_login_return_to(return_to: str | None) -> str | None:
+    if not return_to:
+        return None
+
+    try:
+        parsed = urlparse(return_to)
+    except ValueError:
+        return None
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+
+    target_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    if target_origin not in settings.frontend_origins_list:
+        return None
+
+    path = parsed.path or DEFAULT_POST_LOGIN_REDIRECT_PATH
+    if not path.startswith("/") or path.startswith("//"):
+        return None
+    if path == "/auth/callback":
+        return None
+
+    return return_to
+
+
+def build_frontend_auth_redirect_url(return_to: str | None = None) -> str:
+    redirect_url = settings.frontend_auth_redirect_url
+    normalized_return_to = normalize_post_login_return_to(return_to)
+    if normalized_return_to is None:
+        return redirect_url
+
+    parsed_redirect_url = urlparse(redirect_url)
+    query_pairs = parse_qsl(parsed_redirect_url.query, keep_blank_values=True)
+    query_pairs = [(key, value) for key, value in query_pairs if key != "return_to"]
+    query_pairs.append(("return_to", normalized_return_to))
+
+    return urlunparse(
+        parsed_redirect_url._replace(query=urlencode(query_pairs, doseq=True))
+    )
 
 
 class CustomCookieTransport(CookieTransport):
@@ -23,9 +68,7 @@ class CustomCookieTransport(CookieTransport):
         Returns:
             Response: The HTTP response with the cookie set and redirection.
         """
-        response = RedirectResponse(
-            settings.frontend_auth_redirect_url, status_code=302
-        )
+        response = RedirectResponse(build_frontend_auth_redirect_url(), status_code=302)
 
         return self._set_login_cookie(response, token)
 

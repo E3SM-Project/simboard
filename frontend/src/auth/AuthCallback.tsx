@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
+import { consumePostLoginReturnTarget, readPostLoginReturnTarget } from '@/auth/returnTarget';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/hooks/use-toast';
 
@@ -12,10 +13,29 @@ export const AuthCallback: React.FC = () => {
 
   useEffect(() => {
     const completeLogin = async () => {
+      const returnTarget =
+        readPostLoginReturnTarget(window.location.search) ?? consumePostLoginReturnTarget();
+
       try {
         // NOTE: FastAPI Users exchanges the OAuth code and sets the cookie.
         // Here we just need to refresh the user data to confirm login.
-        await refreshUser();
+        const isAuthenticated = await refreshUser();
+
+        if (!isAuthenticated) {
+          toast({
+            title: 'Login Failed',
+            description: (
+              <div className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-red-600" />
+                <span>We couldn’t sign you in. Please try again.</span>
+              </div>
+            ),
+            duration: 3000,
+          });
+
+          navigate('/', { replace: true });
+          return;
+        }
 
         toast({
           title: 'Logged In',
@@ -28,7 +48,7 @@ export const AuthCallback: React.FC = () => {
           duration: 2000,
         });
 
-        navigate('/', { replace: true });
+        navigate(returnTarget, { replace: true });
       } catch (err) {
         console.error('OAuth post-login failed:', err);
 

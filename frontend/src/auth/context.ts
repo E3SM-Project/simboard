@@ -8,7 +8,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   loginWithGithub: () => void;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<boolean>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
