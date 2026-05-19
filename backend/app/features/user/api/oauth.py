@@ -16,8 +16,8 @@ from app.core.config import settings
 from app.features.user.auth.oauth import (
     GITHUB_OAUTH_BACKEND,
     GITHUB_OAUTH_CLIENT,
-    build_frontend_auth_redirect_url,
-    normalize_post_login_return_to,
+    _build_frontend_auth_redirect_url,
+    _normalize_post_login_return_to,
 )
 from app.features.user.auth.token import JWT_BEARER_BACKEND
 from app.features.user.manager import (
@@ -45,8 +45,22 @@ async def github_authorize(
     return_to: str | None = Query(default=None),
     scopes: list[str] | None = Query(default=None),
 ) -> OAuth2AuthorizeResponse:
+    """Initiate the GitHub OAuth flow by generating an authorization URL.
+
+    Parameters:
+    -----------
+    return_to : str | None
+        The URL to redirect to after login.
+    scopes : list[str] | None
+        The OAuth scopes to request.
+
+    Returns:
+    --------
+    OAuth2AuthorizeResponse
+        An object containing the GitHub authorization URL.
+    """
     state_data: dict[str, str] = {}
-    normalized_return_to = normalize_post_login_return_to(return_to)
+    normalized_return_to = _normalize_post_login_return_to(return_to)
     if normalized_return_to is not None:
         state_data["return_to"] = normalized_return_to
 
@@ -89,6 +103,28 @@ async def github_callback(
     user_manager: BaseUserManager = Depends(get_user_manager),  # noqa: B008
     strategy: Strategy = Depends(GITHUB_OAUTH_BACKEND.get_strategy),  # noqa: B008
 ):
+    """
+    Handle the GitHub OAuth callback by processing the access token and logging
+    in the user.
+
+    Parameters
+    ----------
+    request : Request
+        The incoming HTTP request.
+    access_token_state : tuple[dict, str | None]
+        A tuple containing the access token information and the state token.
+    user_manager : BaseUserManager
+        The user manager instance for handling user operations.
+    strategy : Strategy
+        The authentication strategy for logging in the user.
+
+    Returns
+    -------
+    Response
+        A response object that redirects the user to the frontend with the
+        appropriate authentication state.
+    """
+
     token, state = access_token_state
     account_id, account_email = await GITHUB_OAUTH_CLIENT.get_id_email(
         token["access_token"]
@@ -137,7 +173,7 @@ async def github_callback(
         )
 
     response = await GITHUB_OAUTH_BACKEND.login(strategy, user)
-    response.headers["location"] = build_frontend_auth_redirect_url(
+    response.headers["location"] = _build_frontend_auth_redirect_url(
         state_data.get("return_to")
     )
     await user_manager.on_after_login(user, request, response)

@@ -5,8 +5,8 @@ from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.features.user.auth.oauth import (
     CustomCookieTransport,
-    build_frontend_auth_redirect_url,
-    normalize_post_login_return_to,
+    _build_frontend_auth_redirect_url,
+    _normalize_post_login_return_to,
 )
 
 
@@ -94,7 +94,7 @@ def test_normalize_post_login_return_to_accepts_allowed_frontend_origin(monkeypa
     )
 
     assert (
-        normalize_post_login_return_to(
+        _normalize_post_login_return_to(
             "https://127.0.0.1:5173/simulations/123?tab=1#rail"
         )
         == "https://127.0.0.1:5173/simulations/123?tab=1#rail"
@@ -105,7 +105,7 @@ def test_normalize_post_login_return_to_rejects_unapproved_origin(monkeypatch):
     monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
 
     assert (
-        normalize_post_login_return_to("https://evil.example.com/simulations/123")
+        _normalize_post_login_return_to("https://evil.example.com/simulations/123")
         is None
     )
 
@@ -116,7 +116,7 @@ def test_build_frontend_auth_redirect_url_appends_return_to(monkeypatch):
     )
     monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
 
-    redirect_url = build_frontend_auth_redirect_url(
+    redirect_url = _build_frontend_auth_redirect_url(
         "https://127.0.0.1:5173/simulations/123?tab=summary"
     )
 

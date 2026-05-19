@@ -11,7 +11,79 @@ from app.features.user.auth.utils import get_jwt_strategy
 DEFAULT_POST_LOGIN_REDIRECT_PATH = "/"
 
 
-def normalize_post_login_return_to(return_to: str | None) -> str | None:
+class CustomCookieTransport(CookieTransport):
+    """Custom cookie transport to handle OAuth login responses."""
+
+    async def get_login_response(self, token: str) -> Response:
+        """Create a login response that sets the cookie and redirects to frontend.
+
+        The default response is a 204 with no content, which is not suitable for
+        OAuth flows where we need to redirect the user after login.
+
+        Source: https://github.com/fastapi-users/fastapi-users/issues/434#issuecomment-1881945184
+
+        Parameters
+        ----------
+        token : str
+            The JWT token to set in the cookie.
+        Returns
+        -------
+        Response
+            The HTTP response with the cookie set and redirection.
+        """
+        response = RedirectResponse(
+            _build_frontend_auth_redirect_url(), status_code=302
+        )
+
+        return self._set_login_cookie(response, token)
+
+
+def _build_frontend_auth_redirect_url(return_to: str | None = None) -> str:
+    """Build the URL to redirect to after successful OAuth login
+
+    Parameters
+    ----------
+    return_to : str | None
+        The URL to redirect to after login. If None, defaults to the frontend
+        URL.
+
+    Returns
+    -------
+    str
+        The URL to redirect to after login, with the optional return_to
+        parameter included.
+    """
+
+    redirect_url = settings.frontend_auth_redirect_url
+    normalized_return_to = _normalize_post_login_return_to(return_to)
+    if normalized_return_to is None:
+        return redirect_url
+
+    parsed_redirect_url = urlparse(redirect_url)
+    query_pairs = parse_qsl(parsed_redirect_url.query, keep_blank_values=True)
+    query_pairs = [(key, value) for key, value in query_pairs if key != "return_to"]
+    query_pairs.append(("return_to", normalized_return_to))
+
+    return urlunparse(
+        parsed_redirect_url._replace(query=urlencode(query_pairs, doseq=True))
+    )
+
+
+def _normalize_post_login_return_to(return_to: str | None) -> str | None:
+    """
+    Normalize and validate the 'return_to' URL parameter for post-login
+    redirection.
+
+    Parameters
+    ----------
+    return_to : str | None
+        The URL to redirect to after login. If None, defaults to the frontend URL.
+
+    Returns
+    -------
+    str | None
+        The normalized and validated 'return_to' URL, or None if invalid.
+    """
     if not return_to:
         return None
 
@@ -34,43 +106,6 @@ def normalize_post_login_return_to(return_to: str | None) -> str | None:
         return None
 
     return return_to
-
-
-def build_frontend_auth_redirect_url(return_to: str | None = None) -> str:
-    redirect_url = settings.frontend_auth_redirect_url
-    normalized_return_to = normalize_post_login_return_to(return_to)
-    if normalized_return_to is None:
-        return redirect_url
-
-    parsed_redirect_url = urlparse(redirect_url)
-    query_pairs = parse_qsl(parsed_redirect_url.query, keep_blank_values=True)
-    query_pairs = [(key, value) for key, value in query_pairs if key != "return_to"]
-    query_pairs.append(("return_to", normalized_return_to))
-
-    return urlunparse(
-        parsed_redirect_url._replace(query=urlencode(query_pairs, doseq=True))
-    )
-
-
-class CustomCookieTransport(CookieTransport):
-    """Custom cookie transport to handle OAuth login responses."""
-
-    async def get_login_response(self, token: str) -> Response:
-        """Create a login response that sets the cookie and redirects to frontend.
-
-        The default response is a 204 with no content, which is not suitable for
-        OAuth flows where we need to redirect the user after login.
-
-        Source: https://github.com/fastapi-users/fastapi-users/issues/434#issuecomment-1881945184
-
-        Parameters:
-            token (str): The JWT token to set in the cookie.
-        Returns:
-            Response: The HTTP response with the cookie set and redirection.
-        """
-        response = RedirectResponse(build_frontend_auth_redirect_url(), status_code=302)
-
-        return self._set_login_cookie(response, token)
 
 
 COOKIE_TRANSPORT = CustomCookieTransport(
