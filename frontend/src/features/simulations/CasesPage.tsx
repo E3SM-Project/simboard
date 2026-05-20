@@ -30,7 +30,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { formatCaseDate } from '@/features/simulations/caseUtils';
+import {
+  formatCaseDate,
+  formatCaseHashLabel,
+  MISSING_CASE_HASH_LABEL,
+} from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
 import type { CaseOut, SimulationOut, SimulationSummaryOut } from '@/types';
@@ -696,6 +700,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
+                  <TableHead>Case Hash</TableHead>
                   <TableHead>Changes</TableHead>
                   <TableHead>Simulation Dates</TableHead>
                 </TableRow>
@@ -720,6 +725,16 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                           </span>
                         )}
                       </Link>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <span
+                        className="font-mono text-xs text-slate-700"
+                        title={simulation.caseHash ?? MISSING_CASE_HASH_LABEL}
+                      >
+                        {simulation.caseHash
+                          ? formatCaseHashLabel(simulation.caseHash)
+                          : MISSING_CASE_HASH_LABEL}
+                      </span>
                     </TableCell>
                     <TableCell className="align-top">
                       {simulation.isReference ? (

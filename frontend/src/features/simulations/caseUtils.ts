@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 
 import type { CaseOut, SimulationSummaryOut } from '@/types';
 
-export const MISSING_CASE_HASH_LABEL = 'Case hash unavailable';
+export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
 
 export interface SimulationSummaryGroup {
   key: string;

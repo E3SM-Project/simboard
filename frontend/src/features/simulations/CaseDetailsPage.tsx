@@ -40,23 +40,22 @@ import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
 import type { SimulationOut, SimulationSummaryOut } from '@/types';
 
-const SummaryStat = ({
+const DetailField = ({
   label,
   value,
-  hint,
   mono = false,
+  title,
 }: {
   label: string;
   value: React.ReactNode;
-  hint?: string;
   mono?: boolean;
+  title?: string;
 }) => (
-  <div className="rounded-xl border border-slate-200/80 bg-white/80 p-3">
+  <div className="min-w-0 space-y-1" title={title}>
     <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">{label}</div>
-    <div className={`mt-2 font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>
+    <div className={`truncate font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>
       {value}
     </div>
-    {hint ? <div className="mt-1 text-xs text-slate-500">{hint}</div> : null}
   </div>
 );
 
@@ -104,7 +103,7 @@ const SCROLLABLE_FLAT_ROWS_THRESHOLD = 10;
 const GROUP_FILTER_OPTIONS: Array<{ value: SimulationSummaryGroupFilter; label: string }> = [
   { value: 'all', label: 'All groups' },
   { value: 'multiRun', label: 'Multi-run groups' },
-  { value: 'missing', label: 'Missing CASE_HASH' },
+  { value: 'missing', label: 'Missing Case Hash' },
 ];
 
 export const CaseDetailsPage = ({
@@ -328,9 +327,6 @@ export const CaseDetailsPage = ({
             </Link>
           </Button>
           <h1 className="text-2xl font-bold">{caseRecord.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>Case detail</span>
-          </div>
         </div>
         <div className="flex items-center gap-2 self-start">
           <Button variant="outline" size="sm" type="button" onClick={handleShareCase}>
@@ -347,33 +343,33 @@ export const CaseDetailsPage = ({
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-500">Case summary</p>
                 <h2 className="text-lg font-semibold text-slate-950">
-                  {caseRecord.simulations.length} runs across {rawSimulationGroups.length} execution groups
+                  {caseRecord.simulations.length} runs across {caseHashGroupCount} Case Hash groups
                 </h2>
-                <p className="text-sm text-muted-foreground">
-                  Scientific view favors CASE_HASH lineage first, then per-run details.
-                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {caseRecord.caseGroup ? <Badge variant="outline">{caseRecord.caseGroup}</Badge> : null}
                 {missingCaseHashCount > 0 ? (
                   <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-                    {missingCaseHashCount} without CASE_HASH
+                    {missingCaseHashCount} missing Case Hash
                   </Badge>
                 ) : null}
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <SummaryStat label="Runs" value={caseRecord.simulations.length} />
-              <SummaryStat label="Execution groups" value={rawSimulationGroups.length} />
-              <SummaryStat label="CASE_HASH groups" value={caseHashGroupCount} />
-              <SummaryStat label="Machines" value={machineSummary} hint={caseRecord.machineNames.join(', ')} />
-              <SummaryStat
+            <div className="grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2 xl:grid-cols-5">
+              <DetailField label="Runs" value={caseRecord.simulations.length} />
+              <DetailField label="Case Hash groups" value={caseHashGroupCount} />
+              <DetailField
+                label="Machines"
+                value={machineSummary}
+                title={caseRecord.machineNames.length > 1 ? caseRecord.machineNames.join(', ') : undefined}
+              />
+              <DetailField
                 label="HPC users"
                 value={hpcUsernameSummary}
-                hint={caseRecord.hpcUsernames.join(', ')}
+                title={caseRecord.hpcUsernames.length > 1 ? caseRecord.hpcUsernames.join(', ') : undefined}
               />
-              <SummaryStat label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
+              <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
             </div>
           </CardContent>
         </Card>
@@ -381,12 +377,7 @@ export const CaseDetailsPage = ({
         <Card className="border-slate-200 bg-white shadow-sm">
           <CardContent className="space-y-4 p-5">
             <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-500">Reference simulation</p>
-                <p className="text-sm text-muted-foreground">
-                  Baseline run used for change counts and compare context.
-                </p>
-              </div>
+              <p className="text-sm font-medium text-slate-500">Reference simulation</p>
               {referenceSimulation ? (
                 <SimulationStatusBadge status={referenceSimulation.status} />
               ) : null}
@@ -408,16 +399,9 @@ export const CaseDetailsPage = ({
                     <Pin className="h-3.5 w-3.5 text-amber-600" />
                   </span>
                 </Link>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <SummaryStat
-                    label="Simulation window"
-                    value={formatSimulationDateRange(referenceSimulation)}
-                  />
-                  <SummaryStat
-                    label="Change role"
-                    value="Reference baseline"
-                    hint="Other runs report changes relative to this execution."
-                  />
+                <div className="grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2">
+                  <DetailField label="Simulation window" value={formatSimulationDateRange(referenceSimulation)} />
+                  <DetailField label="Change role" value="Reference baseline" />
                 </div>
               </div>
             ) : (
@@ -433,15 +417,10 @@ export const CaseDetailsPage = ({
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold">Simulations</h2>
-                <Badge variant="outline" className="bg-slate-50">
-                  CASE_HASH-first view
-                </Badge>
-              </div>
+              <h2 className="text-xl font-semibold">Simulations</h2>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Group by CASE_HASH to compare runs within same lineage; runs without CASE_HASH stay visible as
-                fallback entries.
+                Group by Case Hash to compare runs within the same lineage; runs without Case Hash stay
+                visible as fallback entries.
               </p>
             </div>
 
@@ -483,7 +462,7 @@ export const CaseDetailsPage = ({
                       variant={viewMode === 'grouped' ? 'default' : 'outline'}
                       onClick={() => setViewMode('grouped')}
                     >
-                      Grouped by CASE_HASH
+                      Grouped by Case Hash
                     </Button>
                     <Button
                       type="button"
@@ -500,10 +479,10 @@ export const CaseDetailsPage = ({
                   <div className="text-sm font-medium text-slate-900">Scope</div>
                   <Select value={selectedCaseHashKey} onValueChange={setSelectedCaseHashKey}>
                     <SelectTrigger className="w-full bg-white shadow-none lg:w-72">
-                      <SelectValue placeholder="All CASE_HASH groups" />
+                      <SelectValue placeholder="All Case Hash groups" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ALL_CASE_HASHES_VALUE}>All CASE_HASH groups</SelectItem>
+                      <SelectItem value={ALL_CASE_HASHES_VALUE}>All Case Hash groups</SelectItem>
                       {caseHashOptions.map((option) => (
                         <SelectItem key={option.key} value={option.key} title={option.title}>
                           {option.label}
@@ -571,7 +550,7 @@ export const CaseDetailsPage = ({
               <div>
                 {viewMode === 'grouped'
                   ? `${filteredExecutionCount} executions available inside current group set`
-                  : `${filteredSimulationGroups.length} CASE_HASH groups represented`}
+                  : `${filteredSimulationGroups.length} Case Hash groups represented`}
               </div>
             </div>
           </div>
@@ -586,14 +565,14 @@ export const CaseDetailsPage = ({
         >
           <div className="space-y-4">
             {(viewMode === 'grouped' ? filteredSimulationGroups.length : filteredFlatSimulations.length) === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-10 text-center">
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-10 text-center">
                 <p className="text-sm font-medium text-slate-900">
                   {viewMode === 'grouped'
-                    ? 'No CASE_HASH groups match these filters.'
+                    ? 'No Case Hash groups match these filters.'
                     : 'No executions match these filters.'}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Try a different CASE_HASH selection or reset the quick filters.
+                  Try a different Case Hash selection or reset the quick filters.
                 </p>
                 <Button type="button" variant="outline" size="sm" className="mt-4" onClick={resetGroupFilters}>
                   Reset filters
@@ -607,7 +586,7 @@ export const CaseDetailsPage = ({
                       <TableRow>
                         <TableHead className="w-12">Select</TableHead>
                         <TableHead>Execution ID</TableHead>
-                        <TableHead>CASE_HASH</TableHead>
+                        <TableHead>Case Hash</TableHead>
                         <TableHead>Role / changes</TableHead>
                         <TableHead>Initialization</TableHead>
                         <TableHead>Simulation dates</TableHead>
@@ -690,8 +669,6 @@ export const CaseDetailsPage = ({
                 const maxChangeCount = Math.max(
                   ...group.simulations.map(({ summary }) => summary.changeCount),
                 );
-                const hasReferenceSimulation = group.simulations.some(({ summary }) => summary.isReference);
-
                 return (
                   <Collapsible
                     key={group.key}
@@ -713,7 +690,7 @@ export const CaseDetailsPage = ({
                               />
                               <div className="min-w-0 space-y-1">
                                 <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                                  {group.isFallback ? 'Missing CASE_HASH' : 'CASE_HASH group'}
+                                  {group.isFallback ? 'Missing Case Hash' : 'Case Hash group'}
                                 </p>
                                 <p
                                   className="truncate font-mono text-sm text-slate-950"
@@ -725,31 +702,23 @@ export const CaseDetailsPage = ({
                                 </p>
                                 {group.isFallback ? (
                                   <p className="max-w-2xl text-xs text-muted-foreground">
-                                    Older ingests without CASE_HASH stay visible here without subgrouping.
+                                    Older ingests without Case Hash stay visible here without subgrouping.
                                   </p>
                                 ) : null}
                               </div>
                             </div>
 
                             <div className="flex shrink-0 flex-wrap items-center gap-2">
-                              {hasReferenceSimulation ? (
-                                <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">
-                                  Reference inside group
-                                </Badge>
-                              ) : null}
                               <Badge variant="outline">
                                 {group.simulations.length} {group.simulations.length === 1 ? 'run' : 'runs'}
                               </Badge>
                             </div>
                           </div>
 
-                          <div className="grid gap-3 sm:grid-cols-3">
-                            <SummaryStat label="Simulation window" value={groupSimulationWindow} />
-                            <SummaryStat label="Initialization" value={groupInitializationSummary} />
-                            <SummaryStat
-                              label="Change spread"
-                              value={hasReferenceSimulation ? `0 to ${maxChangeCount} changes` : `Up to ${maxChangeCount} changes`}
-                            />
+                          <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
+                            <DetailField label="Simulation window" value={groupSimulationWindow} />
+                            <DetailField label="Initialization" value={groupInitializationSummary} />
+                            <DetailField label="Change spread" value={`Up to ${maxChangeCount} changes`} />
                           </div>
                         </button>
                       </CollapsibleTrigger>
