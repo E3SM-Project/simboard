@@ -13,7 +13,7 @@ from app.features.ingestion.ingest import (
     _build_config_snapshot,
     _build_simulation_create_draft,
     _extract_postprocessing_script_path,
-    _get_case_hash_baseline,
+    _get_known_case_hash,
     _get_or_create_case,
     _get_reference_metadata_for_case,
     _normalize_git_url,
@@ -21,7 +21,7 @@ from app.features.ingestion.ingest import (
     _normalize_simulation_status,
     _normalize_simulation_type,
     _stringify_config_value,
-    _track_case_hash_observation,
+    _track_case_hash_grouping,
     _validate_simulation_create,
     ingest_archive,
 )
@@ -1925,10 +1925,10 @@ class TestReferenceRunIngestion:
             "ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357"
         )
 
-    def test_case_hash_drift_logs_warning_and_retains_case_name_grouping(
+    def test_case_hash_variation_logs_info_and_retains_case_name_grouping(
         self, db: Session
     ) -> None:
-        """Conflicting CASE_HASH values warn but do not split the Case."""
+        """Different CASE_HASH values group under one Case and preserve execution hashes."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -1991,7 +1991,7 @@ class TestReferenceRunIngestion:
                 "app.features.ingestion.ingest.main_parser",
                 return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
             ),
-            patch("app.features.ingestion.ingest.logger.warning") as mock_warning,
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -2001,7 +2001,11 @@ class TestReferenceRunIngestion:
         assert result.simulations[0].case_hash == (
             "162f93c8f9ac9296efe7160d1807e41d8c2a6da1cbc77c54dd976665e10818fb"
         )
-        mock_warning.assert_called_once()
+        assert db.query(Case).filter(Case.name == "case1").count() == 1
+        assert any(
+            call.args and "Observed additional CASE_HASH for case '%s'" in call.args[0]
+            for call in mock_info.call_args_list
+        )
 
     def test_different_case_name_creates_separate_cases(self, db: Session) -> None:
         """Runs with different case_name values create separate Cases."""
@@ -2192,7 +2196,7 @@ class TestIngestHelpers:
             )
         assert second == first
 
-    def test_get_case_hash_baseline_uses_persisted_cache_on_second_lookup(
+    def test_get_known_case_hash_uses_persisted_cache_on_second_lookup(
         self,
     ) -> None:
         case = MagicMock(spec=Case)
@@ -2205,7 +2209,7 @@ class TestIngestHelpers:
         persisted_case_hash_cache: dict[UUID, str | None] = {case.id: "baseline-hash"}
 
         with patch.object(db, "query", side_effect=AssertionError):
-            result = _get_case_hash_baseline(
+            result = _get_known_case_hash(
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
@@ -2214,7 +2218,7 @@ class TestIngestHelpers:
 
         assert result == "baseline-hash"
 
-    def test_track_case_hash_observation_skips_warning_for_matching_baseline(
+    def test_track_case_hash_grouping_skips_info_for_matching_known_hash(
         self,
     ) -> None:
         parsed = ParsedSimulation(
@@ -2250,12 +2254,12 @@ class TestIngestHelpers:
 
         with (
             patch(
-                "app.features.ingestion.ingest._get_case_hash_baseline",
+                "app.features.ingestion.ingest._get_known_case_hash",
                 return_value="matching-hash",
             ),
-            patch("app.features.ingestion.ingest.logger.warning") as mock_warning,
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
-            _track_case_hash_observation(
+            _track_case_hash_grouping(
                 parsed_simulation=parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
@@ -2264,9 +2268,9 @@ class TestIngestHelpers:
             )
 
         assert case_hash_cache == {"case_hash_case": "matching-hash"}
-        mock_warning.assert_not_called()
+        mock_info.assert_not_called()
 
-    def test_track_case_hash_observation_uses_in_batch_baseline_when_reference_hash_missing(
+    def test_track_case_hash_grouping_uses_in_batch_hash_when_reference_hash_missing(
         self,
     ) -> None:
         first_parsed = ParsedSimulation(
@@ -2337,15 +2341,15 @@ class TestIngestHelpers:
         case_hash_cache: dict[str, str] = {}
         persisted_case_hash_cache: dict[UUID, str | None] = {}
 
-        with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
-            _track_case_hash_observation(
+        with patch("app.features.ingestion.ingest.logger.info") as mock_info:
+            _track_case_hash_grouping(
                 parsed_simulation=first_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
                 db=db,
             )
-            _track_case_hash_observation(
+            _track_case_hash_grouping(
                 parsed_simulation=second_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
@@ -2355,7 +2359,7 @@ class TestIngestHelpers:
 
         assert case_hash_cache == {"case_hash_case": "first-hash"}
         assert persisted_case_hash_cache == {case.id: None}
-        mock_warning.assert_called_once()
+        mock_info.assert_called_once()
 
     def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(

@@ -163,6 +163,7 @@ def _case_to_out(case: Case) -> CaseOut:
             SimulationSummaryOut(
                 id=sim.id,
                 execution_id=sim.execution_id,
+                case_hash=sim.case_hash,
                 status=sim.status,
                 is_reference=is_reference,
                 change_count=change_count,

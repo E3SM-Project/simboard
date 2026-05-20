@@ -5,7 +5,7 @@ Reference simulation semantics for performance_archive ingestion:
   - A run is "successful" only if all required metadata files are present.
   - case_name (from timing files) is the identity for Case grouping.
   - The first successful run per case is the reference simulation.
-  - CASE_HASH is stored as execution metadata and used for drift warnings.
+  - CASE_HASH is stored as execution metadata for grouping related runs.
   - Each run creates a Simulation linked to a Case via case_id.
   - Reference simulations have run_config_deltas = None.
   - Non-reference runs store config differences vs the reference.
@@ -262,7 +262,7 @@ def _process_simulation_for_ingest(
 
     prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
     case = _resolve_case(parsed_simulation, case_name, db)
-    _track_case_hash_observation(
+    _track_case_hash_grouping(
         parsed_simulation=parsed_simulation,
         case=case,
         case_hash_cache=case_hash_cache,
@@ -282,49 +282,49 @@ def _process_simulation_for_ingest(
     return simulation, False
 
 
-def _track_case_hash_observation(
+def _track_case_hash_grouping(
     parsed_simulation: ParsedSimulation,
     case: Case,
     case_hash_cache: dict[str, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     db: Session,
 ) -> None:
-    """Track CASE_HASH drift without changing case-name grouping."""
+    """Track CASE_HASH values as within-case execution grouping metadata."""
     current_hash = parsed_simulation.case_hash
     if not current_hash:
         return
 
-    baseline_hash = _get_case_hash_baseline(
+    known_hash = _get_known_case_hash(
         case=case,
         case_hash_cache=case_hash_cache,
         persisted_case_hash_cache=persisted_case_hash_cache,
         db=db,
     )
-    if baseline_hash is None:
+    if known_hash is None:
         case_hash_cache.setdefault(case.name, current_hash)
         return
 
-    case_hash_cache.setdefault(case.name, baseline_hash)
-    if baseline_hash == current_hash:
+    case_hash_cache.setdefault(case.name, known_hash)
+    if known_hash == current_hash:
         return
 
-    logger.warning(
-        "Observed CASE_HASH drift for case '%s': baseline='%s', current='%s' "
-        "from %s. Retaining case-name grouping.",
+    logger.info(
+        "Observed additional CASE_HASH for case '%s': known='%s', current='%s' "
+        "from %s. Preserving per-execution hashes for grouping.",
         case.name,
-        baseline_hash,
+        known_hash,
         current_hash,
         parsed_simulation.execution_dir,
     )
 
 
-def _get_case_hash_baseline(
+def _get_known_case_hash(
     case: Case,
     case_hash_cache: dict[str, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     db: Session,
 ) -> str | None:
-    """Return the CASE_HASH baseline for drift detection."""
+    """Return first known CASE_HASH used for within-case execution grouping."""
     if case.reference_simulation_id is not None:
         if case.id not in persisted_case_hash_cache:
             reference_simulation = (
@@ -332,16 +332,16 @@ def _get_case_hash_baseline(
                 .filter(Simulation.id == case.reference_simulation_id)
                 .first()
             )
-            baseline_hash = (
+            known_hash = (
                 reference_simulation.case_hash if reference_simulation else None
             )
-            persisted_case_hash_cache[case.id] = baseline_hash
-            if baseline_hash is not None:
-                case_hash_cache.setdefault(case.name, baseline_hash)
+            persisted_case_hash_cache[case.id] = known_hash
+            if known_hash is not None:
+                case_hash_cache.setdefault(case.name, known_hash)
 
-        baseline_hash = persisted_case_hash_cache[case.id]
-        if baseline_hash is not None:
-            return baseline_hash
+        known_hash = persisted_case_hash_cache[case.id]
+        if known_hash is not None:
+            return known_hash
 
     return case_hash_cache.get(case.name)
 
