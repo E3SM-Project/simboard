@@ -5,6 +5,7 @@ Reference simulation semantics for performance_archive ingestion:
   - A run is "successful" only if all required metadata files are present.
   - case_name (from timing files) is the identity for Case grouping.
   - The first successful run per case is the reference simulation.
+  - CASE_HASH is stored as execution metadata for grouping related runs.
   - Each run creates a Simulation linked to a Case via case_id.
   - Reference simulations have run_config_deltas = None.
   - Non-reference runs store config differences vs the reference.
@@ -100,6 +101,7 @@ class SimulationCreateDraft:
     last_updated_by: UUID | None
     hpc_username: str | None
     run_config_deltas: dict[str, dict[str, str | None]] | None = None
+    case_hash: str | None = None
 
 
 def ingest_archive(
@@ -172,6 +174,8 @@ def ingest_archive(
     errors: list[dict[str, str]] = []
     reference_cache: dict[str, SimulationConfigSnapshot] = {}
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+    case_hash_cache: dict[str, str] = {}
+    persisted_case_hash_cache: dict[UUID, str | None] = {}
 
     for parsed_simulation in parsed_simulations:
         try:
@@ -180,6 +184,8 @@ def ingest_archive(
                 db=db,
                 reference_cache=reference_cache,
                 persisted_reference_cache=persisted_reference_cache,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
             )
 
             if is_duplicate:
@@ -221,6 +227,8 @@ def _process_simulation_for_ingest(
     db: Session,
     reference_cache: dict[str, SimulationConfigSnapshot],
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    case_hash_cache: dict[str, str],
+    persisted_case_hash_cache: dict[UUID, str | None],
 ) -> tuple[SimulationCreate | None, bool]:
     """Process one parsed simulation entry.
 
@@ -254,6 +262,13 @@ def _process_simulation_for_ingest(
 
     prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
     case = _resolve_case(parsed_simulation, case_name, db)
+    _track_case_hash_grouping(
+        parsed_simulation=parsed_simulation,
+        case=case,
+        case_hash_cache=case_hash_cache,
+        persisted_case_hash_cache=persisted_case_hash_cache,
+        db=db,
+    )
 
     simulation = _build_simulation_create(
         parsed_simulation=parsed_simulation,
@@ -265,6 +280,70 @@ def _process_simulation_for_ingest(
     )
 
     return simulation, False
+
+
+def _track_case_hash_grouping(
+    parsed_simulation: ParsedSimulation,
+    case: Case,
+    case_hash_cache: dict[str, str],
+    persisted_case_hash_cache: dict[UUID, str | None],
+    db: Session,
+) -> None:
+    """Track CASE_HASH values as within-case execution grouping metadata."""
+    current_hash = parsed_simulation.case_hash
+    if not current_hash:
+        return
+
+    known_hash = _get_known_case_hash(
+        case=case,
+        case_hash_cache=case_hash_cache,
+        persisted_case_hash_cache=persisted_case_hash_cache,
+        db=db,
+    )
+    if known_hash is None:
+        case_hash_cache.setdefault(case.name, current_hash)
+        return
+
+    case_hash_cache.setdefault(case.name, known_hash)
+    if known_hash == current_hash:
+        return
+
+    logger.info(
+        "Observed additional CASE_HASH for case '%s': known='%s', current='%s' "
+        "from %s. Preserving per-execution hashes for grouping.",
+        case.name,
+        known_hash,
+        current_hash,
+        parsed_simulation.execution_dir,
+    )
+
+
+def _get_known_case_hash(
+    case: Case,
+    case_hash_cache: dict[str, str],
+    persisted_case_hash_cache: dict[UUID, str | None],
+    db: Session,
+) -> str | None:
+    """Return first known CASE_HASH used for within-case execution grouping."""
+    if case.reference_simulation_id is not None:
+        if case.id not in persisted_case_hash_cache:
+            reference_simulation = (
+                db.query(Simulation)
+                .filter(Simulation.id == case.reference_simulation_id)
+                .first()
+            )
+            known_hash = (
+                reference_simulation.case_hash if reference_simulation else None
+            )
+            persisted_case_hash_cache[case.id] = known_hash
+            if known_hash is not None:
+                case_hash_cache.setdefault(case.name, known_hash)
+
+        known_hash = persisted_case_hash_cache[case.id]
+        if known_hash is not None:
+            return known_hash
+
+    return case_hash_cache.get(case.name)
 
 
 def _require_case_name(parsed_simulation: ParsedSimulation) -> str:
@@ -809,6 +888,7 @@ def _build_simulation_create_draft(
         last_updated_by=None,
         hpc_username=parsed_simulation.hpc_username,
         run_config_deltas=run_config_deltas,
+        case_hash=parsed_simulation.case_hash,
     )
 
     return simulation_draft

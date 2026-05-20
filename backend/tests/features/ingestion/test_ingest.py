@@ -13,6 +13,7 @@ from app.features.ingestion.ingest import (
     _build_config_snapshot,
     _build_simulation_create_draft,
     _extract_postprocessing_script_path,
+    _get_known_case_hash,
     _get_or_create_case,
     _get_reference_metadata_for_case,
     _normalize_git_url,
@@ -20,6 +21,7 @@ from app.features.ingestion.ingest import (
     _normalize_simulation_status,
     _normalize_simulation_type,
     _stringify_config_value,
+    _track_case_hash_grouping,
     _validate_simulation_create,
     ingest_archive,
 )
@@ -72,6 +74,7 @@ def _parsed_simulations_from_mapping(
                 archive_path=metadata.get("archive_path"),
                 case_root=metadata.get("case_root"),
                 postprocessing_script=metadata.get("postprocessing_script"),
+                case_hash=metadata.get("case_hash"),
             )
         )
 
@@ -1870,7 +1873,7 @@ class TestReferenceRunIngestion:
         }
 
     def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
-        """Runs with the same case_name belong to the same Case."""
+        """Runs with the same case_name belong to the same Case without CASE_HASH."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1898,6 +1901,111 @@ class TestReferenceRunIngestion:
         # Case was created with the shared name
         case = db.query(Case).filter(Case.name == "case1").first()
         assert case is not None
+
+    def test_case_hash_is_persisted_on_created_simulation(self, db: Session) -> None:
+        """Parsed CASE_HASH should be preserved on created simulations."""
+        self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081196.251218-200956": self._make_metadata(
+                execution_id="1081196.251218-200956",
+                case_name="case1",
+                case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.simulations[0].case_hash == (
+            "ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357"
+        )
+
+    def test_case_hash_variation_logs_info_and_retains_case_name_grouping(
+        self, db: Session
+    ) -> None:
+        """Different CASE_HASH values group under one Case and preserve execution hashes."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081192.251218-200952",
+            case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.reference_simulation_id = sim.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081193.251218-200953": self._make_metadata(
+                execution_id="1081193.251218-200953",
+                case_name="case1",
+                simulation_start_date="2020-06-01",
+                case_hash="162f93c8f9ac9296efe7160d1807e41d8c2a6da1cbc77c54dd976665e10818fb",
+            ),
+        }
+
+        with (
+            patch(
+                "app.features.ingestion.ingest.main_parser",
+                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            ),
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert len({s.case_id for s in result.simulations}) == 1
+        assert result.simulations[0].case_id == case.id
+        assert result.simulations[0].case_hash == (
+            "162f93c8f9ac9296efe7160d1807e41d8c2a6da1cbc77c54dd976665e10818fb"
+        )
+        assert db.query(Case).filter(Case.name == "case1").count() == 1
+        assert any(
+            call.args and "Observed additional CASE_HASH for case '%s'" in call.args[0]
+            for call in mock_info.call_args_list
+        )
 
     def test_different_case_name_creates_separate_cases(self, db: Session) -> None:
         """Runs with different case_name values create separate Cases."""
@@ -2087,6 +2195,171 @@ class TestIngestHelpers:
                 db=db,
             )
         assert second == first
+
+    def test_get_known_case_hash_uses_persisted_cache_on_second_lookup(
+        self,
+    ) -> None:
+        case = MagicMock(spec=Case)
+        case.id = uuid4()
+        case.name = "case_hash_cache_case"
+        case.reference_simulation_id = uuid4()
+
+        db = MagicMock(spec=Session)
+        case_hash_cache: dict[str, str] = {}
+        persisted_case_hash_cache: dict[UUID, str | None] = {case.id: "baseline-hash"}
+
+        with patch.object(db, "query", side_effect=AssertionError):
+            result = _get_known_case_hash(
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+
+        assert result == "baseline-hash"
+
+    def test_track_case_hash_grouping_skips_info_for_matching_known_hash(
+        self,
+    ) -> None:
+        parsed = ParsedSimulation(
+            execution_dir="/path/to/1082002.260305-120002",
+            execution_id="1082002.260305-120002",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="matching-hash",
+        )
+        case = MagicMock(spec=Case)
+        case.name = "case_hash_case"
+
+        case_hash_cache: dict[str, str] = {}
+
+        with (
+            patch(
+                "app.features.ingestion.ingest._get_known_case_hash",
+                return_value="matching-hash",
+            ),
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
+        ):
+            _track_case_hash_grouping(
+                parsed_simulation=parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache={},
+                db=MagicMock(spec=Session),
+            )
+
+        assert case_hash_cache == {"case_hash_case": "matching-hash"}
+        mock_info.assert_not_called()
+
+    def test_track_case_hash_grouping_uses_in_batch_hash_when_reference_hash_missing(
+        self,
+    ) -> None:
+        first_parsed = ParsedSimulation(
+            execution_dir="/path/to/1082003.260305-120003",
+            execution_id="1082003.260305-120003",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-01-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="first-hash",
+        )
+        second_parsed = ParsedSimulation(
+            execution_dir="/path/to/1082004.260305-120004",
+            execution_id="1082004.260305-120004",
+            case_name="case_hash_case",
+            case_group=None,
+            machine="machine",
+            hpc_username=None,
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            campaign=None,
+            experiment_type=None,
+            initialization_type="test",
+            simulation_start_date="2020-06-01",
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+            case_hash="second-hash",
+        )
+        case = MagicMock(spec=Case)
+        case.id = uuid4()
+        case.name = "case_hash_case"
+        case.reference_simulation_id = uuid4()
+
+        reference_simulation = MagicMock(spec=Simulation)
+        reference_simulation.case_hash = None
+
+        db = MagicMock(spec=Session)
+        db.query.return_value.filter.return_value.first.return_value = (
+            reference_simulation
+        )
+
+        case_hash_cache: dict[str, str] = {}
+        persisted_case_hash_cache: dict[UUID, str | None] = {}
+
+        with patch("app.features.ingestion.ingest.logger.info") as mock_info:
+            _track_case_hash_grouping(
+                parsed_simulation=first_parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+            _track_case_hash_grouping(
+                parsed_simulation=second_parsed,
+                case=case,
+                case_hash_cache=case_hash_cache,
+                persisted_case_hash_cache=persisted_case_hash_cache,
+                db=db,
+            )
+
+        assert case_hash_cache == {"case_hash_case": "first-hash"}
+        assert persisted_case_hash_cache == {case.id: None}
+        mock_info.assert_called_once()
 
     def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
         parsed = ParsedSimulation(
@@ -2337,6 +2610,7 @@ class TestIngestHelpers:
             last_updated_by=None,
             hpc_username="test-user",
             run_config_deltas=None,
+            case_hash="abc123",
         )
 
         schema = _validate_simulation_create(draft)
@@ -2346,6 +2620,7 @@ class TestIngestHelpers:
         assert schema.extra == {}
         assert schema.artifacts == []
         assert schema.links == []
+        assert schema.case_hash == "abc123"
         assert schema.run_config_deltas is None
 
     def test_build_simulation_create_draft_normalizes_values(self) -> None:
@@ -2373,6 +2648,7 @@ class TestIngestHelpers:
             git_tag="v1.0.0",
             git_commit_hash="abc123",
             status="completed",
+            case_hash="hash123",
         )
 
         draft = _build_simulation_create_draft(
@@ -2384,6 +2660,7 @@ class TestIngestHelpers:
         assert draft.simulation_type == SimulationType.UNKNOWN
         assert draft.status == SimulationStatus.COMPLETED
         assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
+        assert draft.case_hash == "hash123"
         assert draft.simulation_start_date is not None
         assert draft.run_start_date is not None
 

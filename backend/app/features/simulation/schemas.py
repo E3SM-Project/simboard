@@ -114,6 +114,17 @@ class SimulationCreate(CamelInBaseModel):
             ),
         ),
     ]
+    case_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional CASE_HASH parsed from env_case.xml. Used to group "
+                "related executions or sub-cases within a case; not top-level "
+                "case identity."
+            ),
+        ),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
@@ -294,6 +305,16 @@ class SimulationSummaryOut(CamelOutBaseModel):
             ),
         ),
     ]
+    case_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional CASE_HASH used to group related executions or "
+                "sub-cases within a case."
+            ),
+        ),
+    ]
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -401,6 +422,17 @@ class SimulationOut(CamelOutBaseModel):
             ...,
             description=(
                 "Unique identifier for this execution, derived from the timing-file LID"
+            ),
+        ),
+    ]
+    case_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Optional CASE_HASH parsed from env_case.xml. Used to group "
+                "related executions or sub-cases within a case; not top-level "
+                "case identity."
             ),
         ),
     ]

@@ -1,12 +1,20 @@
-import { ArrowLeft, Pin, Share2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowLeft, ChevronDown, Pin, Share2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -18,20 +26,67 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   formatCaseDate,
+  formatCaseHashLabel,
   formatSimulationDateRange,
+  getDefaultExpandedGroupKeys,
   getReferenceSimulation,
-  sortSimulationSummaries,
+  getSimulationSummaryDateWindow,
+  groupSimulationSummaries,
+  matchesSimulationGroupFilter,
+  MISSING_CASE_HASH_LABEL,
+  type SimulationSummaryGroupFilter,
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
-import type { SimulationOut } from '@/types';
+import type { SimulationOut, SimulationSummaryOut } from '@/types';
 
-const MetadataRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div className="flex items-start justify-between gap-4 border-b border-border/60 py-3 last:border-b-0">
-    <span className="text-sm text-muted-foreground">{label}</span>
-    <div className="text-right text-sm font-medium">{value}</div>
+const SummaryStat = ({
+  label,
+  value,
+  hint,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+  mono?: boolean;
+}) => (
+  <div className="rounded-xl border border-slate-200/80 bg-white/80 p-3">
+    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">{label}</div>
+    <div className={`mt-2 font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>
+      {value}
+    </div>
+    {hint ? <div className="mt-1 text-xs text-slate-500">{hint}</div> : null}
   </div>
 );
+
+const summarizeValues = (values: string[]) => {
+  if (values.length === 0) return '—';
+  if (values.length === 1) return values[0];
+
+  return `${values[0]} +${values.length - 1}`;
+};
+
+const summarizeDistinctValues = (values: Array<string | null | undefined>) => {
+  const uniqueValues = [...new Set(values.filter((value): value is string => Boolean(value)))];
+
+  if (uniqueValues.length === 0) return '—';
+  if (uniqueValues.length === 1) return uniqueValues[0];
+
+  return `${uniqueValues[0]} +${uniqueValues.length - 1}`;
+};
+
+const formatRunDateRange = (startDate?: string | null, endDate?: string | null) => {
+  if (!startDate && !endDate) return '—';
+
+  return `${startDate?.slice(0, 10) ?? '—'} → ${endDate?.slice(0, 10) ?? '—'}`;
+};
+
+const formatGroupSimulationWindow = (simulations: SimulationSummaryOut[]) => {
+  const { startDate, endDate } = getSimulationSummaryDateWindow(simulations);
+
+  return `${formatCaseDate(startDate)} → ${formatCaseDate(endDate)}`;
+};
 
 interface CaseDetailsPageProps {
   simulations: SimulationOut[];
@@ -39,7 +94,18 @@ interface CaseDetailsPageProps {
   setSelectedSimulationIds: (ids: string[]) => void;
 }
 
+type SimulationViewMode = 'grouped' | 'flat';
+
 const MAX_SELECTION = 5;
+const GROUP_ACTIONS_THRESHOLD = 4;
+const ALL_CASE_HASHES_VALUE = '__all_case_hashes__';
+const SCROLLABLE_GROUPS_THRESHOLD = 5;
+const SCROLLABLE_FLAT_ROWS_THRESHOLD = 10;
+const GROUP_FILTER_OPTIONS: Array<{ value: SimulationSummaryGroupFilter; label: string }> = [
+  { value: 'all', label: 'All groups' },
+  { value: 'multiRun', label: 'Multi-run groups' },
+  { value: 'missing', label: 'Missing CASE_HASH' },
+];
 
 export const CaseDetailsPage = ({
   simulations: allSimulations,
@@ -49,14 +115,90 @@ export const CaseDetailsPage = ({
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<SimulationViewMode>('grouped');
+  const [selectedCaseHashKey, setSelectedCaseHashKey] = useState(ALL_CASE_HASHES_VALUE);
+  const [groupFilterMode, setGroupFilterMode] = useState<SimulationSummaryGroupFilter>('all');
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const { data: caseRecord, loading, error } = useCase(id ?? '');
   const currentPath = `${location.pathname}${location.search}`;
   const state = location.state as { from?: string } | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
+  const caseSimulations = useMemo(() => caseRecord?.simulations ?? [], [caseRecord?.simulations]);
   const simulationDetailsById = useMemo(
     () => new Map(allSimulations.map((simulation) => [simulation.id, simulation])),
     [allSimulations],
   );
+  const rawSimulationGroups = useMemo(
+    () => groupSimulationSummaries(caseSimulations),
+    [caseSimulations],
+  );
+  const simulationGroups = useMemo(
+    () =>
+      rawSimulationGroups.map((group) => ({
+        ...group,
+        simulations: group.simulations.map((simulation) => ({
+          summary: simulation,
+          details: simulationDetailsById.get(simulation.id),
+        })),
+      })),
+    [rawSimulationGroups, simulationDetailsById],
+  );
+  const caseHashOptions = useMemo(
+    () =>
+      rawSimulationGroups.map((group) => ({
+        key: group.key,
+        label: group.isFallback ? MISSING_CASE_HASH_LABEL : formatCaseHashLabel(group.caseHash),
+        title: group.caseHash ?? MISSING_CASE_HASH_LABEL,
+      })),
+    [rawSimulationGroups],
+  );
+  const caseHashGroupCount = rawSimulationGroups.filter((group) => !group.isFallback).length;
+  const missingCaseHashCount =
+    rawSimulationGroups.find((group) => group.isFallback)?.simulations.length ?? 0;
+  const filteredGroupKeys = useMemo(
+    () =>
+      rawSimulationGroups
+        .filter(
+          (group) =>
+            matchesSimulationGroupFilter(group, groupFilterMode) &&
+            (selectedCaseHashKey === ALL_CASE_HASHES_VALUE || group.key === selectedCaseHashKey),
+        )
+        .map((group) => group.key),
+    [groupFilterMode, rawSimulationGroups, selectedCaseHashKey],
+  );
+  const filteredGroupKeySet = useMemo(() => new Set(filteredGroupKeys), [filteredGroupKeys]);
+  const filteredSimulationGroups = useMemo(
+    () => simulationGroups.filter((group) => filteredGroupKeySet.has(group.key)),
+    [filteredGroupKeySet, simulationGroups],
+  );
+  const filteredFlatSimulations = useMemo(
+    () => filteredSimulationGroups.flatMap((group) => group.simulations),
+    [filteredSimulationGroups],
+  );
+  const visibleSimulationIds = useMemo(
+    () =>
+      new Set(
+        filteredFlatSimulations.map(({ summary }) => summary.id),
+      ),
+    [filteredFlatSimulations],
+  );
+  const selectedCurrentCaseSimulationIds = caseSimulations
+    .map((simulation) => simulation.id)
+    .filter((simulationId) => selectedSimulationIds.includes(simulationId));
+  const hiddenSelectedCount = selectedCurrentCaseSimulationIds.filter(
+    (simulationId) => !visibleSimulationIds.has(simulationId),
+  ).length;
+  const hasActiveGroupFilters =
+    groupFilterMode !== 'all' || selectedCaseHashKey !== ALL_CASE_HASHES_VALUE;
+  const showGroupActions = rawSimulationGroups.length > GROUP_ACTIONS_THRESHOLD;
+  const useScrollableGroupsPanel =
+    viewMode === 'grouped'
+      ? filteredSimulationGroups.length > SCROLLABLE_GROUPS_THRESHOLD
+      : filteredFlatSimulations.length > SCROLLABLE_FLAT_ROWS_THRESHOLD;
+
+  useEffect(() => {
+    setExpandedGroupKeys(getDefaultExpandedGroupKeys(rawSimulationGroups));
+  }, [rawSimulationGroups]);
 
   const handleShareCase = async () => {
     if (!id) return;
@@ -125,19 +267,14 @@ export const CaseDetailsPage = ({
   }
 
   const referenceSimulation = getReferenceSimulation(caseRecord);
-  const simulations = sortSimulationSummaries(caseRecord.simulations).map((simulation) => ({
-    summary: simulation,
-    details: simulationDetailsById.get(simulation.id),
-  }));
-  const summarizeValues = (values: string[]) => {
-    if (values.length === 0) return '—';
-    if (values.length === 1) return values[0];
-
-    return `${values[0]} +${values.length - 1}`;
-  };
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+  const filteredExecutionCount = filteredFlatSimulations.length;
+  const activeSimulationCount =
+    viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
+  const totalSimulationCount =
+    viewMode === 'grouped' ? simulationGroups.length : caseRecord.simulations.length;
 
   const toggleSimulationSelection = (simulationId: string) => {
     if (selectedSimulationIds.includes(simulationId)) {
@@ -150,6 +287,34 @@ export const CaseDetailsPage = ({
     }
 
     setSelectedSimulationIds([...selectedSimulationIds, simulationId]);
+  };
+
+  const toggleGroupExpansion = (groupKey: string, open: boolean) => {
+    setExpandedGroupKeys((currentKeys) => {
+      if (open) {
+        return currentKeys.includes(groupKey) ? currentKeys : [...currentKeys, groupKey];
+      }
+
+      return currentKeys.filter((key) => key !== groupKey);
+    });
+  };
+
+  const handleExpandAllGroups = () => {
+    setExpandedGroupKeys((currentKeys) => [
+      ...new Set([...currentKeys, ...filteredSimulationGroups.map((group) => group.key)]),
+    ]);
+  };
+
+  const handleCollapseAllGroups = () => {
+    const filteredGroupKeys = new Set(filteredSimulationGroups.map((group) => group.key));
+    setExpandedGroupKeys((currentKeys) =>
+      currentKeys.filter((key) => !filteredGroupKeys.has(key)),
+    );
+  };
+
+  const resetGroupFilters = () => {
+    setGroupFilterMode('all');
+    setSelectedCaseHashKey(ALL_CASE_HASHES_VALUE);
   };
 
   return (
@@ -168,7 +333,6 @@ export const CaseDetailsPage = ({
           </div>
         </div>
         <div className="flex items-center gap-2 self-start">
-          {caseRecord.caseGroup && <Badge variant="outline">{caseRecord.caseGroup}</Badge>}
           <Button variant="outline" size="sm" type="button" onClick={handleShareCase}>
             <Share2 className="h-4 w-4" />
             Share Case
@@ -176,60 +340,86 @@ export const CaseDetailsPage = ({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Case Metadata</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MetadataRow label="Total Simulations" value={caseRecord.simulations.length} />
-            <MetadataRow label="Machines" value={machineSummary} />
-            <MetadataRow label="HPC Usernames" value={hpcUsernameSummary} />
-            <MetadataRow label="Case Group" value={caseRecord.caseGroup ?? '—'} />
-            <MetadataRow label="Created" value={formatCaseDate(caseRecord.createdAt)} />
-            <MetadataRow label="Last Updated" value={formatCaseDate(caseRecord.updatedAt)} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
+        <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
+          <CardContent className="space-y-5 p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Case summary</p>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  {caseRecord.simulations.length} runs across {rawSimulationGroups.length} execution groups
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Scientific view favors CASE_HASH lineage first, then per-run details.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {caseRecord.caseGroup ? <Badge variant="outline">{caseRecord.caseGroup}</Badge> : null}
+                {missingCaseHashCount > 0 ? (
+                  <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                    {missingCaseHashCount} without CASE_HASH
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <SummaryStat label="Runs" value={caseRecord.simulations.length} />
+              <SummaryStat label="Execution groups" value={rawSimulationGroups.length} />
+              <SummaryStat label="CASE_HASH groups" value={caseHashGroupCount} />
+              <SummaryStat label="Machines" value={machineSummary} hint={caseRecord.machineNames.join(', ')} />
+              <SummaryStat
+                label="HPC users"
+                value={hpcUsernameSummary}
+                hint={caseRecord.hpcUsernames.join(', ')}
+              />
+              <SummaryStat label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Reference Simulation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {referenceSimulation ? (
-              <>
-                <p className="mb-4 text-sm leading-6 text-muted-foreground">
-                  This is the first successful run for the case and serves as the reference used to
-                  compare configuration changes across the other simulations.
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardContent className="space-y-4 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Reference simulation</p>
+                <p className="text-sm text-muted-foreground">
+                  Baseline run used for change counts and compare context.
                 </p>
-                <MetadataRow
-                  label="Execution ID"
-                  value={
-                    <Link
-                      to={`/simulations/${referenceSimulation.id}`}
-                      state={{ from: currentPath }}
-                      className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                    >
-                      {referenceSimulation.executionId}
-                      <span
-                        className="inline-flex items-center"
-                        title="Reference simulation"
-                        aria-label="Reference simulation"
-                      >
-                        <Pin className="h-3.5 w-3.5 text-amber-600" />
-                      </span>
-                    </Link>
-                  }
-                />
-                <MetadataRow
-                  label="Status"
-                  value={<SimulationStatusBadge status={referenceSimulation.status} />}
-                />
-                <MetadataRow
-                  label="Simulation Dates"
-                  value={formatSimulationDateRange(referenceSimulation)}
-                />
-              </>
+              </div>
+              {referenceSimulation ? (
+                <SimulationStatusBadge status={referenceSimulation.status} />
+              ) : null}
+            </div>
+
+            {referenceSimulation ? (
+              <div className="space-y-4">
+                <Link
+                  to={`/simulations/${referenceSimulation.id}`}
+                  state={{ from: currentPath }}
+                  className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                >
+                  {referenceSimulation.executionId}
+                  <span
+                    className="inline-flex items-center"
+                    title="Reference simulation"
+                    aria-label="Reference simulation"
+                  >
+                    <Pin className="h-3.5 w-3.5 text-amber-600" />
+                  </span>
+                </Link>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SummaryStat
+                    label="Simulation window"
+                    value={formatSimulationDateRange(referenceSimulation)}
+                  />
+                  <SummaryStat
+                    label="Change role"
+                    value="Reference baseline"
+                    hint="Other runs report changes relative to this execution."
+                  />
+                </div>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">
                 No reference simulation is set for this case.
@@ -239,119 +429,403 @@ export const CaseDetailsPage = ({
         </Card>
       </div>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-xl font-semibold">Simulations</h2>
-          <p className="text-sm text-muted-foreground">
-            Execution-level summaries for this case. Reference runs are pinned first.
-          </p>
-        </div>
+      <section className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-semibold">Simulations</h2>
+                <Badge variant="outline" className="bg-slate-50">
+                  CASE_HASH-first view
+                </Badge>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Group by CASE_HASH to compare runs within same lineage; runs without CASE_HASH stay visible as
+                fallback entries.
+              </p>
+            </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button
-              type="button"
-              onClick={() => navigate('/compare')}
-              disabled={isCompareButtonDisabled}
-            >
-              Compare Selected
-            </Button>
-            <div className="text-sm text-slate-600">
-              Selected <span className="font-semibold text-slate-950">{selectedSimulationIds.length}</span>{' '}
-              / {MAX_SELECTION}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  onClick={() => navigate('/compare')}
+                  disabled={isCompareButtonDisabled}
+                >
+                  Compare Selected
+                </Button>
+                <div className="space-y-1 text-sm text-slate-600">
+                  <div>
+                    Selected{' '}
+                    <span className="font-semibold text-slate-950">{selectedSimulationIds.length}</span> /{' '}
+                    {MAX_SELECTION}
+                  </div>
+                  {hiddenSelectedCount > 0 ? (
+                    <div className="text-xs text-slate-500">
+                      {hiddenSelectedCount} selected {hiddenSelectedCount === 1 ? 'run is' : 'runs are'} in
+                      filtered-out groups.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
 
-          {selectedSimulationIds.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-slate-600 hover:text-slate-900"
-              onClick={() => setSelectedSimulationIds([])}
-            >
-              Deselect all
-            </Button>
-          )}
+          <div className="space-y-4 px-5 py-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-slate-900">View</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={viewMode === 'grouped' ? 'default' : 'outline'}
+                      onClick={() => setViewMode('grouped')}
+                    >
+                      Grouped by CASE_HASH
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={viewMode === 'flat' ? 'default' : 'outline'}
+                      onClick={() => setViewMode('flat')}
+                    >
+                      All executions
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-slate-900">Scope</div>
+                  <Select value={selectedCaseHashKey} onValueChange={setSelectedCaseHashKey}>
+                    <SelectTrigger className="w-full bg-white shadow-none lg:w-72">
+                      <SelectValue placeholder="All CASE_HASH groups" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CASE_HASHES_VALUE}>All CASE_HASH groups</SelectItem>
+                      {caseHashOptions.map((option) => (
+                        <SelectItem key={option.key} value={option.key} title={option.title}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-3 xl:text-right">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-slate-900">Filters</div>
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    {GROUP_FILTER_OPTIONS.map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        size="sm"
+                        variant={groupFilterMode === option.value ? 'default' : 'outline'}
+                        onClick={() => setGroupFilterMode(option.value)}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                  {selectedSimulationIds.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-600 hover:text-slate-900"
+                      onClick={() => setSelectedSimulationIds([])}
+                    >
+                      Deselect all
+                    </Button>
+                  ) : null}
+                  {hasActiveGroupFilters ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
+                      Reset filters
+                    </Button>
+                  ) : null}
+                  {viewMode === 'grouped' && showGroupActions ? (
+                    <>
+                      <Button type="button" variant="ghost" size="sm" onClick={handleExpandAllGroups}>
+                        Expand all
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={handleCollapseAllGroups}>
+                        Collapse all
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                Showing <span className="font-semibold text-slate-950">{activeSimulationCount}</span> of{' '}
+                {totalSimulationCount} {viewMode === 'grouped' ? 'groups' : 'executions'}
+              </div>
+              <div>
+                {viewMode === 'grouped'
+                  ? `${filteredExecutionCount} executions available inside current group set`
+                  : `${filteredSimulationGroups.length} CASE_HASH groups represented`}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="overflow-hidden rounded-md border bg-background">
-          <div className="max-h-[32rem] overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Select</TableHead>
-                  <TableHead>Execution ID</TableHead>
-                  <TableHead>Changes</TableHead>
-                  <TableHead>Initialization</TableHead>
-                  <TableHead>Git Tag</TableHead>
-                  <TableHead>Simulation Dates</TableHead>
-                  <TableHead>Run Dates</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {simulations.map(({ summary, details }) => (
-                  <TableRow key={summary.id}>
-                    <TableCell className="align-top">
-                      <Checkbox
-                        checked={selectedSimulationIds.includes(summary.id)}
-                        disabled={
-                          !selectedSimulationIds.includes(summary.id) &&
-                          selectedSimulationIds.length >= MAX_SELECTION
-                        }
-                        onCheckedChange={() => toggleSimulationSelection(summary.id)}
-                        aria-label={`Select ${summary.executionId} for compare`}
-                      />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <Link
-                        to={`/simulations/${summary.id}`}
-                        state={{ from: currentPath }}
-                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                      >
-                        {summary.executionId}
-                        {summary.isReference && (
-                          <span
-                            className="inline-flex items-center"
-                            title="Reference simulation"
-                            aria-label="Reference simulation"
-                          >
-                            <Pin className="h-3.5 w-3.5 text-amber-600" />
-                          </span>
-                        )}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {summary.isReference ? (
-                        <span className="text-sm font-medium text-slate-700">Reference</span>
-                      ) : (
-                        summary.changeCount
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <TableCellText value={details?.initializationType ?? '—'} lines={1} />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <TableCellText value={details?.gitTag ?? '—'} lines={1} />
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {formatSimulationDateRange(summary)}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {details?.runStartDate || details?.runEndDate ? (
-                        <span
-                          title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
+        <div
+          className={
+            useScrollableGroupsPanel
+              ? 'rounded-2xl border border-slate-200 bg-slate-50/30 p-3 lg:max-h-[70vh] lg:overflow-y-auto'
+              : ''
+          }
+        >
+          <div className="space-y-4">
+            {(viewMode === 'grouped' ? filteredSimulationGroups.length : filteredFlatSimulations.length) === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-10 text-center">
+                <p className="text-sm font-medium text-slate-900">
+                  {viewMode === 'grouped'
+                    ? 'No CASE_HASH groups match these filters.'
+                    : 'No executions match these filters.'}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Try a different CASE_HASH selection or reset the quick filters.
+                </p>
+                <Button type="button" variant="outline" size="sm" className="mt-4" onClick={resetGroupFilters}>
+                  Reset filters
+                </Button>
+              </div>
+            ) : viewMode === 'flat' ? (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-background">
+                <div className="max-h-[28rem] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">Select</TableHead>
+                        <TableHead>Execution ID</TableHead>
+                        <TableHead>CASE_HASH</TableHead>
+                        <TableHead>Role / changes</TableHead>
+                        <TableHead>Initialization</TableHead>
+                        <TableHead>Simulation dates</TableHead>
+                        <TableHead>Run dates</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredFlatSimulations.map(({ summary, details }) => (
+                        <TableRow key={summary.id}>
+                          <TableCell className="align-top">
+                            <Checkbox
+                              checked={selectedSimulationIds.includes(summary.id)}
+                              disabled={
+                                !selectedSimulationIds.includes(summary.id) &&
+                                selectedSimulationIds.length >= MAX_SELECTION
+                              }
+                              onCheckedChange={() => toggleSimulationSelection(summary.id)}
+                              aria-label={`Select ${summary.executionId} for compare`}
+                            />
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <Link
+                              to={`/simulations/${summary.id}`}
+                              state={{ from: currentPath }}
+                              className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                            >
+                              {summary.executionId}
+                              {summary.isReference ? (
+                                <span
+                                  className="inline-flex items-center"
+                                  title="Reference simulation"
+                                  aria-label="Reference simulation"
+                                >
+                                  <Pin className="h-3.5 w-3.5 text-amber-600" />
+                                </span>
+                              ) : null}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <span
+                              className="font-mono text-xs text-slate-700"
+                              title={summary.caseHash ?? MISSING_CASE_HASH_LABEL}
+                            >
+                              {summary.caseHash
+                                ? formatCaseHashLabel(summary.caseHash)
+                                : MISSING_CASE_HASH_LABEL}
+                            </span>
+                          </TableCell>
+                          <TableCell className="align-top text-sm text-slate-700">
+                            {summary.isReference ? 'Reference baseline' : `${summary.changeCount} changes`}
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <TableCellText value={details?.initializationType ?? '—'} lines={1} />
+                          </TableCell>
+                          <TableCell className="align-top">{formatSimulationDateRange(summary)}</TableCell>
+                          <TableCell className="align-top">
+                            {details?.runStartDate || details?.runEndDate ? (
+                              <span title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}>
+                                {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
+              filteredSimulationGroups.map((group) => {
+                const isOpen = expandedGroupKeys.includes(group.key);
+                const groupSimulationWindow = formatGroupSimulationWindow(
+                  group.simulations.map(({ summary }) => summary),
+                );
+                const groupInitializationSummary = summarizeDistinctValues(
+                  group.simulations.map(({ details }) => details?.initializationType),
+                );
+                const maxChangeCount = Math.max(
+                  ...group.simulations.map(({ summary }) => summary.changeCount),
+                );
+                const hasReferenceSimulation = group.simulations.some(({ summary }) => summary.isReference);
+
+                return (
+                  <Collapsible
+                    key={group.key}
+                    open={isOpen}
+                    onOpenChange={(open) => toggleGroupExpansion(group.key, open)}
+                  >
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-background">
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex w-full flex-col gap-4 bg-slate-50/70 px-4 py-4 text-left transition-colors hover:bg-slate-100/80"
                         >
-                          {`${details?.runStartDate?.slice(0, 10) ?? '—'} → ${details?.runEndDate?.slice(0, 10) ?? '—'}`}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <ChevronDown
+                                className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${
+                                  isOpen ? 'rotate-180' : ''
+                                }`}
+                              />
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                                  {group.isFallback ? 'Missing CASE_HASH' : 'CASE_HASH group'}
+                                </p>
+                                <p
+                                  className="truncate font-mono text-sm text-slate-950"
+                                  title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
+                                >
+                                  {group.isFallback
+                                    ? MISSING_CASE_HASH_LABEL
+                                    : formatCaseHashLabel(group.caseHash)}
+                                </p>
+                                {group.isFallback ? (
+                                  <p className="max-w-2xl text-xs text-muted-foreground">
+                                    Older ingests without CASE_HASH stay visible here without subgrouping.
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
+                              {hasReferenceSimulation ? (
+                                <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">
+                                  Reference inside group
+                                </Badge>
+                              ) : null}
+                              <Badge variant="outline">
+                                {group.simulations.length} {group.simulations.length === 1 ? 'run' : 'runs'}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <SummaryStat label="Simulation window" value={groupSimulationWindow} />
+                            <SummaryStat label="Initialization" value={groupInitializationSummary} />
+                            <SummaryStat
+                              label="Change spread"
+                              value={hasReferenceSimulation ? `0 to ${maxChangeCount} changes` : `Up to ${maxChangeCount} changes`}
+                            />
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent>
+                        <div className="max-h-[24rem] overflow-auto border-t border-slate-200">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-12">Select</TableHead>
+                                <TableHead>Execution ID</TableHead>
+                                <TableHead>Role / changes</TableHead>
+                                <TableHead>Initialization</TableHead>
+                                <TableHead>Simulation dates</TableHead>
+                                <TableHead>Run dates</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.simulations.map(({ summary, details }) => (
+                                <TableRow key={summary.id}>
+                                  <TableCell className="align-top">
+                                    <Checkbox
+                                      checked={selectedSimulationIds.includes(summary.id)}
+                                      disabled={
+                                        !selectedSimulationIds.includes(summary.id) &&
+                                        selectedSimulationIds.length >= MAX_SELECTION
+                                      }
+                                      onCheckedChange={() => toggleSimulationSelection(summary.id)}
+                                      aria-label={`Select ${summary.executionId} for compare`}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="align-top">
+                                    <Link
+                                      to={`/simulations/${summary.id}`}
+                                      state={{ from: currentPath }}
+                                      className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                                    >
+                                      {summary.executionId}
+                                      {summary.isReference ? (
+                                        <span
+                                          className="inline-flex items-center"
+                                          title="Reference simulation"
+                                          aria-label="Reference simulation"
+                                        >
+                                          <Pin className="h-3.5 w-3.5 text-amber-600" />
+                                        </span>
+                                      ) : null}
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell className="align-top text-sm text-slate-700">
+                                    {summary.isReference ? 'Reference baseline' : `${summary.changeCount} changes`}
+                                  </TableCell>
+                                  <TableCell className="align-top">
+                                    <TableCellText value={details?.initializationType ?? '—'} lines={1} />
+                                  </TableCell>
+                                  <TableCell className="align-top">{formatSimulationDateRange(summary)}</TableCell>
+                                  <TableCell className="align-top">
+                                    {details?.runStartDate || details?.runEndDate ? (
+                                      <span title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}>
+                                        {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })
+            )}
           </div>
         </div>
       </section>

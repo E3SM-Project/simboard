@@ -78,6 +78,7 @@ class TestListCases:
         sim1 = Simulation(
             case_id=case.id,
             execution_id="case-nested-exec-1",
+            case_hash="nested-hash-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -94,6 +95,7 @@ class TestListCases:
         sim2 = Simulation(
             case_id=case.id,
             execution_id="case-nested-exec-2",
+            case_hash="nested-hash-2",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -137,6 +139,7 @@ class TestListCases:
         for s in sims:
             assert "id" in s
             assert "executionId" in s
+            assert "caseHash" in s
             assert "status" in s
             assert "isReference" in s
             assert "changeCount" in s
@@ -153,8 +156,10 @@ class TestListCases:
         # Verify reference and change_count derivation
         exec_ids = {s["executionId"]: s for s in sims}
         assert exec_ids["case-nested-exec-1"]["isReference"] is True
+        assert exec_ids["case-nested-exec-1"]["caseHash"] == "nested-hash-1"
         assert exec_ids["case-nested-exec-1"]["changeCount"] == 0
         assert exec_ids["case-nested-exec-2"]["isReference"] is False
+        assert exec_ids["case-nested-exec-2"]["caseHash"] == "nested-hash-2"
         assert exec_ids["case-nested-exec-2"]["changeCount"] == 1
 
 
@@ -202,6 +207,7 @@ class TestGetCase:
         sim = Simulation(
             case_id=case.id,
             execution_id="case-detail-exec-1",
+            case_hash="detail-hash-1",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -229,6 +235,7 @@ class TestGetCase:
         assert data["machineNames"] == [machine.name]
         assert data["hpcUsernames"] == []
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
+        assert data["simulations"][0]["caseHash"] == "detail-hash-1"
         assert data["simulations"][0]["isReference"] is True
 
     def test_endpoint_raises_404_if_case_not_found(self, client):
@@ -645,6 +652,7 @@ class TestGetSimulation:
         sim = Simulation(
             case_id=case.id,
             execution_id="get-test-exec-1",
+            case_hash="abc123casehash",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -669,6 +677,7 @@ class TestGetSimulation:
         data = res.json()
         assert data["caseName"] == "test_case_get"
         assert data["executionId"] == "get-test-exec-1"
+        assert data["caseHash"] == "abc123casehash"
 
     def test_endpoint_raises_404_if_simulation_not_found(self, client):
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
