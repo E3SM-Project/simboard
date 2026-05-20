@@ -166,6 +166,45 @@ class TestSettings:
         assert configured.assistant_livai_api_key is not None
         assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
 
+    def test_assistant_ollama_env_names_are_canonical_and_strip_whitespace(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            assistant_ollama_base_url=" http://localhost:11434/  ",
+            assistant_ollama_api_key="ollama-key",
+            assistant_ollama_model="gemma4:26b",
+        )
+
+        assert configured.assistant_ollama_base_url == "http://localhost:11434"
+        assert configured.assistant_ollama_model == "gemma4:26b"
+        assert configured.assistant_ollama_api_key is not None
+        assert configured.assistant_ollama_api_key.get_secret_value() == "ollama-key"
+
+    def test_assistant_ollama_model_accepts_arbitrary_string(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            assistant_ollama_model="gemma4:26b-q4_K_M",
+        )
+
+        assert configured.assistant_ollama_model == "gemma4:26b-q4_K_M"
+
     def test_assistant_llm_tuning_env_values_load_from_settings(self):
         configured = Settings(
             _env_file=None,

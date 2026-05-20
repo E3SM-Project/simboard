@@ -41,7 +41,8 @@ Backend env templates live in `.envs/example/backend.env.example` and local deve
 Assistant summary configuration uses the `ASSISTANT_*` namespace:
 
 - `ASSISTANT_LLM_ENABLED`
-- `ASSISTANT_LLM_PROVIDER` with `openai`, `anthropic`, or `livai`
+- `ASSISTANT_LLM_PROVIDER` with `ollama`, `openai`, `anthropic`, or `livai`
+- `ASSISTANT_OLLAMA_API_KEY` / `ASSISTANT_OLLAMA_MODEL` / `ASSISTANT_OLLAMA_BASE_URL`
 - `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
 - `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
 - `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
@@ -49,6 +50,16 @@ Assistant summary configuration uses the `ASSISTANT_*` namespace:
 - `ASSISTANT_LLM_TEMPERATURE`
 - `ASSISTANT_LLM_MAX_TOKENS`
 - `ASSISTANT_SNAPSHOT_MAX_CHARS`
+
+For local open-weight runs, prefer Ollama with Gemma 4:
+
+- `gemma4:e4b` for fast local iteration and prompt-contract checks
+- `gemma4:26b` for preferred summary quality checks
+- `gemma4:31b` only if local hardware can support it
+
+On macOS, prefer native Ollama install for local development. Docker Desktop does not provide GPU passthrough for Ollama on macOS, so containerized local runs are typically much slower and are not the recommended default.
+
+For Ollama, SimBoard accepts `ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434` and normalizes it to Ollama's OpenAI-compatible `/v1` endpoint internally. `ASSISTANT_OLLAMA_API_KEY` is optional for local runs and can stay blank unless a proxy in front of Ollama requires auth.
 
 For LivAI, `ASSISTANT_LIVAI_*` names are canonical.
 For the current LivAI OpenAI-compatible chat path, SimBoard omits `temperature` for `gpt-5*` models because that endpoint rejects the parameter.

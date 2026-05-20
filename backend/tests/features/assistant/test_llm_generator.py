@@ -52,6 +52,40 @@ class TestSummaryLLMGenerator:
         assert str(model.client.base_url) == "https://example.livai.test/v1/"
 
     @pytest.mark.asyncio
+    async def test_build_model_normalizes_ollama_root_url_to_v1(self) -> None:
+        config = AssistantLLMConfig(
+            provider="ollama",
+            model_name="gemma4:26b",
+            api_key=None,
+            timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
+            base_url="http://localhost:11434",
+        )
+
+        async with AsyncClient() as http_client:
+            model = SummaryLLMGenerator(config)._build_model(http_client=http_client)
+
+        assert str(model.client.base_url) == "http://localhost:11434/v1/"
+
+    @pytest.mark.asyncio
+    async def test_build_model_preserves_explicit_ollama_v1_base_url(self) -> None:
+        config = AssistantLLMConfig(
+            provider="ollama",
+            model_name="gemma4:e4b",
+            api_key=SecretStr("ollama-key"),
+            timeout_seconds=30.0,
+            temperature=0.2,
+            max_tokens=2048,
+            base_url="http://localhost:11434/v1",
+        )
+
+        async with AsyncClient() as http_client:
+            model = SummaryLLMGenerator(config)._build_model(http_client=http_client)
+
+        assert str(model.client.base_url) == "http://localhost:11434/v1/"
+
+    @pytest.mark.asyncio
     async def test_build_model_uses_anthropic_provider(self) -> None:
         config = AssistantLLMConfig(
             provider="anthropic",

@@ -89,6 +89,24 @@ def _set_livai_settings(
     monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
 
 
+def _set_ollama_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    enabled: bool = True,
+    api_key: SecretStr | None = None,
+    model: str | None = "gemma4:26b",
+    base_url: str = "http://localhost:11434",
+) -> None:
+    monkeypatch.setattr(settings, "assistant_llm_enabled", enabled)
+    monkeypatch.setattr(settings, "assistant_llm_provider", "ollama")
+    monkeypatch.setattr(settings, "assistant_ollama_api_key", api_key)
+    monkeypatch.setattr(settings, "assistant_ollama_model", model)
+    monkeypatch.setattr(settings, "assistant_ollama_base_url", base_url)
+    monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 30.0)
+    monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
+    monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
+
+
 class TestResolveLLMConfig:
     def test_resolve_llm_config_for_openai_returns_expected_config(
         self, monkeypatch: pytest.MonkeyPatch
@@ -106,6 +124,7 @@ class TestResolveLLMConfig:
 
         assert config.provider == "openai"
         assert config.model_name == "gpt-test"
+        assert config.api_key is not None
         assert config.api_key.get_secret_value() == "openai-key"
         assert config.temperature == 0.2
         assert config.max_tokens == 2048
@@ -119,8 +138,22 @@ class TestResolveLLMConfig:
 
         assert config.provider == "livai"
         assert config.model_name == "livai-model"
+        assert config.api_key is not None
         assert config.api_key.get_secret_value() == "livai-key"
         assert config.base_url == "https://api.livai.llnl.gov/v1"
+
+    @pytest.mark.parametrize("model_name", ["gemma4:e4b", "gemma4:26b"])
+    def test_resolve_llm_config_for_ollama_uses_configured_model_and_base_url(
+        self, monkeypatch: pytest.MonkeyPatch, model_name: str
+    ) -> None:
+        _set_ollama_settings(monkeypatch, model=model_name)
+
+        config = orchestrator._resolve_llm_config()
+
+        assert config.provider == "ollama"
+        assert config.model_name == model_name
+        assert config.api_key is None
+        assert config.base_url == "http://localhost:11434"
 
     def test_resolve_llm_config_for_anthropic_returns_expected_config(
         self, monkeypatch: pytest.MonkeyPatch
@@ -138,6 +171,7 @@ class TestResolveLLMConfig:
 
         assert config.provider == "anthropic"
         assert config.model_name == "claude-test"
+        assert config.api_key is not None
         assert config.api_key.get_secret_value() == "anthropic-key"
         assert config.temperature == 0.2
         assert config.max_tokens == 2048
@@ -162,6 +196,24 @@ class TestResolveLLMConfig:
         with pytest.raises(ValueError, match="anthropic_misconfigured"):
             orchestrator._resolve_llm_config()
 
+    @pytest.mark.parametrize(
+        ("model", "base_url"),
+        [
+            (None, "http://localhost:11434"),
+            ("gemma4:26b", ""),
+        ],
+    )
+    def test_resolve_llm_config_rejects_ollama_misconfiguration(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        model: str | None,
+        base_url: str,
+    ) -> None:
+        _set_ollama_settings(monkeypatch, model=model, base_url=base_url)
+
+        with pytest.raises(ValueError, match="ollama_misconfigured"):
+            orchestrator._resolve_llm_config()
+
     def test_resolve_llm_config_rejects_unsupported_provider(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -176,6 +228,7 @@ class TestResolveLLMConfig:
             ("openai", "gpt-test"),
             ("anthropic", "claude-test"),
             ("livai", "livai-model"),
+            ("ollama", "gemma4:26b"),
         ],
     )
     def test_configured_model_name_uses_provider_setting(
@@ -189,6 +242,7 @@ class TestResolveLLMConfig:
         monkeypatch.setattr(settings, "assistant_openai_model", "gpt-test")
         monkeypatch.setattr(settings, "assistant_anthropic_model", "claude-test")
         monkeypatch.setattr(settings, "assistant_livai_model", "livai-model")
+        monkeypatch.setattr(settings, "assistant_ollama_model", "gemma4:26b")
 
         assert (
             orchestrator._configured_model_name(
@@ -334,6 +388,36 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "livai-model"
 
     @pytest.mark.asyncio
+    async def test_generate_simulation_summary_returns_ollama_provider_on_success(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model="gemma4:26b")
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            return _make_llm_content()
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason is None
+        assert result.summary.generation_mode == "llm"
+        assert result.summary.generation_provider == "ollama"
+        assert result.summary.generation_model == "gemma4:26b"
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model == "gemma4:26b"
+
+    @pytest.mark.asyncio
     async def test_generate_simulation_summary_falls_back_for_livai_misconfiguration(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -353,6 +437,28 @@ class TestGenerateSimulationSummary:
         assert result.summary.generation_model is None
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
+        assert LLM_FALLBACK_CAVEAT in result.summary.caveats
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_falls_back_for_ollama_misconfiguration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model=None)
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason == "ollama_misconfigured"
+        assert result.summary.generation_mode == "deterministic"
+        assert result.summary.generation_provider is None
+        assert result.summary.generation_model is None
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model is None
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
 
     @pytest.mark.asyncio

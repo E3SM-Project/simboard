@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from httpx import AsyncClient
 from pydantic import SecretStr
@@ -31,12 +32,14 @@ Rules:
 - Produce concise, factual output for all structured fields.
 """.strip()
 
+OPENAI_COMPATIBLE_PROVIDERS = {"openai", "livai", "ollama"}
+
 
 @dataclass(frozen=True)
 class AssistantLLMConfig:
     provider: SummaryGenerationProvider
     model_name: str
-    api_key: SecretStr
+    api_key: SecretStr | None
     timeout_seconds: float
     temperature: float
     max_tokens: int
@@ -62,13 +65,17 @@ class SummaryLLMGenerator:
     def _build_model(
         self, http_client: AsyncClient
     ) -> OpenAIChatModel | AnthropicModel:
-        api_key = self.config.api_key.get_secret_value()
-        if self.config.provider in {"openai", "livai"}:
+        api_key = (
+            self.config.api_key.get_secret_value()
+            if self.config.api_key is not None
+            else None
+        )
+        if self.config.provider in OPENAI_COMPATIBLE_PROVIDERS:
             return OpenAIChatModel(
                 self.config.model_name,
                 provider=OpenAIProvider(
                     api_key=api_key,
-                    base_url=self.config.base_url,
+                    base_url=self._resolve_base_url(),
                     http_client=http_client,
                 ),
             )
@@ -76,6 +83,15 @@ class SummaryLLMGenerator:
             self.config.model_name,
             provider=AnthropicProvider(api_key=api_key, http_client=http_client),
         )
+
+    def _resolve_base_url(self) -> str | None:
+        if self.config.provider != "ollama" or self.config.base_url is None:
+            return self.config.base_url
+
+        parsed = urlparse(self.config.base_url)
+        if parsed.path not in {"", "/"}:
+            return self.config.base_url
+        return f"{self.config.base_url.rstrip('/')}/v1"
 
     def _build_model_settings(self) -> ModelSettings | None:
         settings: ModelSettings = {

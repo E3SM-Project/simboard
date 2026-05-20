@@ -24,7 +24,7 @@ class SummaryCitationOut(CamelOutBaseModel):
 
 
 SummaryGenerationMode = Literal["llm", "deterministic"]
-SummaryGenerationProvider = Literal["openai", "anthropic", "livai"]
+SummaryGenerationProvider = Literal["openai", "anthropic", "livai", "ollama"]
 
 
 class SimulationSummaryContent(CamelOutBaseModel):

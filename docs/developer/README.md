@@ -66,7 +66,8 @@ If you want the simulation details page to use LLM-backed summaries instead of d
 Canonical assistant env names:
 
 - `ASSISTANT_LLM_ENABLED`
-- `ASSISTANT_LLM_PROVIDER` with `openai`, `anthropic`, or `livai`
+- `ASSISTANT_LLM_PROVIDER` with `ollama`, `openai`, `anthropic`, or `livai`
+- `ASSISTANT_OLLAMA_API_KEY` / `ASSISTANT_OLLAMA_MODEL` / `ASSISTANT_OLLAMA_BASE_URL`
 - `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
 - `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
 - `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
@@ -83,6 +84,41 @@ Recommended setup flow:
 6. Generate an AI Summary from the simulation details page and confirm it does not fall back to deterministic mode.
 
 Recommended local default for this repo:
+
+```env
+ASSISTANT_LLM_ENABLED=true
+ASSISTANT_LLM_PROVIDER=ollama
+ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434
+ASSISTANT_OLLAMA_MODEL=gemma4:26b
+ASSISTANT_OLLAMA_API_KEY=
+ASSISTANT_LLM_TEMPERATURE=0.2
+ASSISTANT_LLM_MAX_TOKENS=2048
+```
+
+Recommended Ollama workflow:
+
+1. On macOS, install Ollama natively using the official setup guide: https://docs.ollama.com/quickstart
+2. Pull `gemma4:e4b` for fast local iteration:
+
+   ```bash
+   ollama pull gemma4:e4b
+   ```
+
+3. Pull `gemma4:26b` for preferred summary quality checks:
+
+   ```bash
+   ollama pull gemma4:26b
+   ```
+
+4. Point `ASSISTANT_OLLAMA_BASE_URL` at your local runtime. SimBoard accepts `http://localhost:11434` and normalizes it to Ollama's OpenAI-compatible `/v1` endpoint internally. If your deployment already exposes `/v1`, that value also works unchanged.
+5. Switch `ASSISTANT_OLLAMA_MODEL` between:
+   - `gemma4:e4b` for fast prompt-contract iteration
+   - `gemma4:26b` for preferred quality checks
+   - `gemma4:31b` only if local hardware supports it
+
+For macOS developers, native Ollama is the recommended default. Ollama's official docs note that GPU acceleration is not available through Docker Desktop on macOS because GPU passthrough and emulation are not supported there. You can still run Ollama in Docker on macOS for CPU-only portability testing, but expect slower local inference than native install.
+
+LivAI setup:
 
 ```env
 ASSISTANT_LLM_ENABLED=true
@@ -107,11 +143,13 @@ ASSISTANT_LLM_MAX_TOKENS=2048
 
 If `ASSISTANT_LLM_ENABLED=false`, or the selected provider is misconfigured, the backend automatically returns the deterministic metadata summary instead of an LLM-generated one.
 
+For Ollama, `ASSISTANT_OLLAMA_BASE_URL` and `ASSISTANT_OLLAMA_MODEL` are required. `ASSISTANT_OLLAMA_API_KEY` is optional for local runs and can stay blank unless a proxy in front of Ollama requires auth.
 For LivAI, `ASSISTANT_LIVAI_API_KEY` and `ASSISTANT_LIVAI_BASE_URL` are the canonical names.
 For the current LivAI OpenAI-compatible chat endpoint, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter; `ASSISTANT_LLM_MAX_TOKENS` still applies.
 
 If summary generation still falls back:
 
+- `fallback_reason=ollama_misconfigured` means `ASSISTANT_OLLAMA_MODEL` or `ASSISTANT_OLLAMA_BASE_URL` is missing.
 - `fallback_reason=openai_misconfigured` means the backend is still configured for `openai`, but `ASSISTANT_OPENAI_API_KEY` or `ASSISTANT_OPENAI_MODEL` is missing.
 - `fallback_reason=anthropic_misconfigured` means `ASSISTANT_ANTHROPIC_API_KEY` or `ASSISTANT_ANTHROPIC_MODEL` is missing.
 - `fallback_reason=livai_misconfigured` means `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL` is missing.

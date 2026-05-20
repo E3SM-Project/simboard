@@ -30,7 +30,7 @@ export interface SimulationSummaryResponseOut {
   limitations: string[];
   suggestedFollowups: string[];
   generationMode?: 'llm' | 'deterministic';
-  generationProvider?: 'openai' | 'anthropic' | 'livai' | null;
+  generationProvider?: 'openai' | 'anthropic' | 'livai' | 'ollama' | null;
   generationModel?: string | null;
   traceId: string;
 }

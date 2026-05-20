@@ -243,7 +243,7 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert response.answer == "Deterministic assistant summary."
         assert response.trace_id == trace_id
@@ -252,6 +252,57 @@ class TestSummarizeSimulationUnit:
         assert logged[0][1][0] == trace_id
         assert logged[0][1][1] == sim_id
         assert logged[0][1][2] == user.id
+
+    @pytest.mark.asyncio
+    async def test_summarize_simulation_returns_ollama_generation_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sim_id = uuid4()
+        trace_id = uuid4()
+        user = User(
+            id=uuid4(),
+            email="user@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        summary = SimulationSummaryResponse(
+            answer="LLM assistant summary.",
+            citations=[],
+            assumptions=[],
+            caveats=[],
+            limitations=["limit"],
+            suggested_followups=["follow up"],
+            generation_mode="llm",
+            generation_provider="ollama",
+            generation_model="gemma4:26b",
+            trace_id=uuid4(),
+        )
+
+        async def fake_generate(simulation):
+            assert simulation.id == sim_id
+            return type(
+                "GenerationResult",
+                (),
+                {
+                    "summary": summary,
+                    "fallback_reason": None,
+                    "llm_latency_ms": 9.0,
+                    "attempted_provider": "ollama",
+                    "attempted_model": "gemma4:26b",
+                },
+            )()
+
+        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
+
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+
+        assert response.generation_mode == "llm"
+        assert response.generation_provider == "ollama"
+        assert response.generation_model == "gemma4:26b"
+        assert response.trace_id == trace_id
 
     @pytest.mark.asyncio
     async def test_summarize_simulation_raises_404_for_missing_simulation(
@@ -277,7 +328,7 @@ class TestSummarizeSimulationUnit:
         )
 
         with pytest.raises(assistant_api.HTTPException) as exc_info:
-            await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
+            await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Simulation not found"

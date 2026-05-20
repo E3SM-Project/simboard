@@ -193,6 +193,22 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             base_url=settings.assistant_livai_base_url,
         )
 
+    if provider == "ollama":
+        if (
+            not settings.assistant_ollama_model
+            or not settings.assistant_ollama_base_url
+        ):
+            raise ValueError("ollama_misconfigured")
+        return AssistantLLMConfig(
+            provider="ollama",
+            model_name=settings.assistant_ollama_model,
+            api_key=settings.assistant_ollama_api_key,
+            timeout_seconds=settings.assistant_llm_timeout_seconds,
+            temperature=settings.assistant_llm_temperature,
+            max_tokens=settings.assistant_llm_max_tokens,
+            base_url=settings.assistant_ollama_base_url,
+        )
+
     raise ValueError("unsupported_provider")
 
 
@@ -201,7 +217,9 @@ def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
         return settings.assistant_openai_model
     if provider == "anthropic":
         return settings.assistant_anthropic_model
-    return settings.assistant_livai_model
+    if provider == "livai":
+        return settings.assistant_livai_model
+    return settings.assistant_ollama_model
 
 
 async def generate_simulation_summary(
