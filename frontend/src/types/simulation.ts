@@ -30,6 +30,7 @@ export interface SimulationSummaryResponseOut {
   limitations: string[];
   suggestedFollowups: string[];
   generationMode?: 'llm' | 'deterministic';
+  fallbackUsed?: boolean;
   generationProvider?: 'livai' | 'ollama' | null;
   generationModel?: string | null;
   traceId: string;

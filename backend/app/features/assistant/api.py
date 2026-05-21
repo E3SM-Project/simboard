@@ -72,12 +72,17 @@ async def summarize_simulation(
         raise HTTPException(status_code=404, detail="Simulation not found")
 
     generation = await generate_simulation_summary(simulation)
-    summary = generation.summary.model_copy(update={"trace_id": trace_id})
-    llm_success = summary.generation_mode == "llm"
+    llm_success = generation.summary.generation_mode == "llm"
     fallback_used = (
         not llm_success
         and generation.fallback_reason is not None
         and generation.fallback_reason != "llm_disabled"
+    )
+    summary = generation.summary.model_copy(
+        update={
+            "trace_id": trace_id,
+            "fallback_used": fallback_used,
+        }
     )
 
     duration_ms = (perf_counter() - start) * 1000

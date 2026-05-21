@@ -389,6 +389,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason == "llm_disabled"
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is False
         assert result.attempted_provider is None
         assert result.attempted_model is None
 
@@ -465,6 +466,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
+        assert result.summary.fallback_used is False
         assert result.summary.generation_provider == "ollama"
         assert result.summary.generation_model == "gemma4:26b"
         assert result.attempted_provider == "ollama"
@@ -508,6 +510,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason == "ollama_misconfigured"
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is True
         assert result.summary.generation_provider is None
         assert result.summary.generation_model is None
         assert result.attempted_provider == "ollama"
@@ -535,6 +538,7 @@ class TestGenerateSimulationSummary:
         assert result.fallback_reason is not None
         assert result.fallback_reason.startswith("Snapshot size ")
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is True
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
@@ -559,6 +563,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason == "llm_disabled"
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is False
         assert result.attempted_provider is None
         assert result.attempted_model is None
         assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
@@ -588,6 +593,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason == "missing_limitations"
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is True
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
@@ -740,6 +746,7 @@ class TestGenerateSimulationSummary:
 
         assert result.fallback_reason == "RuntimeError: boom"
         assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is True
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
 

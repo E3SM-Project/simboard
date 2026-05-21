@@ -258,6 +258,7 @@ const SummaryPanelBody = ({
   className?: string;
 }) => {
   const summaryGenerationMode = summary?.generationMode ?? 'deterministic';
+  const summaryFallbackUsed = summary?.fallbackUsed ?? false;
   const summaryGenerationProvider =
     summaryGenerationMode === 'llm' ? summary?.generationProvider ?? null : null;
   const summaryGenerationModel =
@@ -331,7 +332,7 @@ const SummaryPanelBody = ({
             )}
           </div>
 
-          {summaryGenerationMode !== 'llm' && (
+          {summaryFallbackUsed && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               AI generation did not complete for this attempt. Showing metadata-based summary
               instead.

@@ -272,6 +272,7 @@ def build_simulation_summary(
         limitations=DETERMINISTIC_LIMITATIONS,
         suggested_followups=draft.followups,
         generation_mode="deterministic",
+        fallback_used=False,
         generation_provider=None,
         generation_model=None,
         trace_id="00000000-0000-0000-0000-000000000000",

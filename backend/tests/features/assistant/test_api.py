@@ -126,6 +126,7 @@ class TestSummarizeSimulationEndpoint:
         ]
         assert isinstance(data["suggestedFollowups"], list)
         assert UUID(data["traceId"])
+        assert data["fallbackUsed"] is False
         assert {citation["path"] for citation in data["citations"]} >= {
             "simulation.execution_id",
             "case.name",
@@ -246,6 +247,7 @@ class TestSummarizeSimulationUnit:
         response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert response.answer == "Deterministic assistant summary."
+        assert response.fallback_used is False
         assert response.trace_id == trace_id
         assert logged
         assert "success=true" in logged[0][0]
@@ -310,6 +312,7 @@ class TestSummarizeSimulationUnit:
         response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert response.answer == "Deterministic fallback summary."
+        assert response.fallback_used is True
         assert response.trace_id == trace_id
         assert logged
         assert "success=true" in logged[0][0]
@@ -371,6 +374,7 @@ class TestSummarizeSimulationUnit:
         response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert response.generation_mode == "llm"
+        assert response.fallback_used is False
         assert response.generation_provider == "ollama"
         assert response.generation_model == "gemma4:26b"
         assert response.trace_id == trace_id

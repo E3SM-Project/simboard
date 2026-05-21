@@ -100,7 +100,7 @@ async def generate_simulation_summary(
             summary=_build_deterministic_response(
                 exc.snapshot,
                 include_fallback_caveat=settings.assistant_llm_enabled,
-            ),
+            ).model_copy(update={"fallback_used": settings.assistant_llm_enabled}),
             fallback_reason=str(exc)
             if settings.assistant_llm_enabled
             else "llm_disabled",
@@ -135,7 +135,7 @@ async def generate_simulation_summary(
             summary=_build_deterministic_response(
                 snapshot,
                 include_fallback_caveat=True,
-            ),
+            ).model_copy(update={"fallback_used": True}),
             fallback_reason=str(exc),
             llm_latency_ms=0.0,
             attempted_provider=attempted_provider,
@@ -153,6 +153,7 @@ async def generate_simulation_summary(
         response = SimulationSummaryResponse(
             **validated.model_dump(),
             generation_mode="llm",
+            fallback_used=False,
             generation_provider=config.provider,
             generation_model=config.model_name,
             trace_id="00000000-0000-0000-0000-000000000000",
@@ -175,7 +176,7 @@ async def generate_simulation_summary(
         summary=_build_deterministic_response(
             snapshot,
             include_fallback_caveat=True,
-        ),
+        ).model_copy(update={"fallback_used": True}),
         fallback_reason=str(fallback_reason),
         llm_latency_ms=(perf_counter() - start) * 1000,
         attempted_provider=config.provider,
