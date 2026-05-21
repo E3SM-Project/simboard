@@ -229,6 +229,11 @@ class TestValidationHelpers:
             )
         ]
 
+    def test_canonicalize_citation_path_uses_unique_suffix_without_source_type(
+        self,
+    ) -> None:
+        assert orchestrator._canonicalize_citation_path("status") == "simulation.status"
+
     def test_standardize_citations_rejects_ambiguous_suffix_path(self) -> None:
         with pytest.raises(ValueError, match="invalid_citation_path:name"):
             orchestrator._standardize_citations(
@@ -370,6 +375,12 @@ class TestValidationHelpers:
             snapshot, "links[kind=docs]"
         )
         assert not orchestrator._snapshot_has_citation_path(snapshot, "invalid.path")
+
+    def test_format_model_error_uses_exception_name_when_message_blank(self) -> None:
+        assert orchestrator._format_model_error(Exception()) == "Exception"
+
+    def test_trim_fallback_reason_adds_ellipsis_when_limit_exceeded(self) -> None:
+        assert orchestrator._trim_fallback_reason("abcdef", limit=5) == "ab..."
 
 
 class TestGenerateSimulationSummary:
