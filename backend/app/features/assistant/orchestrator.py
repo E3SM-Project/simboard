@@ -96,21 +96,47 @@ def _format_model_error(exc: Exception) -> str:
     return exc.__class__.__name__
 
 
+def _canonicalize_citation_path(path: str, source_type: str | None = None) -> str:
+    normalized = path.strip()
+    if normalized in VALID_CITATION_PATHS:
+        return normalized
+
+    matches = [
+        candidate
+        for candidate in VALID_CITATION_PATHS
+        if candidate.endswith(f".{normalized}")
+    ]
+    if source_type is not None:
+        typed_matches = [
+            candidate
+            for candidate in matches
+            if get_citation_entry(candidate).source_type == source_type
+        ]
+        if len(typed_matches) == 1:
+            return typed_matches[0]
+    if len(matches) == 1:
+        return matches[0]
+
+    raise ValueError(f"invalid_citation_path:{path}")
+
+
 def _standardize_citations(
     citations: list[SummaryCitationOut],
     snapshot: SimulationSnapshot,
 ) -> list[SummaryCitationOut]:
     normalized: list[SummaryCitationOut] = []
     for citation in citations:
-        if citation.path not in VALID_CITATION_PATHS:
-            raise ValueError(f"invalid_citation_path:{citation.path}")
-        if not snapshot_has_citation_path(snapshot, citation.path):
-            raise ValueError(f"missing_citation_path:{citation.path}")
-        entry = get_citation_entry(citation.path)
+        canonical_path = _canonicalize_citation_path(
+            citation.path,
+            citation.source_type,
+        )
+        if not snapshot_has_citation_path(snapshot, canonical_path):
+            raise ValueError(f"missing_citation_path:{canonical_path}")
+        entry = get_citation_entry(canonical_path)
         normalized.append(
             SummaryCitationOut(
                 source_type=entry.source_type,
-                path=citation.path,
+                path=canonical_path,
                 label=entry.label,
             )
         )
@@ -183,6 +209,19 @@ def _build_deterministic_response(
             "generation_provider": None,
             "generation_model": None,
         }
+    )
+
+
+def _fill_missing_llm_followups(
+    content: SimulationSummaryContent,
+    snapshot: SimulationSnapshot,
+) -> SimulationSummaryContent:
+    if content.suggested_followups:
+        return content
+
+    fallback_summary = build_simulation_summary(snapshot)
+    return content.model_copy(
+        update={"suggested_followups": fallback_summary.suggested_followups}
     )
 
 
@@ -288,6 +327,7 @@ async def generate_simulation_summary(
     start = perf_counter()
     try:
         llm_content = await generator.generate(snapshot)
+        llm_content = _fill_missing_llm_followups(llm_content, snapshot)
         validated = _validate_llm_content(llm_content, snapshot)
         response = SimulationSummaryResponse(
             **validated.model_dump(),

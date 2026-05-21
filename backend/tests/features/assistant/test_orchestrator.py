@@ -18,6 +18,7 @@ from app.features.assistant.snapshot import (
     SnapshotBudgetExceededError,
     SnapshotCaseFields,
     SnapshotLink,
+    SnapshotMachineFields,
     SnapshotSimulationFields,
 )
 from app.features.simulation.models import Simulation
@@ -208,6 +209,87 @@ class TestValidationHelpers:
                 _make_snapshot(),
             )
 
+    def test_standardize_citations_canonicalizes_unambiguous_suffix_path(self) -> None:
+        result = orchestrator._standardize_citations(
+            [
+                SummaryCitationOut(
+                    source_type="simulation_field",
+                    path="status",
+                    label="Status",
+                )
+            ],
+            _make_snapshot(),
+        )
+
+        assert result == [
+            SummaryCitationOut(
+                source_type="simulation_field",
+                path="simulation.status",
+                label="Simulation status",
+            )
+        ]
+
+    def test_standardize_citations_rejects_ambiguous_suffix_path(self) -> None:
+        with pytest.raises(ValueError, match="invalid_citation_path:name"):
+            orchestrator._standardize_citations(
+                [
+                    SummaryCitationOut(
+                        source_type="simulation_field",
+                        path="name",
+                        label="Name",
+                    )
+                ],
+                _make_snapshot(),
+            )
+
+    def test_standardize_citations_uses_source_type_to_disambiguate_suffix_path(
+        self,
+    ) -> None:
+        result = orchestrator._standardize_citations(
+            [
+                SummaryCitationOut(
+                    source_type="case_field",
+                    path="name",
+                    label="Name",
+                )
+            ],
+            _make_snapshot(),
+        )
+
+        assert result == [
+            SummaryCitationOut(
+                source_type="case_field",
+                path="case.name",
+                label="Case name",
+            )
+        ]
+
+    def test_standardize_citations_uses_source_type_for_machine_name_suffix_path(
+        self,
+    ) -> None:
+        snapshot = _make_snapshot().model_copy(
+            update={"machine": SnapshotMachineFields(name="perlmutter")}
+        )
+
+        result = orchestrator._standardize_citations(
+            [
+                SummaryCitationOut(
+                    source_type="machine_field",
+                    path="name",
+                    label="Name",
+                )
+            ],
+            snapshot,
+        )
+
+        assert result == [
+            SummaryCitationOut(
+                source_type="machine_field",
+                path="machine.name",
+                label="Machine name",
+            )
+        ]
+
     def test_standardize_citations_rejects_missing_snapshot_path(self) -> None:
         with pytest.raises(ValueError, match="missing_citation_path:machine.name"):
             orchestrator._standardize_citations(
@@ -254,6 +336,18 @@ class TestValidationHelpers:
 
         assert result.answer == (
             "Simulation assistant-livai-exec belongs to case assistant_livai_case."
+        )
+
+    def test_fill_missing_llm_followups_uses_deterministic_followups(self) -> None:
+        snapshot = _make_snapshot()
+
+        result = orchestrator._fill_missing_llm_followups(
+            _make_llm_content(suggested_followups=[]),
+            snapshot,
+        )
+
+        assert result.suggested_followups == (
+            orchestrator.build_simulation_summary(snapshot).suggested_followups
         )
 
     def test_snapshot_has_citation_path_supports_related_record_selectors(self) -> None:
@@ -495,6 +589,129 @@ class TestGenerateSimulationSummary:
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_keeps_llm_mode_when_followups_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_livai_settings(monkeypatch)
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            return _make_llm_content(suggested_followups=[])
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason is None
+        assert result.summary.generation_mode == "llm"
+        assert result.summary.generation_provider == "livai"
+        assert result.summary.generation_model == "livai-model"
+        assert result.summary.suggested_followups == (
+            orchestrator.build_simulation_summary(snapshot).suggested_followups
+        )
+        assert result.attempted_provider == "livai"
+        assert result.attempted_model == "livai-model"
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_canonicalizes_unambiguous_citation_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model="llama3.1:8b")
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            return _make_llm_content(
+                citations=[
+                    SummaryCitationOut(
+                        source_type="simulation_field",
+                        path="status",
+                        label="Status",
+                    )
+                ]
+            )
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason is None
+        assert result.summary.generation_mode == "llm"
+        assert result.summary.generation_provider == "ollama"
+        assert result.summary.generation_model == "llama3.1:8b"
+        assert result.summary.citations == [
+            SummaryCitationOut(
+                source_type="simulation_field",
+                path="simulation.status",
+                label="Simulation status",
+            )
+        ]
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model == "llama3.1:8b"
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_uses_source_type_to_fix_name_alias(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model="llama3.1:8b")
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            return _make_llm_content(
+                citations=[
+                    SummaryCitationOut(
+                        source_type="case_field",
+                        path="name",
+                        label="Name",
+                    )
+                ]
+            )
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason is None
+        assert result.summary.generation_mode == "llm"
+        assert result.summary.generation_provider == "ollama"
+        assert result.summary.generation_model == "llama3.1:8b"
+        assert result.summary.citations == [
+            SummaryCitationOut(
+                source_type="case_field",
+                path="case.name",
+                label="Case name",
+            )
+        ]
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model == "llama3.1:8b"
 
     @pytest.mark.asyncio
     async def test_generate_simulation_summary_falls_back_on_unexpected_exception(
