@@ -62,6 +62,20 @@ class SummaryLLMGenerator:
         self.config = config
 
     async def generate(self, snapshot: SimulationSnapshot) -> SimulationSummaryContent:
+        """
+        Generates a simulation summary from the given snapshot using the
+        configured LLM provider.
+
+        Parameters
+        ----------
+        snapshot : SimulationSnapshot
+            The simulation snapshot containing metadata to summarize.
+
+        Returns
+        -------
+        SimulationSummaryContent
+            The generated simulation summary content.
+        """
         async with AsyncClient(timeout=self.config.timeout_seconds) as http_client:
             model = self._build_model(http_client)
             agent = Agent(
@@ -70,15 +84,33 @@ class SummaryLLMGenerator:
                 system_prompt=SUMMARY_SYSTEM_PROMPT,
                 model_settings=self._build_model_settings(),
             )
+
             result = await agent.run(self._build_user_prompt(snapshot))
             return result.output
 
     def _build_model(self, http_client: AsyncClient) -> OpenAIChatModel:
+        """Builds the OpenAIChatModel based on the configuration and HTTP client.
+
+        For Ollama, if the API key is not set, it uses a placeholder value to
+        allow the client to initialize without credentials, since Ollama can run
+        without an API key.
+
+        Parameters
+        ----------
+        http_client : AsyncClient
+            The HTTP client to use for making requests to the LLM provider.
+
+        Returns
+        -------
+        OpenAIChatModel
+            The initialized OpenAIChatModel ready for generating summaries.
+        """
         api_key = (
             self.config.api_key.get_secret_value()
             if self.config.api_key is not None
             else None
         )
+
         if self.config.provider == "ollama":
             api_key = api_key or _OLLAMA_PLACEHOLDER_API_KEY
 
@@ -96,10 +128,11 @@ class SummaryLLMGenerator:
                     _enforce_credentials=False,
                 )
             }
-        return OpenAIChatModel(
-            self.config.model_name,
-            provider=OpenAIProvider(**provider_kwargs),
+
+        model = OpenAIChatModel(
+            self.config.model_name, provider=OpenAIProvider(**provider_kwargs)
         )
+        return model
 
     def _resolve_base_url(self) -> str | None:
         if self.config.provider != "ollama" or self.config.base_url is None:
@@ -108,17 +141,20 @@ class SummaryLLMGenerator:
         parsed = urlparse(self.config.base_url)
         if parsed.path not in {"", "/"}:
             return self.config.base_url
+
         return f"{self.config.base_url.rstrip('/')}/v1"
 
     def _build_model_settings(self) -> ModelSettings | None:
         settings: ModelSettings = {
             "max_tokens": self.config.max_tokens,
         }
+
         if not (
             self.config.provider == "livai"
             and self.config.model_name.startswith("gpt-5")
         ):
             settings["temperature"] = self.config.temperature
+
         return settings or None
 
     def _build_output_type(
@@ -126,6 +162,7 @@ class SummaryLLMGenerator:
     ) -> type[SimulationSummaryContent] | PromptedOutput[SimulationSummaryContent]:
         if self.config.provider == "ollama":
             return PromptedOutput(SimulationSummaryContent)
+
         return SimulationSummaryContent
 
     def _build_user_prompt(self, snapshot: SimulationSnapshot) -> str:
@@ -134,6 +171,7 @@ class SummaryLLMGenerator:
             for path, entry in sorted(CITATION_REGISTRY.items())
         )
         snapshot_json = snapshot.model_dump_json(indent=2, exclude_none=True)
+
         return (
             "Simulation metadata snapshot:\n"
             f"{snapshot_json}\n\n"
