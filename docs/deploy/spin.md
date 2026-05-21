@@ -50,19 +50,16 @@ Environment variable keys:
 
 Optional assistant summary keys for `simboard-backend-env` when enabling AI summaries:
 
-| Key                          | Required | Example/Allowed Value                  | Used By              |
-| ---------------------------- | -------- | -------------------------------------- | -------------------- |
-| `ASSISTANT_LLM_ENABLED`      | No       | `true` or `false`                      | `backend`, `migrate` |
-| `ASSISTANT_LLM_PROVIDER`     | No       | `ollama`, `livai`                   | `backend`, `migrate` |
-| `ASSISTANT_OLLAMA_BASE_URL`  | If using Ollama | `http://localhost:11434`         | `backend`, `migrate` |
-| `ASSISTANT_OLLAMA_MODEL`     | If using Ollama | `gemma4:26b`                     | `backend`, `migrate` |
-| `ASSISTANT_OLLAMA_API_KEY`   | No       | proxy auth token or blank              | `backend`, `migrate` |
-| `ASSISTANT_LIVAI_API_KEY`    | If using LivAI | provider secret                    | `backend`, `migrate` |
-| `ASSISTANT_LIVAI_MODEL`      | If using LivAI | provider model name                | `backend`, `migrate` |
-| `ASSISTANT_LIVAI_BASE_URL`   | If using LivAI | provider base URL                  | `backend`, `migrate` |
-| `ASSISTANT_LLM_TIMEOUT_SECONDS` | No    | `30`                                   | `backend`, `migrate` |
-| `ASSISTANT_LLM_TEMPERATURE`  | No       | `0.2`                                  | `backend`, `migrate` |
-| `ASSISTANT_LLM_MAX_TOKENS`   | No       | `2048`                                 | `backend`, `migrate` |
+| Key                             | Required        | Example/Allowed Value     | Used By              |
+| ------------------------------- | --------------- | ------------------------- | -------------------- |
+| `ASSISTANT_LLM_ENABLED`         | No              | `true` or `false`         | `backend`, `migrate` |
+| `ASSISTANT_LLM_PROVIDER`        | No              | `ollama`                  | `backend`, `migrate` |
+| `ASSISTANT_OLLAMA_BASE_URL`     | If using Ollama | `http://localhost:11434`  | `backend`, `migrate` |
+| `ASSISTANT_OLLAMA_MODEL`        | If using Ollama | `gemma4:26b`              | `backend`, `migrate` |
+| `ASSISTANT_OLLAMA_API_KEY`      | No              | proxy auth token or blank | `backend`, `migrate` |
+| `ASSISTANT_LLM_TIMEOUT_SECONDS` | No              | `30`                      | `backend`, `migrate` |
+| `ASSISTANT_LLM_TEMPERATURE`     | No              | `0.2`                     | `backend`, `migrate` |
+| `ASSISTANT_LLM_MAX_TOKENS`      | No              | `2048`                    | `backend`, `migrate` |
 
 `simboard-db`:
 
@@ -96,14 +93,14 @@ Workloads -> Deployments -> Create (top-right)
 
 Create a PersistentVolumeClaim volume for Postgres data.
 
-| Rancher field                | Value                                                  |
-| ---------------------------- | ------------------------------------------------------ |
-| Volume type                  | `PersistentVolumeClaim`                                |
-| Volume name                  | `db-data` (or your naming standard)                    |
-| Persistent Volume Claim Name | `pvc-simboard-db` (or existing claim)                  |
-| Access mode                  | `Single-Node Read/Write`                               |
-| Capacity                     | `1Gi` minimum (or larger per policy)                   |
-| Storage class                | Namespace/default class (example: `nfs-client-vast`)   |
+| Rancher field                | Value                                                |
+| ---------------------------- | ---------------------------------------------------- |
+| Volume type                  | `PersistentVolumeClaim`                              |
+| Volume name                  | `db-data` (or your naming standard)                  |
+| Persistent Volume Claim Name | `pvc-simboard-db` (or existing claim)                |
+| Access mode                  | `Single-Node Read/Write`                             |
+| Capacity                     | `1Gi` minimum (or larger per policy)                 |
+| Storage class                | Namespace/default class (example: `nfs-client-vast`) |
 
 #### 3. Container tab (`db`)
 

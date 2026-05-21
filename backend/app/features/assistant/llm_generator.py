@@ -43,6 +43,8 @@ Rules:
 - Prefer natural language over field-by-field narration.
 """.strip()
 
+_OLLAMA_PLACEHOLDER_API_KEY = "api-key-not-set"
+
 
 @dataclass(frozen=True)
 class AssistantLLMConfig:
@@ -77,6 +79,9 @@ class SummaryLLMGenerator:
             if self.config.api_key is not None
             else None
         )
+        if self.config.provider == "ollama":
+            api_key = api_key or _OLLAMA_PLACEHOLDER_API_KEY
+
         provider_kwargs = {
             "api_key": api_key,
             "base_url": self._resolve_base_url(),

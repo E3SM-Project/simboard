@@ -68,6 +68,7 @@ class TestSummaryLLMGenerator:
             model = SummaryLLMGenerator(config)._build_model(http_client=http_client)
 
         assert str(model.client.base_url) == "http://localhost:11434/v1/"
+        assert model.client.api_key == "api-key-not-set"
 
     @pytest.mark.asyncio
     async def test_build_model_preserves_explicit_ollama_v1_base_url(self) -> None:

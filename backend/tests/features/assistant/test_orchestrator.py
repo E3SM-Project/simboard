@@ -360,14 +360,16 @@ class TestValidationHelpers:
             }
         )
 
-        assert orchestrator.snapshot_has_citation_path(
+        assert orchestrator._snapshot_has_citation_path(
             snapshot, "artifacts[kind=output]"
         )
-        assert orchestrator.snapshot_has_citation_path(
+        assert orchestrator._snapshot_has_citation_path(
             snapshot, "links[kind=diagnostic]"
         )
-        assert not orchestrator.snapshot_has_citation_path(snapshot, "links[kind=docs]")
-        assert not orchestrator.snapshot_has_citation_path(snapshot, "invalid.path")
+        assert not orchestrator._snapshot_has_citation_path(
+            snapshot, "links[kind=docs]"
+        )
+        assert not orchestrator._snapshot_has_citation_path(snapshot, "invalid.path")
 
 
 class TestGenerateSimulationSummary:
@@ -736,7 +738,7 @@ class TestGenerateSimulationSummary:
 
         result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
 
-        assert result.fallback_reason == "RuntimeError"
+        assert result.fallback_reason == "RuntimeError: boom"
         assert result.summary.generation_mode == "deterministic"
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
