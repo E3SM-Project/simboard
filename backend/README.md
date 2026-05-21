@@ -49,9 +49,10 @@ Assistant summary configuration uses the `ASSISTANT_*` namespace:
 - `ASSISTANT_LLM_MAX_TOKENS`
 - `ASSISTANT_SNAPSHOT_MAX_CHARS`
 
-For local open-weight runs, prefer Ollama with Gemma 4:
+For local open-weight runs, prefer Ollama with one of these models:
 
-- `gemma4:e4b` for fast local iteration and prompt-contract checks
+- `llama3.1:8b` for faster local iteration on developer hardware
+- `gemma4:e4b` for local quality checks when hardware and latency budget allow it
 - `gemma4:26b` for preferred summary quality checks
 - `gemma4:31b` only if local hardware can support it
 
@@ -59,11 +60,12 @@ Quick start (from repo root):
 
 ```bash
 # Pull models
-make ollama-pull-e4b   # fast dev model (~4GB)
-make ollama-pull-26b   # quality model (~26GB)
+make ollama-pull-fast          # llama3.1:8b, fast dev model (~5GB)
+make ollama-pull-dev           # gemma4:e4b, stronger dev model (~9GB)
+make ollama-pull-quality       # gemma4:26b, quality model (~26GB)
 
-# Optional: configure keep-alive to eliminate model reload latency
-make ollama-setup-macos
+# Start local Ollama runtime with keep-alive enabled
+make ollama-serve
 ```
 
 On macOS, prefer native Ollama install for local development. Docker Desktop does not provide GPU passthrough for Ollama on macOS, so containerized local runs are typically much slower and are not the recommended default.

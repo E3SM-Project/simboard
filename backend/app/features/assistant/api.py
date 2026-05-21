@@ -56,7 +56,7 @@ async def summarize_simulation(
         duration_ms = (perf_counter() - start) * 1000
         logger.info(
             "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=false "
-            "status=not_found latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
+            "status=not_found llm_success=false fallback_used=false latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
             "generation_provider=%s generation_model=%s fallback_reason=%s "
             "citation_count=0 caveat_count=0",
             trace_id,
@@ -73,15 +73,23 @@ async def summarize_simulation(
 
     generation = await generate_simulation_summary(simulation)
     summary = generation.summary.model_copy(update={"trace_id": trace_id})
+    llm_success = summary.generation_mode == "llm"
+    fallback_used = (
+        not llm_success
+        and generation.fallback_reason is not None
+        and generation.fallback_reason != "llm_disabled"
+    )
 
     duration_ms = (perf_counter() - start) * 1000
     logger.info(
         "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=true "
-        "latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s generation_provider=%s "
-        "generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
+        "llm_success=%s fallback_used=%s latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
+        "generation_provider=%s generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
         trace_id,
         simulation.id,
         user.id,
+        str(llm_success).lower(),
+        str(fallback_used).lower(),
         duration_ms,
         generation.llm_latency_ms,
         summary.generation_mode,

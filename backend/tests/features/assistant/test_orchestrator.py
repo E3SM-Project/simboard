@@ -2,6 +2,7 @@ from typing import cast
 
 import pytest
 from pydantic import SecretStr
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 
 from app.core.config import settings
 from app.features.assistant import orchestrator
@@ -184,6 +185,16 @@ class TestResolveLLMConfig:
 
 
 class TestValidationHelpers:
+    def test_normalize_llm_answer_strips_inline_citation_markers(self) -> None:
+        answer = (
+            "This simulation completed [simulation.status]. It ran on chrysalis "
+            "[machine.name] and used WCYCL20TR [simulation.compset]."
+        )
+
+        assert orchestrator._normalize_llm_answer(answer) == (
+            "This simulation completed. It ran on chrysalis and used WCYCL20TR."
+        )
+
     def test_standardize_citations_rejects_invalid_path(self) -> None:
         with pytest.raises(ValueError, match="invalid_citation_path:invalid.path"):
             orchestrator._standardize_citations(
@@ -229,6 +240,21 @@ class TestValidationHelpers:
                 _make_llm_content(**overrides),
                 _make_snapshot(),
             )
+
+    def test_validate_llm_content_normalizes_inline_citation_markers(self) -> None:
+        result = orchestrator._validate_llm_content(
+            _make_llm_content(
+                answer=(
+                    "Simulation assistant-livai-exec belongs to case "
+                    "assistant_livai_case [case.name]."
+                )
+            ),
+            _make_snapshot(),
+        )
+
+        assert result.answer == (
+            "Simulation assistant-livai-exec belongs to case assistant_livai_case."
+        )
 
     def test_snapshot_has_citation_path_supports_related_record_selectors(self) -> None:
         snapshot = _make_snapshot().model_copy(
@@ -497,3 +523,65 @@ class TestGenerateSimulationSummary:
         assert result.summary.generation_mode == "deterministic"
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_preserves_model_api_error_details(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model="gemma4:e4b")
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            raise ModelAPIError("gemma4:e4b", "unsupported value for tools")
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason == ("ModelAPIError: unsupported value for tools")
+        assert result.summary.generation_mode == "deterministic"
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model == "gemma4:e4b"
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_preserves_model_http_error_details(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_ollama_settings(monkeypatch, model="gemma4:e4b")
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        async def fake_generate(self, snapshot_arg):
+            raise ModelHTTPError(
+                400,
+                "gemma4:e4b",
+                {"error": {"message": "unknown field `tools`"}},
+            )
+
+        monkeypatch.setattr(
+            orchestrator.SummaryLLMGenerator,
+            "generate",
+            fake_generate,
+        )
+
+        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+
+        assert result.fallback_reason == (
+            'ModelHTTPError: status_code=400; body={"error": {"message": "unknown field `tools`"}}'
+        )
+        assert result.summary.generation_mode == "deterministic"
+        assert result.attempted_provider == "ollama"
+        assert result.attempted_model == "gemma4:e4b"

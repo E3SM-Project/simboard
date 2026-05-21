@@ -72,6 +72,13 @@ help:
 	@echo "  make pre-commit-run                        # Run all pre-commit hooks"
 	@echo ""
 
+	@echo "$(BLUE)Ollama (Local LLM):$(NC)"
+	@echo "  make ollama-serve                          # Start Ollama server with OLLAMA_KEEP_ALIVE=-1"
+	@echo "  make ollama-pull-fast                      # Pull llama3.1:8b (fast dev model)"
+	@echo "  make ollama-pull-dev                       # Pull gemma4:e4b (stronger dev model)"
+	@echo "  make ollama-pull-quality                   # Pull gemma4:26b (quality model)"
+	@echo ""
+
 	@echo "$(BLUE)Docker Compose:$(NC)"
 	@echo "  make docker-build svc=<svc>                # Build Docker image(s)"
 	@echo "  make docker-rebuild svc=<svc>              # Build Docker image(s) without cache"
@@ -310,3 +317,37 @@ docker-ps:
 
 docker-config:
 	$(COMPOSE) config
+
+# ============================================================
+# 🤖 OLLAMA LOCAL LLM COMMANDS
+# ============================================================
+
+.PHONY: \
+	ollama-serve \
+	ollama-pull-fast \
+	ollama-pull-dev \
+	ollama-pull-quality \
+	ollama-pull-e4b \
+	ollama-pull-26b
+
+ollama-serve:
+	@echo "$(GREEN)🚀 Starting Ollama server with OLLAMA_KEEP_ALIVE=-1...$(NC)"
+	OLLAMA_KEEP_ALIVE=-1 ollama serve
+
+ollama-pull-fast:
+	@echo "$(GREEN)📥 Pulling llama3.1:8b (fast dev model)...$(NC)"
+	ollama pull llama3.1:8b
+
+ollama-pull-dev:
+	@echo "$(GREEN)📥 Pulling gemma4:e4b (stronger dev model)...$(NC)"
+	ollama pull gemma4:e4b
+
+ollama-pull-quality:
+	@echo "$(GREEN)📥 Pulling gemma4:26b (quality model)...$(NC)"
+	ollama pull gemma4:26b
+
+ollama-pull-e4b:
+	@$(MAKE) ollama-pull-dev
+
+ollama-pull-26b:
+	@$(MAKE) ollama-pull-quality

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from time import perf_counter
 
 from pydantic import ValidationError
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+)
 
 from app.core.config import settings
 from app.features.assistant.llm_generator import AssistantLLMConfig, SummaryLLMGenerator
@@ -70,6 +77,25 @@ class SummaryGenerationResult:
     attempted_model: str | None
 
 
+def _trim_fallback_reason(value: str, limit: int = 500) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3]}..."
+
+
+def _format_model_error(exc: Exception) -> str:
+    if isinstance(exc, ModelHTTPError):
+        body = exc.body
+        if body is not None and not isinstance(body, str):
+            body = json.dumps(body, sort_keys=True)
+        return _trim_fallback_reason(
+            f"{exc.__class__.__name__}: status_code={exc.status_code}; body={body}"
+        )
+    if isinstance(exc, (ModelAPIError, UnexpectedModelBehavior)):
+        return _trim_fallback_reason(f"{exc.__class__.__name__}: {exc}")
+    return exc.__class__.__name__
+
+
 def _standardize_citations(
     citations: list[SummaryCitationOut],
     snapshot: SimulationSnapshot,
@@ -102,11 +128,26 @@ def _merge_unique_strings(*groups: list[str]) -> list[str]:
     return merged
 
 
+_INLINE_CITATION_RE = re.compile(
+    r"\s*\[(?:simulation|case|machine|artifacts|links)[^\]]+\]"
+)
+_MULTISPACE_RE = re.compile(r"\s+")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.;:])")
+
+
+def _normalize_llm_answer(answer: str) -> str:
+    cleaned = _INLINE_CITATION_RE.sub("", answer)
+    cleaned = _MULTISPACE_RE.sub(" ", cleaned).strip()
+    cleaned = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", cleaned)
+    return cleaned
+
+
 def _validate_llm_content(
     content: SimulationSummaryContent,
     snapshot: SimulationSnapshot,
 ) -> SimulationSummaryContent:
-    if not content.answer.strip():
+    normalized_answer = _normalize_llm_answer(content.answer)
+    if not normalized_answer:
         raise ValueError("empty_answer")
     if not content.citations:
         raise ValueError("missing_citations")
@@ -117,6 +158,7 @@ def _validate_llm_content(
 
     return content.model_copy(
         update={
+            "answer": normalized_answer,
             "citations": _standardize_citations(content.citations, snapshot),
             "caveats": _merge_unique_strings(
                 snapshot.snapshot_caveats, content.caveats
@@ -264,7 +306,7 @@ async def generate_simulation_summary(
     except (ValidationError, ValueError) as exc:
         fallback_reason = getattr(exc, "args", ["llm_validation_failed"])[0]
     except Exception as exc:  # pragma: no cover - exercised via patched tests
-        fallback_reason = exc.__class__.__name__
+        fallback_reason = _format_model_error(exc)
 
     return SummaryGenerationResult(
         summary=_build_deterministic_response(

@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from httpx import AsyncClient
+from openai import AsyncOpenAI
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.output import PromptedOutput
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
@@ -28,6 +30,12 @@ Rules:
 - Keep claims grounded in citations.
 - Use only allowed citation paths and source types provided in prompt.
 - Produce concise, factual output for all structured fields.
+- Keep `answer` to 2-4 short sentences and under 120 words.
+- Prioritize the few most decision-useful facts: status, case/campaign, configuration, machine, and notable provenance or timing only when material.
+- Do not enumerate every available field.
+- Do not repeat raw citation paths or add inline bracketed citations such as `[simulation.status]` inside the answer text.
+- Put evidence only in the structured `citations` field, not inline in prose.
+- Prefer natural language over field-by-field narration.
 """.strip()
 
 
@@ -51,7 +59,7 @@ class SummaryLLMGenerator:
             model = self._build_model(http_client)
             agent = Agent(
                 model,
-                output_type=SimulationSummaryContent,
+                output_type=self._build_output_type(),
                 system_prompt=SUMMARY_SYSTEM_PROMPT,
                 model_settings=self._build_model_settings(),
             )
@@ -64,13 +72,23 @@ class SummaryLLMGenerator:
             if self.config.api_key is not None
             else None
         )
+        provider_kwargs = {
+            "api_key": api_key,
+            "base_url": self._resolve_base_url(),
+            "http_client": http_client,
+        }
+        if self.config.provider == "ollama":
+            provider_kwargs = {
+                "openai_client": AsyncOpenAI(
+                    **provider_kwargs,
+                    max_retries=0,
+                    timeout=self.config.timeout_seconds,
+                    _enforce_credentials=False,
+                )
+            }
         return OpenAIChatModel(
             self.config.model_name,
-            provider=OpenAIProvider(
-                api_key=api_key,
-                base_url=self._resolve_base_url(),
-                http_client=http_client,
-            ),
+            provider=OpenAIProvider(**provider_kwargs),
         )
 
     def _resolve_base_url(self) -> str | None:
@@ -92,6 +110,13 @@ class SummaryLLMGenerator:
         ):
             settings["temperature"] = self.config.temperature
         return settings or None
+
+    def _build_output_type(
+        self,
+    ) -> type[SimulationSummaryContent] | PromptedOutput[SimulationSummaryContent]:
+        if self.config.provider == "ollama":
+            return PromptedOutput(SimulationSummaryContent)
+        return SimulationSummaryContent
 
     def _build_user_prompt(self, snapshot: SimulationSnapshot) -> str:
         allowed_citations = "\n".join(
