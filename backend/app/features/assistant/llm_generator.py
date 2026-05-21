@@ -29,7 +29,12 @@ Rules:
 - If metadata is missing or truncated, say so in caveats.
 - Keep claims grounded in citations.
 - Use only allowed citation paths and source types provided in prompt.
+- Every `citations.path` value must exactly match one allowed path string.
+- Never shorten or rewrite citation paths. For example, use `simulation.status`, `case.name`, and `machine.name`, not `status` or `name`.
+- If you cannot cite a claim with an exact allowed path, omit that claim instead of inventing a citation path.
 - Produce concise, factual output for all structured fields.
+- Return every structured field required by schema, even when brief.
+- `suggested_followups` must contain at least one concrete item.
 - Keep `answer` to 2-4 short sentences and under 120 words.
 - Prioritize the few most decision-useful facts: status, case/campaign, configuration, machine, and notable provenance or timing only when material.
 - Do not enumerate every available field.

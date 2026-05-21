@@ -178,6 +178,17 @@ class TestSummaryLLMGenerator:
             in llm_generator.SUMMARY_SYSTEM_PROMPT
         )
         assert "Do not repeat raw citation paths" in llm_generator.SUMMARY_SYSTEM_PROMPT
+        assert (
+            "Every `citations.path` value must exactly match one allowed path string."
+            in (llm_generator.SUMMARY_SYSTEM_PROMPT)
+        )
+        assert (
+            "use `simulation.status`, `case.name`, and `machine.name`, not `status` or `name`."
+            in llm_generator.SUMMARY_SYSTEM_PROMPT
+        )
+        assert "`suggested_followups` must contain at least one concrete item." in (
+            llm_generator.SUMMARY_SYSTEM_PROMPT
+        )
 
     def test_build_output_type_uses_prompted_output_for_ollama(self) -> None:
         output_type = SummaryLLMGenerator(
