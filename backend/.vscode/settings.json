@@ -23,6 +23,9 @@
   // Type checking
   // ===================
   "mypy-type-checker.args": ["--config=pyproject.toml"],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.autoImportCompletions": true,
 
   // ===================
   // Testing settings

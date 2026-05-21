@@ -34,4 +34,10 @@ make backend-migrate m='message'
 make backend-upgrade
 ```
 
-For repo-wide setup and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).
+## Configuration
+
+Backend env templates live in `.envs/example/backend.env.example`. Local developer values live in `.envs/local/backend.env`.
+
+Restart the backend after changing local env values.
+
+For repo-wide setup, assistant LLM configuration, and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).

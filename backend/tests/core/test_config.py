@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from app.core.config import get_env_file, settings
+from app.core.config import Settings, get_env_file, settings
 
 
 class TestGetEnvFile:
@@ -145,3 +145,97 @@ class TestSettings:
             "https://example1.com",
             "https://example2.com",
         ]
+
+    def test_assistant_livai_env_names_are_canonical_and_strip_whitespace(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            assistant_livai_base_url=" https://livai-api.llnl.gov/  ",
+            assistant_livai_api_key="livai-key",
+        )
+
+        assert configured.assistant_livai_base_url == "https://livai-api.llnl.gov/"
+        assert configured.assistant_livai_api_key is not None
+        assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
+
+    def test_assistant_llm_provider_defaults_to_ollama(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+        )
+
+        assert configured.assistant_llm_provider == "ollama"
+
+    def test_assistant_ollama_env_names_are_canonical_and_strip_whitespace(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            assistant_ollama_base_url=" http://localhost:11434/  ",
+            assistant_ollama_api_key="ollama-key",
+            assistant_ollama_model="gemma4:26b",
+        )
+
+        assert configured.assistant_ollama_base_url == "http://localhost:11434"
+        assert configured.assistant_ollama_model == "gemma4:26b"
+        assert configured.assistant_ollama_api_key is not None
+        assert configured.assistant_ollama_api_key.get_secret_value() == "ollama-key"
+
+    def test_assistant_ollama_model_accepts_arbitrary_string(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            assistant_ollama_model="gemma4:26b-q4_K_M",
+        )
+
+        assert configured.assistant_ollama_model == "gemma4:26b-q4_K_M"
+
+    def test_assistant_llm_tuning_env_values_load_from_settings(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+            ASSISTANT_LLM_TEMPERATURE="0.2",
+            ASSISTANT_LLM_MAX_TOKENS="2048",
+        )
+
+        assert configured.assistant_llm_temperature == 0.2
+        assert configured.assistant_llm_max_tokens == 2048
