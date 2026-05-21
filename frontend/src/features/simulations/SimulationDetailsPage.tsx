@@ -122,6 +122,8 @@ export const SimulationDetailsPage = () => {
       summaryLoading={summary.loading}
       summaryError={summary.error}
       summaryRequested={summary.requested}
+      summaryElapsedMs={summary.elapsedMs}
+      summaryLastDurationMs={summary.lastDurationMs}
       onGenerateSummary={summary.generate}
       canGenerateSummary={isAuthenticated}
       isCheckingAuth={authLoading}

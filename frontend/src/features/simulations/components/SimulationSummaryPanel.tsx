@@ -27,11 +27,25 @@ interface SimulationSummaryPanelProps {
   summaryLoading?: boolean;
   summaryError?: string | null;
   summaryRequested?: boolean;
+  summaryElapsedMs?: number;
+  summaryLastDurationMs?: number | null;
   onGenerateSummary?: () => void | Promise<void>;
   canGenerateSummary?: boolean;
   isCheckingAuth?: boolean;
   onLoginForSummary?: () => void;
 }
+
+const formatSummaryRuntime = (durationMs: number) => {
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes === 0) {
+    return `${totalSeconds}s`;
+  }
+
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+};
 
 const getSummaryActionLabel = ({
   summary,
@@ -223,6 +237,8 @@ const SummaryPanelBody = ({
   summaryLoading = false,
   summaryError = null,
   summaryRequested = false,
+  summaryElapsedMs = 0,
+  summaryLastDurationMs = null,
   canGenerateSummary = false,
   isCheckingAuth = false,
   scrollable = false,
@@ -233,6 +249,8 @@ const SummaryPanelBody = ({
   | 'summaryLoading'
   | 'summaryError'
   | 'summaryRequested'
+  | 'summaryElapsedMs'
+  | 'summaryLastDurationMs'
   | 'canGenerateSummary'
   | 'isCheckingAuth'
 > & {
@@ -263,15 +281,26 @@ const SummaryPanelBody = ({
 
       {summaryError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {summaryError}
+          <div>{summaryError}</div>
+          {summaryLastDurationMs !== null && (
+            <div className="mt-1 text-xs text-red-600/80">
+              Latest attempt ran for {formatSummaryRuntime(summaryLastDurationMs)}.
+            </div>
+          )}
         </div>
       )}
 
       {summaryLoading && !summary && (
         <div className="flex min-h-[220px] items-center rounded-md border bg-white/80 px-4 py-5">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" />
-            Generating summary from SimBoard metadata...
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Spinner className="size-4" />
+              Generating summary from SimBoard metadata...
+            </div>
+            <div className="pl-6 text-xs text-slate-500">
+              {formatSummaryRuntime(summaryElapsedMs)} elapsed. This can fall back to a
+              metadata-based summary if AI generation stalls or fails.
+            </div>
           </div>
         </div>
       )}
@@ -295,7 +324,19 @@ const SummaryPanelBody = ({
                 {summaryGenerationModel ? ` · ${summaryGenerationModel}` : ''}
               </span>
             )}
+            {summaryLastDurationMs !== null && (
+              <span className="text-sm text-muted-foreground">
+                Runtime: {formatSummaryRuntime(summaryLastDurationMs)}
+              </span>
+            )}
           </div>
+
+          {summaryGenerationMode !== 'llm' && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              AI generation did not complete for this attempt. Showing metadata-based summary
+              instead.
+            </div>
+          )}
 
           <div>
             <Label className="mb-2 block text-xs text-muted-foreground">Summary</Label>
@@ -329,6 +370,8 @@ export const SimulationSummaryRail = ({
   summaryLoading = false,
   summaryError = null,
   summaryRequested = false,
+  summaryElapsedMs = 0,
+  summaryLastDurationMs = null,
   onGenerateSummary,
   canGenerateSummary = false,
   isCheckingAuth = false,
@@ -361,6 +404,8 @@ export const SimulationSummaryRail = ({
         summaryLoading={summaryLoading}
         summaryError={summaryError}
         summaryRequested={summaryRequested}
+        summaryElapsedMs={summaryElapsedMs}
+        summaryLastDurationMs={summaryLastDurationMs}
         canGenerateSummary={canGenerateSummary}
         isCheckingAuth={isCheckingAuth}
         scrollable
@@ -374,6 +419,8 @@ export const SimulationSummaryLauncher = ({
   summaryLoading = false,
   summaryError = null,
   summaryRequested = false,
+  summaryElapsedMs = 0,
+  summaryLastDurationMs = null,
   onGenerateSummary,
   canGenerateSummary = false,
   isCheckingAuth = false,
@@ -402,11 +449,15 @@ export const SimulationSummaryLauncher = ({
         <CardContent className="flex items-center justify-between gap-3 pt-0">
           <p className="text-sm text-muted-foreground">
             {summary
-              ? 'Summary is ready to review.'
+              ? summaryLastDurationMs !== null
+                ? `Summary ready. Latest attempt took ${formatSummaryRuntime(summaryLastDurationMs)}.`
+                : 'Summary is ready to review.'
               : summaryError
-                ? 'Review the latest summary error.'
+                ? summaryLastDurationMs !== null
+                  ? `Latest summary attempt failed after ${formatSummaryRuntime(summaryLastDurationMs)}.`
+                  : 'Review the latest summary error.'
                 : summaryLoading
-                  ? 'Summary generation is in progress.'
+                  ? `Summary generation is in progress. ${formatSummaryRuntime(summaryElapsedMs)} elapsed.`
                   : canGenerateSummary
                     ? 'Generate a metadata-based summary when you need a quick overview.'
                     : 'Log in to generate a metadata-based summary for this run.'}
@@ -451,6 +502,8 @@ export const SimulationSummaryLauncher = ({
                 summaryLoading={summaryLoading}
                 summaryError={summaryError}
                 summaryRequested={summaryRequested}
+                summaryElapsedMs={summaryElapsedMs}
+                summaryLastDurationMs={summaryLastDurationMs}
                 canGenerateSummary={canGenerateSummary}
                 isCheckingAuth={isCheckingAuth}
               />

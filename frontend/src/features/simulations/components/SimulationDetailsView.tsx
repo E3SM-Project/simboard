@@ -41,6 +41,8 @@ interface SimulationDetailsViewProps {
   summaryLoading?: boolean;
   summaryError?: string | null;
   summaryRequested?: boolean;
+  summaryElapsedMs?: number;
+  summaryLastDurationMs?: number | null;
   onGenerateSummary?: () => void | Promise<void>;
   canGenerateSummary?: boolean;
   isCheckingAuth?: boolean;
@@ -115,6 +117,8 @@ export const SimulationDetailsView = ({
   summaryLoading = false,
   summaryError = null,
   summaryRequested = false,
+  summaryElapsedMs = 0,
+  summaryLastDurationMs = null,
   onGenerateSummary,
   canGenerateSummary = false,
   isCheckingAuth = false,
@@ -235,6 +239,8 @@ export const SimulationDetailsView = ({
               summaryLoading={summaryLoading}
               summaryError={summaryError}
               summaryRequested={summaryRequested}
+              summaryElapsedMs={summaryElapsedMs}
+              summaryLastDurationMs={summaryLastDurationMs}
               onGenerateSummary={onGenerateSummary}
               canGenerateSummary={canGenerateSummary}
               isCheckingAuth={isCheckingAuth}
@@ -882,6 +888,8 @@ export const SimulationDetailsView = ({
                   summaryLoading={summaryLoading}
                   summaryError={summaryError}
                   summaryRequested={summaryRequested}
+                  summaryElapsedMs={summaryElapsedMs}
+                  summaryLastDurationMs={summaryLastDurationMs}
                   onGenerateSummary={onGenerateSummary}
                   canGenerateSummary={canGenerateSummary}
                   isCheckingAuth={isCheckingAuth}
