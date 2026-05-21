@@ -130,13 +130,24 @@ On macOS, native Ollama is recommended. Docker Desktop on macOS does not support
 ASSISTANT_LLM_ENABLED=true
 ASSISTANT_LLM_PROVIDER=livai
 ASSISTANT_LIVAI_API_KEY=
-ASSISTANT_LIVAI_MODEL=
+ASSISTANT_LIVAI_MODEL=gpt-5.4
 ASSISTANT_LIVAI_BASE_URL=https://livai-api.llnl.gov/
 ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=2048
+ASSISTANT_LLM_MAX_TOKENS=8192
+ASSISTANT_SNAPSHOT_MAX_CHARS=12000
 ```
 
 For LivAI, `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, and `ASSISTANT_LIVAI_BASE_URL` are required.
+
+**Model selection:**
+
+- **Recommended:** `gpt-5.4` (full model) — reliable structured output completion, handles 8K+ token responses
+- **Avoid:** `gpt-5.4-mini` — may truncate structured responses before completing all required fields (`limitations`, `citations`, `suggested_followups`)
+
+**Token budget guidance:**
+
+- `ASSISTANT_LLM_MAX_TOKENS`: 4096-8192 for `gpt-5.4`; 2048 for mini models (if used despite limitations)
+- `ASSISTANT_SNAPSHOT_MAX_CHARS`: 12000-16000 balances detail vs token budget; reduce to 8000-10000 for mini models
 
 For current LivAI OpenAI-compatible chat endpoints, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter. `ASSISTANT_LLM_MAX_TOKENS` still applies.
 
