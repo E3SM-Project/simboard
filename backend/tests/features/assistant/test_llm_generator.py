@@ -85,22 +85,6 @@ class TestSummaryLLMGenerator:
 
         assert str(model.client.base_url) == "http://localhost:11434/v1/"
 
-    @pytest.mark.asyncio
-    async def test_build_model_uses_anthropic_provider(self) -> None:
-        config = AssistantLLMConfig(
-            provider="anthropic",
-            model_name="claude-test",
-            api_key=SecretStr("anthropic-key"),
-            timeout_seconds=30.0,
-            temperature=0.2,
-            max_tokens=2048,
-        )
-
-        async with AsyncClient() as http_client:
-            model = SummaryLLMGenerator(config)._build_model(http_client=http_client)
-
-        assert model.__class__.__name__ == "AnthropicModel"
-
     def test_build_model_settings_omits_temperature_for_livai_gpt5(self) -> None:
         config = AssistantLLMConfig(
             provider="livai",
@@ -132,14 +116,15 @@ class TestSummaryLLMGenerator:
             "max_tokens": 2048,
         }
 
-    def test_build_model_settings_includes_tuning_for_openai(self) -> None:
+    def test_build_model_settings_includes_tuning_for_ollama(self) -> None:
         config = AssistantLLMConfig(
-            provider="openai",
-            model_name="gpt-test",
-            api_key=SecretStr("openai-key"),
+            provider="ollama",
+            model_name="gemma4:26b",
+            api_key=None,
             timeout_seconds=30.0,
             temperature=0.2,
             max_tokens=2048,
+            base_url="http://localhost:11434",
         )
 
         assert SummaryLLMGenerator(config)._build_model_settings() == {
@@ -150,12 +135,13 @@ class TestSummaryLLMGenerator:
     def test_build_user_prompt_includes_snapshot_and_allowed_citations(self) -> None:
         prompt = SummaryLLMGenerator(
             AssistantLLMConfig(
-                provider="openai",
-                model_name="gpt-test",
-                api_key=SecretStr("openai-key"),
+                provider="livai",
+                model_name="livai-model",
+                api_key=SecretStr("livai-key"),
                 timeout_seconds=30.0,
                 temperature=0.2,
                 max_tokens=2048,
+                base_url="https://example.livai.test/v1",
             )
         )._build_user_prompt(_make_snapshot())
 
@@ -200,12 +186,13 @@ class TestSummaryLLMGenerator:
 
         generator = SummaryLLMGenerator(
             AssistantLLMConfig(
-                provider="openai",
-                model_name="gpt-test",
-                api_key=SecretStr("openai-key"),
+                provider="livai",
+                model_name="livai-model",
+                api_key=SecretStr("livai-key"),
                 timeout_seconds=30.0,
                 temperature=0.2,
                 max_tokens=2048,
+                base_url="https://example.livai.test/v1",
             )
         )
 

@@ -146,36 +146,6 @@ def _build_deterministic_response(
 
 def _resolve_llm_config() -> AssistantLLMConfig:
     provider = settings.assistant_llm_provider
-    if provider == "openai":
-        if (
-            settings.assistant_openai_api_key is None
-            or not settings.assistant_openai_model
-        ):
-            raise ValueError("openai_misconfigured")
-        return AssistantLLMConfig(
-            provider="openai",
-            model_name=settings.assistant_openai_model,
-            api_key=settings.assistant_openai_api_key,
-            timeout_seconds=settings.assistant_llm_timeout_seconds,
-            temperature=settings.assistant_llm_temperature,
-            max_tokens=settings.assistant_llm_max_tokens,
-        )
-
-    if provider == "anthropic":
-        if (
-            settings.assistant_anthropic_api_key is None
-            or not settings.assistant_anthropic_model
-        ):
-            raise ValueError("anthropic_misconfigured")
-        return AssistantLLMConfig(
-            provider="anthropic",
-            model_name=settings.assistant_anthropic_model,
-            api_key=settings.assistant_anthropic_api_key,
-            timeout_seconds=settings.assistant_llm_timeout_seconds,
-            temperature=settings.assistant_llm_temperature,
-            max_tokens=settings.assistant_llm_max_tokens,
-        )
-
     if provider == "livai":
         if (
             settings.assistant_livai_api_key is None
@@ -213,10 +183,6 @@ def _resolve_llm_config() -> AssistantLLMConfig:
 
 
 def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
-    if provider == "openai":
-        return settings.assistant_openai_model
-    if provider == "anthropic":
-        return settings.assistant_anthropic_model
     if provider == "livai":
         return settings.assistant_livai_model
     return settings.assistant_ollama_model

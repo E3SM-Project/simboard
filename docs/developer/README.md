@@ -66,10 +66,8 @@ If you want the simulation details page to use LLM-backed summaries instead of d
 Canonical assistant env names:
 
 - `ASSISTANT_LLM_ENABLED`
-- `ASSISTANT_LLM_PROVIDER` with `ollama`, `openai`, `anthropic`, or `livai`
+- `ASSISTANT_LLM_PROVIDER` with `ollama` or `livai`
 - `ASSISTANT_OLLAMA_API_KEY` / `ASSISTANT_OLLAMA_MODEL` / `ASSISTANT_OLLAMA_BASE_URL`
-- `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
-- `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
 - `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
 - `ASSISTANT_LLM_TEMPERATURE` default `0.2`
 - `ASSISTANT_LLM_MAX_TOKENS` default `2048`
@@ -98,19 +96,79 @@ ASSISTANT_LLM_MAX_TOKENS=2048
 Recommended Ollama workflow:
 
 1. On macOS, install Ollama natively using the official setup guide: https://docs.ollama.com/quickstart
-2. Pull `gemma4:e4b` for fast local iteration:
+2. Pull models:
 
    ```bash
-   ollama pull gemma4:e4b
+   make ollama-pull-e4b  # gemma4:e4b for fast dev (~4GB)
+   make ollama-pull-26b  # gemma4:26b for quality (~26GB)
    ```
 
-3. Pull `gemma4:26b` for preferred summary quality checks:
+3. (Optional) Configure Ollama to keep models loaded indefinitely to eliminate reload latency on subsequent requests. By default, Ollama unloads models after 5 minutes of inactivity. To keep models resident:
+
+   **macOS:**
 
    ```bash
-   ollama pull gemma4:26b
+   make ollama-setup-macos
    ```
+
+   This creates `~/Library/LaunchAgents/com.ollama.plist` with `OLLAMA_KEEP_ALIVE=-1` and loads it. To manually create or unload, see below.
+
+   <details>
+   <summary>Manual LaunchAgent setup</summary>
+
+   Create `~/Library/LaunchAgents/com.ollama.plist`:
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+       <key>Label</key>
+       <string>com.ollama</string>
+       <key>ProgramArguments</key>
+       <array>
+           <string>/usr/local/bin/ollama</string>
+           <string>serve</string>
+       </array>
+       <key>EnvironmentVariables</key>
+       <dict>
+           <key>OLLAMA_KEEP_ALIVE</key>
+           <string>-1</string>
+       </dict>
+       <key>RunAtLoad</key>
+       <true/>
+       <key>KeepAlive</key>
+       <true/>
+       <key>StandardOutPath</key>
+       <string>/tmp/ollama.log</string>
+       <key>StandardErrorPath</key>
+       <string>/tmp/ollama.err</string>
+   </dict>
+   </plist>
+   ```
+
+   Replace `/usr/local/bin/ollama` with your Ollama path from `which ollama`. Then load:
+
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.ollama.plist
+   ```
+
+   </details>
+
+   **Linux (systemd):**
+
+   ```bash
+   sudo systemctl edit ollama
+   # Add under [Service]:
+   Environment="OLLAMA_KEEP_ALIVE=-1"
+
+   sudo systemctl restart ollama
+   ```
+
+   `OLLAMA_KEEP_ALIVE=-1` keeps models loaded indefinitely. Use `1h`, `30m`, etc., for time-based expiry. First API call loads model; subsequent calls instant.
 
 4. Point `ASSISTANT_OLLAMA_BASE_URL` at your local runtime. SimBoard accepts `http://localhost:11434` and normalizes it to Ollama's OpenAI-compatible `/v1` endpoint internally. If your deployment already exposes `/v1`, that value also works unchanged.
+
 5. Switch `ASSISTANT_OLLAMA_MODEL` between:
    - `gemma4:e4b` for fast prompt-contract iteration
    - `gemma4:26b` for preferred quality checks
@@ -130,17 +188,6 @@ ASSISTANT_LLM_TEMPERATURE=0.2
 ASSISTANT_LLM_MAX_TOKENS=2048
 ```
 
-Direct OpenAI setup:
-
-```env
-ASSISTANT_LLM_ENABLED=true
-ASSISTANT_LLM_PROVIDER=openai
-ASSISTANT_OPENAI_API_KEY=
-ASSISTANT_OPENAI_MODEL=
-ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=2048
-```
-
 If `ASSISTANT_LLM_ENABLED=false`, or the selected provider is misconfigured, the backend automatically returns the deterministic metadata summary instead of an LLM-generated one.
 
 For Ollama, `ASSISTANT_OLLAMA_BASE_URL` and `ASSISTANT_OLLAMA_MODEL` are required. `ASSISTANT_OLLAMA_API_KEY` is optional for local runs and can stay blank unless a proxy in front of Ollama requires auth.
@@ -150,8 +197,6 @@ For the current LivAI OpenAI-compatible chat endpoint, SimBoard omits `ASSISTANT
 If summary generation still falls back:
 
 - `fallback_reason=ollama_misconfigured` means `ASSISTANT_OLLAMA_MODEL` or `ASSISTANT_OLLAMA_BASE_URL` is missing.
-- `fallback_reason=openai_misconfigured` means the backend is still configured for `openai`, but `ASSISTANT_OPENAI_API_KEY` or `ASSISTANT_OPENAI_MODEL` is missing.
-- `fallback_reason=anthropic_misconfigured` means `ASSISTANT_ANTHROPIC_API_KEY` or `ASSISTANT_ANTHROPIC_MODEL` is missing.
 - `fallback_reason=livai_misconfigured` means `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL` is missing.
 - If you edit `.envs/local/backend.env`, restart `make backend-run` before testing again.
 

@@ -166,6 +166,22 @@ class TestSettings:
         assert configured.assistant_livai_api_key is not None
         assert configured.assistant_livai_api_key.get_secret_value() == "livai-key"
 
+    def test_assistant_llm_provider_defaults_to_ollama(self):
+        configured = Settings(
+            _env_file=None,
+            FRONTEND_ORIGIN="http://localhost:3000",
+            FRONTEND_AUTH_REDIRECT_URL="http://localhost:3000/auth/callback",
+            FRONTEND_ORIGINS="http://localhost:3000",
+            database_url="postgresql+psycopg://user:password@localhost/simboard",
+            test_database_url="postgresql+psycopg://user:password@localhost/simboard_test",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_redirect_url="http://localhost:8000/auth/github/callback",
+            github_state_secret_key="state-secret",
+        )
+
+        assert configured.assistant_llm_provider == "ollama"
+
     def test_assistant_ollama_env_names_are_canonical_and_strip_whitespace(self):
         configured = Settings(
             _env_file=None,

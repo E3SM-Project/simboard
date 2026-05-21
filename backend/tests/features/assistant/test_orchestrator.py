@@ -5,7 +5,11 @@ from pydantic import SecretStr
 
 from app.core.config import settings
 from app.features.assistant import orchestrator
-from app.features.assistant.schemas import SimulationSummaryContent, SummaryCitationOut
+from app.features.assistant.schemas import (
+    SimulationSummaryContent,
+    SummaryCitationOut,
+    SummaryGenerationProvider,
+)
 from app.features.assistant.service import LLM_FALLBACK_CAVEAT
 from app.features.assistant.snapshot import (
     SimulationSnapshot,
@@ -108,27 +112,6 @@ def _set_ollama_settings(
 
 
 class TestResolveLLMConfig:
-    def test_resolve_llm_config_for_openai_returns_expected_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(settings, "assistant_llm_provider", "openai")
-        monkeypatch.setattr(
-            settings, "assistant_openai_api_key", SecretStr("openai-key")
-        )
-        monkeypatch.setattr(settings, "assistant_openai_model", "gpt-test")
-        monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 20.0)
-        monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
-        monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
-
-        config = orchestrator._resolve_llm_config()
-
-        assert config.provider == "openai"
-        assert config.model_name == "gpt-test"
-        assert config.api_key is not None
-        assert config.api_key.get_secret_value() == "openai-key"
-        assert config.temperature == 0.2
-        assert config.max_tokens == 2048
-
     def test_resolve_llm_config_for_livai_uses_wrapper_key_and_base_url(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -154,47 +137,6 @@ class TestResolveLLMConfig:
         assert config.model_name == model_name
         assert config.api_key is None
         assert config.base_url == "http://localhost:11434"
-
-    def test_resolve_llm_config_for_anthropic_returns_expected_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(settings, "assistant_llm_provider", "anthropic")
-        monkeypatch.setattr(
-            settings, "assistant_anthropic_api_key", SecretStr("anthropic-key")
-        )
-        monkeypatch.setattr(settings, "assistant_anthropic_model", "claude-test")
-        monkeypatch.setattr(settings, "assistant_llm_timeout_seconds", 15.0)
-        monkeypatch.setattr(settings, "assistant_llm_temperature", 0.2)
-        monkeypatch.setattr(settings, "assistant_llm_max_tokens", 2048)
-
-        config = orchestrator._resolve_llm_config()
-
-        assert config.provider == "anthropic"
-        assert config.model_name == "claude-test"
-        assert config.api_key is not None
-        assert config.api_key.get_secret_value() == "anthropic-key"
-        assert config.temperature == 0.2
-        assert config.max_tokens == 2048
-
-    def test_resolve_llm_config_rejects_openai_misconfiguration(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(settings, "assistant_llm_provider", "openai")
-        monkeypatch.setattr(settings, "assistant_openai_api_key", None)
-        monkeypatch.setattr(settings, "assistant_openai_model", "gpt-test")
-
-        with pytest.raises(ValueError, match="openai_misconfigured"):
-            orchestrator._resolve_llm_config()
-
-    def test_resolve_llm_config_rejects_anthropic_misconfiguration(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(settings, "assistant_llm_provider", "anthropic")
-        monkeypatch.setattr(settings, "assistant_anthropic_api_key", None)
-        monkeypatch.setattr(settings, "assistant_anthropic_model", "claude-test")
-
-        with pytest.raises(ValueError, match="anthropic_misconfigured"):
-            orchestrator._resolve_llm_config()
 
     @pytest.mark.parametrize(
         ("model", "base_url"),
@@ -225,8 +167,6 @@ class TestResolveLLMConfig:
     @pytest.mark.parametrize(
         ("provider", "expected"),
         [
-            ("openai", "gpt-test"),
-            ("anthropic", "claude-test"),
             ("livai", "livai-model"),
             ("ollama", "gemma4:26b"),
         ],
@@ -234,22 +174,13 @@ class TestResolveLLMConfig:
     def test_configured_model_name_uses_provider_setting(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        provider: str,
+        provider: SummaryGenerationProvider,
         expected: str,
     ) -> None:
-        from app.features.assistant.schemas import SummaryGenerationProvider
-
-        monkeypatch.setattr(settings, "assistant_openai_model", "gpt-test")
-        monkeypatch.setattr(settings, "assistant_anthropic_model", "claude-test")
         monkeypatch.setattr(settings, "assistant_livai_model", "livai-model")
         monkeypatch.setattr(settings, "assistant_ollama_model", "gemma4:26b")
 
-        assert (
-            orchestrator._configured_model_name(
-                cast(SummaryGenerationProvider, provider)
-            )
-            == expected
-        )
+        assert orchestrator._configured_model_name(provider) == expected
 
 
 class TestValidationHelpers:

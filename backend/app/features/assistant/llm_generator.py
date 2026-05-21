@@ -6,9 +6,7 @@ from urllib.parse import urlparse
 from httpx import AsyncClient
 from pydantic import SecretStr
 from pydantic_ai import Agent
-from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
@@ -31,8 +29,6 @@ Rules:
 - Use only allowed citation paths and source types provided in prompt.
 - Produce concise, factual output for all structured fields.
 """.strip()
-
-OPENAI_COMPATIBLE_PROVIDERS = {"openai", "livai", "ollama"}
 
 
 @dataclass(frozen=True)
@@ -62,26 +58,19 @@ class SummaryLLMGenerator:
             result = await agent.run(self._build_user_prompt(snapshot))
             return result.output
 
-    def _build_model(
-        self, http_client: AsyncClient
-    ) -> OpenAIChatModel | AnthropicModel:
+    def _build_model(self, http_client: AsyncClient) -> OpenAIChatModel:
         api_key = (
             self.config.api_key.get_secret_value()
             if self.config.api_key is not None
             else None
         )
-        if self.config.provider in OPENAI_COMPATIBLE_PROVIDERS:
-            return OpenAIChatModel(
-                self.config.model_name,
-                provider=OpenAIProvider(
-                    api_key=api_key,
-                    base_url=self._resolve_base_url(),
-                    http_client=http_client,
-                ),
-            )
-        return AnthropicModel(
+        return OpenAIChatModel(
             self.config.model_name,
-            provider=AnthropicProvider(api_key=api_key, http_client=http_client),
+            provider=OpenAIProvider(
+                api_key=api_key,
+                base_url=self._resolve_base_url(),
+                http_client=http_client,
+            ),
         )
 
     def _resolve_base_url(self) -> str | None:
