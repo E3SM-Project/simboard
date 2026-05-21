@@ -7,13 +7,13 @@ FROM node:24-alpine AS build-stage
 
 ENV CI=true
 
-# Install pnpm globally
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Activate repo-pinned pnpm version
+RUN corepack enable && corepack prepare pnpm@10.24.0 --activate
 
 WORKDIR /app
 
 # Copy dependency manifests for caching
-COPY pnpm-lock.yaml package.json ./
+COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 
 # Install dependencies (with caching)
 RUN --mount=type=cache,target=/root/.pnpm-store \
