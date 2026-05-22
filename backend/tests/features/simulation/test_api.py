@@ -685,6 +685,11 @@ class TestGetSimulation:
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
     ):
         monkeypatch.setattr(settings, "assistant_llm_enabled", True)
+        monkeypatch.setattr(settings, "assistant_llm_provider", "ollama")
+        monkeypatch.setattr(settings, "assistant_ollama_model", "gemma4:26b")
+        monkeypatch.setattr(
+            settings, "assistant_ollama_base_url", "http://localhost:11434"
+        )
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"
 
