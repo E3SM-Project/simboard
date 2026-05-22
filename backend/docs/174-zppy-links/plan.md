@@ -137,7 +137,7 @@ Tests:
 
 - uses standardized NERSC production output locations
 - emits `case_name`, `machine`, `hpc_username`
-- emits explicit diagnostics URLs
+- emits explicit diagnostics URLs (`diagnostic_url`)
 - can construct explicit diagnostics URLs from cfg `www` plus `mache` machine metadata
 - parses values from `env_case.xml`
 - parses values from `env_build.xml`
@@ -156,7 +156,7 @@ Responsibilities:
 - dedup with state file
 - verify diagnostics completion from index page plus status files
 - parse `case_name`, `machine`, `hpc_username`
-- parse explicit diagnostics URLs
+- parse explicit diagnostics URLs (`diagnostic_url`)
 - call internal API with service-account auth
 - skip and log if full join key is unavailable
 
