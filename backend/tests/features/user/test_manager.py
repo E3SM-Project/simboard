@@ -127,6 +127,22 @@ class TestCurrentActiveUser:
 
 class TestOptionalCurrentUser:
     @pytest.mark.asyncio
+    async def test_returns_oauth_user_when_present(self):
+        oauth_user = User(
+            id=uuid.uuid4(),
+            email="oauth@example.com",
+            role=UserRole.USER,
+        )
+        request = MagicMock()
+        db = MagicMock()
+
+        result = await optional_current_user(
+            request=request, oauth_user=oauth_user, db=db
+        )
+
+        assert result is oauth_user
+
+    @pytest.mark.asyncio
     async def test_returns_none_when_no_auth_header(self):
         request = MagicMock()
         request.headers.get.return_value = None
