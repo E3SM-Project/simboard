@@ -13,6 +13,7 @@ from app.features.simulation.schemas import (
     ExternalLinkOut,
     SimulationCreate,
     SimulationOut,
+    SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
 )
 from app.features.user.schemas import UserPreview
@@ -134,6 +135,10 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             "last_updated_by": uuid4(),
+            "summary_capabilities": SimulationSummaryCapabilitiesOut(
+                llm_available=False,
+                auto_generate_deterministic_on_load=True,
+            ),
             "machine": MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -213,6 +218,10 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             "last_updated_by": uuid4(),
+            "summary_capabilities": SimulationSummaryCapabilitiesOut(
+                llm_available=False,
+                auto_generate_deterministic_on_load=True,
+            ),
             "machine": MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -308,6 +317,10 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             last_updated_by=uuid4(),
+            summary_capabilities=SimulationSummaryCapabilitiesOut(
+                llm_available=False,
+                auto_generate_deterministic_on_load=True,
+            ),
             machine=MachineOut(
                 id=uuid4(),
                 name="Machine A",
@@ -379,6 +392,10 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             last_updated_by=uuid4(),
+            summary_capabilities=SimulationSummaryCapabilitiesOut(
+                llm_available=False,
+                auto_generate_deterministic_on_load=True,
+            ),
             machine=MachineOut(
                 id=uuid4(),
                 name="Machine A",

@@ -14,7 +14,7 @@ from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.models import Case, Simulation
-from app.features.user.manager import current_active_user
+from app.features.user.manager import current_active_user, optional_current_user
 from app.features.user.models import User, UserRole
 from app.main import app
 
@@ -31,6 +31,7 @@ def authenticated_client(async_client: AsyncClient, normal_user):
         )
 
     app.dependency_overrides[current_active_user] = fake_current_user
+    app.dependency_overrides[optional_current_user] = fake_current_user
     return async_client
 
 
@@ -134,7 +135,7 @@ class TestSummarizeSimulationEndpoint:
         }
 
     @pytest.mark.asyncio
-    async def test_unauthenticated_request_returns_401(
+    async def test_unauthenticated_request_returns_deterministic_summary(
         self,
         async_client: AsyncClient,
         async_db: AsyncSession,
@@ -151,8 +152,36 @@ class TestSummarizeSimulationEndpoint:
             f"{API_BASE}/simulations/{simulation.id}/summary"
         )
 
-        assert response.status_code == 401
-        assert response.json() == {"detail": "Not authenticated"}
+        assert response.status_code == 200
+        data = response.json()
+        assert data["generationMode"] == "deterministic"
+        assert data["fallbackUsed"] is False
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_request_returns_deterministic_summary_when_llm_enabled(
+        self,
+        async_client: AsyncClient,
+        async_db: AsyncSession,
+        normal_user,
+        admin_user,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "assistant_llm_enabled", True)
+        simulation = await _create_simulation(
+            async_db,
+            normal_user,
+            admin_user,
+            execution_id="assistant-api-exec-llm-enabled",
+        )
+
+        response = await async_client.post(
+            f"{API_BASE}/simulations/{simulation.id}/summary"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["generationMode"] == "deterministic"
+        assert data["fallbackUsed"] is False
 
     @pytest.mark.asyncio
     async def test_unknown_simulation_returns_404(
@@ -226,8 +255,9 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation):
+        async def fake_generate(simulation, *, allow_llm=True):
             assert simulation.id == sim_id
+            assert allow_llm is True
             return type(
                 "GenerationResult",
                 (),
@@ -294,8 +324,9 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation):
+        async def fake_generate(simulation, *, allow_llm=True):
             assert simulation.id == sim_id
+            assert allow_llm is True
             return type(
                 "GenerationResult",
                 (),
@@ -359,8 +390,9 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation):
+        async def fake_generate(simulation, *, allow_llm=True):
             assert simulation.id == sim_id
+            assert allow_llm is True
             return type(
                 "GenerationResult",
                 (),
@@ -428,3 +460,57 @@ class TestSummarizeSimulationUnit:
         assert "fallback_used=false" in logged[0][0]
         assert logged[0][1][0] == trace_id
         assert logged[0][1][1] == sim_id
+
+    @pytest.mark.asyncio
+    async def test_summarize_simulation_logs_null_user_for_anonymous_request(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sim_id = uuid4()
+        trace_id = uuid4()
+        db = cast(
+            AsyncSession,
+            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+        )
+        summary = SimulationSummaryResponse(
+            answer="Deterministic anonymous summary.",
+            citations=[],
+            assumptions=[],
+            caveats=[],
+            limitations=["limit"],
+            suggested_followups=["follow up"],
+            generation_mode="deterministic",
+            generation_provider=None,
+            generation_model=None,
+            trace_id=uuid4(),
+        )
+        logged: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fake_generate(simulation, *, allow_llm=True):
+            assert simulation.id == sim_id
+            assert allow_llm is False
+            return type(
+                "GenerationResult",
+                (),
+                {
+                    "summary": summary,
+                    "fallback_reason": None,
+                    "llm_latency_ms": 0.0,
+                    "attempted_provider": None,
+                    "attempted_model": None,
+                },
+            )()
+
+        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
+        monkeypatch.setattr(
+            assistant_api.logger,
+            "info",
+            lambda message, *args: logged.append((message, args)),
+        )
+
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=None)
+
+        assert response.answer == "Deterministic anonymous summary."
+        assert response.fallback_used is False
+        assert response.trace_id == trace_id
+        assert logged[0][1][2] == "null"

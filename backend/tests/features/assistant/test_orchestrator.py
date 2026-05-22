@@ -184,6 +184,27 @@ class TestResolveLLMConfig:
 
         assert orchestrator._configured_model_name(provider) == expected
 
+    def test_is_summary_llm_available_returns_true_for_valid_config(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_ollama_settings(monkeypatch)
+
+        assert orchestrator.is_summary_llm_available() is True
+
+    def test_is_summary_llm_available_returns_false_for_misconfigured_enabled_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_ollama_settings(monkeypatch, model=None)
+
+        assert orchestrator.is_summary_llm_available() is False
+
+    def test_is_summary_llm_available_returns_false_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_livai_settings(monkeypatch, enabled=False)
+
+        assert orchestrator.is_summary_llm_available() is False
+
 
 class TestValidationHelpers:
     def test_normalize_llm_answer_strips_inline_citation_markers(self) -> None:

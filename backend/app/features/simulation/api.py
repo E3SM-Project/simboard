@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
+from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
@@ -13,6 +14,7 @@ from app.features.simulation.schemas import (
     CaseOut,
     SimulationCreate,
     SimulationOut,
+    SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
 )
 from app.features.user.manager import current_active_user
@@ -413,6 +415,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     case = sim.case
     is_reference = sim.id == case.reference_simulation_id
     change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
+    llm_available = is_summary_llm_available()
 
     result = SimulationOut.model_validate(
         {
@@ -421,6 +424,10 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             "case_group": case.case_group,
             "is_reference": is_reference,
             "change_count": change_count,
+            "summary_capabilities": SimulationSummaryCapabilitiesOut(
+                llm_available=llm_available,
+                auto_generate_deterministic_on_load=not llm_available,
+            ),
         },
         from_attributes=True,
     )
