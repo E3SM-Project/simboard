@@ -184,6 +184,27 @@ class TestResolveLLMConfig:
 
         assert orchestrator._configured_model_name(provider) == expected
 
+    def test_is_summary_llm_available_returns_true_for_valid_config(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_ollama_settings(monkeypatch)
+
+        assert orchestrator.is_summary_llm_available() is True
+
+    def test_is_summary_llm_available_returns_false_for_misconfigured_enabled_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_ollama_settings(monkeypatch, model=None)
+
+        assert orchestrator.is_summary_llm_available() is False
+
+    def test_is_summary_llm_available_returns_false_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_livai_settings(monkeypatch, enabled=False)
+
+        assert orchestrator.is_summary_llm_available() is False
+
 
 class TestValidationHelpers:
     def test_normalize_llm_answer_strips_inline_citation_markers(self) -> None:
@@ -405,6 +426,30 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model is None
 
     @pytest.mark.asyncio
+    async def test_generate_simulation_summary_returns_deterministic_when_llm_disallowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_livai_settings(monkeypatch)
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            lambda simulation: snapshot,
+        )
+
+        result = await orchestrator.generate_simulation_summary(
+            cast(Simulation, None),
+            allow_llm=False,
+        )
+
+        assert result.fallback_reason is None
+        assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is False
+        assert result.attempted_provider is None
+        assert result.attempted_model is None
+        assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
+
+    @pytest.mark.asyncio
     async def test_generate_simulation_summary_returns_livai_provider_on_success(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -573,6 +618,34 @@ class TestGenerateSimulationSummary:
         result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
 
         assert result.fallback_reason == "llm_disabled"
+        assert result.summary.generation_mode == "deterministic"
+        assert result.summary.fallback_used is False
+        assert result.attempted_provider is None
+        assert result.attempted_model is None
+        assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
+
+    @pytest.mark.asyncio
+    async def test_generate_simulation_summary_returns_deterministic_when_llm_disallowed_and_snapshot_budget_exceeded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = _make_snapshot()
+        _set_livai_settings(monkeypatch)
+
+        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+            raise SnapshotBudgetExceededError(snapshot, 10)
+
+        monkeypatch.setattr(
+            orchestrator,
+            "build_simulation_snapshot",
+            fail_snapshot_build,
+        )
+
+        result = await orchestrator.generate_simulation_summary(
+            cast(Simulation, None),
+            allow_llm=False,
+        )
+
+        assert result.fallback_reason is None
         assert result.summary.generation_mode == "deterministic"
         assert result.summary.fallback_used is False
         assert result.attempted_provider is None

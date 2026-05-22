@@ -13,7 +13,7 @@ from app.core.logger import _setup_custom_logger
 from app.features.assistant.orchestrator import generate_simulation_summary
 from app.features.assistant.schemas import SimulationSummaryResponse
 from app.features.simulation.models import Simulation
-from app.features.user.manager import current_active_user
+from app.features.user.manager import optional_current_user
 from app.features.user.models import User
 
 router = APIRouter(prefix="/simulations", tags=["Simulation Assistant"])
@@ -32,7 +32,7 @@ logger = _setup_custom_logger(__name__)
 async def summarize_simulation(
     sim_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User | None = Depends(optional_current_user),
 ) -> SimulationSummaryResponse:
     """Generate a metadata-grounded read-only summary for one simulation."""
 
@@ -54,6 +54,7 @@ async def summarize_simulation(
 
     if simulation is None:
         duration_ms = (perf_counter() - start) * 1000
+        user_id = user.id if user is not None else "null"
         logger.info(
             "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=false "
             "status=not_found llm_success=false fallback_used=false latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
@@ -61,7 +62,7 @@ async def summarize_simulation(
             "citation_count=0 caveat_count=0",
             trace_id,
             sim_id,
-            user.id,
+            user_id,
             duration_ms,
             0.0,
             "deterministic",
@@ -71,7 +72,9 @@ async def summarize_simulation(
         )
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    generation = await generate_simulation_summary(simulation)
+    generation = await generate_simulation_summary(
+        simulation, allow_llm=user is not None
+    )
     llm_success = generation.summary.generation_mode == "llm"
     fallback_used = (
         not llm_success
@@ -86,13 +89,14 @@ async def summarize_simulation(
     )
 
     duration_ms = (perf_counter() - start) * 1000
+    user_id = user.id if user is not None else "null"
     logger.info(
         "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=true "
         "llm_success=%s fallback_used=%s latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
         "generation_provider=%s generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
         trace_id,
         simulation.id,
-        user.id,
+        user_id,
         str(llm_success).lower(),
         str(fallback_used).lower(),
         duration_ms,

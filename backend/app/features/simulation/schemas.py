@@ -322,6 +322,25 @@ class SimulationSummaryOut(CamelOutBaseModel):
     ]
 
 
+class SimulationSummaryCapabilitiesOut(CamelOutBaseModel):
+    """Summary-generation capabilities available for this deployment."""
+
+    llm_available: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether this deployment can generate LLM-backed summaries.",
+        ),
+    ]
+    auto_generate_deterministic_on_load: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether deterministic summaries should auto-load on page open.",
+        ),
+    ]
+
+
 class CaseOut(CamelOutBaseModel):
     """Schema for representing a Case with nested simulation summaries."""
 
@@ -569,6 +588,14 @@ class SimulationOut(CamelOutBaseModel):
                 "reference simulation for the same case. None for reference "
                 "simulations or when no differences exist."
             ),
+        ),
+    ]
+    summary_capabilities: Annotated[
+        SimulationSummaryCapabilitiesOut,
+        Field(
+            description=(
+                "Deployment-level summary generation capabilities available to the UI."
+            )
         ),
     ]
 

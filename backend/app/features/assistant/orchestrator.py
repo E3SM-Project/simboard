@@ -83,66 +83,99 @@ class SummaryGenerationResult:
     attempted_model: str | None
 
 
+def is_summary_llm_available() -> bool:
+    """Return whether LLM-backed summaries are effectively available."""
+
+    if not settings.assistant_llm_enabled:
+        return False
+
+    try:
+        _resolve_llm_config()
+    except ValueError:
+        return False
+
+    return True
+
+
 async def generate_simulation_summary(
     simulation: Simulation,
+    *,
+    allow_llm: bool = True,
 ) -> SummaryGenerationResult:
-    attempted_provider: SummaryGenerationProvider | None = None
-    attempted_model: str | None = None
+    """
+    Generates a simulation summary, attempting LLM generation if allowed and
+    falling back to deterministic generation on failure.
 
-    if settings.assistant_llm_enabled:
-        attempted_provider = settings.assistant_llm_provider
-        attempted_model = _configured_model_name(settings.assistant_llm_provider)
+    Parameters
+    ----------
+    simulation : Simulation
+        The simulation for which to generate the summary
+    allow_llm : bool, optional
+        Whether to attempt LLM generation (default: True)
+
+    Returns
+    -------
+    SummaryGenerationResult
+        The result of the summary generation, including the summary response,
+        any fallback reason, and LLM latency.
+    """
+    attempted_provider, attempted_model = _resolve_attempted_llm_metadata(
+        allow_llm=allow_llm
+    )
 
     try:
         snapshot = build_simulation_snapshot(simulation)
     except SnapshotBudgetExceededError as exc:
-        result = SummaryGenerationResult(
-            summary=_build_deterministic_response(
+        if not allow_llm:
+            return _build_deterministic_result(
                 exc.snapshot,
-                include_fallback_caveat=settings.assistant_llm_enabled,
-            ).model_copy(update={"fallback_used": settings.assistant_llm_enabled}),
+                include_fallback_caveat=False,
+                fallback_reason=None,
+                attempted_provider=None,
+                attempted_model=None,
+            )
+
+        return _build_deterministic_result(
+            exc.snapshot,
+            include_fallback_caveat=settings.assistant_llm_enabled,
             fallback_reason=str(exc)
             if settings.assistant_llm_enabled
             else "llm_disabled",
-            llm_latency_ms=0.0,
             attempted_provider=attempted_provider,
             attempted_model=attempted_model,
+            fallback_used=settings.assistant_llm_enabled,
         )
 
-        return result
-
-    if not settings.assistant_llm_enabled:
-        result = SummaryGenerationResult(
-            summary=_build_deterministic_response(
-                snapshot,
-                include_fallback_caveat=False,
-            ),
-            fallback_reason="llm_disabled",
-            llm_latency_ms=0.0,
+    if not allow_llm:
+        return _build_deterministic_result(
+            snapshot,
+            include_fallback_caveat=False,
+            fallback_reason=None,
             attempted_provider=None,
             attempted_model=None,
         )
 
-        return result
+    if not settings.assistant_llm_enabled:
+        return _build_deterministic_result(
+            snapshot,
+            include_fallback_caveat=False,
+            fallback_reason="llm_disabled",
+            attempted_provider=None,
+            attempted_model=None,
+        )
 
     try:
         config = _resolve_llm_config()
-        attempted_provider = config.provider
-        attempted_model = config.model_name
         generator = SummaryLLMGenerator(config)
     except ValueError as exc:
-        result = SummaryGenerationResult(
-            summary=_build_deterministic_response(
-                snapshot,
-                include_fallback_caveat=True,
-            ).model_copy(update={"fallback_used": True}),
+        return _build_deterministic_result(
+            snapshot,
+            include_fallback_caveat=True,
             fallback_reason=str(exc),
-            llm_latency_ms=0.0,
             attempted_provider=attempted_provider,
             attempted_model=attempted_model,
+            fallback_used=True,
         )
-
-        return result
 
     start = perf_counter()
     try:
@@ -150,40 +183,35 @@ async def generate_simulation_summary(
         llm_content = _fill_missing_llm_followups(llm_content, snapshot)
         validated = _validate_llm_content(llm_content, snapshot)
 
-        response = SimulationSummaryResponse(
-            **validated.model_dump(),
-            generation_mode="llm",
-            fallback_used=False,
-            generation_provider=config.provider,
-            generation_model=config.model_name,
-            trace_id="00000000-0000-0000-0000-000000000000",
+        return _build_llm_result(
+            validated, config=config, llm_latency_ms=(perf_counter() - start) * 1000
         )
-        result = SummaryGenerationResult(
-            summary=response,
-            fallback_reason=None,
-            llm_latency_ms=(perf_counter() - start) * 1000,
-            attempted_provider=config.provider,
-            attempted_model=config.model_name,
-        )
-
-        return result
     except (ValidationError, ValueError) as exc:
         fallback_reason = getattr(exc, "args", ["llm_validation_failed"])[0]
     except Exception as exc:  # pragma: no cover - exercised via patched tests
         fallback_reason = _format_model_error(exc)
 
-    result = SummaryGenerationResult(
-        summary=_build_deterministic_response(
-            snapshot,
-            include_fallback_caveat=True,
-        ).model_copy(update={"fallback_used": True}),
+    return _build_deterministic_result(
+        snapshot,
+        include_fallback_caveat=True,
         fallback_reason=str(fallback_reason),
         llm_latency_ms=(perf_counter() - start) * 1000,
         attempted_provider=config.provider,
         attempted_model=config.model_name,
+        fallback_used=True,
     )
 
-    return result
+
+def _resolve_attempted_llm_metadata(
+    *,
+    allow_llm: bool,
+) -> tuple[SummaryGenerationProvider | None, str | None]:
+    if not allow_llm or not settings.assistant_llm_enabled:
+        return None, None
+
+    provider = settings.assistant_llm_provider
+
+    return provider, _configured_model_name(provider)
 
 
 def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
@@ -191,6 +219,58 @@ def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
         return settings.assistant_livai_model
 
     return settings.assistant_ollama_model
+
+
+def _build_deterministic_result(
+    snapshot: SimulationSnapshot,
+    *,
+    include_fallback_caveat: bool,
+    fallback_reason: str | None,
+    attempted_provider: SummaryGenerationProvider | None,
+    attempted_model: str | None,
+    fallback_used: bool = False,
+    llm_latency_ms: float = 0.0,
+) -> SummaryGenerationResult:
+    summary = _build_deterministic_response(
+        snapshot,
+        include_fallback_caveat=include_fallback_caveat,
+    )
+    if fallback_used:
+        summary = summary.model_copy(update={"fallback_used": True})
+
+    result = SummaryGenerationResult(
+        summary=summary,
+        fallback_reason=fallback_reason,
+        llm_latency_ms=llm_latency_ms,
+        attempted_provider=attempted_provider,
+        attempted_model=attempted_model,
+    )
+
+    return result
+
+
+def _build_llm_result(
+    validated: SimulationSummaryContent,
+    *,
+    config: AssistantLLMConfig,
+    llm_latency_ms: float,
+) -> SummaryGenerationResult:
+    response = SimulationSummaryResponse(
+        **validated.model_dump(),
+        generation_mode="llm",
+        fallback_used=False,
+        generation_provider=config.provider,
+        generation_model=config.model_name,
+        trace_id="00000000-0000-0000-0000-000000000000",
+    )
+
+    return SummaryGenerationResult(
+        summary=response,
+        fallback_reason=None,
+        llm_latency_ms=llm_latency_ms,
+        attempted_provider=config.provider,
+        attempted_model=config.model_name,
+    )
 
 
 def _resolve_llm_config() -> AssistantLLMConfig:
@@ -202,6 +282,7 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             or not settings.assistant_livai_base_url
         ):
             raise ValueError("livai_misconfigured")
+
         return AssistantLLMConfig(
             provider="livai",
             model_name=settings.assistant_livai_model,
@@ -218,6 +299,7 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             or not settings.assistant_ollama_base_url
         ):
             raise ValueError("ollama_misconfigured")
+
         return AssistantLLMConfig(
             provider="ollama",
             model_name=settings.assistant_ollama_model,
@@ -255,6 +337,7 @@ def _standardize_citations(
                 label=entry.label,
             )
         )
+
     return normalized
 
 

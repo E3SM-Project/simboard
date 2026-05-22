@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.features.user.manager import UserManager, current_active_user
+from app.features.user.manager import (
+    UserManager,
+    current_active_user,
+    optional_current_user,
+)
 from app.features.user.models import User, UserRole
 
 
@@ -117,5 +121,55 @@ class TestCurrentActiveUser:
             return_value=expected_user,
         ):
             result = await current_active_user(request=request, oauth_user=None, db=db)
+
+        assert result is expected_user
+
+
+class TestOptionalCurrentUser:
+    @pytest.mark.asyncio
+    async def test_returns_oauth_user_when_present(self):
+        oauth_user = User(
+            id=uuid.uuid4(),
+            email="oauth@example.com",
+            role=UserRole.USER,
+        )
+        request = MagicMock()
+        db = MagicMock()
+
+        result = await optional_current_user(
+            request=request, oauth_user=oauth_user, db=db
+        )
+
+        assert result is oauth_user
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_auth_header(self):
+        request = MagicMock()
+        request.headers.get.return_value = None
+        db = MagicMock()
+
+        result = await optional_current_user(request=request, oauth_user=None, db=db)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_user_for_valid_token(self):
+        request = MagicMock()
+        request.headers.get.return_value = "Bearer sbk_valid_token"
+        db = MagicMock()
+
+        expected_user = User(
+            id=uuid.uuid4(),
+            email="svc@example.com",
+            role=UserRole.SERVICE_ACCOUNT,
+        )
+
+        with patch(
+            "app.features.user.manager.validate_token",
+            return_value=expected_user,
+        ):
+            result = await optional_current_user(
+                request=request, oauth_user=None, db=db
+            )
 
         assert result is expected_user

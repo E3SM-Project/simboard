@@ -76,15 +76,42 @@ async def current_active_user(
     if oauth_user is not None:
         return oauth_user
 
-    # OAuth failed, try API token authentication
+    user = _resolve_api_token_user(request, db, allow_missing=False)
+    assert user is not None
+
+    return user
+
+
+async def optional_current_user(
+    request: Request,
+    oauth_user: Optional[User] = Depends(_oauth_current_active_user),  # noqa: B008
+    db: Session = Depends(get_database_session),  # noqa: B008
+) -> Optional[User]:
+    """Optional auth dependency supporting OAuth and API tokens."""
+
+    if oauth_user is not None:
+        return oauth_user
+
+    return _resolve_api_token_user(request, db, allow_missing=True)
+
+
+def _resolve_api_token_user(
+    request: Request,
+    db: Session,
+    *,
+    allow_missing: bool,
+) -> Optional[User]:
+    """Resolve Bearer API-token auth, optionally allowing missing credentials."""
+
     auth_header = request.headers.get("Authorization")
     if not auth_header:
+        if allow_missing:
+            return None
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
 
-    # Check for Bearer token
     parts = auth_header.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(
@@ -93,8 +120,6 @@ async def current_active_user(
         )
 
     token = parts[1]
-
-    # Validate token
     user = validate_token(token, db)
     if user is None:
         raise HTTPException(
