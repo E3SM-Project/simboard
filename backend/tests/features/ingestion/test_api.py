@@ -136,7 +136,7 @@ class TestGetIngestionStateEndpoint:
             )
         )
 
-    def test_endpoint_aggregates_hpc_path_state_and_excludes_uploads(
+    def test_endpoint_aggregates_hpc_path_and_hpc_upload_state_and_excludes_browser_uploads(
         self, client, db: Session, normal_user_sync
     ) -> None:
         machine = self._create_machine(db, "perlmutter")
@@ -164,6 +164,15 @@ class TestGetIngestionStateEndpoint:
             db,
             user_id=user_id,
             machine=machine,
+            source_type=IngestionSourceType.HPC_UPLOAD,
+            source_reference="/archive/case_upload",
+            execution_id="102.1-1",
+            case_name="state_case_upload_hpc",
+        )
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=user_id,
+            machine=machine,
             source_type=IngestionSourceType.BROWSER_UPLOAD,
             source_reference="upload.zip",
             execution_id="999.1-1",
@@ -178,10 +187,13 @@ class TestGetIngestionStateEndpoint:
         assert res.status_code == 200
         data = res.json()
         assert data["machine_name"] == "perlmutter"
-        assert list(data["cases"]) == ["/archive/case_a"]
+        assert list(data["cases"]) == ["/archive/case_a", "/archive/case_upload"]
         assert data["cases"]["/archive/case_a"]["processed_execution_ids"] == [
             "100.1-1",
             "101.1-1",
+        ]
+        assert data["cases"]["/archive/case_upload"]["processed_execution_ids"] == [
+            "102.1-1"
         ]
         assert isinstance(data["cases"]["/archive/case_a"]["fingerprint"], str)
 
@@ -324,6 +336,56 @@ class TestGetIngestionStateEndpoint:
         assert res.json()["cases"]["/archive/legacy_case"][
             "processed_execution_ids"
         ] == ["legacy-100.1-1"]
+
+    def test_endpoint_falls_back_to_simulation_ids_for_legacy_hpc_upload_ingestions_without_persisted_state(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        case = Case(name="legacy_hpc_upload_case")
+        db.add(case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_UPLOAD,
+            source_reference="/archive/legacy_upload_case",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+            processed_execution_ids=None,
+        )
+        db.add(ingestion)
+        db.flush()
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="legacy-upload-100.1-1",
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="grid",
+                grid_resolution="1x1",
+                simulation_type="production",
+                status="completed",
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        assert res.json()["cases"]["/archive/legacy_upload_case"][
+            "processed_execution_ids"
+        ] == ["legacy-upload-100.1-1"]
 
     def test_endpoint_handles_many_legacy_ingestions_without_persisted_state(
         self, client, db: Session, normal_user_sync
@@ -1791,6 +1853,210 @@ class TestIngestFromUploadEndpoint:
 
         assert simulation is not None
         assert simulation.hpc_username == "nersc-user"
+
+
+class TestIngestFromHpcUploadEndpoint:
+    def test_endpoint_returns_403_for_non_admin_user(self, client, db: Session):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        res = client.post(
+            f"{API_BASE}/ingestions/from-hpc-upload",
+            data={
+                "machine_name": machine.name,
+                "case_path": "/archive/case_a",
+                "processed_execution_ids[]": "100.1-1",
+            },
+            files={"file": ("case_a.tar.gz", BytesIO(b"fake"), "application/gzip")},
+        )
+
+        assert res.status_code == 403
+        assert (
+            res.json()["detail"]
+            == "Only administrators and service accounts may upload automated HPC archives."
+        )
+
+    def test_endpoint_persists_hpc_upload_with_case_path_sha_and_processed_execution_ids(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = Case(name="test_case_hpc_upload")
+        db.add(case)
+        db.flush()
+
+        mock_simulations = [
+            SimulationCreate.model_validate(
+                {
+                    "caseId": str(case.id),
+                    "executionId": "exec-hpc-upload-1",
+                    "compset": "AQUAPLANET",
+                    "compsetAlias": "QPC4",
+                    "gridName": "f19_f19",
+                    "gridResolution": "1.9x2.5",
+                    "initializationType": "startup",
+                    "simulationType": "experimental",
+                    "status": "created",
+                    "machineId": str(machine.id),
+                    "simulationStartDate": "2023-01-01T00:00:00Z",
+                }
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=1,
+                duplicate_count=0,
+                errors=[],
+            ),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": machine.name,
+                    "case_path": "/archive/case_a",
+                    "processed_execution_ids[]": ["101.1-1", "100.1-1"],
+                },
+                files={
+                    "file": (
+                        "case_a.tar.gz",
+                        BytesIO(b"case-a-archive"),
+                        "application/gzip",
+                    )
+                },
+            )
+
+        assert res.status_code == 201
+        ingestion = (
+            db.query(Ingestion)
+            .filter(Ingestion.source_reference == "/archive/case_a")
+            .first()
+        )
+
+        assert ingestion is not None
+        assert ingestion.source_type == IngestionSourceType.HPC_UPLOAD
+        assert ingestion.archive_sha256 is not None
+        assert len(ingestion.archive_sha256) == 64
+        assert ingestion.processed_execution_ids == ["100.1-1", "101.1-1"]
+
+    def test_endpoint_allows_partial_and_duplicate_only_results_for_stateful_dedupe(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=[],
+                created_count=0,
+                duplicate_count=1,
+                errors=[{"execution_dir": "x", "error": "duplicate"}],
+            ),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": machine.name,
+                    "case_path": "/archive/case_duplicate",
+                    "processed_execution_ids[]": ["200.1-1"],
+                },
+                files={
+                    "file": (
+                        "case_duplicate.tar.gz",
+                        BytesIO(b"case-duplicate-archive"),
+                        "application/gzip",
+                    )
+                },
+            )
+
+        assert res.status_code == 201
+        assert res.json()["duplicate_count"] == 1
+        assert res.json()["errors"] == [{"execution_dir": "x", "error": "duplicate"}]
+
+        ingestion = (
+            db.query(Ingestion)
+            .filter(Ingestion.source_reference == "/archive/case_duplicate")
+            .first()
+        )
+        assert ingestion is not None
+        assert ingestion.source_type == IngestionSourceType.HPC_UPLOAD
+        assert ingestion.processed_execution_ids == ["200.1-1"]
+
+    def test_endpoint_rejects_multi_case_uploads(self, client, db: Session):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        first_case = Case(name="multi_case_first")
+        second_case = Case(name="multi_case_second")
+        db.add_all([first_case, second_case])
+        db.flush()
+
+        mock_simulations = [
+            SimulationCreate.model_validate(
+                {
+                    "caseId": str(first_case.id),
+                    "executionId": "multi-1",
+                    "compset": "AQUAPLANET",
+                    "compsetAlias": "QPC4",
+                    "gridName": "f19_f19",
+                    "gridResolution": "1.9x2.5",
+                    "initializationType": "startup",
+                    "simulationType": "experimental",
+                    "status": "created",
+                    "machineId": str(machine.id),
+                    "simulationStartDate": "2023-01-01T00:00:00Z",
+                }
+            ),
+            SimulationCreate.model_validate(
+                {
+                    "caseId": str(second_case.id),
+                    "executionId": "multi-2",
+                    "compset": "AQUAPLANET",
+                    "compsetAlias": "QPC4",
+                    "gridName": "f19_f19",
+                    "gridResolution": "1.9x2.5",
+                    "initializationType": "startup",
+                    "simulationType": "experimental",
+                    "status": "created",
+                    "machineId": str(machine.id),
+                    "simulationStartDate": "2023-01-01T00:00:00Z",
+                }
+            ),
+        ]
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=mock_simulations,
+                created_count=2,
+                duplicate_count=0,
+                errors=[],
+            ),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": machine.name,
+                    "case_path": "/archive/case_multi",
+                    "processed_execution_ids[]": ["300.1-1"],
+                },
+                files={
+                    "file": (
+                        "case_multi.tar.gz",
+                        BytesIO(b"case-multi-archive"),
+                        "application/gzip",
+                    )
+                },
+            )
+
+        assert res.status_code == 400
+        assert "must contain exactly one case" in res.json()["detail"]
 
 
 class TestIngestionApiCoverage:

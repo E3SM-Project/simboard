@@ -17,6 +17,7 @@ from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
 from app.features.ingestion.models import Ingestion, IngestionSourceType
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.schemas import (
+    IngestFromHpcUploadRequest,
     IngestFromPathRequest,
     IngestionCreate,
     IngestionResponse,
@@ -34,16 +35,10 @@ from app.features.user.models import User, UserRole
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
-
-
-def _resolve_request_machine(db: Session, machine_name: str):
-    machine = resolve_machine_by_name(db, machine_name)
-    if not machine:
-        raise HTTPException(
-            status_code=404, detail=f"Machine '{machine_name}' not found."
-        )
-
-    return machine
+STATEFUL_INGESTION_SOURCE_TYPES = (
+    IngestionSourceType.HPC_PATH,
+    IngestionSourceType.HPC_UPLOAD,
+)
 
 
 @router.post(
@@ -215,6 +210,92 @@ def ingest_from_upload(
             pass
 
 
+@router.post(
+    "/from-hpc-upload",
+    response_model=IngestionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Automated HPC upload ingestion completed."},
+        400: {"description": "Invalid input or upload file."},
+        403: {
+            "description": (
+                "Forbidden: only administrators and service accounts may upload "
+                "automated HPC archives."
+            )
+        },
+        404: {"description": "Machine not found."},
+        409: {"description": "Conflict: ingestion error."},
+        413: {"description": "File too large."},
+        500: {"description": "Internal server error."},
+    },
+)
+def ingest_from_hpc_upload(
+    file: UploadFile = File(...),
+    machine_name: str = Form(...),
+    case_path: str = Form(...),
+    hpc_username: str | None = Form(None),
+    processed_execution_ids: list[str] | None = Form(None),
+    processed_execution_ids_bracket: list[str] | None = Form(
+        None, alias="processed_execution_ids[]"
+    ),
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> IngestionResponse:
+    """Ingest one service-account HPC archive upload with path-style semantics."""
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only administrators and service accounts may upload automated "
+                "HPC archives."
+            ),
+        )
+
+    payload = _build_hpc_upload_payload(
+        machine_name=machine_name,
+        case_path=case_path,
+        hpc_username=hpc_username,
+        processed_execution_ids=processed_execution_ids,
+        processed_execution_ids_bracket=processed_execution_ids_bracket,
+    )
+    machine = _resolve_request_machine(db, payload.machine_name)
+
+    _validate_upload_file(file)
+    filename = file.filename
+    if filename is None:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / filename
+            sha256_hex = _save_uploaded_file_and_hash(file, archive_path)
+
+            ingest_result = _run_ingest_archive(
+                archive_path=str(archive_path),
+                output_dir=tmpdir,
+                db=db,
+            )
+
+        _validate_single_case_upload_ingest_result(ingest_result, payload.case_path)
+
+        return _process_ingestion(
+            ingest_result=ingest_result,
+            source_type=IngestionSourceType.HPC_UPLOAD,
+            source_reference=payload.case_path,
+            machine_id=machine.id,
+            user=user,
+            archive_sha256=sha256_hex,
+            hpc_username=payload.hpc_username,
+            processed_execution_ids=payload.processed_execution_ids,
+            db=db,
+        )
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
+
+
 @router.get(
     "/state",
     response_model=IngestionStateResponse,
@@ -243,6 +324,45 @@ def get_ingestion_state(
     return _build_ingestion_state_response(db, machine.id, machine.name)
 
 
+def _resolve_request_machine(db: Session, machine_name: str):
+    machine = resolve_machine_by_name(db, machine_name)
+    if not machine:
+        raise HTTPException(
+            status_code=404, detail=f"Machine '{machine_name}' not found."
+        )
+
+    return machine
+
+
+def _build_hpc_upload_payload(
+    *,
+    machine_name: str,
+    case_path: str,
+    hpc_username: str | None,
+    processed_execution_ids: list[str] | None,
+    processed_execution_ids_bracket: list[str] | None,
+) -> IngestFromHpcUploadRequest:
+    normalized_execution_ids = _normalize_processed_execution_ids(
+        [
+            *(processed_execution_ids or []),
+            *(processed_execution_ids_bracket or []),
+        ]
+    )
+
+    try:
+        return IngestFromHpcUploadRequest(
+            machine_name=machine_name,
+            case_path=case_path.strip(),
+            hpc_username=hpc_username,
+            processed_execution_ids=normalized_execution_ids or [],
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(),
+        ) from exc
+
+
 def _validate_archive_path(archive_path: Path) -> None:
     if not archive_path.exists():
         raise HTTPException(
@@ -268,7 +388,7 @@ def _build_ingestion_state_response(
             Ingestion.id, Ingestion.source_reference, Ingestion.processed_execution_ids
         )
         .filter(
-            Ingestion.source_type == IngestionSourceType.HPC_PATH,
+            Ingestion.source_type.in_(STATEFUL_INGESTION_SOURCE_TYPES),
             Ingestion.machine_id == machine_id,
         )
         .order_by(Ingestion.source_reference.asc(), Ingestion.created_at.asc())
@@ -294,7 +414,7 @@ def _build_ingestion_state_response(
             db.query(Ingestion.source_reference, Simulation.execution_id)
             .join(Simulation, Simulation.ingestion_id == Ingestion.id)
             .filter(
-                Ingestion.source_type == IngestionSourceType.HPC_PATH,
+                Ingestion.source_type.in_(STATEFUL_INGESTION_SOURCE_TYPES),
                 Ingestion.machine_id == machine_id,
                 or_(
                     Ingestion.processed_execution_ids.is_(None),
@@ -340,7 +460,12 @@ def _normalize_processed_execution_ids(raw_execution_ids: Any) -> list[str] | No
     if not isinstance(raw_execution_ids, list):
         return None
 
-    return sorted({value for value in raw_execution_ids if isinstance(value, str)})
+    normalized_values = {
+        value.strip()
+        for value in raw_execution_ids
+        if isinstance(value, str) and value.strip()
+    }
+    return sorted(normalized_values)
 
 
 def _validate_upload_file(file: UploadFile) -> None:
@@ -419,6 +544,27 @@ def _raise_archive_validation_error(errors: list[dict[str, str]]) -> NoReturn:
             "message": "Archive validation failed.",
             "errors": errors,
         },
+    )
+
+
+def _validate_single_case_upload_ingest_result(
+    ingest_result: IngestArchiveResult,
+    case_path: str,
+) -> None:
+    created_case_ids = {
+        simulation.case_id
+        for simulation in ingest_result.simulations
+        if simulation.case_id is not None
+    }
+    if len(created_case_ids) <= 1:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "Automated HPC upload archives must contain exactly one case. "
+            f"Received created simulations for multiple cases under '{case_path}'."
+        ),
     )
 
 

@@ -1,6 +1,7 @@
 """Integration tests for ingestion with API token authentication."""
 
 from datetime import datetime, timezone
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -177,6 +178,59 @@ class TestIngestionWithAPIToken:
             assert response.status_code == status.HTTP_201_CREATED
             data = response.json()
             assert data["created_count"] == 1
+
+    def test_ingest_from_hpc_upload_with_api_token(self, client, db):
+        """Service-account tokens can call automated HPC upload endpoint."""
+        svc_user = _create_service_account(db)
+        raw_token, token_hash = generate_token()
+        db.add(
+            ApiToken(
+                name="HPC Upload Token",
+                token_hash=token_hash,
+                user_id=svc_user.id,
+                created_at=datetime.now(timezone.utc),
+                revoked=False,
+            )
+        )
+        db.commit()
+
+        with patch("app.features.ingestion.api._run_ingest_archive") as mock_ingest:
+            mock_result = MagicMock()
+            mock_result.created_count = 0
+            mock_result.duplicate_count = 1
+            mock_result.errors = [{"execution_dir": "x", "error": "duplicate"}]
+            mock_result.simulations = []
+            mock_ingest.return_value = mock_result
+
+            machine = Machine(
+                name="test-hpc-upload",
+                site="Test Site",
+                architecture="x86_64",
+                scheduler="slurm",
+                gpu=False,
+            )
+            db.add(machine)
+            db.commit()
+
+            response = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": "test-hpc-upload",
+                    "case_path": "/fake/path/case_a",
+                    "processed_execution_ids[]": ["100.1-1"],
+                },
+                files={
+                    "file": (
+                        "case_a.tar.gz",
+                        BytesIO(b"fake-archive"),
+                        "application/gzip",
+                    )
+                },
+                headers={"Authorization": f"Bearer {raw_token}"},
+            )
+
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.json()["duplicate_count"] == 1
 
     def test_ingest_from_path_with_invalid_token(self, client, db):
         """Test that ingestion with invalid token returns 401."""

@@ -130,3 +130,38 @@ Configuration surface (via env vars):
 - `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
 - `MAX_ATTEMPTS` (`--max-attempts`)
 - `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)
+
+## HPC Upload Archive Ingestor
+
+The HPC upload archive ingestor uses the same scan, state, dry-run, retry, and
+per-case dedupe flow as the NERSC path ingestor, but packages each changed case
+directory into a temporary single-case `.tar.gz` archive and calls
+`/api/v1/ingestions/from-hpc-upload`.
+
+Use this runner when the source filesystem is not directly mounted in the
+SimBoard backend environment.
+
+One-case-per-request rule:
+
+- Each upload request contains exactly one case directory.
+- `case_path` is sent alongside the archive and becomes the stable dedupe key in
+  the ingestion audit table.
+- Browser/manual uploads still use `/api/v1/ingestions/from-upload`; this runner
+  does not call that endpoint.
+
+Example:
+
+```bash
+uv run python -m app.scripts.ingestion.hpc_upload_archive_ingestor
+```
+
+Configuration surface (via env vars):
+
+- `SIMBOARD_API_BASE_URL`
+- `SIMBOARD_API_TOKEN`
+- `PERF_ARCHIVE_ROOT` (default `/performance_archive`)
+- `MACHINE_NAME` (default `perlmutter`)
+- `DRY_RUN`
+- `MAX_CASES_PER_RUN`
+- `MAX_ATTEMPTS`
+- `REQUEST_TIMEOUT_SECONDS`

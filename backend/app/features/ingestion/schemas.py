@@ -45,6 +45,38 @@ class IngestFromPathRequest(BaseModel):
     ] = None
 
 
+class IngestFromHpcUploadRequest(BaseModel):
+    """Request payload for automated HPC archive upload ingestion."""
+
+    machine_name: Annotated[
+        str,
+        Field(..., description="Name of the machine associated with the simulations"),
+    ]
+    case_path: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            description="Stable case path used as the dedupe identity",
+        ),
+    ]
+    processed_execution_ids: Annotated[
+        list[str],
+        Field(
+            ...,
+            min_length=1,
+            description="Full discovered execution IDs for this case path",
+        ),
+    ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ] = None
+
+
 class IngestionResponse(BaseModel):
     """Response payload for ingesting and persisting simulations."""
 

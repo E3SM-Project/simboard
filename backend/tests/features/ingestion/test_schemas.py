@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.features.ingestion.enums import IngestionSourceType
 from app.features.ingestion.schemas import (
+    IngestFromHpcUploadRequest,
     IngestFromPathRequest,
     IngestionRead,
     IngestionResponse,
@@ -28,6 +29,27 @@ class TestIngestionSchemas:
     def test_ingest_archive_request_missing_fields(self) -> None:
         with pytest.raises(ValidationError):
             IngestFromPathRequest()  # type: ignore[call-arg]
+
+    def test_ingest_hpc_upload_request_valid(self) -> None:
+        payload = IngestFromHpcUploadRequest(
+            machine_name="chrysalis",
+            case_path="/lcrc/group/e3sm/case_a",
+            processed_execution_ids=["101.1-1"],
+        )
+
+        assert payload.machine_name == "chrysalis"
+        assert payload.case_path == "/lcrc/group/e3sm/case_a"
+        assert payload.processed_execution_ids == ["101.1-1"]
+
+    def test_ingest_hpc_upload_request_requires_case_path_and_execution_ids(
+        self,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            IngestFromHpcUploadRequest(
+                machine_name="chrysalis",
+                case_path="",
+                processed_execution_ids=[],
+            )
 
     def test_ingest_archive_response_valid(self) -> None:
         payload = IngestionResponse(
