@@ -194,7 +194,7 @@ def _encode_multipart_form_data(
     _append_text_part("machine_name", machine_name)
     _append_text_part("case_path", case_path)
     for execution_id in processed_execution_ids:
-        _append_text_part("processed_execution_ids[]", execution_id)
+        _append_text_part("processed_execution_ids", execution_id)
 
     body.extend(f"--{boundary}\r\n".encode("utf-8"))
     body.extend(

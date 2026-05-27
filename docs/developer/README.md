@@ -203,7 +203,7 @@ flowchart LR
 HPC sites automatically produce `performance_archive` metadata. Automated ingestion jobs running on those sites collect the metadata and push it to SimBoard through one of two ingestion modes:
 
 - **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem (used when the site's storage is accessible to NERSC Spin, e.g., NERSC / Perlmutter).
-- **Automated archive upload** — an ingestion job packages one changed case directory at a time and uploads it over HTTPS to `/api/v1/ingestions/from-hpc-upload`, sending both `case_path` and `processed_execution_ids[]` so dedupe state stays path-aligned (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
+- **Automated archive upload** — an ingestion job packages one changed case directory at a time and uploads it over HTTPS to `/api/v1/ingestions/from-hpc-upload`, sending both `case_path` and repeated `processed_execution_ids` fields so dedupe state stays path-aligned (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
 
 Browser/manual uploads remain separate. They use `/api/v1/ingestions/from-upload`,
 persist as `BROWSER_UPLOAD`, and are intentionally excluded from automated HPC

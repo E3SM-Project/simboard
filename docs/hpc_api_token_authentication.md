@@ -82,8 +82,8 @@ curl -X POST https://api.simboard.org/api/v1/ingestions/from-hpc-upload \
   -F "file=@case-a.tar.gz" \
   -F "machine_name=perlmutter" \
   -F "case_path=/lcrc/group/e3sm/PERF_Chrysalis/performance_archive/case_a" \
-  -F "processed_execution_ids[]=100.1-1" \
-  -F "processed_execution_ids[]=101.1-1" \
+  -F "processed_execution_ids=100.1-1" \
+  -F "processed_execution_ids=101.1-1" \
   -F "hpc_username=johndoe"
 ```
 
@@ -204,7 +204,7 @@ print(response.json())
 
 For automated archive uploads from remote HPC sites, post multipart form data to
 `/ingestions/from-hpc-upload` with exactly one case archive per request plus the
-stable `case_path` and repeated `processed_execution_ids[]` fields. Keep
+stable `case_path` and repeated `processed_execution_ids` fields. Keep
 `/ingestions/from-upload` for browser/manual uploads only.
 
 ### Bash Script Example
@@ -236,7 +236,7 @@ curl -X POST "${API_BASE}/ingestions/from-hpc-upload" \
   -F "file=@case-a.tar.gz" \
   -F "machine_name=${MACHINE}" \
   -F "case_path=/remote/performance_archive/case_a" \
-  -F "processed_execution_ids[]=100.1-1"
+  -F "processed_execution_ids=100.1-1"
 ```
 
 ## Database Schema

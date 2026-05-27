@@ -235,13 +235,35 @@ def ingest_from_hpc_upload(
     case_path: str = Form(...),
     hpc_username: str | None = Form(None),
     processed_execution_ids: list[str] | None = Form(None),
-    processed_execution_ids_bracket: list[str] | None = Form(
-        None, alias="processed_execution_ids[]"
-    ),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
-    """Ingest one service-account HPC archive upload with path-style semantics."""
+    """Ingest one service-account HPC archive upload with path-style semantics.
+
+    Parameters
+    ----------
+    file : UploadFile
+        Uploaded archive file, expected to be .zip, .tar.gz, or .tgz
+    machine_name : str
+        Name of the machine associated with this ingestion, used to look up the
+        corresponding Machine record in the database.
+    case_path : str
+        Case path string parsed from the archive metadata, used as the
+        source_reference for this ingestion and to validate that exactly one case
+        is created from the archive.
+    hpc_username : str, optional
+        HPC username for provenance (trusted, informational only), included in
+        the created Simulation records if provided.
+    processed_execution_ids : list[str], optional
+        Full discovered execution IDs for this uploaded case. Scheduler jobs send
+        this repeated form field so SimBoard can persist dedupe state even when
+        the upload produces only duplicates or partial results.
+    db : Session
+        Active SQLAlchemy database session used for persistence.
+    user : User
+        Authenticated user who initiated the ingestion, used for permission
+        checks and recorded as the trigger of the ingestion.
+    """
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -256,7 +278,6 @@ def ingest_from_hpc_upload(
         case_path=case_path,
         hpc_username=hpc_username,
         processed_execution_ids=processed_execution_ids,
-        processed_execution_ids_bracket=processed_execution_ids_bracket,
     )
     machine = _resolve_request_machine(db, payload.machine_name)
 
@@ -340,13 +361,9 @@ def _build_hpc_upload_payload(
     case_path: str,
     hpc_username: str | None,
     processed_execution_ids: list[str] | None,
-    processed_execution_ids_bracket: list[str] | None,
 ) -> IngestFromHpcUploadRequest:
     normalized_execution_ids = _normalize_processed_execution_ids(
-        [
-            *(processed_execution_ids or []),
-            *(processed_execution_ids_bracket or []),
-        ]
+        processed_execution_ids or []
     )
 
     try:

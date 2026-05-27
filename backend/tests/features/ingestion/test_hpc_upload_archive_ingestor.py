@@ -124,7 +124,7 @@ def test_post_hpc_upload_ingestion_request_sends_case_path_and_processed_executi
     assert isinstance(request_body, bytes)
     assert b'name="case_path"' in request_body
     assert str(case_dir).encode("utf-8") in request_body
-    assert b'name="processed_execution_ids[]"' in request_body
+    assert b'name="processed_execution_ids"' in request_body
     assert b"100.1-1" in request_body
     assert b"101.1-1" in request_body
 

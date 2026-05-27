@@ -1869,7 +1869,7 @@ class TestIngestFromHpcUploadEndpoint:
             data={
                 "machine_name": machine.name,
                 "case_path": "/archive/case_a",
-                "processed_execution_ids[]": "100.1-1",
+                "processed_execution_ids": "100.1-1",
             },
             files={"file": ("case_a.tar.gz", BytesIO(b"fake"), "application/gzip")},
         )
@@ -1922,7 +1922,7 @@ class TestIngestFromHpcUploadEndpoint:
                 data={
                     "machine_name": machine.name,
                     "case_path": "/archive/case_a",
-                    "processed_execution_ids[]": ["101.1-1", "100.1-1"],
+                    "processed_execution_ids": ["101.1-1", "100.1-1"],
                 },
                 files={
                     "file": (
@@ -1966,7 +1966,7 @@ class TestIngestFromHpcUploadEndpoint:
                 data={
                     "machine_name": machine.name,
                     "case_path": "/archive/case_duplicate",
-                    "processed_execution_ids[]": ["200.1-1"],
+                    "processed_execution_ids": ["200.1-1"],
                 },
                 files={
                     "file": (
@@ -2046,7 +2046,7 @@ class TestIngestFromHpcUploadEndpoint:
                 data={
                     "machine_name": machine.name,
                     "case_path": "/archive/case_multi",
-                    "processed_execution_ids[]": ["300.1-1"],
+                    "processed_execution_ids": ["300.1-1"],
                 },
                 files={
                     "file": (
@@ -2229,7 +2229,6 @@ class TestIngestionApiCoverage:
                 case_path="   ",
                 hpc_username=None,
                 processed_execution_ids=None,
-                processed_execution_ids_bracket=None,
             )
 
         assert exc_info.value.status_code == 422
@@ -2263,7 +2262,6 @@ class TestIngestionApiCoverage:
                     case_path="/archive/case_a",
                     hpc_username=None,
                     processed_execution_ids=["100.1-1"],
-                    processed_execution_ids_bracket=None,
                     db=db,
                     user=user,
                 )
@@ -2317,7 +2315,6 @@ class TestIngestionApiCoverage:
                 case_path="/archive/case_a",
                 hpc_username=None,
                 processed_execution_ids=["100.1-1"],
-                processed_execution_ids_bracket=None,
                 db=db,
                 user=user,
             )

@@ -217,7 +217,7 @@ class TestIngestionWithAPIToken:
                 data={
                     "machine_name": "test-hpc-upload",
                     "case_path": "/fake/path/case_a",
-                    "processed_execution_ids[]": ["100.1-1"],
+                    "processed_execution_ids": ["100.1-1"],
                 },
                 files={
                     "file": (
