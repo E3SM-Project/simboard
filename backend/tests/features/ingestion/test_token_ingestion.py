@@ -8,6 +8,8 @@ from fastapi import status
 
 from app.api.version import API_BASE
 from app.common.models.base import Base
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
@@ -46,6 +48,78 @@ def _create_service_account(db):
 
 class TestIngestionWithAPIToken:
     """Integration tests for ingestion using API token authentication."""
+
+    def test_get_ingestion_state_with_api_token(self, client, db):
+        """Service-account tokens can read DB-backed ingestion state."""
+        svc_user = _create_service_account(db)
+        raw_token, token_hash = generate_token()
+        db.add(
+            ApiToken(
+                name="HPC Ingestion Token",
+                token_hash=token_hash,
+                user_id=svc_user.id,
+                created_at=datetime.now(timezone.utc),
+                revoked=False,
+            )
+        )
+
+        machine = Machine(
+            name="test-hpc",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(machine)
+        db.flush()
+
+        case = Case(name="state-token-case")
+        db.add(case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/token-case",
+            machine_id=machine.id,
+            triggered_by=svc_user.id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="1083012.260305-120012",
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="grid",
+                grid_resolution="1x1",
+                simulation_type=SimulationType.PRODUCTION,
+                status=SimulationStatus.COMPLETED,
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=svc_user.id,
+                last_updated_by=svc_user.id,
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.commit()
+
+        response = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": "test-hpc"},
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["cases"]["/archive/token-case"][
+            "processed_execution_ids"
+        ] == ["1083012.260305-120012"]
 
     def test_ingest_from_path_with_api_token(self, client, db):
         """Test ingestion from path using API token authentication."""

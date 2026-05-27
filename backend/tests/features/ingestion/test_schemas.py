@@ -16,11 +16,14 @@ from app.features.ingestion.schemas import (
 class TestIngestionSchemas:
     def test_ingest_archive_request_valid(self) -> None:
         payload = IngestFromPathRequest(
-            archive_path="/tmp/archive.zip", machine_name="chrysalis"
+            archive_path="/tmp/archive.zip",
+            machine_name="chrysalis",
+            processed_execution_ids=["101.1-1"],
         )
 
         assert payload.archive_path == "/tmp/archive.zip"
         assert payload.machine_name == "chrysalis"
+        assert payload.processed_execution_ids == ["101.1-1"]
 
     def test_ingest_archive_request_missing_fields(self) -> None:
         with pytest.raises(ValidationError):

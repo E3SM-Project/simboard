@@ -304,33 +304,22 @@ Key table for step 3 (`simboard-ingestion-env`):
 | `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-archive-ingestor` |
 | `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-archive-ingestor` |
 | `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-archive-ingestor` |
-| `STATE_PATH`            | Yes      | `/var/lib/simboard-ingestion/state.json`                   | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-archive-ingestor` |
 
-4. **Create PersistentVolumeClaim (PVC) for ingestion state**
-   - In Rancher, open target namespace -> **Storage** -> **PersistentVolumeClaims** -> **Create**.
-   - Volume Claim settings:
-     - Name: `simboard-ingestion-state`
-     - Source: `Use a Storage Class to provision a new Persistent Volume`
-     - Storage class: default class (or your namespace standard)
-     - Request storage: `1Gi` (or larger per policy)
-   - Customize:
-     - Access Modes: Single Node Read/Write
-
-5. **Create/update CronJob `nersc-archive-ingestor`**
+4. **Create/update CronJob `nersc-archive-ingestor`**
    - Use the values in the **Configuration Reference** section below.
    - Configure secret-backed environment variables from `simboard-ingestion-env`.
-   - Configure **Pod -> Storage** and **Container -> Storage** exactly as shown in the tables below (including PVC claim `simboard-ingestion-state` and state mount path).
+   - Configure only the performance-archive bind mount shown in the tables below.
 
-6. **Validate once with dry run**
+5. **Validate once with dry run**
    - Set `DRY_RUN=true` in `simboard-ingestion-env`.
    - Trigger a one-off job from the CronJob.
    - Confirm logs include `scan_completed` and candidate discovery.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
-7. **Verify steady-state behavior**
+6. **Verify steady-state behavior**
    - Confirm the CronJob runs every 15 minutes.
-   - Confirm `state.json` is written/updated and unchanged cases are not re-ingested.
+   - Confirm unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
 
 #### Configuration Reference
@@ -369,15 +358,12 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `Storage`:
 
-| Rancher field                | Value                                          |
-| ---------------------------- | ---------------------------------------------- |
-| Volume type                  | `Bind-Mount`                                   |
-| Volume name                  | `performance-archive`                          |
-| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive`   |
-| The Path on the Node must be | `An existing directory`                        |
-| State volume type            | `PersistentVolumeClaim`                        |
-| State volume name            | `ingestion-state`                              |
-| State claim name             | `simboard-ingestion-state` (or existing claim) |
+| Rancher field                | Value                                        |
+| ---------------------------- | -------------------------------------------- |
+| Volume type                  | `Bind-Mount`                                 |
+| Volume name                  | `performance-archive`                        |
+| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive` |
+| The Path on the Node must be | `An existing directory`                      |
 
 ##### 3. Container tab (`nersc-archive-ingestor`)
 
@@ -404,20 +390,15 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `Storage`:
 
-| Rancher field      | Value                                                   |
-| ------------------ | ------------------------------------------------------- |
-| Archive volume     | `performance-archive`                                   |
-| Archive mount path | `/performance_archive`                                  |
-| Archive read only  | `true` (recommended)                                    |
-| State volume       | `ingestion-state`                                       |
-| State source claim | `simboard-ingestion-state` (through Pod volume mapping) |
-| State mount path   | `/var/lib/simboard-ingestion`                           |
-| State read only    | `false` (required; must be writable across runs)        |
+| Rancher field      | Value                    |
+| ------------------ | ------------------------ |
+| Archive volume     | `performance-archive`    |
+| Archive mount path | `/performance_archive`   |
+| Archive read only  | `true` (recommended)     |
 
 Notes:
 
 - Manage ingestion configuration via one Opaque secret (`simboard-ingestion-env`) and expose it as secret-backed environment variables.
-- The state volume must be writable across job runs so deduplication persists.
 - Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
 - Non-zero CronJob exits indicate at least one case ingestion failure in that run.
 
@@ -538,9 +519,8 @@ Service Discovery -> Ingresses -> Create
 5. Verify backend deployment health and pod status under **Workloads → Pods**.
 6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
 7. Create/confirm an admin account (Rancher pod shell), then provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
-8. Create PersistentVolumeClaim `simboard-ingestion-state` for CronJob state.
-9. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
-10. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
+8. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
+9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling
 

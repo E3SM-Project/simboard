@@ -3,19 +3,14 @@
 This script is intended for scheduled execution (for example, a CronJob)
 against a bind-mounted performance archive. Runtime configuration is read
 from environment variables (for example ``SIMBOARD_API_BASE_URL``,
-``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``STATE_PATH``, and
-``DRY_RUN``).
+``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
 Each run executes four phases:
 
 1. Discover parseable execution directories grouped by case path.
-2. Compare discovered execution IDs against persisted per-case state.
+2. Fetch persisted per-case state from SimBoard API.
 3. Submit one ingestion request per changed case with retry/backoff.
-4. Persist successful case state for idempotent future runs.
-
-The state file stores per-case execution IDs and fingerprints so unchanged
-cases are skipped across runs. Structured event logs are emitted for startup,
-scan progress, candidate processing, and run summaries.
+4. Rely on DB writes from successful ingestions for future idempotent runs.
 """
 
 from __future__ import annotations
@@ -27,6 +22,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -47,7 +43,6 @@ STATE_VERSION = 1
 DEFAULT_API_BASE_URL = "http://backend:8000"
 DEFAULT_ARCHIVE_ROOT = "/performance_archive"
 DEFAULT_MACHINE_NAME = "perlmutter"
-DEFAULT_STATE_PATH = "/tmp/simboard-ingestion/state.json"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 MAX_SKIP_DETAIL_LOGS = 20
@@ -81,7 +76,6 @@ class IngestorConfig:
     api_token: str
     archive_root: Path
     machine_name: str
-    state_path: Path
     dry_run: bool
     max_cases_per_run: int | None
     max_attempts: int
@@ -148,7 +142,6 @@ def main() -> int:
         {
             "mode": "dry-run" if config.dry_run else "ingest",
             "archive_root": str(config.archive_root),
-            "state_path": str(config.state_path),
         },
     )
     exit_code = _run_ingestor(config)
@@ -180,7 +173,6 @@ def _build_config_from_env() -> IngestorConfig:
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
     archive_root = Path(os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_ARCHIVE_ROOT)).resolve()
     machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
-    state_path = Path(os.getenv("STATE_PATH", DEFAULT_STATE_PATH)).resolve()
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=False)
     max_cases_per_run = _parse_optional_int(os.getenv("MAX_CASES_PER_RUN"))
     if max_cases_per_run is not None and max_cases_per_run <= 0:
@@ -201,7 +193,6 @@ def _build_config_from_env() -> IngestorConfig:
         api_token=api_token,
         archive_root=archive_root,
         machine_name=machine_name,
-        state_path=state_path,
         dry_run=dry_run,
         max_cases_per_run=max_cases_per_run,
         max_attempts=max_attempts,
@@ -282,7 +273,12 @@ def _run_ingestor(
         post_request_fn = _post_ingestion_request
 
     endpoint_url = _build_endpoint_url(config)
-    _log_startup_configuration(config, endpoint_url=endpoint_url)
+    state_endpoint_url = _build_state_endpoint_url(config)
+    _log_startup_configuration(
+        config,
+        endpoint_url=endpoint_url,
+        state_endpoint_url=state_endpoint_url,
+    )
 
     if not config.archive_root.is_dir():
         _log_event(
@@ -291,12 +287,31 @@ def _run_ingestor(
         )
         return 1
 
-    if not config.dry_run and not config.api_token:
+    if not config.api_token:
         _log_event("configuration_error", {"error": "SIMBOARD_API_TOKEN is required"})
+        return 1
+
+    try:
+        state = _fetch_ingestion_state(
+            state_endpoint_url,
+            config.api_token,
+            config.machine_name,
+            timeout_seconds=config.request_timeout_seconds,
+        )
+    except IngestionRequestError as exc:
+        _log_event(
+            "state_fetch_failed",
+            {
+                "machine_name": config.machine_name,
+                "status_code": exc.status_code,
+                "error": str(exc),
+            },
+        )
         return 1
 
     scan_results, candidates, discovery_stats, state = _scan_archive(
         config,
+        state,
         metadata_locator=metadata_locator,
     )
 
@@ -348,13 +363,19 @@ def _build_endpoint_url(config: IngestorConfig) -> str:
     return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/from-path"
 
 
+def _build_state_endpoint_url(config: IngestorConfig) -> str:
+    """Build the ingestion-state endpoint URL from runtime config."""
+    return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/state"
+
+
 def _scan_archive(
     config: IngestorConfig,
+    state: dict[str, Any],
     metadata_locator: Callable[[str], object],
 ) -> tuple[
     list[CaseScanResult], list[IngestionCandidate], DiscoveryStats, dict[str, Any]
 ]:
-    """Load state and compute scan results, candidates, and discovery counters.
+    """Compute scan results, candidates, and discovery counters.
 
     Parameters
     ----------
@@ -368,7 +389,6 @@ def _scan_archive(
     tuple[list[CaseScanResult], list[IngestionCandidate], DiscoveryStats, dict[str, Any]]
         Scan results, candidate list, discovery counters, and mutable state payload.
     """
-    state = _load_state(config.state_path)
     discovery_stats = _new_discovery_stats()
     grouped_executions = _discover_case_executions(
         config.archive_root, metadata_locator=metadata_locator, stats=discovery_stats
@@ -797,8 +817,6 @@ def _handle_ingest_run(
             },
         )
 
-    _save_state(config.state_path, state)
-
     _log_event(
         "run_completed",
         {
@@ -810,7 +828,6 @@ def _handle_ingest_run(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
-            "state_path": str(config.state_path),
         },
     )
     _log_summary_table(
@@ -822,7 +839,6 @@ def _handle_ingest_run(
             ("success_count", success_count),
             ("failure_count", failure_count),
             *_common_summary_rows(discovery_stats),
-            ("state_path", str(config.state_path)),
         ],
     )
 
@@ -887,6 +903,7 @@ def _ingest_case_with_retries(
                 api_token,
                 candidate.case_path,
                 machine_name,
+                processed_execution_ids=candidate.execution_ids,
                 timeout_seconds=timeout_seconds,
             )
             body = response.get("body")
@@ -943,6 +960,8 @@ def _post_ingestion_request(
     api_token: str,
     archive_path: str,
     machine_name: str,
+    *,
+    processed_execution_ids: list[str],
     timeout_seconds: int,
 ) -> IngestionRequestResponse:
     """Send one path-based ingestion request to SimBoard.
@@ -973,6 +992,7 @@ def _post_ingestion_request(
     payload = {
         "archive_path": archive_path,
         "machine_name": machine_name,
+        "processed_execution_ids": processed_execution_ids,
     }
     body = json.dumps(payload).encode("utf-8")
 
@@ -1016,6 +1036,89 @@ def _post_ingestion_request(
         ) from exc
 
 
+def _fetch_ingestion_state(
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Fetch database-backed ingestion state from SimBoard API."""
+    query = urllib.parse.urlencode({"machine_name": machine_name})
+    request = urllib.request.Request(
+        f"{endpoint_url}?{query}",
+        headers={"Authorization": f"Bearer {api_token}"},
+        method="GET",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_body = response.read().decode("utf-8")
+            try:
+                parsed_body = json.loads(raw_body) if raw_body else {}
+            except json.JSONDecodeError as exc:
+                raise IngestionRequestError(
+                    f"Invalid JSON response: {exc}",
+                    status_code=response.status,
+                    transient=False,
+                ) from exc
+
+            return _normalize_remote_state(parsed_body)
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        raise IngestionRequestError(
+            f"HTTP {exc.code}: {response_text}",
+            status_code=exc.code,
+            transient=_is_transient_status(exc.code),
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise IngestionRequestError(
+            f"URL error: {exc.reason}",
+            status_code=None,
+            transient=True,
+        ) from exc
+    except TimeoutError as exc:
+        raise IngestionRequestError(
+            "Request timed out",
+            status_code=None,
+            transient=True,
+        ) from exc
+
+
+def _normalize_remote_state(body: dict[str, Any]) -> dict[str, Any]:
+    """Normalize API state response into runner-compatible structure."""
+    if not isinstance(body, dict):
+        raise IngestionRequestError(
+            "Invalid ingestion state response payload.",
+            status_code=None,
+            transient=False,
+        )
+
+    raw_cases = body.get("cases", {})
+    if not isinstance(raw_cases, dict):
+        raw_cases = {}
+
+    cases: dict[str, dict[str, Any]] = {}
+    for case_path, case_state in raw_cases.items():
+        if not isinstance(case_path, str) or not isinstance(case_state, dict):
+            continue
+
+        processed_execution_ids = sorted(_case_state_processed_ids(case_state))
+        fingerprint = case_state.get("fingerprint")
+        if not isinstance(fingerprint, str):
+            fingerprint = _compute_case_fingerprint(processed_execution_ids)
+
+        cases[case_path] = {
+            "processed_execution_ids": processed_execution_ids,
+            "fingerprint": fingerprint,
+        }
+
+    return {
+        "version": STATE_VERSION,
+        "cases": cases,
+        "updated_at": _utc_now_iso(),
+    }
+
+
 def _is_transient_status(status_code: int | None) -> bool:
     """Return whether an HTTP status code is retriable.
 
@@ -1045,67 +1148,6 @@ def _fresh_state() -> dict[str, Any]:
         "cases": {},
         "updated_at": _utc_now_iso(),
     }
-
-
-def _load_state(state_path: Path) -> dict[str, Any]:
-    """Load persisted ingestion state from disk.
-
-    Parameters
-    ----------
-    state_path : Path
-        Path to the JSON state file.
-
-    Returns
-    -------
-    dict[str, Any]
-        Loaded state or a fresh default state when unreadable.
-    """
-    if not state_path.exists():
-        return _fresh_state()
-
-    try:
-        loaded = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        _log_event(
-            "state_load_failed",
-            {
-                "state_path": str(state_path),
-                "error": str(exc),
-            },
-        )
-        return _fresh_state()
-
-    if not isinstance(loaded, dict):
-        return _fresh_state()
-
-    if not isinstance(loaded.get("cases"), dict):
-        loaded["cases"] = {}
-
-    loaded.setdefault("version", STATE_VERSION)
-    loaded.setdefault("updated_at", _utc_now_iso())
-
-    return loaded
-
-
-def _save_state(state_path: Path, state: dict[str, Any]) -> None:
-    """Persist ingestion state atomically using a temporary file.
-
-    Parameters
-    ----------
-    state_path : Path
-        Target JSON state path.
-    state : dict[str, Any]
-        State payload to serialize.
-    """
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state["updated_at"] = _utc_now_iso()
-
-    tmp_path = state_path.with_suffix(f"{state_path.suffix}.tmp")
-    tmp_path.write_text(
-        json.dumps(state, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    tmp_path.replace(state_path)
 
 
 def _record_successful_case(
@@ -1229,7 +1271,11 @@ def _render_log_value(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
 
-def _log_startup_configuration(config: IngestorConfig, endpoint_url: str) -> None:
+def _log_startup_configuration(
+    config: IngestorConfig,
+    endpoint_url: str,
+    state_endpoint_url: str,
+) -> None:
     """Log sanitized runtime configuration for one ingestor run.
 
     Parameters
@@ -1245,8 +1291,8 @@ def _log_startup_configuration(config: IngestorConfig, endpoint_url: str) -> Non
         rows=[
             ("api.api_base_url", config.api_base_url),
             ("api.endpoint_url", endpoint_url),
+            ("api.state_endpoint_url", state_endpoint_url),
             ("paths.archive_root", str(config.archive_root)),
-            ("paths.state_path", str(config.state_path)),
             ("runtime.machine_name", config.machine_name),
             ("runtime.dry_run", config.dry_run),
             ("runtime.max_cases_per_run", config.max_cases_per_run),

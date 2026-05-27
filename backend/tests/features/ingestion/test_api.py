@@ -5,6 +5,7 @@ including path-based and upload-based ingestion endpoints.
 """
 
 import uuid
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
+    _build_ingestion_state_response,
+    _normalize_processed_execution_ids,
     _run_ingest_archive,
     _save_uploaded_file_and_hash,
     _set_reference_simulations,
@@ -23,6 +26,7 @@ from app.features.ingestion.api import (
     _validate_upload_file,
     ingest_from_upload,
 )
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.ingest import IngestArchiveResult
 from app.features.ingestion.models import Ingestion
 from app.features.ingestion.parsers.parser import ArchiveValidationError
@@ -64,6 +68,435 @@ def fake_non_admin_user():
         is_verified=True,
         role=UserRole.USER,
     )
+
+
+class TestGetIngestionStateEndpoint:
+    @staticmethod
+    def _create_machine(db: Session, name: str) -> Machine:
+        machine = db.query(Machine).filter(Machine.name == name).one_or_none()
+        if machine is not None:
+            return machine
+
+        machine = Machine(
+            name=name,
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(machine)
+        db.flush()
+        return machine
+
+    @staticmethod
+    def _create_ingestion_with_simulation(
+        db: Session,
+        *,
+        user_id,
+        machine: Machine,
+        source_type: IngestionSourceType,
+        source_reference: str,
+        execution_id: str,
+        case_name: str,
+    ) -> None:
+        case = Case(name=case_name)
+        db.add(case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=source_type,
+            source_reference=source_reference,
+            machine_id=machine.id,
+            triggered_by=user_id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+            processed_execution_ids=[execution_id],
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id=execution_id,
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="ne30pg2_r05_IcoswISC30E3r5",
+                grid_resolution="1x1",
+                simulation_type="production",
+                status="completed",
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=user_id,
+                last_updated_by=user_id,
+                ingestion_id=ingestion.id,
+            )
+        )
+
+    def test_endpoint_aggregates_hpc_path_state_and_excludes_uploads(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        user_id = normal_user_sync["id"]
+
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=user_id,
+            machine=machine,
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case_a",
+            execution_id="101.1-1",
+            case_name="state_case_a_1",
+        )
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=user_id,
+            machine=machine,
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case_a",
+            execution_id="100.1-1",
+            case_name="state_case_a_2",
+        )
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=user_id,
+            machine=machine,
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="upload.zip",
+            execution_id="999.1-1",
+            case_name="state_case_upload",
+        )
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["machine_name"] == "perlmutter"
+        assert list(data["cases"]) == ["/archive/case_a"]
+        assert data["cases"]["/archive/case_a"]["processed_execution_ids"] == [
+            "100.1-1",
+            "101.1-1",
+        ]
+        assert isinstance(data["cases"]["/archive/case_a"]["fingerprint"], str)
+
+    def test_endpoint_accepts_machine_alias(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=normal_user_sync["id"],
+            machine=machine,
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case_alias",
+            execution_id="200.1-1",
+            case_name="state_case_alias",
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/ingestions/state", params={"machine_name": "pm"})
+
+        assert res.status_code == 200
+        assert res.json()["machine_name"] == "perlmutter"
+
+    def test_endpoint_uses_persisted_processed_execution_ids_for_partial_and_duplicate_only_cases(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        user_id = normal_user_sync["id"]
+
+        partial_case = Case(name="state_case_partial")
+        db.add(partial_case)
+        db.flush()
+
+        partial_ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case_partial",
+            machine_id=machine.id,
+            triggered_by=user_id,
+            status=IngestionStatus.PARTIAL,
+            created_count=1,
+            duplicate_count=0,
+            error_count=1,
+            processed_execution_ids=["100.1-1", "101.1-1"],
+        )
+        db.add(partial_ingestion)
+        db.flush()
+        db.add(
+            Simulation(
+                case_id=partial_case.id,
+                execution_id="100.1-1",
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="grid",
+                grid_resolution="1x1",
+                simulation_type="production",
+                status="completed",
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=user_id,
+                last_updated_by=user_id,
+                ingestion_id=partial_ingestion.id,
+            )
+        )
+
+        duplicate_only_ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case_duplicate_only",
+            machine_id=machine.id,
+            triggered_by=user_id,
+            status=IngestionStatus.FAILED,
+            created_count=0,
+            duplicate_count=1,
+            error_count=0,
+            processed_execution_ids=["200.1-1"],
+        )
+        db.add(duplicate_only_ingestion)
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        data = res.json()["cases"]
+        assert data["/archive/case_partial"]["processed_execution_ids"] == [
+            "100.1-1",
+            "101.1-1",
+        ]
+        assert data["/archive/case_duplicate_only"]["processed_execution_ids"] == [
+            "200.1-1"
+        ]
+
+    def test_endpoint_falls_back_to_simulation_ids_for_legacy_ingestions_without_persisted_state(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        case = Case(name="legacy_state_case")
+        db.add(case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/legacy_case",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+            processed_execution_ids=None,
+        )
+        db.add(ingestion)
+        db.flush()
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="legacy-100.1-1",
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="grid",
+                grid_resolution="1x1",
+                simulation_type="production",
+                status="completed",
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        assert res.json()["cases"]["/archive/legacy_case"][
+            "processed_execution_ids"
+        ] == ["legacy-100.1-1"]
+
+    def test_endpoint_handles_many_legacy_ingestions_without_persisted_state(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        user_id = normal_user_sync["id"]
+
+        legacy_case_count = 200
+
+        for index in range(legacy_case_count):
+            case = Case(name=f"legacy_state_case_{index}")
+            db.add(case)
+            db.flush()
+
+            ingestion = Ingestion(
+                source_type=IngestionSourceType.HPC_PATH,
+                source_reference=f"/archive/legacy_case_{index}",
+                machine_id=machine.id,
+                triggered_by=user_id,
+                status=IngestionStatus.SUCCESS,
+                created_count=1,
+                duplicate_count=0,
+                error_count=0,
+                processed_execution_ids=None,
+            )
+            db.add(ingestion)
+            db.flush()
+
+            db.add(
+                Simulation(
+                    case_id=case.id,
+                    execution_id=f"legacy-{index}.1-1",
+                    compset="FHIST",
+                    compset_alias="fhist",
+                    grid_name="grid",
+                    grid_resolution="1x1",
+                    simulation_type="production",
+                    status="completed",
+                    initialization_type="branch",
+                    machine_id=machine.id,
+                    simulation_start_date=datetime.now(timezone.utc),
+                    created_by=user_id,
+                    last_updated_by=user_id,
+                    ingestion_id=ingestion.id,
+                )
+            )
+
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        data = res.json()["cases"]
+        assert len(data) == legacy_case_count
+        assert data["/archive/legacy_case_0"]["processed_execution_ids"] == [
+            "legacy-0.1-1"
+        ]
+        assert data["/archive/legacy_case_199"]["processed_execution_ids"] == [
+            "legacy-199.1-1"
+        ]
+
+    def test_endpoint_returns_404_when_machine_missing(self, client) -> None:
+        res = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": "does-not-exist-machine"},
+        )
+
+        assert res.status_code == 404
+
+    def test_endpoint_returns_403_for_non_admin_user(self, client) -> None:
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": "perlmutter"},
+        )
+
+        app.dependency_overrides.clear()
+
+        assert res.status_code == 403
+        assert (
+            res.json()["detail"]
+            == "Only administrators and service accounts may read ingestion state."
+        )
+
+    def test_endpoint_returns_401_without_authentication(self, client) -> None:
+        app.dependency_overrides.clear()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": "perlmutter"},
+        )
+
+        assert res.status_code == 401
+
+    def test_build_ingestion_state_response_skips_blank_case_paths_and_blank_fallback_execution_ids(
+        self, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        user_id = normal_user_sync["id"]
+
+        db.add(
+            Ingestion(
+                source_type=IngestionSourceType.HPC_PATH,
+                source_reference="",
+                machine_id=machine.id,
+                triggered_by=user_id,
+                status=IngestionStatus.SUCCESS,
+                created_count=0,
+                duplicate_count=1,
+                error_count=0,
+                processed_execution_ids=["100.1-1"],
+            )
+        )
+
+        blank_execution_case = Case(name="blank_execution_case")
+        db.add(blank_execution_case)
+        db.flush()
+
+        blank_execution_ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/blank_execution",
+            machine_id=machine.id,
+            triggered_by=user_id,
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+            processed_execution_ids=None,
+        )
+        db.add(blank_execution_ingestion)
+        db.flush()
+        db.add(
+            Simulation(
+                case_id=blank_execution_case.id,
+                execution_id="",
+                compset="FHIST",
+                compset_alias="fhist",
+                grid_name="grid",
+                grid_resolution="1x1",
+                simulation_type="production",
+                status="completed",
+                initialization_type="branch",
+                machine_id=machine.id,
+                simulation_start_date=datetime.now(timezone.utc),
+                created_by=user_id,
+                last_updated_by=user_id,
+                ingestion_id=blank_execution_ingestion.id,
+            )
+        )
+
+        self._create_ingestion_with_simulation(
+            db,
+            user_id=user_id,
+            machine=machine,
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/valid_case",
+            execution_id="200.1-1",
+            case_name="state_case_valid",
+        )
+        db.commit()
+
+        response = _build_ingestion_state_response(db, machine.id, machine.name)
+
+        assert response.cases.keys() == {"/archive/valid_case"}
+        assert response.cases["/archive/valid_case"].processed_execution_ids == [
+            "200.1-1"
+        ]
+
+    def test_normalize_processed_execution_ids_returns_none_for_non_list(self) -> None:
+        assert _normalize_processed_execution_ids("not-a-list") is None
 
 
 class TestIngestFromPathEndpoint:
@@ -299,6 +732,39 @@ class TestIngestFromPathEndpoint:
         assert ingestion.duplicate_count == 0
         assert ingestion.error_count == 0
         assert ingestion.archive_sha256 is None
+
+    def test_endpoint_persists_processed_execution_ids_when_provided(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
+        payload = {
+            "archive_path": str(archive_path),
+            "machine_name": machine.name,
+            "processed_execution_ids": ["100.1-1", "101.1-1"],
+        }
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                simulations=[],
+                created_count=0,
+                duplicate_count=2,
+                errors=[{"execution_dir": "x", "error": "duplicate"}],
+            ),
+        ):
+            client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        ingestion = (
+            db.query(Ingestion)
+            .filter(Ingestion.source_reference == str(archive_path))
+            .first()
+        )
+
+        assert ingestion is not None
+        assert ingestion.processed_execution_ids == ["100.1-1", "101.1-1"]
 
     def test_endpoint_returns_400_when_archive_path_missing(
         self, client, db: Session, tmp_path

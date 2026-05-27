@@ -36,6 +36,13 @@ class IngestFromPathRequest(BaseModel):
             description="HPC username for provenance (trusted, informational only)",
         ),
     ] = None
+    processed_execution_ids: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description="Execution IDs already discovered for this case path by the caller",
+        ),
+    ] = None
 
 
 class IngestionResponse(BaseModel):
@@ -54,6 +61,34 @@ class IngestionResponse(BaseModel):
     errors: Annotated[
         list[dict[str, str]],
         Field(..., description="List of errors encountered during ingestion"),
+    ]
+
+
+class IngestionStateCase(BaseModel):
+    """Known execution state for one ingested case path."""
+
+    processed_execution_ids: Annotated[
+        list[str],
+        Field(
+            ..., description="Sorted execution IDs already persisted for this case path"
+        ),
+    ]
+    fingerprint: Annotated[
+        str,
+        Field(..., description="Deterministic fingerprint of processed execution IDs"),
+    ]
+
+
+class IngestionStateResponse(BaseModel):
+    """Database-backed ingestion state for one machine."""
+
+    machine_name: Annotated[
+        str,
+        Field(..., description="Canonical machine name used for this state lookup"),
+    ]
+    cases: Annotated[
+        dict[str, IngestionStateCase],
+        Field(..., description="Case path to processed execution state mapping"),
     ]
 
 
@@ -95,6 +130,13 @@ class IngestionCreate(BaseModel):
             description="SHA256 hash of the ingested archive, if available",
         ),
     ]
+    processed_execution_ids: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description="Execution IDs the caller considers processed for this ingestion",
+        ),
+    ] = None
 
 
 class IngestionRead(BaseModel):

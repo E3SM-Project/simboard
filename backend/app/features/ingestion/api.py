@@ -1,12 +1,14 @@
 import hashlib
 import tempfile
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
@@ -19,6 +21,8 @@ from app.features.ingestion.schemas import (
     IngestionCreate,
     IngestionResponse,
     IngestionSimulationSummary,
+    IngestionStateCase,
+    IngestionStateResponse,
     IngestionStatus,
 )
 from app.features.machine.utils import resolve_machine_by_name
@@ -115,6 +119,7 @@ def ingest_from_path(
         user=user,
         archive_sha256=None,
         hpc_username=payload.hpc_username,
+        processed_execution_ids=payload.processed_execution_ids,
         db=db,
     )
 
@@ -210,6 +215,34 @@ def ingest_from_upload(
             pass
 
 
+@router.get(
+    "/state",
+    response_model=IngestionStateResponse,
+    responses={
+        200: {"description": "Database-backed ingestion state for one machine."},
+        403: {
+            "description": "Forbidden: only administrators can read ingestion state."
+        },
+        404: {"description": "Machine not found."},
+    },
+)
+def get_ingestion_state(
+    machine_name: str,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> IngestionStateResponse:
+    """Return known ingested execution IDs for one machine."""
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and service accounts may read ingestion state.",
+        )
+
+    machine = _resolve_request_machine(db, machine_name)
+
+    return _build_ingestion_state_response(db, machine.id, machine.name)
+
+
 def _validate_archive_path(archive_path: Path) -> None:
     if not archive_path.exists():
         raise HTTPException(
@@ -222,6 +255,92 @@ def _validate_archive_path(archive_path: Path) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(f"Archive path '{archive_path}' must be a file or directory."),
         )
+
+
+def _build_ingestion_state_response(
+    db: Session,
+    machine_id: UUID,
+    machine_name: str,
+) -> IngestionStateResponse:
+    execution_ids_by_case: dict[str, set[str]] = defaultdict(set)
+    ingestion_rows = (
+        db.query(
+            Ingestion.id, Ingestion.source_reference, Ingestion.processed_execution_ids
+        )
+        .filter(
+            Ingestion.source_type == IngestionSourceType.HPC_PATH,
+            Ingestion.machine_id == machine_id,
+        )
+        .order_by(Ingestion.source_reference.asc(), Ingestion.created_at.asc())
+        .all()
+    )
+    requires_legacy_fallback = False
+
+    for _ingestion_id, case_path, processed_execution_ids in ingestion_rows:
+        if not case_path:
+            continue
+
+        normalized_execution_ids = _normalize_processed_execution_ids(
+            processed_execution_ids
+        )
+        if normalized_execution_ids is None:
+            requires_legacy_fallback = True
+            continue
+
+        execution_ids_by_case[case_path].update(normalized_execution_ids)
+
+    if requires_legacy_fallback:
+        simulation_rows = (
+            db.query(Ingestion.source_reference, Simulation.execution_id)
+            .join(Simulation, Simulation.ingestion_id == Ingestion.id)
+            .filter(
+                Ingestion.source_type == IngestionSourceType.HPC_PATH,
+                Ingestion.machine_id == machine_id,
+                or_(
+                    Ingestion.processed_execution_ids.is_(None),
+                    func.jsonb_typeof(Ingestion.processed_execution_ids) == "null",
+                ),
+            )
+            .order_by(Ingestion.source_reference.asc(), Simulation.execution_id.asc())
+            .all()
+        )
+
+        for case_path, execution_id in simulation_rows:
+            if not case_path or not execution_id:
+                continue
+            execution_ids_by_case[case_path].add(execution_id)
+
+    cases = {
+        case_path: IngestionStateCase(
+            processed_execution_ids=processed_execution_ids,
+            fingerprint=_compute_execution_fingerprint(processed_execution_ids),
+        )
+        for case_path, processed_execution_ids in (
+            (case_path, sorted(execution_ids))
+            for case_path, execution_ids in sorted(execution_ids_by_case.items())
+        )
+    }
+
+    return IngestionStateResponse(machine_name=machine_name, cases=cases)
+
+
+def _compute_execution_fingerprint(execution_ids: list[str]) -> str:
+    digest = hashlib.sha256()
+
+    for execution_id in execution_ids:
+        digest.update(execution_id.encode("utf-8"))
+        digest.update(b"\n")
+
+    return digest.hexdigest()
+
+
+def _normalize_processed_execution_ids(raw_execution_ids: Any) -> list[str] | None:
+    if raw_execution_ids is None:
+        return None
+    if not isinstance(raw_execution_ids, list):
+        return None
+
+    return sorted({value for value in raw_execution_ids if isinstance(value, str)})
 
 
 def _validate_upload_file(file: UploadFile) -> None:
@@ -312,6 +431,7 @@ def _process_ingestion(
     archive_sha256: str | None,
     db: Session,
     hpc_username: str | None = None,
+    processed_execution_ids: list[str] | None = None,
 ) -> IngestionResponse:
     """Finalize and persist an ingestion operation.
 
@@ -362,6 +482,7 @@ def _process_ingestion(
             duplicate_count=ingest_result.duplicate_count,
             error_count=error_count,
             archive_sha256=archive_sha256,
+            processed_execution_ids=processed_execution_ids,
         )
         ingestion = Ingestion(
             **ingestion_create.model_dump(),

@@ -22,15 +22,17 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _build_case_scan_results,
     _build_config_from_env,
     _build_ingestion_candidates,
+    _build_state_endpoint_url,
     _case_state_processed_ids,
     _discover_case_executions,
+    _fetch_ingestion_state,
     _fresh_state,
     _ingest_case_with_retries,
     _is_transient_status,
-    _load_state,
     _log_execution_skip_detail,
     _log_startup_configuration,
     _log_summary_table,
+    _normalize_remote_state,
     _normalized_api_base_url,
     _parse_bool,
     _parse_optional_int,
@@ -38,9 +40,17 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _record_successful_case,
     _render_log_value,
     _run_ingestor,
-    _save_state,
     _validate_execution_dir,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stub_remote_state(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
 
 
 def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
@@ -339,15 +349,16 @@ def test_ingest_case_with_retries_does_not_retry_non_transient_errors() -> None:
     assert call_count == 1
 
 
-def test_run_ingestor_persists_state_and_builds_expected_payload(
+def test_run_ingestor_uses_remote_state_and_builds_expected_payload(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     archive_root = tmp_path / "performance_archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
 
-    state_path = tmp_path / "state.json"
     captured_calls: list[dict[str, str]] = []
+    remote_state = _fresh_state()
 
     def fake_post_request(
         endpoint_url: str,
@@ -355,6 +366,7 @@ def test_run_ingestor_persists_state_and_builds_expected_payload(
         archive_path: str,
         machine_name: str,
         *,
+        processed_execution_ids: list[str],
         timeout_seconds: int,
     ) -> IngestionRequestResponse:
         captured_calls.append(
@@ -363,20 +375,35 @@ def test_run_ingestor_persists_state_and_builds_expected_payload(
                 "api_token": api_token,
                 "archive_path": archive_path,
                 "machine_name": machine_name,
+                "processed_execution_ids": ",".join(processed_execution_ids),
                 "timeout_seconds": str(timeout_seconds),
             }
+        )
+        _record_successful_case(
+            remote_state,
+            IngestionCandidate(
+                case_path=archive_path,
+                execution_ids=["100.1-1"],
+                new_execution_ids=["100.1-1"],
+                fingerprint=ingestor_module._compute_case_fingerprint(["100.1-1"]),
+            ),
         )
         return {
             "status_code": 201,
             "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
         }
 
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: remote_state,
+    )
+
     config = IngestorConfig(
         api_base_url="http://backend:8000",
         api_token="token-123",
         archive_root=archive_root,
         machine_name="perlmutter",
-        state_path=state_path,
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -404,14 +431,10 @@ def test_run_ingestor_persists_state_and_builds_expected_payload(
         "api_token": "token-123",
         "archive_path": str(case_dir.resolve()),
         "machine_name": "perlmutter",
+        "processed_execution_ids": "100.1-1",
         "timeout_seconds": "30",
     }
-
-    reloaded_state = _fresh_state()
-    reloaded_state.update(
-        __import__("json").loads(state_path.read_text(encoding="utf-8"))
-    )
-    assert str(case_dir.resolve()) in reloaded_state["cases"]
+    assert str(case_dir.resolve()) in remote_state["cases"]
 
 
 def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
@@ -433,7 +456,6 @@ def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -468,22 +490,24 @@ def test_build_case_scan_results_is_deterministic() -> None:
     ]
 
 
-def test_run_ingestor_dry_run_without_token_succeeds(tmp_path: Path) -> None:
+def test_run_ingestor_dry_run_without_token_returns_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     archive_root = tmp_path / "archive"
     (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
-    call_count = 0
+    logged_events: list[tuple[str, dict[str, Any]]] = []
 
-    def fake_post_request(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
         api_token="",
         archive_root=archive_root,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
@@ -494,14 +518,13 @@ def test_run_ingestor_dry_run_without_token_succeeds(tmp_path: Path) -> None:
         config,
         metadata_locator=lambda *_: {},
         sleep_fn=lambda *_: None,
-        post_request_fn=fake_post_request,
     )
 
-    assert exit_code == 0
-    assert call_count == 0
+    assert exit_code == 1
+    assert any(event == "configuration_error" for event, _ in logged_events)
 
 
-def test_run_ingestor_non_dry_run_without_token_returns_config_error(
+def test_run_ingestor_without_token_returns_config_error(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -519,7 +542,6 @@ def test_run_ingestor_non_dry_run_without_token_returns_config_error(
         api_token="",
         archive_root=archive_root,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -530,6 +552,44 @@ def test_run_ingestor_non_dry_run_without_token_returns_config_error(
 
     assert exit_code == 1
     assert any(event == "configuration_error" for event, _ in logged_events)
+    assert not any(event == "scan_completed" for event, _ in logged_events)
+
+
+def test_run_ingestor_returns_failure_when_state_fetch_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            IngestionRequestError("boom", status_code=503, transient=True)
+        ),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "state_fetch_failed" for event, _ in logged_events)
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
@@ -556,7 +616,6 @@ def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
         api_token="token",
         archive_root=missing_archive_root,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -593,10 +652,9 @@ def test_dry_run_candidate_suppression_event_emitted_once(
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
-        api_token="",
+        api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
@@ -637,10 +695,9 @@ def test_completion_events_include_summary_counters(
 
     dry_run_config = IngestorConfig(
         api_base_url="http://backend:8000",
-        api_token="",
+        api_token="token",
         archive_root=dry_archive,
         machine_name="perlmutter",
-        state_path=tmp_path / "dry_state.json",
         dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
@@ -651,7 +708,6 @@ def test_completion_events_include_summary_counters(
         api_token="token",
         archive_root=ingest_archive,
         machine_name="perlmutter",
-        state_path=tmp_path / "ingest_state.json",
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -692,7 +748,6 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path / "archive"))
     monkeypatch.setenv("MACHINE_NAME", "pm")
-    monkeypatch.setenv("STATE_PATH", str(tmp_path / "state.json"))
     monkeypatch.setenv("DRY_RUN", "true")
     monkeypatch.setenv("MAX_CASES_PER_RUN", "5")
     monkeypatch.setenv("MAX_ATTEMPTS", "4")
@@ -704,7 +759,6 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
     assert config.api_token == "token"
     assert config.archive_root == (tmp_path / "archive").resolve()
     assert config.machine_name == "pm"
-    assert config.state_path == (tmp_path / "state.json").resolve()
     assert config.dry_run is True
     assert config.max_cases_per_run == 5
     assert config.max_attempts == 4
@@ -760,7 +814,6 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
         api_token="token",
         archive_root=tmp_path,
         machine_name="perlmutter",
-        state_path=tmp_path / "state.json",
         dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
@@ -827,7 +880,7 @@ def test_ingest_case_with_retries_uses_default_post_request_fn(monkeypatch) -> N
         new_execution_ids=["100.1-1"],
         fingerprint="fp-1",
     )
-    captured: list[tuple[str, str, str, str, int]] = []
+    captured: list[tuple[str, str, str, str, str, int]] = []
 
     def fake_post(
         endpoint_url: str,
@@ -835,10 +888,18 @@ def test_ingest_case_with_retries_uses_default_post_request_fn(monkeypatch) -> N
         archive_path: str,
         machine_name: str,
         *,
+        processed_execution_ids: list[str],
         timeout_seconds: int,
     ) -> IngestionRequestResponse:
         captured.append(
-            (endpoint_url, api_token, archive_path, machine_name, timeout_seconds)
+            (
+                endpoint_url,
+                api_token,
+                archive_path,
+                machine_name,
+                ",".join(processed_execution_ids),
+                timeout_seconds,
+            )
         )
         return {"status_code": 201, "body": {"created_count": 1}}
 
@@ -861,6 +922,7 @@ def test_ingest_case_with_retries_uses_default_post_request_fn(monkeypatch) -> N
             "token",
             "/performance_archive/case_a",
             "pm",
+            "100.1-1",
             5,
         )
     ]
@@ -964,11 +1026,19 @@ def test_post_ingestion_request_success(monkeypatch) -> None:
         "token",
         "/archive/case_a",
         "pm",
+        processed_execution_ids=["100.1-1", "101.1-1"],
         timeout_seconds=12,
     )
 
     assert response == {"status_code": 201, "body": {"created_count": 1}}
     assert captured_request[0].headers["Authorization"] == "Bearer token"
+    request_body = captured_request[0].data
+    assert isinstance(request_body, bytes)
+    assert json.loads(request_body.decode("utf-8")) == {
+        "archive_path": "/archive/case_a",
+        "machine_name": "pm",
+        "processed_execution_ids": ["100.1-1", "101.1-1"],
+    }
 
 
 def test_post_ingestion_request_handles_http_error(monkeypatch) -> None:
@@ -992,6 +1062,7 @@ def test_post_ingestion_request_handles_http_error(monkeypatch) -> None:
             "token",
             "/archive/case_a",
             "pm",
+            processed_execution_ids=["100.1-1"],
             timeout_seconds=12,
         )
 
@@ -1014,6 +1085,7 @@ def test_post_ingestion_request_handles_url_error(monkeypatch) -> None:
             "token",
             "/archive/case_a",
             "pm",
+            processed_execution_ids=["100.1-1"],
             timeout_seconds=12,
         )
 
@@ -1031,6 +1103,7 @@ def test_post_ingestion_request_handles_timeout(monkeypatch) -> None:
             "token",
             "/archive/case_a",
             "pm",
+            processed_execution_ids=["100.1-1"],
             timeout_seconds=12,
         )
 
@@ -1040,49 +1113,146 @@ def test_is_transient_status() -> None:
     assert _is_transient_status(400) is False
 
 
-def test_load_state_handles_invalid_json_and_logs(monkeypatch, tmp_path: Path) -> None:
-    state_path = tmp_path / "state.json"
-    state_path.write_text("{invalid", encoding="utf-8")
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-
-    state = _load_state(state_path)
-
-    assert state["version"] == ingestor_module.STATE_VERSION
-    assert logged_events[0][0] == "state_load_failed"
+def test_normalize_remote_state_rejects_non_dict_payload() -> None:
+    with pytest.raises(
+        IngestionRequestError,
+        match="Invalid ingestion state response payload.",
+    ):
+        _normalize_remote_state([])  # type: ignore[arg-type]
 
 
-def test_load_state_handles_non_dict_root_and_non_dict_cases(tmp_path: Path) -> None:
-    non_dict_path = tmp_path / "not_dict.json"
-    non_dict_path.write_text("[]", encoding="utf-8")
-    assert _load_state(non_dict_path)["cases"] == {}
-
-    bad_cases_path = tmp_path / "bad_cases.json"
-    bad_cases_path.write_text(
-        json.dumps(
-            {"version": 9, "cases": [], "updated_at": "2024-01-01T00:00:00+00:00"}
-        ),
-        encoding="utf-8",
+def test_normalize_remote_state_sanitizes_cases() -> None:
+    state = _normalize_remote_state(
+        {
+            "cases": {
+                "/archive/case_a": {
+                    "processed_execution_ids": ["101.1-1", "100.1-1", "100.1-1"],
+                },
+                "/archive/case_b": {"processed_execution_ids": "bad"},
+                123: {"processed_execution_ids": ["skip"]},
+            }
+        }
     )
-    loaded = _load_state(bad_cases_path)
-    assert loaded["cases"] == {}
-    assert loaded["version"] == 9
+
+    assert state["cases"]["/archive/case_a"]["processed_execution_ids"] == [
+        "100.1-1",
+        "101.1-1",
+    ]
+    assert state["cases"]["/archive/case_b"]["processed_execution_ids"] == []
+    assert "/archive/case_a" in state["cases"]
+    assert 123 not in state["cases"]
 
 
-def test_save_state_round_trips(tmp_path: Path) -> None:
-    state_path = tmp_path / "nested" / "state.json"
-    state = {"version": 1, "cases": {}}
+def test_fetch_ingestion_state_success(monkeypatch) -> None:
+    captured_request: list[urllib.request.Request] = []
 
-    _save_state(state_path, state)
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        captured_request.append(request)
+        assert timeout == 12
+        return _FakeHttpResponse(
+            200,
+            json.dumps(
+                {
+                    "machine_name": "pm",
+                    "cases": {
+                        "/archive/case_a": {
+                            "processed_execution_ids": ["100.1-1"],
+                            "fingerprint": "fp-1",
+                        }
+                    },
+                }
+            ),
+        )
 
-    assert state_path.exists()
-    saved = json.loads(state_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 1
-    assert "updated_at" in saved
+    monkeypatch.setattr(ingestor_module.urllib.request, "urlopen", fake_urlopen)
+
+    state = _fetch_ingestion_state(
+        "http://backend:8000/api/v1/ingestions/state",
+        "token",
+        "pm",
+        timeout_seconds=12,
+    )
+
+    assert state["cases"]["/archive/case_a"]["processed_execution_ids"] == ["100.1-1"]
+    assert "machine_name=pm" in captured_request[0].full_url
+    assert captured_request[0].headers["Authorization"] == "Bearer token"
+
+
+def test_fetch_ingestion_state_handles_http_error(monkeypatch) -> None:
+    request = urllib.request.Request("http://example.com")
+    error = _FakeHttpError(
+        request.full_url,
+        503,
+        "Service Unavailable",
+        b"retry later",
+    )
+
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(IngestionRequestError) as exc_info:
+        _fetch_ingestion_state(
+            "http://backend:8000/api/v1/ingestions/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.transient is True
+
+
+def test_fetch_ingestion_state_handles_url_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            urllib.error.URLError("network down")
+        ),
+    )
+
+    with pytest.raises(IngestionRequestError, match="URL error: network down"):
+        _fetch_ingestion_state(
+            "http://backend:8000/api/v1/ingestions/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
+
+
+def test_fetch_ingestion_state_handles_timeout(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError()),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Request timed out"):
+        _fetch_ingestion_state(
+            "http://backend:8000/api/v1/ingestions/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
+
+
+def test_fetch_ingestion_state_handles_invalid_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(200, "{invalid"),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Invalid JSON response:"):
+        _fetch_ingestion_state(
+            "http://backend:8000/api/v1/ingestions/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
 
 
 def test_record_successful_case_replaces_non_dict_cases() -> None:
@@ -1101,6 +1271,29 @@ def test_record_successful_case_replaces_non_dict_cases() -> None:
 
 def test_case_state_processed_ids_ignores_non_list() -> None:
     assert _case_state_processed_ids({"processed_execution_ids": "bad"}) == set()
+
+
+def test_normalize_remote_state_replaces_non_dict_cases_root() -> None:
+    state = _normalize_remote_state({"cases": []})
+
+    assert state["cases"] == {}
+
+
+def test_build_state_endpoint_url() -> None:
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=Path("/archive"),
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert _build_state_endpoint_url(config) == (
+        "http://backend:8000/api/v1/ingestions/state"
+    )
 
 
 def test_normalized_api_base_url_handles_existing_api_base() -> None:
@@ -1155,14 +1348,15 @@ def test_log_summary_table_and_startup_configuration(
         api_token="token",
         archive_root=tmp_path,
         machine_name="pm",
-        state_path=tmp_path / "state.json",
         dry_run=True,
         max_cases_per_run=5,
         max_attempts=2,
         request_timeout_seconds=60,
     )
     _log_startup_configuration(
-        config, endpoint_url="http://backend:8000/api/v1/ingestions/from-path"
+        config,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        state_endpoint_url="http://backend:8000/api/v1/ingestions/state",
     )
 
     assert logged_events[0][0] == "summary_table"

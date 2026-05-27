@@ -205,6 +205,8 @@ HPC sites automatically produce `performance_archive` metadata. Automated ingest
 - **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem (used when the site's storage is accessible to NERSC Spin, e.g., NERSC / Perlmutter).
 - **Archive upload** — an ingestion job packages the archive and uploads it to SimBoard over HTTPS (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
 
+For NERSC path ingestion, deduplication state is now database-backed. The ingestor reads known execution IDs from `/api/v1/ingestions/state`, compares them with the current archive scan, and sends the full discovered `processed_execution_ids` set with each changed case. Successful ingestions persist that state on ingestion audit rows so future runs can reconstruct dedupe state directly from PostgreSQL.
+
 ```mermaid
 flowchart TD
   subgraph SOURCES["Source Archives"]
@@ -219,24 +221,34 @@ flowchart TD
   end
 
   subgraph BACKEND["SimBoard Backend"]
-    PATH["Path Ingestion\nvalidate token, parse in place"]
+    STATE["GET /ingestions/state\nDB-backed known execution IDs"]
+    PATH["Path Ingestion\nvalidate token, parse in place,\npersist processed_execution_ids"]
     UPLOAD["Archive Upload Ingestion\nvalidate token, stage and parse"]
     NORMALIZE["Normalize and Validate"]
     AUDIT["Ingestion Audit Record"]
     DB[("PostgreSQL")]
   end
 
-  NERSC_SRC --> NERSC_WRAP -->|"path reference"| PATH
+  NERSC_SRC --> NERSC_WRAP
+  NERSC_WRAP -->|"read known state"| STATE
+  NERSC_WRAP -->|"path reference + processed_execution_ids"| PATH
   LCRC_SRC --> UPLOAD_WRAP
   ADDL_SRC -.-> UPLOAD_WRAP
   UPLOAD_WRAP -->|"archive upload"| UPLOAD
 
+  STATE --> DB
   PATH --> NORMALIZE
   UPLOAD --> NORMALIZE
   NORMALIZE --> AUDIT --> DB
 ```
 
-All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, state path, dry-run flag, and the token.
+All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, dry-run flag, and the token. For the NERSC path-ingestion workflow, the job also needs access to the `/api/v1/ingestions/state` endpoint so it can reconstruct dedupe state from PostgreSQL before deciding which cases to submit.
+
+### State Management Notes
+
+- **Current NERSC runner behavior** — the `nersc-archive-ingestor` fetches DB-backed ingestion state from `/api/v1/ingestions/state` before deciding which case paths to submit.
+- **Persisted dedupe state** — path-based ingestion requests include `processed_execution_ids`, and the backend stores them on `Ingestion` rows so partial and duplicate-only runs still contribute to future dedupe decisions.
+- **Fallback for older rows** — if an ingestion predates the new `processed_execution_ids` column, SimBoard reconstructs state from `Simulation.execution_id` for those legacy rows until they are backfilled or superseded by new ingestions.
 
 After ingestion completes, the backend stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. The frontend reads the resulting catalog data through `/api/v1` endpoints.
 

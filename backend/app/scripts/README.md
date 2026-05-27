@@ -126,7 +126,6 @@ Configuration surface (via env vars):
 - `SIMBOARD_API_TOKEN` (`--api-token`)
 - `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive`)
 - `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
-- `STATE_PATH` (`--state-path`)
 - `DRY_RUN` (`--dry-run`)
 - `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
 - `MAX_ATTEMPTS` (`--max-attempts`)

@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -66,6 +67,9 @@ class Ingestion(Base):
     duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     archive_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    processed_execution_ids: Mapped[list[str] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     user = relationship("User")
     simulations: Mapped[list[Simulation]] = relationship(
