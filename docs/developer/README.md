@@ -200,21 +200,27 @@ flowchart LR
 
 ## Automated HPC Metadata Ingestion
 
-HPC sites automatically produce `performance_archive` metadata. Automated ingestion jobs running on those sites collect the metadata and push it to SimBoard through one of two ingestion modes:
+HPC sites automatically produce `performance_archive` metadata. Site-side ingestion jobs collect that metadata and send it to SimBoard. Automated HPC ingestion uses two modes, depending on whether the source filesystem is visible from NERSC Spin.
 
-- **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem (used when the site's storage is accessible to NERSC Spin, e.g., NERSC / Perlmutter).
-- **Automated archive upload** — an ingestion job packages one changed case directory at a time and uploads it over HTTPS to `/api/v1/ingestions/from-hpc-upload`, sending both `case_path` and repeated `processed_execution_ids` fields so dedupe state stays path-aligned (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
+### Ingestion Modes
 
-Browser/manual uploads remain separate. They use `/api/v1/ingestions/from-upload`,
-persist as `BROWSER_UPLOAD`, and are intentionally excluded from automated HPC
-dedupe state reconstruction.
+- **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem. Use this when the site's storage is accessible to NERSC Spin, such as NERSC / Perlmutter.
+- **Automated archive upload** — an ingestion job packages one changed case directory at a time and uploads it over HTTPS to `/api/v1/ingestions/from-hpc-upload`. Each request sends both `case_path` and repeated `processed_execution_ids` fields so dedupe state stays path-aligned. Use this when the filesystem is not accessible from NERSC Spin, such as LCRC / Chrysalis.
 
-For automated HPC ingestion, deduplication state is database-backed across both
-path ingestions and automated uploads. Site runners read known execution IDs
-from `/api/v1/ingestions/state`, compare them with the current archive scan, and
-send the full discovered `processed_execution_ids` set with each changed case.
-Successful ingestions persist that state on ingestion audit rows so future runs
-can reconstruct dedupe state directly from PostgreSQL.
+### Manual Browser Uploads
+
+Browser/manual uploads remain separate from automated HPC ingestion. They use `/api/v1/ingestions/from-upload`, persist as `BROWSER_UPLOAD`, and are intentionally excluded from automated HPC dedupe state reconstruction.
+
+### Dedupe and State Flow
+
+For automated HPC ingestion, deduplication state is database-backed across both path ingestions and automated uploads.
+
+- Site runners read known execution IDs from `/api/v1/ingestions/state`.
+- They compare that state with the current archive scan.
+- They send the full discovered `processed_execution_ids` set with each changed case.
+- Successful ingestions persist that state on ingestion audit rows so future runs can reconstruct dedupe state directly from PostgreSQL.
+
+This flow shows how automated runners, manual uploads, and backend persistence fit together.
 
 ```mermaid
 flowchart TD
@@ -253,7 +259,11 @@ flowchart TD
   NORMALIZE --> AUDIT --> DB
 ```
 
-All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, dry-run flag, and the token. For the NERSC path-ingestion workflow, the job also needs access to the `/api/v1/ingestions/state` endpoint so it can reconstruct dedupe state from PostgreSQL before deciding which cases to submit.
+### Runner Configuration
+
+All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, dry-run flag, and the token.
+
+For the NERSC path-ingestion workflow, the job also needs access to the `/api/v1/ingestions/state` endpoint so it can reconstruct dedupe state from PostgreSQL before deciding which cases to submit.
 
 ### State Management Notes
 
@@ -263,6 +273,8 @@ All ingestion requests require a bearer API token. Site-side ingestion jobs are 
 - **Fallback for older rows** — if a stateful ingestion row predates `processed_execution_ids`, SimBoard reconstructs state from `Simulation.execution_id` for those legacy `HPC_PATH` or `HPC_UPLOAD` rows until they are superseded by new ingestions.
 - **One-case-per-request rule** — automated upload archives must contain exactly one case directory; `case_path` becomes the stable dedupe key for that uploaded case.
 
+### Stored Results
+
 After ingestion completes, the backend stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. The frontend reads the resulting catalog data through `/api/v1` endpoints.
 
 > **Note**
@@ -270,6 +282,8 @@ After ingestion completes, the backend stores normalized cases, simulations, mac
 > SimBoard records artifact references, including output directories, source archive locations, run scripts, and batch logs, to support reproducibility.
 >
 > Referenced case directories under source archive locations are periodically cleaned up by scheduled site-side jobs outside of SimBoard to limit storage growth.
+
+### Site Summary
 
 | Site                 | Ingestion mode            | Source archive location                                                 |
 | -------------------- | ------------------------- | ----------------------------------------------------------------------- |
