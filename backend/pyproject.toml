@@ -5,7 +5,7 @@ description = "SimBoard backend for the E3SM project"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Tom Vo", email = "vo13@llnl.com" }]
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
