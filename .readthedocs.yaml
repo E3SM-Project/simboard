@@ -12,6 +12,7 @@ mkdocs:
 python:
   install:
     - method: uv
+      command: pip
       path: backend
-      extra_requirements:
+      extras:
         - docs
