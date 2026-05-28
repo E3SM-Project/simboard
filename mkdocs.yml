@@ -1,0 +1,30 @@
+site_name: SimBoard Docs
+site_description: Developer, architecture, CI/CD, and deployment documentation for SimBoard.
+site_url: https://simboard.readthedocs.io/
+repo_url: https://github.com/E3SM-Project/simboard
+repo_name: E3SM-Project/simboard
+docs_dir: docs
+theme:
+  name: material
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+nav:
+  - Home: README.md
+  - Developer:
+      - Developer Guide: developer/README.md
+      - Assistant LLM Setup: developer/assistant-llm-setup.md
+      - Backend Guide: backend/README.md
+      - Frontend Guide: frontend/README.md
+  - Architecture:
+      - Metadata Ingestion: architecture/metadata-ingestion.md
+  - Operations:
+      - CI/CD: cicd/README.md
+      - Deployment Docs Index: deploy/README.md
+      - Deployment and Release: deploy/deployment-and-release.md
+      - NERSC Spin Runbook: deploy/nersc-spin-runbook.md
+      - HPC API Token Authentication: deploy/hpc-api-token-authentication.md

@@ -30,7 +30,7 @@ docker login registry.nersc.gov
 
 ## Workflows
 
-Current workflow files and exact trigger filters live under [`../../.github/workflows/`](../../.github/workflows/).
+Current workflow files and exact trigger filters live under [`.github/workflows/` on GitHub](https://github.com/E3SM-Project/simboard/tree/main/.github/workflows).
 
 | Workflow               | Trigger                                                  | Image tags                           |
 | ---------------------- | -------------------------------------------------------- | ------------------------------------ |

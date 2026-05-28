@@ -38,7 +38,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/home>
 - **GitHub Actions:** <https://github.com/E3SM-Project/simboard/actions>
-- **NERSC Spin Runbook (Rancher UI):** [docs/deploy/spin.md](../deploy/spin.md)
+- **NERSC Spin Runbook (Rancher UI):** [docs/deploy/nersc-spin-runbook.md](../deploy/nersc-spin-runbook.md)
 
 ## Environment Architecture
 
@@ -281,7 +281,7 @@ Database migrations are executed by a backend Deployment initContainer during ro
 
 Reference runbook:
 
-- [`docs/deploy/spin.md`](../deploy/spin.md)
+- [`docs/deploy/nersc-spin-runbook.md`](../deploy/nersc-spin-runbook.md)
 
 - Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
 - Backend Deployment uses the image entrypoint directly (no app args required).

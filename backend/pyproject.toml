@@ -38,6 +38,12 @@ dependencies = [
   "python-jose>=3.5.0",
 ]
 
+[project.optional-dependencies]
+docs = [
+  "mkdocs-material",
+  "pymdown-extensions",
+]
+
 [dependency-groups]
 dev = [
   # --- Testing ---

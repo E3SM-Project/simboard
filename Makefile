@@ -72,6 +72,11 @@ help:
 	@echo "  make pre-commit-run                        # Run all pre-commit hooks"
 	@echo ""
 
+	@echo "$(BLUE)Docs:$(NC)"
+	@echo "  make docs-serve                            # Preview docs locally with MkDocs"
+	@echo "  make docs-build                            # Build docs site locally with MkDocs"
+	@echo ""
+
 	@echo "$(BLUE)Ollama (Local LLM):$(NC)"
 	@echo "  make ollama-serve                          # Start Ollama server with OLLAMA_KEEP_ALIVE=-1"
 	@echo "  make ollama-pull-fast                      # Pull llama3.1:8b (fast dev model)"
@@ -198,6 +203,18 @@ install: backend-install frontend-install pre-commit-install
 clean:
 	make backend-clean
 	make frontend-clean
+
+# ============================================================
+# 📚 DOCS COMMANDS
+# ============================================================
+
+.PHONY: docs-serve docs-build
+
+docs-serve:
+	cd $(BACKEND_DIR) && uv run --extra docs mkdocs serve --config-file ../mkdocs.yml --dev-addr 127.0.0.1:8001
+
+docs-build:
+	cd $(BACKEND_DIR) && uv run --extra docs mkdocs build --config-file ../mkdocs.yml --strict
 
 # ============================================================
 # 🧑‍💻 BACKEND COMMANDS
