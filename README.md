@@ -45,6 +45,8 @@ For architecture diagrams, API/data-flow detail, and contributor-oriented system
 
 ## Documentation Map
 
+- Hosted docs: <https://simboard.readthedocs.io/>
+- Local docs preview: `make docs-serve`
 - Contributor guide: [docs/developer/README.md](docs/developer/README.md)
 - Contribution workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Backend details: [backend/README.md](backend/README.md)

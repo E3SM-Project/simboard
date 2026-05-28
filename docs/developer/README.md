@@ -1,7 +1,7 @@
 # Developer Guide
 
 Use this guide for local setup, repo-wide development workflow, and contributor-oriented architecture. For service-specific
-detail, see [backend/README.md](../../backend/README.md) and [frontend/README.md](../../frontend/README.md).
+detail, see [backend/README.md](../backend/README.md) and [frontend/README.md](../frontend/README.md).
 
 ## System Overview
 
@@ -167,7 +167,7 @@ uv run pytest tests/path/to/test_file.py::test_function_name
    make pre-commit-run
    ```
 
-6. **Commit and push**, then open a PR per [CONTRIBUTING.md](../../CONTRIBUTING.md).
+6. **Commit and push**, then open a PR per [CONTRIBUTING.md on GitHub](https://github.com/E3SM-Project/simboard/blob/main/CONTRIBUTING.md).
 
 ### Frontend example: update a feature component
 
@@ -246,7 +246,7 @@ make setup-local
 
 ## Contributing
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for issue, branch, commit, and PR expectations.
+See [CONTRIBUTING.md on GitHub](https://github.com/E3SM-Project/simboard/blob/main/CONTRIBUTING.md) for issue, branch, commit, and PR expectations.
 
 Key habits for safe changes:
 
@@ -258,7 +258,7 @@ Key habits for safe changes:
 
 ## Related Documentation
 
-- backend service detail: [backend/README.md](../../backend/README.md)
-- frontend service detail: [frontend/README.md](../../frontend/README.md)
+- backend service detail: [backend/README.md](../backend/README.md)
+- frontend service detail: [frontend/README.md](../frontend/README.md)
 - docs index: [docs/README.md](../README.md)
 - CI/CD and deployment docs: [docs/cicd/README.md](../cicd/README.md)
