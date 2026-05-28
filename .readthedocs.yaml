@@ -13,6 +13,4 @@ python:
   install:
     - method: uv
       command: pip
-      path: backend
-      extras:
-        - docs
+      requirements: docs/requirements.txt
