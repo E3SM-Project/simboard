@@ -10,7 +10,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -85,6 +88,9 @@ const formatGroupSimulationWindow = (simulations: SimulationSummaryOut[]) => {
   return `${formatCaseDate(startDate)} → ${formatCaseDate(endDate)}`;
 };
 
+const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
 interface CaseDetailsPageProps {
   simulations: SimulationOut[];
   selectedSimulationIds: string[];
@@ -96,6 +102,7 @@ type SimulationViewMode = 'grouped' | 'flat';
 const MAX_SELECTION = 5;
 const GROUP_ACTIONS_THRESHOLD = 4;
 const ALL_CASE_HASHES_VALUE = '__all_case_hashes__';
+const FILTER_SCOPE_PREFIX = '__filter__';
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
 const SCROLLABLE_FLAT_ROWS_THRESHOLD = 10;
 const GROUP_FILTER_OPTIONS: Array<{ value: SimulationSummaryGroupFilter; label: string }> = [
@@ -112,7 +119,7 @@ export const CaseDetailsPage = ({
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<SimulationViewMode>('grouped');
+  const [viewMode, setViewMode] = useState<SimulationViewMode>('flat');
   const [selectedCaseHashKey, setSelectedCaseHashKey] = useState(ALL_CASE_HASHES_VALUE);
   const [groupFilterMode, setGroupFilterMode] = useState<SimulationSummaryGroupFilter>('all');
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
@@ -149,9 +156,15 @@ export const CaseDetailsPage = ({
       })),
     [rawSimulationGroups],
   );
+  const selectableCaseHashOptions = useMemo(
+    () => caseHashOptions.filter((option) => option.key !== '__missing_case_hash__'),
+    [caseHashOptions],
+  );
   const caseHashGroupCount = rawSimulationGroups.filter((group) => !group.isFallback).length;
   const missingCaseHashCount =
     rawSimulationGroups.find((group) => group.isFallback)?.simulations.length ?? 0;
+  const allRunsMissingCaseHash =
+    caseRecord != null && caseRecord.simulations.length > 0 && caseHashGroupCount === 0 && missingCaseHashCount > 0;
   const filteredGroupKeys = useMemo(
     () =>
       rawSimulationGroups
@@ -270,6 +283,37 @@ export const CaseDetailsPage = ({
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
   const totalSimulationCount =
     viewMode === 'grouped' ? simulationGroups.length : caseRecord.simulations.length;
+  const summaryHeadline =
+    caseRecord.simulations.length === 0
+      ? '0 runs'
+      : allRunsMissingCaseHash
+        ? `${caseRecord.simulations.length} runs, all without Case Hash`
+        : `${caseRecord.simulations.length} runs in ${caseHashGroupCount} Case Hash ${
+            caseHashGroupCount === 1 ? 'group' : 'groups'
+          }`;
+  const simulationsIntro = allRunsMissingCaseHash
+    ? 'Every run in this case is missing a Case Hash, so grouped view shows one fallback group.'
+    : 'Grouped view clusters runs by Case Hash and keeps missing-hash runs in a fallback group.';
+  const showingFallbackOnlyGroup =
+    viewMode === 'grouped' &&
+    filteredSimulationGroups.length === 1 &&
+    filteredSimulationGroups[0]?.isFallback === true;
+  const statusSummary =
+    viewMode === 'grouped'
+      ? showingFallbackOnlyGroup
+        ? `1 fallback group containing ${pluralize(filteredExecutionCount, 'execution')}`
+        : `Showing ${activeSimulationCount} of ${totalSimulationCount} groups containing ${pluralize(
+            filteredExecutionCount,
+            'execution',
+          )}`
+      : `Showing ${activeSimulationCount} of ${totalSimulationCount} executions from ${pluralize(
+          filteredSimulationGroups.filter((group) => !group.isFallback).length,
+          'Case Hash group',
+        )}`;
+  const selectedScopeValue =
+    selectedCaseHashKey !== ALL_CASE_HASHES_VALUE && groupFilterMode === 'all'
+      ? selectedCaseHashKey
+      : `${FILTER_SCOPE_PREFIX}:${groupFilterMode}`;
 
   const toggleSimulationSelection = (simulationId: string) => {
     if (selectedSimulationIds.includes(simulationId)) {
@@ -312,6 +356,17 @@ export const CaseDetailsPage = ({
     setSelectedCaseHashKey(ALL_CASE_HASHES_VALUE);
   };
 
+  const handleScopeChange = (value: string) => {
+    if (value.startsWith(`${FILTER_SCOPE_PREFIX}:`)) {
+      setGroupFilterMode(value.replace(`${FILTER_SCOPE_PREFIX}:`, '') as SimulationSummaryGroupFilter);
+      setSelectedCaseHashKey(ALL_CASE_HASHES_VALUE);
+      return;
+    }
+
+    setGroupFilterMode('all');
+    setSelectedCaseHashKey(value);
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -338,17 +393,10 @@ export const CaseDetailsPage = ({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-500">Case summary</p>
-                <h2 className="text-lg font-semibold text-slate-950">
-                  {caseRecord.simulations.length} runs across {caseHashGroupCount} Case Hash groups
-                </h2>
+                <h2 className="text-lg font-semibold text-slate-950">{summaryHeadline}</h2>
               </div>
               <div className="flex flex-wrap gap-2">
                 {caseRecord.caseGroup ? <Badge variant="outline">{caseRecord.caseGroup}</Badge> : null}
-                {missingCaseHashCount > 0 ? (
-                  <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-                    {missingCaseHashCount} missing Case Hash
-                  </Badge>
-                ) : null}
               </div>
             </div>
 
@@ -376,10 +424,7 @@ export const CaseDetailsPage = ({
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
               <h2 className="text-xl font-semibold">Simulations</h2>
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                Group by Case Hash to compare runs within the same lineage; runs without Case Hash stay
-                visible as fallback entries.
-              </p>
+              <p className="max-w-3xl text-sm text-muted-foreground">{simulationsIntro}</p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -409,8 +454,8 @@ export const CaseDetailsPage = ({
           </div>
 
           <div className="space-y-4 px-5 py-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4">
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-slate-900">View</div>
                   <div className="flex flex-wrap gap-2">
@@ -433,83 +478,76 @@ export const CaseDetailsPage = ({
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="text-sm font-medium text-slate-900">Scope</div>
-                  <Select value={selectedCaseHashKey} onValueChange={setSelectedCaseHashKey}>
-                    <SelectTrigger className="w-full bg-white shadow-none lg:w-72">
-                      <SelectValue placeholder="All Case Hash groups" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL_CASE_HASHES_VALUE}>All Case Hash groups</SelectItem>
-                      {caseHashOptions.map((option) => (
-                        <SelectItem key={option.key} value={option.key} title={option.title}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={selectedScopeValue} onValueChange={handleScopeChange}>
+                      <SelectTrigger className="w-full bg-white shadow-none sm:w-72">
+                        <SelectValue placeholder="All groups" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Filters</SelectLabel>
+                          {GROUP_FILTER_OPTIONS.map((option) => (
+                            <SelectItem
+                              key={option.value}
+                              value={`${FILTER_SCOPE_PREFIX}:${option.value}`}
+                            >
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                        {selectableCaseHashOptions.length > 0 ? (
+                          <>
+                            <SelectSeparator />
+                            <SelectGroup>
+                              <SelectLabel>Case Hash groups</SelectLabel>
+                              {selectableCaseHashOptions.map((option) => (
+                                <SelectItem key={option.key} value={option.key} title={option.title}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
+                    {hasActiveGroupFilters ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
+                        Reset filters
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-3 xl:text-right">
-                <div className="space-y-2">
-                  <div className="text-sm font-medium text-slate-900">Filters</div>
-                  <div className="flex flex-wrap gap-2 xl:justify-end">
-                    {GROUP_FILTER_OPTIONS.map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        size="sm"
-                        variant={groupFilterMode === option.value ? 'default' : 'outline'}
-                        onClick={() => setGroupFilterMode(option.value)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                  {selectedSimulationIds.length > 0 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-slate-600 hover:text-slate-900"
-                      onClick={() => setSelectedSimulationIds([])}
-                    >
-                      Deselect all
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                {selectedSimulationIds.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-600 hover:text-slate-900"
+                    onClick={() => setSelectedSimulationIds([])}
+                  >
+                    Deselect all
+                  </Button>
+                ) : null}
+                {viewMode === 'grouped' && showGroupActions ? (
+                  <>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleExpandAllGroups}>
+                      Expand all
                     </Button>
-                  ) : null}
-                  {hasActiveGroupFilters ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
-                      Reset filters
+                    <Button type="button" variant="ghost" size="sm" onClick={handleCollapseAllGroups}>
+                      Collapse all
                     </Button>
-                  ) : null}
-                  {viewMode === 'grouped' && showGroupActions ? (
-                    <>
-                      <Button type="button" variant="ghost" size="sm" onClick={handleExpandAllGroups}>
-                        Expand all
-                      </Button>
-                      <Button type="button" variant="ghost" size="sm" onClick={handleCollapseAllGroups}>
-                        Collapse all
-                      </Button>
-                    </>
-                  ) : null}
-                </div>
+                  </>
+                ) : null}
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                Showing <span className="font-semibold text-slate-950">{activeSimulationCount}</span> of{' '}
-                {totalSimulationCount} {viewMode === 'grouped' ? 'groups' : 'executions'}
-              </div>
-              <div>
-                {viewMode === 'grouped'
-                  ? `${filteredExecutionCount} executions available inside current group set`
-                  : `${filteredSimulationGroups.length} Case Hash groups represented`}
-              </div>
+            <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
+              {statusSummary}
             </div>
           </div>
         </div>
@@ -530,7 +568,7 @@ export const CaseDetailsPage = ({
                     : 'No executions match these filters.'}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Try a different Case Hash selection or reset the quick filters.
+                  Try a different scope selection or reset current filters.
                 </p>
                 <Button type="button" variant="outline" size="sm" className="mt-4" onClick={resetGroupFilters}>
                   Reset filters
@@ -647,17 +685,23 @@ export const CaseDetailsPage = ({
                                 }`}
                               />
                               <div className="min-w-0 space-y-1">
-                                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                                  {group.isFallback ? 'Missing Case Hash' : 'Case Hash group'}
-                                </p>
-                                <p
-                                  className="truncate font-mono text-sm text-slate-950"
-                                  title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
-                                >
-                                  {group.isFallback
-                                    ? MISSING_CASE_HASH_LABEL
-                                    : formatCaseHashLabel(group.caseHash)}
-                                </p>
+                                {group.isFallback ? (
+                                  <p className="font-semibold text-sm text-slate-950">
+                                    {MISSING_CASE_HASH_LABEL}
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                                      Case Hash group
+                                    </p>
+                                    <p
+                                      className="truncate font-mono text-sm text-slate-950"
+                                      title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
+                                    >
+                                      {formatCaseHashLabel(group.caseHash)}
+                                    </p>
+                                  </>
+                                )}
                                 {group.isFallback ? (
                                   <p className="max-w-2xl text-xs text-muted-foreground">
                                     Older ingests without Case Hash stay visible here without subgrouping.
