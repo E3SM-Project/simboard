@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 
-import type { CaseOut, SimulationSummaryOut } from '@/types';
+import type { SimulationSummaryOut } from '@/types';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
 
@@ -68,10 +68,6 @@ export const getSimulationSummaryDateWindow = (
       latestSimulation?.simulationEndDate ?? latestSimulation?.simulationStartDate ?? null,
   };
 };
-
-export const getReferenceSimulation = (caseRecord: CaseOut) =>
-  caseRecord.simulations.find((simulation) => simulation.id === caseRecord.referenceSimulationId) ??
-  null;
 
 export const sortSimulationSummaries = (simulations: SimulationSummaryOut[]) =>
   [...simulations].sort((left, right) => {

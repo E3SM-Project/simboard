@@ -2,7 +2,6 @@ import { ArrowLeft, ChevronDown, Pin, Share2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +28,6 @@ import {
   formatCaseHashLabel,
   formatSimulationDateRange,
   getDefaultExpandedGroupKeys,
-  getReferenceSimulation,
   getSimulationSummaryDateWindow,
   groupSimulationSummaries,
   matchesSimulationGroupFilter,
@@ -264,8 +262,6 @@ export const CaseDetailsPage = ({
       </div>
     );
   }
-
-  const referenceSimulation = getReferenceSimulation(caseRecord);
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
@@ -336,7 +332,7 @@ export const CaseDetailsPage = ({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
+      <div>
         <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -371,44 +367,6 @@ export const CaseDetailsPage = ({
               />
               <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="space-y-4 p-5">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">Reference simulation</p>
-              {referenceSimulation ? (
-                <SimulationStatusBadge status={referenceSimulation.status} />
-              ) : null}
-            </div>
-
-            {referenceSimulation ? (
-              <div className="space-y-4">
-                <Link
-                  to={`/simulations/${referenceSimulation.id}`}
-                  state={{ from: currentPath }}
-                  className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                >
-                  {referenceSimulation.executionId}
-                  <span
-                    className="inline-flex items-center"
-                    title="Reference simulation"
-                    aria-label="Reference simulation"
-                  >
-                    <Pin className="h-3.5 w-3.5 text-amber-600" />
-                  </span>
-                </Link>
-                <div className="grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2">
-                  <DetailField label="Simulation window" value={formatSimulationDateRange(referenceSimulation)} />
-                  <DetailField label="Change role" value="Reference baseline" />
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No reference simulation is set for this case.
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>
