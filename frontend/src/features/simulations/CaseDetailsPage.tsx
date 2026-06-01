@@ -799,6 +799,7 @@ export const CaseDetailsPage = ({
                       <TableBody>
                           {filteredSimulationGroups.map((group) => {
                             const isOpen = expandedGroupKeys.includes(group.key);
+                            const groupPanelId = `case-hash-group-panel-${group.key}`;
                             const groupSimulationWindow = formatGroupSimulationWindow(
                               group.simulations.map(({ summary }) => summary),
                             );
@@ -830,12 +831,15 @@ export const CaseDetailsPage = ({
 
                             return (
                               <Fragment key={group.key}>
-                                <TableRow
-                                  className="cursor-pointer bg-white hover:bg-slate-50/80"
-                                  onClick={() => toggleGroupExpansion(group.key, !isOpen)}
-                                >
+                                <TableRow className="bg-white hover:bg-slate-50/80">
                                   <TableCell className="align-top">
-                                    <div className="flex items-start gap-3">
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-start gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                      onClick={() => toggleGroupExpansion(group.key, !isOpen)}
+                                      aria-expanded={isOpen}
+                                      aria-controls={groupPanelId}
+                                    >
                                       <ChevronDown
                                         className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${
                                           isOpen ? 'rotate-180' : ''
@@ -861,7 +865,7 @@ export const CaseDetailsPage = ({
                                           </p>
                                         ) : null}
                                       </div>
-                                    </div>
+                                    </button>
                                   </TableCell>
                                   <TableCell className="align-top">
                                     <Badge variant="outline">
@@ -884,7 +888,10 @@ export const CaseDetailsPage = ({
                                 {isOpen ? (
                                   <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
                                     <TableCell colSpan={6} className="p-0">
-                                      <div className="border-t border-slate-200 px-4 py-3">
+                                      <div
+                                        id={groupPanelId}
+                                        className="border-t border-slate-200 px-4 py-3"
+                                      >
                                         <div className="mb-3 flex items-center justify-between gap-3">
                                           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
                                             Executions in group

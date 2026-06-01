@@ -731,9 +731,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         className="font-mono text-xs text-slate-700"
                         title={simulation.caseHash ?? MISSING_CASE_HASH_LABEL}
                       >
-                        {simulation.caseHash
-                          ? formatCaseHashLabel(simulation.caseHash)
-                          : MISSING_CASE_HASH_LABEL}
+                        {formatCaseHashLabel(simulation.caseHash)}
                       </span>
                     </TableCell>
                     <TableCell className="align-top">
