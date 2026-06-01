@@ -383,15 +383,11 @@ export const CaseDetailsPage = ({
 
   const toggleGroupExpansion = (groupKey: string, open: boolean) => {
     setExpandedGroupKeys((currentKeys) => {
-      if (!open) {
-        return currentKeys.filter((key) => key !== groupKey);
+      if (open) {
+        return currentKeys.includes(groupKey) ? currentKeys : [...currentKeys, groupKey];
       }
 
-      if (currentKeys.length > 1) {
-        return [groupKey];
-      }
-
-      return currentKeys[0] === groupKey ? currentKeys : [groupKey];
+      return currentKeys.filter((key) => key !== groupKey);
     });
   };
 
@@ -445,28 +441,36 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
-            <div className="grid gap-x-6 gap-y-3 border-t border-slate-200 pt-3 sm:grid-cols-2 xl:grid-cols-5">
-              <DetailField label="Runs" value={caseRecord.simulations.length} />
-              <DetailField label="Case Hash groups" value={caseHashGroupCount} />
-              <DetailField
-                label="Machines"
-                value={machineSummary}
+            <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-3">
+              <div className="min-w-[7rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
+                <DetailField label="Runs" value={caseRecord.simulations.length} />
+              </div>
+              <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
+                <DetailField label="Case Hash groups" value={caseHashGroupCount} />
+              </div>
+              <div
+                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white/80 px-3 py-2"
                 title={
                   caseRecord.machineNames.length > 1
                     ? caseRecord.machineNames.join(', ')
                     : undefined
                 }
-              />
-              <DetailField
-                label="HPC users"
-                value={hpcUsernameSummary}
+              >
+                <DetailField label="Machines" value={machineSummary} />
+              </div>
+              <div
+                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white/80 px-3 py-2"
                 title={
                   caseRecord.hpcUsernames.length > 1
                     ? caseRecord.hpcUsernames.join(', ')
                     : undefined
                 }
-              />
-              <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
+              >
+                <DetailField label="HPC users" value={hpcUsernameSummary} />
+              </div>
+              <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
+                <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
+              </div>
             </div>
           </CardContent>
         </Card>
