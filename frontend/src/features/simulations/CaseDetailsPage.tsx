@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, Pin, Search, Share2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Info, Pin, Search, Share2 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   formatCaseDate,
   formatCaseHashLabel,
@@ -101,6 +102,8 @@ type SimulationViewMode = 'grouped' | 'flat';
 const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
 const SCROLLABLE_FLAT_ROWS_THRESHOLD = 10;
+const CASE_HASH_GROUPING_TOOLTIP =
+  'Case name is human-readable label. Case hash identifies specific CIME case instance. Multiple hashes under one case name usually mean case was recreated or cloned.';
 const GROUP_FILTER_OPTIONS: Array<{ value: SimulationSummaryGroupFilter; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'multiRun', label: 'Multi-run' },
@@ -350,7 +353,7 @@ export const CaseDetailsPage = ({
           }`;
   const simulationsIntro = allRunsMissingCaseHash
     ? 'Every run in this case is missing a Case Hash, so grouped view shows one fallback group.'
-    : 'Grouped view clusters runs by Case Hash and keeps missing-hash runs in a fallback group.';
+    : 'Grouped view clusters runs by Case Hash. Different hashes under one case name usually mean the case was recreated or cloned, and missing-hash runs stay in a fallback group.';
   const showingFallbackOnlyGroup =
     viewMode === 'grouped' &&
     filteredSimulationGroups.length === 1 &&
@@ -765,7 +768,27 @@ export const CaseDetailsPage = ({
                       <Table className="min-w-[980px]">
                         <TableHeader className="sticky top-0 z-10 bg-slate-50">
                           <TableRow className="hover:bg-slate-50">
-                            <TableHead className="w-[22rem] bg-slate-50">Case Hash</TableHead>
+                            <TableHead className="w-[22rem] bg-slate-50">
+                              <div className="flex items-center gap-1.5">
+                                <span>Case Hash</span>
+                                <TooltipProvider delayDuration={150}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="text-slate-400 transition-colors hover:text-slate-600"
+                                        aria-label="Explain case hash grouping"
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-xs leading-5">
+                                      {CASE_HASH_GROUPING_TOOLTIP}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            </TableHead>
                             <TableHead className="w-24 bg-slate-50">Runs</TableHead>
                             <TableHead className="bg-slate-50">Simulation window</TableHead>
                             <TableHead className="bg-slate-50">Initialization</TableHead>
@@ -773,7 +796,7 @@ export const CaseDetailsPage = ({
                             <TableHead className="bg-slate-50">Run dates</TableHead>
                           </TableRow>
                         </TableHeader>
-                        <TableBody>
+                      <TableBody>
                           {filteredSimulationGroups.map((group) => {
                             const isOpen = expandedGroupKeys.includes(group.key);
                             const groupSimulationWindow = formatGroupSimulationWindow(
