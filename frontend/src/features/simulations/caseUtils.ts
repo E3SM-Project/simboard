@@ -150,20 +150,12 @@ export const groupSimulationSummaries = (
     }));
 };
 
-export const getDefaultExpandedGroupKeys = (groups: SimulationSummaryGroup[]) => {
-  if (groups.length <= 3) {
-    return groups.map((group) => group.key);
-  }
-
-  if (groups.length <= 6) {
-    return groups.slice(0, 3).map((group) => group.key);
-  }
-
+export const getDefaultExpandedGroupKeys = <T extends { key: string }>(groups: T[]) => {
   return groups.slice(0, 1).map((group) => group.key);
 };
 
-export const matchesSimulationGroupFilter = (
-  group: SimulationSummaryGroup,
+export const matchesSimulationGroupFilter = <T extends { isFallback: boolean; simulations: unknown[] }>(
+  group: T,
   filterMode: SimulationSummaryGroupFilter,
 ) => {
   switch (filterMode) {
