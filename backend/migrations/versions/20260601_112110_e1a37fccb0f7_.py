@@ -1,8 +1,9 @@
 """Add case_hash column to simulations.
 
-Revision ID: 20260414_000000
-Revises: 20260331_000000
-Create Date: 2026-03-30 00:00:00.000000
+Revision ID: e1a37fccb0f7
+Revises: 20260526_120000
+Create Date: 2026-06-01 11:21:10.936484
+
 """
 
 from typing import Sequence, Union
@@ -11,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "20260414_000000"
-down_revision: Union[str, Sequence[str], None] = "20260331_000000"
+revision: str = "e1a37fccb0f7"
+down_revision: Union[str, Sequence[str], None] = "20260526_120000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
