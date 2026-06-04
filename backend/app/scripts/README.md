@@ -14,7 +14,7 @@ Scripts are organized by domain:
 scripts/
 ├── ingestion/
 │   ├── nersc_archive_ingestor.py
-│   ├── hpc_archive_ingestor.py
+│   ├── hpc_upload_archive_ingestor.py
 │   └── sites/
 │       └── chrysalis.sh
 │       └── nersc.sh
@@ -107,9 +107,9 @@ If operational complexity increases, these scripts may later be consolidated int
 
 ---
 
-## HPC Archive Ingestor
+## HPC Upload Archive Ingestor
 
-The scheduler-agnostic HPC archive ingestor is the preferred entrypoint for
+The scheduler-agnostic HPC upload archive ingestor is the preferred entrypoint for
 site wrappers. It currently delegates to the existing NERSC archive ingestor,
 preserving Perlmutter behavior while giving non-NERSC schedulers a stable shared
 command.
@@ -117,7 +117,7 @@ command.
 Example:
 
 ```bash
-uv run python -m app.scripts.ingestion.hpc_archive_ingestor
+uv run python -m app.scripts.ingestion.hpc_upload_archive_ingestor
 ```
 
 Thin site wrappers live under `app/scripts/ingestion/sites/`. They should only
