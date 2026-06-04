@@ -17,4 +17,4 @@ backend_root="$(cd "${script_dir}/../../../.." && pwd)"
 python_bin="${PYTHON_BIN:-python}"
 
 cd "${backend_root}"
-exec "${python_bin}" -m app.scripts.ingestion.hpc_archive_ingestor
+exec "${python_bin}" -m app.scripts.ingestion.hpc_upload_archive_ingestor
