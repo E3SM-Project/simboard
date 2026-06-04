@@ -23,7 +23,7 @@ Add standalone scanner that discovers zppy provenance cfg files from configured 
 ## Approach
 
 1. Mirror existing operational script structure.
-   - Base new script on patterns from `backend/app/scripts/ingestion/nersc_archive_ingestor.py`.
+   - Base new script on patterns from `backend/app/scripts/ingestion/nersc_upload_archive_ingestor.py`.
    - Reuse same style for config parsing, structured logs, dry-run handling, retry/backoff, and state persistence.
 
 2. Discover provenance cfg files.
