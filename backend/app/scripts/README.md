@@ -58,12 +58,20 @@ Example:
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
+<<<<<<< HEAD
 python -m app.scripts.ingestion.nersc_archive_ingestor
 <<<<<<< HEAD
 python -m app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor
 =======
 python -m app.scripts.ingestion.hpc_archive_ingestor
+<<<<<<< HEAD
 >>>>>>> b798238 (Add Chrysalis ingestion wrapper)
+=======
+=======
+python -m app.scripts.ingestion.hpc_upload_archive_ingestor
+python -m app.scripts.ingestion.nersc_archive_ingestor --dry-run
+>>>>>>> 9b7de39 (Fix docs)
+>>>>>>> d1d7783 (Fix docs)
 ```
 
 Do not execute scripts directly by file path:
