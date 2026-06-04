@@ -29,11 +29,15 @@ def downgrade() -> None:
     """Restore removed reference-tracking columns."""
     op.add_column(
         "simulations",
-        sa.Column("run_config_deltas", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "run_config_deltas", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
     )
     op.add_column(
         "cases",
-        sa.Column("reference_simulation_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "reference_simulation_id", postgresql.UUID(as_uuid=True), nullable=True
+        ),
     )
     op.create_foreign_key(
         "fk_cases_reference_sim",
