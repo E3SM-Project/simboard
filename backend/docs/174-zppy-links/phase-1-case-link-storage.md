@@ -31,6 +31,8 @@ Extend backend data model so an external link can belong to either a simulation 
 2. Add database invariants in Alembic migration.
    - Backfill nothing; existing rows remain simulation-owned.
    - Add check constraint enforcing exactly one owner per row: `case_id` xor `simulation_id`.
+   - Add partial unique index for case-owned diagnostics on `(case_id, kind, url)` where `case_id IS NOT NULL`.
+   - Leave simulation-owned link uniqueness unchanged in this phase.
    - Preserve cascade semantics for both ownership paths.
 
 3. Preserve current write behavior.
@@ -44,6 +46,7 @@ Extend backend data model so an external link can belong to either a simulation 
   - case-owned external link is valid
   - ownerless external link is invalid
   - dual-owned external link is invalid
+  - duplicate case-owned diagnostic link violates the new DB uniqueness invariant
 - Run:
   - `make backend-test`
 

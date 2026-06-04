@@ -175,6 +175,7 @@ Tests:
 Add `DiagnosticsLinkRequest` in `backend/app/features/simulation/schemas.py`.
 
 For MVP, add `case_id` to `ExternalLink` and store diagnostic links at case scope.
+Add a partial unique index on `(case_id, kind, url)` where `case_id IS NOT NULL` so case-owned diagnostic links remain idempotent under repeated or concurrent writes.
 
 #### 3. Add matching resolver
 
@@ -201,6 +202,11 @@ Tests:
 
 Endpoint: `POST /api/v1/diagnostics/link`
 
+Implementation note:
+
+- Define the endpoint in `backend/app/features/simulation/api.py` using a dedicated `diagnostics_router` with prefix `/diagnostics`.
+- Register that router in `backend/app/main.py` with `API_BASE` so the public path remains exactly `/api/v1/diagnostics/link` instead of inheriting the `/simulations` prefix.
+
 Roles: `ADMIN`, `SERVICE_ACCOUNT`
 
 Request:
@@ -223,6 +229,7 @@ Diagnostics item:
 Tests:
 
 - duplicate request is idempotent
+- concurrent duplicate request is idempotent
 - invalid payload returns `422`
 - auth required
 

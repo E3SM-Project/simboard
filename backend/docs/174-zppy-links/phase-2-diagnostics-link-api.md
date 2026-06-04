@@ -28,7 +28,8 @@ Add backend-only endpoint that resolves one case by `(case_name, machine, hpc_us
 2. Add new internal endpoint.
    - Route: `POST /api/v1/diagnostics/link`
    - Success response: `204 No Content`
-   - Endpoint lives in existing simulation feature router module.
+   - Endpoint lives in `backend/app/features/simulation/api.py`, but uses a dedicated `diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])` rather than the existing `/simulations` router.
+   - Register `diagnostics_router` in `backend/app/main.py` with the same `API_BASE` prefix as other feature routers so the final path is exactly `/api/v1/diagnostics/link`.
 
 3. Enforce auth and access policy.
    - Require authenticated user from existing `current_active_user` dependency.
@@ -45,7 +46,8 @@ Add backend-only endpoint that resolves one case by `(case_name, machine, hpc_us
 
 5. Persist idempotent links.
    - Create case-owned `ExternalLink` rows with `kind="diagnostic"`.
-   - Upsert by `(case_id, kind, url)` in application logic.
+   - Treat the Phase 1 partial unique index on `(case_id, kind, url)` as the source of truth for idempotency.
+   - Use conflict-safe write logic so repeated or concurrent requests for the same `(case_id, kind, url)` do not create duplicate rows.
    - If same URL already exists for case, update label from diagnostics item `name` instead of inserting duplicate.
 
 ## Tests
@@ -53,6 +55,7 @@ Add backend-only endpoint that resolves one case by `(case_name, machine, hpc_us
 - Add API coverage for:
   - successful create
   - duplicate request remains idempotent
+  - concurrent duplicate request remains idempotent
   - `401` unauthenticated
   - `403` authenticated but wrong role
   - `404` no matching case
