@@ -409,6 +409,13 @@ class CaseOut(CamelOutBaseModel):
             description="Unique HPC usernames represented across this case's simulations.",
         ),
     ]
+    links: Annotated[
+        list[ExternalLinkOut],
+        Field(
+            default_factory=list,
+            description="Optional list of external links associated with the case.",
+        ),
+    ]
     created_at: Annotated[
         datetime, Field(..., description="Timestamp when the case was created")
     ]

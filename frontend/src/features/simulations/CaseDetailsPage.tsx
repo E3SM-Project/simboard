@@ -30,7 +30,7 @@ import {
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
-import type { SimulationOut, SimulationSummaryOut } from '@/types';
+import type { ExternalLinkOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
 const DetailField = ({
   label,
@@ -139,6 +139,19 @@ const getGroupRunDateWindow = (simulations: GroupSimulation[]) => {
 };
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
+
+const renderExternalLink = (link: ExternalLinkOut) => (
+  <li key={`${link.kind}:${link.url}`} className="flex items-start gap-2">
+    <a
+      className="break-all text-sm font-medium text-blue-600 hover:underline"
+      href={link.url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {link.label || link.url}
+    </a>
+  </li>
+);
 
 export const CaseDetailsPage = ({
   simulations: allSimulations,
@@ -337,6 +350,7 @@ export const CaseDetailsPage = ({
   }
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
+  const diagnosticLinks = caseRecord.links.filter((link) => link.kind === 'diagnostic');
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
@@ -478,6 +492,26 @@ export const CaseDetailsPage = ({
           </CardContent>
         </Card>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-950">Diagnostics</h2>
+          <p className="text-sm text-muted-foreground">
+            Case-level diagnostic links attached directly to this case.
+          </p>
+        </div>
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            {diagnosticLinks.length > 0 ? (
+              <ul className="space-y-2">{diagnosticLinks.map(renderExternalLink)}</ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No case-level diagnostic links are recorded yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       <section className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

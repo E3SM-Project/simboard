@@ -12,6 +12,7 @@ from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.enums import ExternalLinkKind
+from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseOut,
@@ -121,7 +122,10 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     """
     case = (
         db.query(Case)
-        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
+        .options(
+            selectinload(Case.simulations).selectinload(Simulation.machine),
+            selectinload(Case.links),
+        )
         .filter(Case.id == case_id)
         .first()
     )
@@ -129,12 +133,12 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    resp = _case_to_out(case)
+    resp = _case_to_out(case, include_links=True)
 
     return resp
 
 
-def _case_to_out(case: Case) -> CaseOut:
+def _case_to_out(case: Case, *, include_links: bool = False) -> CaseOut:
     """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
 
     Parameters
@@ -181,6 +185,7 @@ def _case_to_out(case: Case) -> CaseOut:
         simulations=summaries,
         machine_names=machine_names,
         hpc_usernames=hpc_usernames,
+        links=case.links if include_links else [],
         created_at=case.created_at,
         updated_at=case.updated_at,
     )
@@ -263,7 +268,7 @@ def create_simulation(
     sim_loaded = (
         db.query(Simulation)
         .options(
-            joinedload(Simulation.case),
+            joinedload(Simulation.case).selectinload(Case.links),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -363,7 +368,7 @@ def list_simulations(
         in descending order.
     """
     query = db.query(Simulation).options(
-        joinedload(Simulation.case),
+        joinedload(Simulation.case).selectinload(Case.links),
         joinedload(Simulation.machine),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
@@ -487,7 +492,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     sim = (
         db.query(Simulation)
         .options(
-            joinedload(Simulation.case),
+            joinedload(Simulation.case).selectinload(Case.links),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -520,12 +525,14 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     """
     case = sim.case
     llm_available = is_summary_llm_available()
+    merged_links = merge_simulation_and_case_links(sim.links, case.links)
 
     result = SimulationOut.model_validate(
         {
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
             "case_group": case.case_group,
+            "links": merged_links,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,

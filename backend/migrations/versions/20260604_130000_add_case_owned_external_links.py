@@ -56,9 +56,7 @@ def downgrade() -> None:
     """Remove case ownership support for external links."""
     connection = op.get_bind()
     case_owned_count = connection.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM external_links WHERE case_id IS NOT NULL"
-        )
+        sa.text("SELECT COUNT(*) FROM external_links WHERE case_id IS NOT NULL")
     ).scalar_one()
     if case_owned_count:
         raise RuntimeError(
