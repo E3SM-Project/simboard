@@ -1,27 +1,49 @@
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.common.dependencies import get_database_session
 from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.api import create_simulation
-from app.features.simulation.models import Case, Simulation
+from app.features.simulation.enums import (
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
+from app.features.simulation.models import Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
+from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
-from app.features.user.models import User, UserRole
+from app.features.user.models import ApiToken, User, UserRole
 from app.main import app
+from tests.conftest import TestingSessionLocal, engine
+
+
+def use_real_auth(test_func):
+    """Flag tests that should bypass the default auth override."""
+    test_func._use_real_auth = True
+    return test_func
 
 
 @pytest.fixture(autouse=True)
-def override_auth_dependency(normal_user_sync):
+def override_auth_dependency(request, normal_user_sync):
     """Auto-login a test user for endpoints requiring authentication."""
+    if getattr(request.node.function, "_use_real_auth", False):
+        yield
+        app.dependency_overrides.clear()
+        return
 
     def fake_current_user():
         return User(
@@ -46,6 +68,85 @@ def _create_case(db: Session, name: str = "test_case") -> Case:
     db.flush()
 
     return case
+
+
+def _create_service_account_token(
+    db: Session,
+    *,
+    email: str | None = None,
+) -> tuple[User, str]:
+    user = User(
+        email=email or f"svc-{uuid4()}@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.flush()
+
+    raw_token, token_hash = generate_token()
+    db.add(
+        ApiToken(
+            name="Diagnostics Link Token",
+            token_hash=token_hash,
+            user_id=user.id,
+            created_at=datetime.now(timezone.utc),
+            revoked=False,
+        )
+    )
+    db.commit()
+    db.refresh(user)
+
+    return user, raw_token
+
+
+def _create_matching_simulation(
+    db: Session,
+    *,
+    case_name: str,
+    machine_id,
+    machine_name: str,
+    user_id,
+    execution_id: str,
+    hpc_username: str,
+    source_reference: str,
+) -> tuple[Case, Simulation]:
+    case = _create_case(db, case_name)
+    ingestion = Ingestion(
+        source_type=IngestionSourceType.BROWSER_UPLOAD,
+        source_reference=source_reference,
+        machine_id=machine_id,
+        triggered_by=user_id,
+        status=IngestionStatus.SUCCESS,
+        created_count=1,
+        duplicate_count=0,
+        error_count=0,
+    )
+    db.add(ingestion)
+    db.flush()
+
+    simulation = Simulation(
+        case_id=case.id,
+        execution_id=execution_id,
+        compset="AQUAPLANET",
+        compset_alias="QPC4",
+        grid_name="f19_f19",
+        grid_resolution="1.9x2.5",
+        initialization_type="startup",
+        simulation_type=SimulationType.EXPERIMENTAL,
+        status=SimulationStatus.CREATED,
+        machine_id=machine_id,
+        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        created_by=user_id,
+        last_updated_by=user_id,
+        ingestion_id=ingestion.id,
+        hpc_username=hpc_username,
+        extra={"machineName": machine_name},
+    )
+    db.add(simulation)
+    db.commit()
+
+    return case, simulation
 
 
 class TestListCases:
@@ -844,3 +945,349 @@ class TestSimulationBrowserIncludesCaseMetadata:
         assert data[0]["caseId"] == str(case.id)
         assert data[0]["caseName"] == "test_case_browser"
         assert data[0]["executionId"] == "browser-exec-1"
+
+
+class TestLinkCaseDiagnostics:
+    @use_real_auth
+    def test_endpoint_creates_case_scoped_diagnostic_links(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        _, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-case-{uuid4()}"
+        case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=db.query(User)
+            .filter(User.role == UserRole.SERVICE_ACCOUNT)
+            .one()
+            .id,
+            execution_id=f"diag-exec-{uuid4()}",
+            hpc_username="diag-user",
+            source_reference=f"diag-source-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Atmosphere diagnostics",
+                        "url": "https://example.com/diag/atmosphere",
+                    },
+                    {
+                        "name": "Ocean diagnostics",
+                        "url": "https://example.com/diag/ocean",
+                    },
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind, link.label, link.url) for link in links] == [
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Atmosphere diagnostics",
+                "https://example.com/diag/atmosphere",
+            ),
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Ocean diagnostics",
+                "https://example.com/diag/ocean",
+            ),
+        ]
+
+    @use_real_auth
+    def test_duplicate_request_remains_idempotent(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        service_user, raw_token = _create_service_account_token(db)
+        case, _ = _create_matching_simulation(
+            db,
+            case_name=f"diagnostics-idempotent-{uuid4()}",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-idempotent-exec-{uuid4()}",
+            hpc_username="idempotent-user",
+            source_reference=f"diag-idempotent-source-{uuid4()}",
+        )
+        payload = {
+            "caseName": case.name,
+            "machine": machine.name,
+            "hpcUsername": "idempotent-user",
+            "diagnostics": [
+                {
+                    "name": "Shared diagnostics",
+                    "url": "https://example.com/diag/shared",
+                }
+            ],
+        }
+
+        first = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        second = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert first.status_code == 204
+        assert second.status_code == 204
+        links = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).all()
+        assert len(links) == 1
+        assert links[0].label == "Shared diagnostics"
+
+    @use_real_auth
+    def test_concurrent_duplicate_request_remains_idempotent(self) -> None:
+        SessionFactory = TestingSessionLocal
+        seed_session = SessionFactory(bind=engine.connect())
+        cleanup_session = None
+        service_user: User | None = None
+        app.dependency_overrides.pop(current_active_user, None)
+
+        def override_get_database_session():
+            session = SessionFactory(bind=engine.connect())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        app.dependency_overrides[get_database_session] = override_get_database_session
+
+        try:
+            machine = seed_session.query(Machine).first()
+            assert machine is not None
+
+            service_user, raw_token = _create_service_account_token(seed_session)
+            case_name = f"diagnostics-concurrent-{uuid4()}"
+            execution_id = f"diag-concurrent-exec-{uuid4()}"
+            source_reference = f"diag-concurrent-source-{uuid4()}"
+            case, _ = _create_matching_simulation(
+                seed_session,
+                case_name=case_name,
+                machine_id=machine.id,
+                machine_name=machine.name,
+                user_id=service_user.id,
+                execution_id=execution_id,
+                hpc_username="concurrent-user",
+                source_reference=source_reference,
+            )
+
+            payload = {
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "concurrent-user",
+                "diagnostics": [
+                    {
+                        "name": "Concurrent diagnostics",
+                        "url": "https://example.com/diag/concurrent",
+                    }
+                ],
+            }
+
+            with TestClient(app) as local_client:
+
+                def send_request() -> int:
+                    response = local_client.post(
+                        f"{API_BASE}/diagnostics/link",
+                        json=payload,
+                        headers={"Authorization": f"Bearer {raw_token}"},
+                    )
+                    return response.status_code
+
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    statuses = list(executor.map(lambda _: send_request(), range(2)))
+
+            assert statuses == [204, 204]
+
+            cleanup_session = SessionFactory(bind=engine.connect())
+            links = (
+                cleanup_session.query(ExternalLink)
+                .filter(ExternalLink.case_id == case.id)
+                .all()
+            )
+            assert len(links) == 1
+        finally:
+            app.dependency_overrides.pop(get_database_session, None)
+            if cleanup_session is None:
+                cleanup_session = SessionFactory(bind=engine.connect())
+            cleanup_session.execute(
+                delete(ExternalLink).where(
+                    ExternalLink.url == "https://example.com/diag/concurrent"
+                )
+            )
+            cleanup_session.execute(
+                delete(Simulation).where(
+                    Simulation.execution_id == locals().get("execution_id")
+                )
+            )
+            cleanup_session.execute(
+                delete(Ingestion).where(
+                    Ingestion.source_reference == locals().get("source_reference")
+                )
+            )
+            cleanup_session.execute(
+                delete(Case).where(Case.name == locals().get("case_name"))
+            )
+            if service_user is not None:
+                cleanup_session.execute(
+                    delete(ApiToken).where(ApiToken.user_id == service_user.id)
+                )
+                cleanup_session.execute(
+                    delete(User).where(User.email == service_user.email)
+                )
+            cleanup_session.commit()
+            cleanup_session.close()
+            seed_session.close()
+
+    @use_real_auth
+    def test_endpoint_requires_authentication(self, client) -> None:
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-auth-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing auth",
+                        "url": "https://example.com/diag/auth",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_endpoint_rejects_non_admin_non_service_account(self, client) -> None:
+        def fake_non_admin_user():
+            return User(
+                id=uuid4(),
+                email="forbidden@example.com",
+                is_active=True,
+                is_verified=True,
+                role=UserRole.USER,
+            )
+
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "forbidden-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Forbidden diagnostics",
+                        "url": "https://example.com/diag/forbidden",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Only administrators and service accounts may link diagnostics."
+        )
+
+    @use_real_auth
+    def test_endpoint_returns_404_when_case_match_is_missing(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing case diagnostics",
+                        "url": "https://example.com/diag/missing-case",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 404
+
+    def test_endpoint_returns_409_for_ambiguous_match(self, client) -> None:
+        def fake_admin_user():
+            return User(
+                id=uuid4(),
+                email="admin-diagnostics@example.com",
+                is_active=True,
+                is_verified=True,
+                role=UserRole.ADMIN,
+            )
+
+        app.dependency_overrides[current_active_user] = fake_admin_user
+
+        with patch(
+            "app.features.simulation.api._resolve_case_id_for_diagnostics_link",
+            side_effect=HTTPException(
+                status_code=409,
+                detail=(
+                    "Multiple cases matched the provided case_name, machine, and hpc_username."
+                ),
+            ),
+        ):
+            response = client.post(
+                f"{API_BASE}/diagnostics/link",
+                json={
+                    "caseName": "ambiguous-case",
+                    "machine": "perlmutter",
+                    "hpcUsername": "diag-user",
+                    "diagnostics": [
+                        {
+                            "name": "Ambiguous diagnostics",
+                            "url": "https://example.com/diag/ambiguous",
+                        }
+                    ],
+                },
+            )
+
+        assert response.status_code == 409
+
+    @use_real_auth
+    def test_endpoint_returns_422_for_invalid_payload(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "invalid-payload-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [{"name": "Broken diagnostics", "url": "not-a-url"}],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 422
