@@ -45,10 +45,7 @@ def _make_snapshot() -> SimulationSnapshot:
             simulation_end_date="2023-12-31T00:00:00Z",
             git_tag="v1.0.0",
         ),
-        case=SnapshotCaseFields(
-            name="assistant_livai_case",
-            reference_simulation_id="simulation-1",
-        ),
+        case=SnapshotCaseFields(name="assistant_livai_case"),
         snapshot_caveats=[],
     )
 

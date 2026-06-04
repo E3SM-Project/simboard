@@ -71,9 +71,6 @@ class TestSimulationCreateSchema:
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
-            "runConfigDeltas": {
-                "compiler": {"reference": "gcc-11", "current": "gcc-12"}
-            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -116,8 +113,6 @@ class TestSimulationOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "is_reference": True,
-            "change_count": 0,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -200,8 +195,6 @@ class TestSimulationOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "is_reference": False,
-            "change_count": 2,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
             "grid_name": "f19_f19",
@@ -253,9 +246,6 @@ class TestSimulationOutSchema:
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
             "extra": {"key": "value"},
-            "run_config_deltas": {
-                "compiler": {"reference": "gcc-11", "current": "gcc-12"}
-            },
             "artifacts": [
                 {
                     "kind": "output",
@@ -299,8 +289,6 @@ class TestSimulationOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            is_reference=True,
-            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -374,8 +362,6 @@ class TestSimulationOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            is_reference=True,
-            change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -462,14 +448,10 @@ class TestSimulationSummaryOutSchema:
             execution_id="1081156.251218-200923",
             case_hash=None,
             status="created",
-            is_reference=True,
-            change_count=0,
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             simulation_end_date=None,
         )
-        assert summary.is_reference is True
         assert summary.case_hash is None
-        assert summary.change_count == 0
         assert summary.simulation_end_date is None
 
     def test_non_reference_with_changes(self):
@@ -478,14 +460,10 @@ class TestSimulationSummaryOutSchema:
             execution_id="1081290.251218-211543",
             case_hash="hash-2",
             status="completed",
-            is_reference=False,
-            change_count=3,
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
         )
-        assert summary.is_reference is False
         assert summary.case_hash == "hash-2"
-        assert summary.change_count == 3
         assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
 
 
@@ -496,15 +474,12 @@ class TestCaseOutSchema:
             id=uuid4(),
             name="v3.LR.historical_0121",
             case_group="ensemble_v3",
-            reference_simulation_id=sim_id,
             simulations=[
                 SimulationSummaryOut(
                     id=sim_id,
                     execution_id="1081156.251218-200923",
                     case_hash="hash-1",
                     status="completed",
-                    is_reference=True,
-                    change_count=0,
                     simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
                     simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
                 ),
@@ -513,8 +488,6 @@ class TestCaseOutSchema:
                     execution_id="1081290.251218-211543",
                     case_hash="hash-2",
                     status="completed",
-                    is_reference=False,
-                    change_count=2,
                     simulation_start_date=datetime(2023, 2, 1, 0, 0, 0),
                     simulation_end_date=None,
                 ),
@@ -527,26 +500,22 @@ class TestCaseOutSchema:
         assert case_out.name == "v3.LR.historical_0121"
         assert case_out.case_group == "ensemble_v3"
         assert len(case_out.simulations) == 2
-        assert case_out.simulations[0].is_reference is True
         assert case_out.simulations[0].case_hash == "hash-1"
         assert case_out.machine_names == ["chrysalis"]
         assert case_out.hpc_usernames == ["ac.tvo"]
         assert case_out.simulations[1].case_hash == "hash-2"
-        assert case_out.simulations[1].change_count == 2
 
     def test_case_out_empty_simulations(self):
         case_out = CaseOut(
             id=uuid4(),
             name="empty_case",
             case_group=None,
-            reference_simulation_id=None,
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
-        assert case_out.reference_simulation_id is None
         assert case_out.simulations == []
         assert case_out.machine_names == []
         assert case_out.hpc_usernames == []

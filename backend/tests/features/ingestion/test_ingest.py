@@ -10,17 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
     SimulationCreateDraft,
-    _build_config_snapshot,
     _build_simulation_create_draft,
     _extract_postprocessing_script_path,
     _get_known_case_hash,
     _get_or_create_case,
-    _get_reference_metadata_for_case,
     _normalize_git_url,
     _normalize_path_candidate,
     _normalize_simulation_status,
     _normalize_simulation_type,
-    _stringify_config_value,
     _track_case_hash_grouping,
     _validate_simulation_create,
     ingest_archive,
@@ -32,7 +29,6 @@ from app.features.ingestion.models import (
 )
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.models import Machine
-from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
@@ -104,13 +100,6 @@ class TestIngestArchive:
     - Archive parsing integration
     - Error handling and propagation
     """
-
-    def test_stringify_config_value_falls_back_to_str_for_non_string_objects(self):
-        class ValueObject:
-            def __str__(self) -> str:
-                return "42"
-
-        assert _stringify_config_value(ValueObject()) == "42"
 
     @staticmethod
     def _create_machine(db: Session, name: str) -> Machine:
@@ -1380,16 +1369,8 @@ class TestNormalizeGitUrl:
         return machine
 
 
-class TestReferenceRunIngestion:
-    """Tests for reference run selection and config delta semantics.
-
-    These tests verify that:
-    - Multiple runs under the same casename are grouped properly
-    - The first successful run is treated as reference
-    - Subsequent runs record only config deltas
-    - Idempotent re-ingestion works correctly
-    - Incremental ingestion adds deltas without overwriting
-    """
+class TestCaseHashIngestion:
+    """Tests for case-name grouping and CASE_HASH preservation semantics."""
 
     @staticmethod
     def _create_machine(db: Session, name: str) -> Machine:
@@ -1442,110 +1423,10 @@ class TestReferenceRunIngestion:
         base.update(overrides)
         return base
 
-    def test_reference_run_selected_from_multiple_runs(self, db: Session) -> None:
-        """First run per case is reference (None deltas), subsequent runs
-        with config differences get a delta dict."""
-        self._create_machine(db, "test-machine")
-
-        # Two runs with the same case_name but different compilers
-        mock_simulations = {
-            "/path/to/1081183.251218-200943": self._make_metadata(
-                execution_id="1081183.251218-200943",
-                simulation_start_date="2020-01-01",
-                compiler="gcc-11",
-            ),
-            "/path/to/1081184.251218-200944": self._make_metadata(
-                execution_id="1081184.251218-200944",
-                simulation_start_date="2020-06-01",
-                compiler="gcc-12",
-            ),
-        }
-
-        with patch(
-            "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
-        ):
-            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
-
-        # Both runs are created as simulations
-        assert result.created_count == 2
-        assert len(result.simulations) == 2
-        # Reference run has run_config_deltas=None
-        reference = [s for s in result.simulations if s.run_config_deltas is None]
-        non_reference = [
-            s for s in result.simulations if s.run_config_deltas is not None
-        ]
-        assert len(reference) == 1
-        assert len(non_reference) == 1
-
-    def test_config_delta_stored_for_non_reference_run(self, db: Session) -> None:
-        """Non-reference runs with config differences record deltas as a dict."""
-        self._create_machine(db, "test-machine")
-
-        mock_simulations = {
-            "/path/to/1081185.251218-200945": self._make_metadata(
-                execution_id="1081185.251218-200945",
-                simulation_start_date="2020-01-01",
-                compiler="gcc-11",
-            ),
-            "/path/to/1081186.251218-200946": self._make_metadata(
-                execution_id="1081186.251218-200946",
-                simulation_start_date="2020-06-01",
-                compiler="gcc-12",
-            ),
-        }
-
-        with patch(
-            "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
-        ):
-            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
-
-        # Both runs created
-        assert result.created_count == 2
-        # Find reference (run_config_deltas=None) and non-reference
-        reference = [s for s in result.simulations if s.run_config_deltas is None]
-        non_reference = [
-            s for s in result.simulations if s.run_config_deltas is not None
-        ]
-        assert len(reference) == 1
-        assert len(non_reference) == 1
-        deltas = non_reference[0].run_config_deltas
-        assert deltas is not None
-        assert "compiler" in deltas
-        assert deltas["compiler"]["reference"] == "gcc-11"
-        assert deltas["compiler"]["current"] == "gcc-12"
-
-    def test_no_delta_when_configs_identical(self, db: Session) -> None:
-        """Non-reference runs with identical config have run_config_deltas=None."""
-        self._create_machine(db, "test-machine")
-
-        mock_simulations = {
-            "/path/to/1081187.251218-200947": self._make_metadata(
-                execution_id="1081187.251218-200947",
-                simulation_start_date="2020-01-01",
-            ),
-            "/path/to/1081188.251218-200948": self._make_metadata(
-                execution_id="1081188.251218-200948",
-                simulation_start_date="2020-06-01",
-            ),
-        }
-
-        with patch(
-            "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
-        ):
-            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
-
-        assert result.created_count == 2
-        # Both simulations have run_config_deltas=None (identical configs)
-        for sim in result.simulations:
-            assert sim.run_config_deltas is None
-
     def test_different_case_names_create_separate_simulations(
         self, db: Session
     ) -> None:
-        """Runs with different case_names are independent reference selections."""
+        """Runs with different case_names create separate cases."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
@@ -1565,10 +1446,8 @@ class TestReferenceRunIngestion:
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
-        # Each case_name gets its own reference simulation
         assert result.created_count == 2
         assert result.skipped_count == 0
-        # Verify Cases were created
         case_alpha = db.query(Case).filter(Case.name == "case_alpha").first()
         case_beta = db.query(Case).filter(Case.name == "case_beta").first()
         assert case_alpha is not None
@@ -1641,8 +1520,10 @@ class TestReferenceRunIngestion:
         assert result.duplicate_count == 1
         assert len(result.simulations) == 0
 
-    def test_incremental_ingestion_new_run_adds_delta(self, db: Session) -> None:
-        """A new run under an existing case records config delta."""
+    def test_incremental_ingestion_new_run_keeps_case_grouping(
+        self, db: Session
+    ) -> None:
+        """A new run under an existing case stays grouped by case name."""
         machine = self._create_machine(db, "test-machine")
 
         # Pre-populate DB with a reference simulation
@@ -1688,12 +1569,8 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        # Set reference_simulation_id on the case
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
         db.commit()
 
-        # Ingest archive containing the existing run plus a new one
         mock_simulations = {
             "/path/to/1081192.251218-200952": self._make_metadata(
                 execution_id="1081192.251218-200952",
@@ -1713,21 +1590,17 @@ class TestReferenceRunIngestion:
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
-        # run1 is a duplicate, run2 is new with config delta
         assert result.duplicate_count == 1
         assert result.created_count == 1
         assert len(result.simulations) == 1
-        # The new run should have a config delta
         new_sim = result.simulations[0]
-        assert new_sim.run_config_deltas is not None
-        assert "compiler" in new_sim.run_config_deltas
-        assert new_sim.run_config_deltas["compiler"]["reference"] == "gcc-11"
-        assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
+        assert new_sim.case_id == case.id
+        assert new_sim.compiler == "gcc-12"
 
-    def test_incremental_ingestion_normalizes_git_url_for_delta(
+    def test_incremental_ingestion_normalizes_git_url_for_created_run(
         self, db: Session
     ) -> None:
-        """Equivalent SSH/HTTPS git URLs should not produce a config delta."""
+        """New runs still normalize parsed git URLs during incremental ingest."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -1772,8 +1645,6 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
         db.commit()
 
         mock_simulations = {
@@ -1792,12 +1663,15 @@ class TestReferenceRunIngestion:
 
         assert result.created_count == 1
         assert len(result.simulations) == 1
-        assert result.simulations[0].run_config_deltas is None
+        assert result.simulations[0].case_id == case.id
+        assert str(result.simulations[0].git_repository_url) == (
+            "https://github.com/E3SM-Project/E3SM.git"
+        )
 
-    def test_incremental_ingestion_persisted_simulation_type_adds_delta(
+    def test_incremental_ingestion_keeps_new_case_hash_on_created_run(
         self, db: Session
     ) -> None:
-        """Persisted reference simulation_type differences are reflected in deltas."""
+        """A new run under an existing case preserves its own CASE_HASH."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -1825,6 +1699,7 @@ class TestReferenceRunIngestion:
         sim = Simulation(
             case_id=case.id,
             execution_id="1081194.251218-200954",
+            case_hash="existing-hash",
             compset="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
@@ -1841,8 +1716,6 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
         db.commit()
 
         mock_simulations = {
@@ -1853,6 +1726,7 @@ class TestReferenceRunIngestion:
             "/path/to/1081194.251218-200955": self._make_metadata(
                 execution_id="1081194.251218-200955",
                 simulation_start_date="2020-06-01",
+                case_hash="new-hash",
             ),
         }
 
@@ -1865,12 +1739,8 @@ class TestReferenceRunIngestion:
         assert result.duplicate_count == 1
         assert result.created_count == 1
         assert len(result.simulations) == 1
-        assert result.simulations[0].run_config_deltas is not None
-        assert "simulation_type" in result.simulations[0].run_config_deltas
-        assert result.simulations[0].run_config_deltas["simulation_type"] == {
-            "reference": SimulationType.PRODUCTION.value,
-            "current": SimulationType.UNKNOWN.value,
-        }
+        assert result.simulations[0].case_id == case.id
+        assert result.simulations[0].case_hash == "new-hash"
 
     def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
         """Runs with the same case_name belong to the same Case without CASE_HASH."""
@@ -1973,8 +1843,6 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
         db.commit()
 
         mock_simulations = {
@@ -2092,117 +1960,12 @@ class TestIngestHelpers:
         assert updated.case_group == "groupA"
         mock_warning.assert_called_once()
 
-    def test_get_reference_metadata_caches_missing_persisted_reference(self) -> None:
-        case = MagicMock(spec=Case)
-        case.id = uuid4()
-        case.reference_simulation_id = uuid4()
-
-        db = MagicMock(spec=Session)
-        db.query.return_value.filter.return_value.first.return_value = None
-
-        reference_cache: dict[str, SimulationConfigSnapshot] = {}
-        persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
-
-        result = _get_reference_metadata_for_case(
-            case=case,
-            case_name="missing_reference_case",
-            reference_cache=reference_cache,
-            persisted_reference_cache=persisted_reference_cache,
-            db=db,
-        )
-
-        assert result is None
-        assert case.id in persisted_reference_cache
-        assert persisted_reference_cache[case.id] is None
-
-    def test_get_reference_metadata_uses_persisted_cache_on_second_lookup(
-        self, db: Session
-    ) -> None:
-        machine = Machine(
-            name="cache-test-machine",
-            site="Test Site",
-            architecture="x86_64",
-            scheduler="SLURM",
-            gpu=False,
-        )
-        db.add(machine)
-
-        user = User(
-            email="cache-test@example.com",
-            is_active=True,
-            is_verified=True,
-        )
-        db.add(user)
-        db.commit()
-
-        ingestion = Ingestion(
-            source_type=IngestionSourceType.HPC_PATH,
-            source_reference="/archive",
-            status=IngestionStatus.SUCCESS,
-            machine_id=machine.id,
-            triggered_by=user.id,
-        )
-        db.add(ingestion)
-        db.commit()
-
-        case = Case(name="reference_cache_case")
-        db.add(case)
-        db.flush()
-
-        sim = Simulation(
-            case_id=case.id,
-            execution_id="1082000.260305-120000",
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            machine_id=machine.id,
-            simulation_start_date=datetime(2020, 1, 1),
-            initialization_type="test",
-            status=SimulationStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
-            created_by=user.id,
-            last_updated_by=user.id,
-            ingestion_id=ingestion.id,
-            compiler="gcc-11",
-        )
-        db.add(sim)
-        db.flush()
-
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
-        reference_cache: dict[str, SimulationConfigSnapshot] = {}
-        persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
-
-        first = _get_reference_metadata_for_case(
-            case=case,
-            case_name=case.name,
-            reference_cache=reference_cache,
-            persisted_reference_cache=persisted_reference_cache,
-            db=db,
-        )
-        assert first is not None
-        assert first.compiler == "gcc-11"
-
-        with patch.object(db, "query", side_effect=AssertionError):
-            second = _get_reference_metadata_for_case(
-                case=case,
-                case_name=case.name,
-                reference_cache=reference_cache,
-                persisted_reference_cache=persisted_reference_cache,
-                db=db,
-            )
-        assert second == first
-
     def test_get_known_case_hash_uses_persisted_cache_on_second_lookup(
         self,
     ) -> None:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_cache_case"
-        case.reference_simulation_id = uuid4()
 
         db = MagicMock(spec=Session)
         case_hash_cache: dict[str, str] = {}
@@ -2328,260 +2091,34 @@ class TestIngestHelpers:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_case"
-        case.reference_simulation_id = uuid4()
-
-        reference_simulation = MagicMock(spec=Simulation)
-        reference_simulation.case_hash = None
-
-        db = MagicMock(spec=Session)
-        db.query.return_value.filter.return_value.first.return_value = (
-            reference_simulation
-        )
 
         case_hash_cache: dict[str, str] = {}
         persisted_case_hash_cache: dict[UUID, str | None] = {}
 
-        with patch("app.features.ingestion.ingest.logger.info") as mock_info:
+        with (
+            patch(
+                "app.features.ingestion.ingest._get_known_case_hash",
+                side_effect=[None, "first-hash"],
+            ),
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
+        ):
             _track_case_hash_grouping(
                 parsed_simulation=first_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
-                db=db,
+                db=MagicMock(spec=Session),
             )
             _track_case_hash_grouping(
                 parsed_simulation=second_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
-                db=db,
+                db=MagicMock(spec=Session),
             )
 
         assert case_hash_cache == {"case_hash_case": "first-hash"}
-        assert persisted_case_hash_cache == {case.id: None}
         mock_info.assert_called_once()
-
-    def test_parsed_snapshot_defaults_simulation_type_to_unknown(self) -> None:
-        parsed = ParsedSimulation(
-            execution_dir="/path/to/1082001.260305-120001",
-            execution_id="1082001.260305-120001",
-            case_name="case1",
-            case_group=None,
-            machine="machine",
-            hpc_username=None,
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            campaign="campaign",
-            experiment_type="historical",
-            initialization_type="test",
-            simulation_start_date="2020-01-01",
-            simulation_end_date=None,
-            run_start_date=None,
-            run_end_date=None,
-            compiler="gcc",
-            git_repository_url="https://example.com/repo.git",
-            git_branch="main",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-            status="completed",
-        )
-
-        snapshot = _build_config_snapshot(parsed)
-
-        assert snapshot.simulation_type == SimulationType.UNKNOWN.value
-
-    def test_persisted_snapshot_matches_config_delta_fields(self, db: Session) -> None:
-        machine = Machine(
-            name="projection-machine",
-            site="Test Site",
-            architecture="x86_64",
-            scheduler="SLURM",
-            gpu=False,
-        )
-        db.add(machine)
-
-        user = User(
-            email="projection@example.com",
-            is_active=True,
-            is_verified=True,
-        )
-        db.add(user)
-        db.commit()
-
-        ingestion = Ingestion(
-            source_type=IngestionSourceType.HPC_PATH,
-            source_reference="/archive",
-            status=IngestionStatus.SUCCESS,
-            machine_id=machine.id,
-            triggered_by=user.id,
-        )
-        db.add(ingestion)
-        db.commit()
-
-        case = Case(name="projection_case")
-        db.add(case)
-        db.flush()
-
-        sim = Simulation(
-            case_id=case.id,
-            execution_id="1082002.260305-120002",
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            machine_id=machine.id,
-            simulation_start_date=datetime(2020, 1, 1),
-            initialization_type="test",
-            status=SimulationStatus.CREATED,
-            simulation_type=SimulationType.TEST,
-            created_by=user.id,
-            last_updated_by=user.id,
-            ingestion_id=ingestion.id,
-            campaign="campaign",
-            experiment_type="historical",
-            compiler="gcc",
-            git_repository_url="https://example.com/repo.git",
-            git_branch="main",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-        )
-        db.add(sim)
-        db.commit()
-
-        snapshot = _build_config_snapshot(sim)
-
-        assert snapshot.simulation_type == SimulationType.TEST.value
-
-    def test_snapshot_normalizes_ssh_git_url_for_equality(self, db: Session) -> None:
-        parsed = ParsedSimulation(
-            execution_dir="/path/to/1082003.260305-120003",
-            execution_id="1082003.260305-120003",
-            case_name="case1",
-            case_group=None,
-            machine="machine",
-            hpc_username=None,
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            campaign="campaign",
-            experiment_type="historical",
-            initialization_type="test",
-            simulation_start_date="2020-01-01",
-            simulation_end_date=None,
-            run_start_date=None,
-            run_end_date=None,
-            compiler="gcc",
-            git_repository_url="git@github.com:E3SM-Project/E3SM.git",
-            git_branch="main",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-            status="completed",
-        )
-
-        machine = Machine(
-            name="snapshot-machine",
-            site="Test Site",
-            architecture="x86_64",
-            scheduler="SLURM",
-            gpu=False,
-        )
-        db.add(machine)
-
-        user = User(
-            email="snapshot@example.com",
-            is_active=True,
-            is_verified=True,
-        )
-        db.add(user)
-        db.commit()
-
-        ingestion = Ingestion(
-            source_type=IngestionSourceType.HPC_PATH,
-            source_reference="/archive",
-            status=IngestionStatus.SUCCESS,
-            machine_id=machine.id,
-            triggered_by=user.id,
-        )
-        db.add(ingestion)
-        db.commit()
-
-        case = Case(name="snapshot_case")
-        db.add(case)
-        db.flush()
-
-        sim = Simulation(
-            case_id=case.id,
-            execution_id="1082004.260305-120004",
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            machine_id=machine.id,
-            simulation_start_date=datetime(2020, 1, 1),
-            initialization_type="test",
-            status=SimulationStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
-            created_by=user.id,
-            last_updated_by=user.id,
-            ingestion_id=ingestion.id,
-            campaign="campaign",
-            experiment_type="historical",
-            compiler="gcc",
-            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
-            git_branch="main",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-        )
-        db.add(sim)
-        db.commit()
-
-        parsed_snapshot = _build_config_snapshot(parsed)
-        persisted_snapshot = _build_config_snapshot(sim)
-
-        assert parsed_snapshot == persisted_snapshot
-        assert parsed_snapshot.diff(persisted_snapshot) == {}
-
-    def test_snapshot_diff_returns_only_changed_fields(self) -> None:
-        reference = SimulationConfigSnapshot(
-            compset="FHIST",
-            compset_alias="alias1",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            initialization_type="initial",
-            compiler="gcc-11",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-            git_branch="main",
-            git_repository_url="https://example.com/repo.git",
-            campaign="campaign1",
-            experiment_type="historical",
-            simulation_type=SimulationType.UNKNOWN.value,
-        )
-        current = SimulationConfigSnapshot(
-            compset="FHIST",
-            compset_alias="alias1",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            initialization_type="initial",
-            compiler="gcc-12",
-            git_tag="v1.0.0",
-            git_commit_hash="abc123",
-            git_branch="feature",
-            git_repository_url="https://example.com/repo.git",
-            campaign="campaign1",
-            experiment_type="historical",
-            simulation_type=SimulationType.UNKNOWN.value,
-        )
-
-        delta = reference.diff(current)
-
-        assert delta == {
-            "compiler": {"reference": "gcc-11", "current": "gcc-12"},
-            "git_branch": {"reference": "main", "current": "feature"},
-        }
 
     def test_simulation_create_draft_validates_by_field_name(self) -> None:
         draft = SimulationCreateDraft(
@@ -2609,7 +2146,6 @@ class TestIngestHelpers:
             created_by=None,
             last_updated_by=None,
             hpc_username="test-user",
-            run_config_deltas=None,
             case_hash="abc123",
         )
 
@@ -2621,7 +2157,6 @@ class TestIngestHelpers:
         assert schema.artifacts == []
         assert schema.links == []
         assert schema.case_hash == "abc123"
-        assert schema.run_config_deltas is None
 
     def test_build_simulation_create_draft_normalizes_values(self) -> None:
         parsed = ParsedSimulation(

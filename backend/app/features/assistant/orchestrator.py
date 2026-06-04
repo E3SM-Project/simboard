@@ -57,11 +57,10 @@ _SNAPSHOT_PATH_ACCESSORS = {
     "simulation.git_branch": lambda snapshot: snapshot.simulation.git_branch,
     "simulation.git_tag": lambda snapshot: snapshot.simulation.git_tag,
     "simulation.git_commit_hash": lambda snapshot: snapshot.simulation.git_commit_hash,
+    "simulation.case_hash": lambda snapshot: snapshot.simulation.case_hash,
     "simulation.extra": lambda snapshot: snapshot.simulation.extra,
-    "simulation.run_config_deltas": lambda snapshot: snapshot.simulation.run_config_deltas,
     "case.name": lambda snapshot: snapshot.case.name,
     "case.case_group": lambda snapshot: snapshot.case.case_group,
-    "case.reference_simulation_id": lambda snapshot: snapshot.case.reference_simulation_id,
     "machine.name": lambda snapshot: snapshot.machine.name
     if snapshot.machine
     else None,

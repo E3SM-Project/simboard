@@ -76,18 +76,6 @@ const UserDisplay = ({
   return null;
 };
 
-const formatDisplayValue = (value: unknown) => {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
 const ReadonlyTextBlock = ({ value, className }: { value?: string | null; className?: string }) => (
   <div
     className={cn(
@@ -99,14 +87,6 @@ const ReadonlyTextBlock = ({ value, className }: { value?: string | null; classN
   </div>
 );
 
-const DiffCell = ({ value, className }: { value: unknown; className?: string }) => {
-  const text = formatDisplayValue(value);
-  return (
-    <div className={cn('whitespace-pre-wrap break-words', className)} title={text}>
-      {text}
-    </div>
-  );
-};
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
@@ -273,14 +253,9 @@ export const SimulationDetailsView = ({
                         <ReadonlyInput value={simulation.caseGroup} />
                       </FieldRow>
                     )}
-                    <FieldRow label="Reference">
-                      <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
+                    <FieldRow label="Case Hash">
+                      <ReadonlyInput value={simulation.caseHash ?? undefined} className="font-mono" />
                     </FieldRow>
-                    {!simulation.isReference && (
-                      <FieldRow label="Changes vs reference">
-                        <span className="text-sm">{simulation.changeCount}</span>
-                      </FieldRow>
-                    )}
                     <FieldRow label="Model Version">
                       <ReadonlyInput value={simulation.gitTag ?? undefined} />
                     </FieldRow>
@@ -336,59 +311,20 @@ export const SimulationDetailsView = ({
                 </Card>
               </div>
 
-              {!simulation.isReference && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Configuration Differences</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {simulation.runConfigDeltas &&
-                    Object.keys(simulation.runConfigDeltas).length > 0 ? (
-                      <div className="overflow-hidden rounded-md border">
-                        <table className="w-full table-fixed text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Field
-                              </th>
-                              <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Reference
-                              </th>
-                              <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Current
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Object.entries(simulation.runConfigDeltas).map(([field, diff]) => {
-                              const reference = (diff as Record<string, unknown>).reference;
-                              const current = (diff as Record<string, unknown>).current;
-                              return (
-                                <tr key={field} className="border-b last:border-0">
-                                  <td className="p-2 align-top">
-                                    <DiffCell
-                                      value={field}
-                                      className="max-w-[180px] font-mono text-xs text-muted-foreground"
-                                    />
-                                  </td>
-                                  <td className="p-2 align-top">
-                                    <DiffCell value={reference} className="max-w-[240px]" />
-                                  </td>
-                                  <td className="p-2 align-top">
-                                    <DiffCell value={current} className="max-w-[240px]" />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No configuration differences.</p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Compare Setup</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Use case details to select runs from one Case Hash subgroup, then open compare
+                    for side-by-side review.
+                  </p>
+                  <Button variant="outline" asChild>
+                    <Link to={`/cases/${simulation.caseId}`}>Open Case Details</Link>
+                  </Button>
+                </CardContent>
+              </Card>
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <Card>

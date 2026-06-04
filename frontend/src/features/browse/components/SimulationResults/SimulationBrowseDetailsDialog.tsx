@@ -146,14 +146,9 @@ export const SimulationBrowseDetailsDialog = ({
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Reference
+                    Case Hash
                   </p>
-                  <p className="mt-1 text-sm text-slate-700">
-                    {simulation.isReference ? 'Yes' : 'No'}
-                    {!simulation.isReference && simulation.changeCount > 0
-                      ? ` (${simulation.changeCount} changes)`
-                      : ''}
-                  </p>
+                  <p className="mt-1 text-sm text-slate-700">{simulation.caseHash ?? 'N/A'}</p>
                 </div>
               </div>
             </section>

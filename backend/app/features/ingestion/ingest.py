@@ -1,23 +1,4 @@
-"""
-Module for ingesting simulation archives and mapping to DB schemas.
-
-Reference simulation semantics for performance_archive ingestion:
-  - A run is "successful" only if all required metadata files are present.
-  - case_name (from timing files) is the identity for Case grouping.
-  - The first successful run per case is the reference simulation.
-  - CASE_HASH is stored as execution metadata for grouping related runs.
-  - Each run creates a Simulation linked to a Case via case_id.
-  - Reference simulations have run_config_deltas = None.
-  - Non-reference runs store config differences vs the reference.
-  - Incomplete runs are skipped at the parser level.
-  - Re-processing is idempotent due to execution_id uniqueness.
-
-Caching for reference lookup:
-  - reference_cache: reference metadata for new cases in this ingest batch,
-    keyed by case_name.
-  - persisted_reference_cache: reference metadata for cases already in DB,
-    keyed by case.id, to avoid repeated DB queries.
-"""
+"""Module for ingesting simulation archives and mapping to DB schemas."""
 
 import shlex
 from dataclasses import dataclass, field, replace
@@ -33,7 +14,6 @@ from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.machine.utils import resolve_machine_by_name
-from app.features.simulation.config_delta import SimulationConfigSnapshot
 from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import ArtifactCreate, SimulationCreate
@@ -100,7 +80,6 @@ class SimulationCreateDraft:
     created_by: UUID | None
     last_updated_by: UUID | None
     hpc_username: str | None
-    run_config_deltas: dict[str, dict[str, str | None]] | None = None
     case_hash: str | None = None
 
 
@@ -113,24 +92,9 @@ def ingest_archive(
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements reference simulation semantics:
-
     - Case lookup/creation is done by ``case_name`` from timing files.
-    - The first successful run per case becomes the reference simulation
-      (``run_config_deltas = None``).
-    - Non-reference simulations store a single dict of configuration
-      differences versus the reference.
     - Duplicate detection is based on ``execution_id`` uniqueness.
-    - Uses two caches to avoid redundant work:
-       - ``reference_cache``: Tracks the reference simulation metadata for each
-           new case found in the current ingest batch (keyed by case_name). This
-           ensures that if multiple new runs for the same case appear in a
-           single archive, all are compared against the same in-batch reference.
-       - ``persisted_reference_cache``: Tracks reference simulation metadata
-           for cases already in the database (keyed by case.id). This avoids
-           repeated database queries for the reference simulation of a case
-           when processing multiple runs for the same case in a single ingest
-           operation.
+    - CASE_HASH is preserved as per-execution metadata for grouping.
 
     Parameters
     ----------
@@ -172,8 +136,6 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-    reference_cache: dict[str, SimulationConfigSnapshot] = {}
-    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
     case_hash_cache: dict[str, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
 
@@ -182,8 +144,6 @@ def ingest_archive(
             simulation, is_duplicate = _process_simulation_for_ingest(
                 parsed_simulation=parsed_simulation,
                 db=db,
-                reference_cache=reference_cache,
-                persisted_reference_cache=persisted_reference_cache,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
             )
@@ -225,8 +185,6 @@ def ingest_archive(
 def _process_simulation_for_ingest(
     parsed_simulation: ParsedSimulation,
     db: Session,
-    reference_cache: dict[str, SimulationConfigSnapshot],
-    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
     case_hash_cache: dict[str, str],
     persisted_case_hash_cache: dict[UUID, str | None],
 ) -> tuple[SimulationCreate | None, bool]:
@@ -238,11 +196,6 @@ def _process_simulation_for_ingest(
         Parsed archive-derived metadata for the simulation.
     db : Session
         Active database session for lookups and case resolution.
-    reference_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of reference config values per case_name for the current batch.
-    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of reference metadata loaded from the database by case_id.
-
     Returns
     -------
     tuple[SimulationCreate | None, bool]
@@ -255,9 +208,6 @@ def _process_simulation_for_ingest(
     machine_id = _resolve_machine_id(parsed_simulation, db)
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
-        _seed_reference_cache_from_duplicate(
-            case_name, parsed_simulation, reference_cache
-        )
         return None, True
 
     prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
@@ -274,9 +224,6 @@ def _process_simulation_for_ingest(
         parsed_simulation=parsed_simulation,
         prevalidated_draft=prevalidated_draft,
         case=case,
-        reference_cache=reference_cache,
-        persisted_reference_cache=persisted_reference_cache,
-        db=db,
     )
 
     return simulation, False
@@ -325,23 +272,24 @@ def _get_known_case_hash(
     db: Session,
 ) -> str | None:
     """Return first known CASE_HASH used for within-case execution grouping."""
-    if case.reference_simulation_id is not None:
-        if case.id not in persisted_case_hash_cache:
-            reference_simulation = (
-                db.query(Simulation)
-                .filter(Simulation.id == case.reference_simulation_id)
-                .first()
+    if case.id not in persisted_case_hash_cache:
+        known_hash = (
+            db.query(Simulation.case_hash)
+            .filter(
+                Simulation.case_id == case.id,
+                Simulation.case_hash.is_not(None),
             )
-            known_hash = (
-                reference_simulation.case_hash if reference_simulation else None
-            )
-            persisted_case_hash_cache[case.id] = known_hash
-            if known_hash is not None:
-                case_hash_cache.setdefault(case.name, known_hash)
-
-        known_hash = persisted_case_hash_cache[case.id]
+            .order_by(Simulation.created_at.asc())
+            .limit(1)
+            .scalar()
+        )
+        persisted_case_hash_cache[case.id] = known_hash
         if known_hash is not None:
-            return known_hash
+            case_hash_cache.setdefault(case.name, known_hash)
+
+    known_hash = persisted_case_hash_cache[case.id]
+    if known_hash is not None:
+        return known_hash
 
     return case_hash_cache.get(case.name)
 
@@ -386,86 +334,19 @@ def _is_duplicate_simulation(
     return True
 
 
-def _seed_reference_cache_from_duplicate(
-    case_name: str,
-    parsed_simulation: ParsedSimulation,
-    reference_cache: dict[str, SimulationConfigSnapshot],
-) -> None:
-    """Seed per-case reference cache using duplicate metadata when needed."""
-    if case_name not in reference_cache:
-        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
-
-
 def _build_simulation_create(
     parsed_simulation: ParsedSimulation,
     prevalidated_draft: SimulationCreateDraft,
     case: Case,
-    reference_cache: dict[str, SimulationConfigSnapshot],
-    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
-    db: Session,
 ) -> SimulationCreate:
-    """Create a SimulationCreate using reference simulation semantics.
-
-    Parameters
-    ----------
-    parsed_simulation : ParsedSimulation
-        Parsed archive-derived metadata for the simulation.
-    prevalidated_draft : SimulationCreateDraft
-        Draft with normalized fields already parsed and prevalidated.
-    case : Case
-        Resolved Case object for this simulation.
-    reference_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of reference metadata per case_name for the current batch.
-    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of reference metadata loaded from the database by case_id.
-    db : Session
-        Active database session for lookups and case resolution.
-    """
-    case_name = case.name
-    reference_snapshot = _get_reference_metadata_for_case(
-        case=case,
-        case_name=case_name,
-        reference_cache=reference_cache,
-        persisted_reference_cache=persisted_reference_cache,
-        db=db,
+    """Create a SimulationCreate from parsed archive metadata."""
+    simulation = _validate_simulation_create(
+        replace(prevalidated_draft, case_id=case.id)
     )
-
-    if reference_snapshot is None:
-        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
-
-        simulation = _validate_simulation_create(
-            replace(prevalidated_draft, case_id=case.id)
-        )
-        simulation = _attach_path_artifacts(simulation, parsed_simulation)
-        logger.info(
-            "Mapped reference simulation from %s: %s",
-            parsed_simulation.execution_dir,
-            case_name,
-        )
-
-        return simulation
-
-    delta = reference_snapshot.diff(_build_config_snapshot(parsed_simulation))
-    simulation_draft = replace(
-        prevalidated_draft,
-        case_id=case.id,
-        run_config_deltas=delta if delta else None,
-    )
-    simulation = _validate_simulation_create(simulation_draft)
     simulation = _attach_path_artifacts(simulation, parsed_simulation)
-
-    if delta:
-        logger.info(
-            "Non-reference run in '%s' has config differences from the reference: %s",
-            parsed_simulation.execution_dir,
-            list(delta.keys()),
-        )
-    else:
-        logger.info(
-            "Non-reference run in '%s' has identical configuration to the reference.",
-            parsed_simulation.execution_dir,
-        )
-
+    logger.info(
+        "Mapped simulation from %s: %s", parsed_simulation.execution_dir, case.name
+    )
     return simulation
 
 
@@ -591,56 +472,6 @@ def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
         _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
 
 
-def _get_reference_metadata_for_case(
-    case: Case,
-    case_name: str,
-    reference_cache: dict[str, SimulationConfigSnapshot],
-    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
-    db: Session,
-) -> SimulationConfigSnapshot | None:
-    """Resolve reference metadata from persisted reference or batch cache.
-
-    This function is useful for ensuring that all simulations of the same case
-    within a batch are compared against a consistent reference simulation.
-
-    Parameters
-    ----------
-    case : Case
-        The Case object for which to retrieve reference metadata.
-    case_name : str
-        The name of the case, used for in-memory cache lookup.
-    reference_cache : dict[str, SimulationConfigSnapshot]
-        In-memory cache of reference metadata per case_name for the current batch.
-    persisted_reference_cache : dict[UUID, SimulationConfigSnapshot | None]
-        Cache of reference metadata loaded from the database by case_id.
-
-    Returns
-    -------
-    SimulationConfigSnapshot | None
-        The reference config snapshot for the case, or None if no reference run exists.
-    """
-    if case.reference_simulation_id is not None:
-        if case.id in persisted_reference_cache:
-            return persisted_reference_cache[case.id]
-
-        reference_simulation = (
-            db.query(Simulation)
-            .filter(Simulation.id == case.reference_simulation_id)
-            .first()
-        )
-
-        if reference_simulation:
-            reference_snapshot = _build_config_snapshot(reference_simulation)
-            persisted_reference_cache[case.id] = reference_snapshot
-
-            return reference_snapshot
-
-        persisted_reference_cache[case.id] = None
-        return None
-
-    return reference_cache.get(case_name)
-
-
 def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -> Case:
     """Get or create a Case record by case name.
 
@@ -681,47 +512,6 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
             )
 
     return case
-
-
-def _build_config_snapshot(
-    source: ParsedSimulation | Simulation,
-) -> SimulationConfigSnapshot:
-    """Return a normalized config snapshot for reference delta comparison."""
-    snapshot_values: dict[str, str | None] = {}
-
-    for field_name in SimulationConfigSnapshot.field_names():
-        if field_name == "simulation_type" and isinstance(source, ParsedSimulation):
-            snapshot_values[field_name] = SimulationType.UNKNOWN.value
-            continue
-
-        value = getattr(source, field_name)
-
-        if isinstance(source, ParsedSimulation):
-            normalized_value = value
-        else:
-            normalized_value = _stringify_config_value(value)
-
-        if field_name == "git_repository_url":
-            normalized_value = _normalize_git_url(normalized_value)
-
-        snapshot_values[field_name] = normalized_value
-
-    return SimulationConfigSnapshot(**snapshot_values)
-
-
-def _stringify_config_value(value: object) -> str | None:
-    """Convert enum-like config values to strings for delta comparison."""
-    if value is None:
-        return None
-
-    enum_value = getattr(value, "value", None)
-    if isinstance(enum_value, str):
-        return enum_value
-
-    if isinstance(value, str):
-        return value
-
-    return str(value)
 
 
 def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
@@ -829,7 +619,6 @@ def _build_simulation_create_draft(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case_id: UUID | None,
-    run_config_deltas: dict[str, dict[str, str | None]] | None = None,
 ) -> SimulationCreateDraft:
     """Build a normalized internal draft for ``SimulationCreate`` validation.
 
@@ -841,9 +630,6 @@ def _build_simulation_create_draft(
         Pre-extracted machine ID.
     case_id : UUID
         ID of the Case this simulation belongs to.
-    run_config_deltas : dict | None
-        Configuration differences vs the reference simulation, or None.
-
     Returns
     -------
     SimulationCreateDraft
@@ -887,7 +673,6 @@ def _build_simulation_create_draft(
         created_by=None,
         last_updated_by=None,
         hpc_username=parsed_simulation.hpc_username,
-        run_config_deltas=run_config_deltas,
         case_hash=parsed_simulation.case_hash,
     )
 

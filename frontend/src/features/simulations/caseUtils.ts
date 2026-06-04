@@ -70,15 +70,10 @@ export const getSimulationSummaryDateWindow = (
 };
 
 export const sortSimulationSummaries = (simulations: SimulationSummaryOut[]) =>
-  [...simulations].sort((left, right) => {
-    if (left.isReference !== right.isReference) {
-      return left.isReference ? -1 : 1;
-    }
-
-    return (
-      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime()
-    );
-  });
+  [...simulations].sort(
+    (left, right) =>
+      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime(),
+  );
 
 export const formatCaseHashLabel = (caseHash: string | null, maxLength = 18) => {
   if (!caseHash) return MISSING_CASE_HASH_LABEL;

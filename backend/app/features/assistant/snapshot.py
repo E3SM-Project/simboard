@@ -68,14 +68,13 @@ class SnapshotSimulationFields(BaseModel):
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
+    case_hash: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
-    run_config_deltas: dict[str, Any] | None = None
 
 
 class SnapshotCaseFields(BaseModel):
     name: str
     case_group: str | None = None
-    reference_simulation_id: str | None = None
 
 
 class SnapshotMachineFields(BaseModel):
@@ -158,7 +157,6 @@ def _trim_snapshot_strings(snapshot: SimulationSnapshot) -> SimulationSnapshot:
             "key_features": None,
             "known_issues": None,
             "extra": {},
-            "run_config_deltas": None,
         }
     )
     return snapshot.model_copy(update={"simulation": simulation})
@@ -229,17 +227,12 @@ def build_simulation_snapshot(
             git_branch=simulation.git_branch,
             git_tag=simulation.git_tag,
             git_commit_hash=simulation.git_commit_hash,
+            case_hash=simulation.case_hash,
             extra=dict(simulation.extra or {}),
-            run_config_deltas=simulation.run_config_deltas,
         ),
         case=SnapshotCaseFields(
             name=simulation.case.name,
             case_group=simulation.case.case_group,
-            reference_simulation_id=(
-                str(simulation.case.reference_simulation_id)
-                if simulation.case.reference_simulation_id
-                else None
-            ),
         ),
         machine=(
             SnapshotMachineFields(name=simulation.machine.name)

@@ -59,9 +59,6 @@ export interface FilterState {
   compiler: string[];
   status: string[];
 
-  // Reference Status
-  referenceStatus: string;
-
   // Metadata & Provenance
   gitTag: string[];
   createdBy: string[];
@@ -93,9 +90,6 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
-  // Reference Status
-  referenceStatus: '',
-
   // Metadata & Provenance
   gitTag: [],
   createdBy: [],
@@ -103,13 +97,12 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 const FILTER_KEYS = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'referenceStatus');
+const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS;
 
 const areStringArraysEqual = (left: string[], right: string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const areFiltersEqual = (left: FilterState, right: FilterState): boolean =>
-  left.referenceStatus === right.referenceStatus &&
   MULTI_SELECT_FILTER_KEYS.every((key) =>
     areStringArraysEqual(left[key] as string[], right[key] as string[]),
   );
@@ -296,9 +289,6 @@ export const BrowsePage = ({
         }
       }
 
-      if (appliedFilters.referenceStatus === 'reference' && !record.isReference) return false;
-      if (appliedFilters.referenceStatus === 'non-reference' && record.isReference) return false;
-
       return true;
     });
   }, [simulations, appliedFilters]);
@@ -358,12 +348,6 @@ export const BrowsePage = ({
         next[key] = deserializeArrayFilter(value) as FilterState[typeof key];
       }
     });
-
-    const referenceStatus = searchParams.get('referenceStatus');
-    next.referenceStatus =
-      referenceStatus !== null && ['', 'reference', 'non-reference'].includes(referenceStatus)
-        ? referenceStatus
-        : '';
 
     setAppliedFilters((current) => (areFiltersEqual(current, next) ? current : next));
 

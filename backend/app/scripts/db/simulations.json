@@ -359,16 +359,6 @@
         "gitTag": "v3.1.0",
         "gitCommitHash": "mno7891",
         "extra": {},
-        "runConfigDeltas": {
-          "compiler": {
-            "reference": "gnu",
-            "current": "intel"
-          },
-          "git_commit_hash": {
-            "reference": "mno7890",
-            "current": "mno7891"
-          }
-        },
         "artifacts": [],
         "links": []
       }

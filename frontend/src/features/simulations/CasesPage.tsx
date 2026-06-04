@@ -6,7 +6,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Pin, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -39,7 +39,6 @@ import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
 import type { CaseOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
-type ReferenceFilter = 'all' | 'with-reference' | 'without-reference';
 type ActiveFilterKey =
   | 'caseName'
   | 'hpcUsername'
@@ -50,8 +49,7 @@ type ActiveFilterKey =
   | 'compiler'
   | 'gitTag'
   | 'createdBy'
-  | 'caseGroup'
-  | 'reference';
+  | 'caseGroup';
 
 interface CasesPageProps {
   simulations: SimulationOut[];
@@ -96,27 +94,10 @@ const sortStringValues = (values: string[]) =>
   values.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
 
 const sortCaseSimulations = (caseSimulations: CaseSimulationListItem[]) =>
-  [...caseSimulations].sort((left, right) => {
-    if (left.isReference !== right.isReference) {
-      return left.isReference ? -1 : 1;
-    }
-
-    return (
-      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime()
-    );
-  });
-
-const getSimulationChangeTitle = (simulation: CaseSimulationListItem) => {
-  if ('runConfigDeltas' in simulation && simulation.runConfigDeltas) {
-    const changedFields = Object.keys(simulation.runConfigDeltas);
-
-    if (changedFields.length > 0) {
-      return `Changed fields: ${changedFields.join(', ')}`;
-    }
-  }
-
-  return `${simulation.changeCount} changes from reference`;
-};
+  [...caseSimulations].sort(
+    (left, right) =>
+      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime(),
+  );
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {
   const location = useLocation();
@@ -128,7 +109,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const [simulationFilters, setSimulationFilters] = useState<CaseSimulationFilters>(
     createEmptySimulationFilters,
   );
-  const [referenceFilter, setReferenceFilter] = useState<ReferenceFilter>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([
@@ -279,7 +259,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
   const hasActiveFilters =
     caseNameFilter.trim().length > 0 ||
     caseGroupFilter.length > 0 ||
-    referenceFilter !== 'all' ||
     hasActiveSimulationFilters;
   const advancedFilterCount = useMemo(
     () =>
@@ -292,9 +271,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         simulationFilters.gitTag,
         simulationFilters.createdBy,
         caseGroupFilter,
-        referenceFilter !== 'all' ? referenceFilter : '',
       ].filter(Boolean).length,
-    [referenceFilter, caseGroupFilter, simulationFilters],
+    [caseGroupFilter, simulationFilters],
   );
   const matchingSimulationsByCaseId = useMemo(() => {
     const matchingMap = new Map<string, SimulationOut[]>();
@@ -408,17 +386,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
-    if (referenceFilter !== 'all') {
-      filters.push({
-        key: 'reference',
-        label: 'Reference',
-        value: referenceFilter === 'with-reference' ? 'Present' : 'Missing',
-      });
-    }
-
     return filters;
   }, [
-    referenceFilter,
     caseGroupFilter,
     caseNameFilter,
     creatorOptions,
@@ -438,7 +407,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
     setSimulationFilters(createEmptySimulationFilters());
-    setReferenceFilter('all');
     setShowAdvancedFilters(false);
     table.setPageIndex(0);
   };
@@ -450,9 +418,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         break;
       case 'caseGroup':
         setCaseGroupFilter('');
-        break;
-      case 'reference':
-        setReferenceFilter('all');
         break;
       default:
         setSimulationFilters((current) => ({
@@ -473,25 +438,13 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         normalizedNameFilter.length === 0 ||
         caseRecord.name.toLowerCase().includes(normalizedNameFilter);
       const matchesGroup = !caseGroupFilter || caseRecord.caseGroup === caseGroupFilter;
-      const hasReferenceSimulation = caseRecord.referenceSimulationId != null;
-      const matchesReference =
-        referenceFilter === 'all' ||
-        (referenceFilter === 'with-reference' && hasReferenceSimulation) ||
-        (referenceFilter === 'without-reference' && !hasReferenceSimulation);
       const matchesSimulationFilters =
         !hasActiveSimulationFilters ||
         (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0) > 0;
 
-      return matchesName && matchesGroup && matchesReference && matchesSimulationFilters;
+      return matchesName && matchesGroup && matchesSimulationFilters;
     });
-  }, [
-    caseGroupFilter,
-    cases,
-    referenceFilter,
-    caseNameFilter,
-    hasActiveSimulationFilters,
-    matchingSimulationsByCaseId,
-  ]);
+  }, [caseGroupFilter, cases, caseNameFilter, hasActiveSimulationFilters, matchingSimulationsByCaseId]);
 
   const visibleRunCount = useMemo(
     () =>
@@ -684,7 +637,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                 ? 'Showing case-level run summaries because full simulation details are unavailable.'
                 : hasActiveSimulationFilters
                   ? `${matchingCaseSimulations.length} of ${allCaseSimulations.length} runs match the current filters.`
-                  : 'Reference runs are pinned first. Open the case page for full context.'}
+                  : 'Open the case page to organize runs by Case Hash and launch compare.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
@@ -701,7 +654,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
                   <TableHead>Case Hash</TableHead>
-                  <TableHead>Changes</TableHead>
                   <TableHead>Simulation Dates</TableHead>
                 </TableRow>
               </TableHeader>
@@ -715,15 +667,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {simulation.executionId}
-                        {simulation.isReference && (
-                          <span
-                            className="inline-flex items-center"
-                            title="Reference simulation"
-                            aria-label="Reference simulation"
-                          >
-                            <Pin className="h-3.5 w-3.5 text-amber-600" />
-                          </span>
-                        )}
                       </Link>
                     </TableCell>
                     <TableCell className="align-top">
@@ -731,22 +674,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                         className="font-mono text-xs text-slate-700"
                         title={simulation.caseHash ?? MISSING_CASE_HASH_LABEL}
                       >
-                        {formatCaseHashLabel(simulation.caseHash)}
+                        {formatCaseHashLabel(simulation.caseHash ?? null)}
                       </span>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {simulation.isReference ? (
-                        <span
-                          className="text-sm font-medium text-slate-700"
-                          title="Reference simulation"
-                        >
-                          Reference
-                        </span>
-                      ) : (
-                        <Badge variant="secondary" title={getSimulationChangeTitle(simulation)}>
-                          {simulation.changeCount}
-                        </Badge>
-                      )}
                     </TableCell>
                     <TableCell className="align-top">
                       {`${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(
@@ -789,7 +718,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
                   Find the cases behind your runs. Start with HPC username or machine, then refine
-                  by campaign, version context, and reference state.
+                  by campaign, version context, and case metadata.
                 </p>
               </div>
             </div>
@@ -989,7 +918,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-slate-900">Case settings</p>
                         <p className="text-xs text-slate-500">
-                          Narrow the result set using case-level metadata and reference state.
+                          Narrow the result set using case-level metadata.
                         </p>
                       </div>
                       <div className="grid gap-3">
@@ -1003,27 +932,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
                             table.setPageIndex(0);
                           },
                         })}
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                            Reference state
-                          </label>
-                          <Select
-                            value={referenceFilter}
-                            onValueChange={(value: ReferenceFilter) => {
-                              setReferenceFilter(value);
-                              table.setPageIndex(0);
-                            }}
-                          >
-                            <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white shadow-none">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All reference states</SelectItem>
-                              <SelectItem value="with-reference">Reference present</SelectItem>
-                              <SelectItem value="without-reference">Reference missing</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
                       </div>
                     </div>
                   </div>

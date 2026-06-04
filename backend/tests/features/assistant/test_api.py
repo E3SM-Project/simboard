@@ -85,7 +85,6 @@ async def _create_simulation(
     )
     db.add(simulation)
     await db.flush()
-    case.reference_simulation_id = simulation.id
     await db.commit()
     await db.refresh(simulation)
     return simulation

@@ -178,12 +178,8 @@ export const SimulationResultCard = ({
                 variant="secondary"
                 className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
-                Reference: {simulation.isReference ? 'Yes' : 'No'}
-                {!simulation.isReference && simulation.changeCount > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    (Changes: {simulation.changeCount})
-                  </span>
-                )}
+                Case Hash:
+                <span className="ml-1 px-1 py-1 text-xs">{simulation.caseHash ?? '—'}</span>
               </Badge>
               <Badge
                 className={`text-xs px-2 py-1 ${

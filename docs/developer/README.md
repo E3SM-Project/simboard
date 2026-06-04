@@ -33,7 +33,7 @@ flowchart LR
 | Component           | Role                                                                                                                                                                         |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend            | Provides browse, detail, compare, authentication, and upload views. Calls the backend over HTTPS through `frontend/src/api/api.ts` with credentials enabled for cookie auth. |
-| Backend             | Parses ingested archives, validates metadata, applies reference-simulation rules, persists normalized records, and exposes `/api/v1` endpoints.                              |
+| Backend             | Parses ingested archives, validates metadata, persists normalized records including per-run `CASE_HASH` grouping metadata, and exposes `/api/v1` endpoints.                   |
 | PostgreSQL          | Stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.                                                                                 |
 | Automated ingestion | Runs on supported HPC sites, scans E3SM `performance_archive` locations, and submits changed metadata to SimBoard.                                                           |
 | External services   | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -29,20 +29,13 @@ if TYPE_CHECKING:
 class Case(Base, IDMixin, TimestampMixin):
     """A logical experiment grouped by case name.
 
-    Each Case contains one or more Simulation executions.  Exactly one
-    Simulation may be designated as the reference via
-    :attr:`reference_simulation_id`.
+    Each Case contains one or more Simulation executions.
     """
 
     __tablename__ = "cases"
 
     name: Mapped[str] = mapped_column(Text, unique=True, index=True)
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
-    reference_simulation_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("simulations.id", use_alter=True, name="fk_cases_reference_sim"),
-        nullable=True,
-    )
 
     # Relationships
     simulations: Mapped[list[Simulation]] = relationship(
@@ -51,9 +44,6 @@ class Case(Base, IDMixin, TimestampMixin):
         foreign_keys="Simulation.case_id",
         cascade="all, delete-orphan",
         passive_deletes=True,
-    )
-    reference_simulation: Mapped[Simulation | None] = relationship(
-        "Simulation", foreign_keys=[reference_simulation_id], post_update=True
     )
 
 
@@ -146,9 +136,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    run_config_deltas: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
 
     # Relationships
     # ~~~~~~~~~~~~~

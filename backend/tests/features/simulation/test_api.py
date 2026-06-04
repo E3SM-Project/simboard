@@ -106,18 +106,12 @@ class TestListCases:
             status="created",
             machine_id=machine.id,
             simulation_start_date="2023-02-01T00:00:00Z",
-            run_config_deltas={
-                "compiler": {"reference": "gcc-11", "current": "gcc-12"}
-            },
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
         )
         db.add(sim1)
         db.flush()
-        # Set reference
-        assert sim1.id is not None
-        case.reference_simulation_id = sim1.id
         db.add(sim2)
         db.commit()
 
@@ -128,7 +122,6 @@ class TestListCases:
 
         case_data = data[0]
         assert case_data["name"] == "test_case_nested"
-        assert case_data["referenceSimulationId"] == str(sim1.id)
         assert case_data["machineNames"] == [machine.name]
         assert case_data["hpcUsernames"] == []
 
@@ -142,8 +135,6 @@ class TestListCases:
             assert "executionId" in s
             assert "caseHash" in s
             assert "status" in s
-            assert "isReference" in s
-            assert "changeCount" in s
             assert "simulationStartDate" in s
             # Must NOT include heavy fields
             assert "machine" not in s
@@ -154,14 +145,10 @@ class TestListCases:
             assert "runConfigDeltas" not in s
             assert "createdByUser" not in s
 
-        # Verify reference and change_count derivation
+        # Verify case hash and summary payload shape
         exec_ids = {s["executionId"]: s for s in sims}
-        assert exec_ids["case-nested-exec-1"]["isReference"] is True
         assert exec_ids["case-nested-exec-1"]["caseHash"] == "nested-hash-1"
-        assert exec_ids["case-nested-exec-1"]["changeCount"] == 0
-        assert exec_ids["case-nested-exec-2"]["isReference"] is False
         assert exec_ids["case-nested-exec-2"]["caseHash"] == "nested-hash-2"
-        assert exec_ids["case-nested-exec-2"]["changeCount"] == 1
 
 
 class TestListCaseNames:
@@ -224,8 +211,6 @@ class TestGetCase:
         )
         db.add(sim)
         db.flush()
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
         db.commit()
 
         res = client.get(f"{API_BASE}/cases/{case.id}")
@@ -237,7 +222,6 @@ class TestGetCase:
         assert data["hpcUsernames"] == []
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
-        assert data["simulations"][0]["isReference"] is True
 
     def test_endpoint_raises_404_if_case_not_found(self, client):
         res = client.get(f"{API_BASE}/cases/{uuid4()}")
@@ -319,7 +303,7 @@ class TestCreateSimulation:
         assert res.status_code == 400
         assert "not found" in res.json()["detail"].lower()
 
-    def test_first_manual_create_sets_reference_on_case(
+    def test_manual_create_returns_generic_simulation_payload(
         self, client, db: Session
     ) -> None:
         machine = db.query(Machine).first()
@@ -345,12 +329,12 @@ class TestCreateSimulation:
         assert res.status_code == 201
         data = res.json()
 
-        assert data["isReference"] is True
-        assert data["runConfigDeltas"] is None
-
         db.refresh(case)
-        assert case.reference_simulation_id is not None
-        assert str(case.reference_simulation_id) == data["id"]
+        assert data["caseId"] == str(case.id)
+        assert data["caseName"] == case.name
+        assert "isReference" not in data
+        assert "changeCount" not in data
+        assert "runConfigDeltas" not in data
 
     def test_create_simulation_raises_500_when_reload_fails(self) -> None:
         case_id = uuid4()

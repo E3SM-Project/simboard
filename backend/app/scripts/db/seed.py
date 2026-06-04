@@ -167,21 +167,10 @@ def seed_from_json(db: Session, json_path: str):
         db.add(case)
         db.flush()
 
-        first_sim = None
-
         for sim_entry in simulations_data:
-            sim = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
-
-            if first_sim is None:
-                first_sim = sim
+            _ = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
 
             total_sims += 1
-
-        # Set the first simulation as the reference for this case
-        if first_sim is not None:
-            if first_sim.id is not None:
-                case.reference_simulation_id = first_sim.id
-            db.flush()
 
     db.commit()
     print(

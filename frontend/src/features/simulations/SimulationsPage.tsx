@@ -151,24 +151,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         size: 380,
       },
       {
-        accessorKey: 'isReference',
-        header: 'Reference',
-        cell: ({ row }) =>
-          row.original.isReference ? (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              Reference
-            </Badge>
-          ) : null,
-        size: 100,
-      },
-      {
-        accessorKey: 'changeCount',
-        header: 'Changes',
-        cell: ({ row }) =>
-          row.original.changeCount > 0 ? (
-            <Badge variant="secondary">{row.original.changeCount}</Badge>
-          ) : null,
-        size: 80,
+        accessorKey: 'caseHash',
+        header: 'Case Hash',
+        cell: ({ row }) => <TableCellText value={row.original.caseHash ?? '—'} />,
+        size: 180,
       },
       {
         accessorKey: 'simulationType',
