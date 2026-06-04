@@ -1,4 +1,5 @@
 from datetime import datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -233,6 +234,42 @@ class TestSimulationUpdateSchema:
     def test_update_resource_validators_accept_none_when_called_directly(self):
         assert SimulationUpdate.validate_update_artifacts(None) is None
         assert SimulationUpdate.validate_update_links(None) is None
+
+
+class TestExternalLinkOutSchema:
+    def test_validates_simulation_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/simulation-owned",
+            label="Simulation-owned",
+            simulation_id=uuid4(),
+            case_id=None,
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/simulation-owned")
+        assert link_out.label == "Simulation-owned"
+
+    def test_validates_case_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/case-owned",
+            label="Case-owned",
+            simulation_id=None,
+            case_id=uuid4(),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/case-owned")
+        assert link_out.label == "Case-owned"
 
 
 class TestSimulationOutSchema:

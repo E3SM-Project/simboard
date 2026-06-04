@@ -6,7 +6,17 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -56,6 +66,13 @@ class Case(Base, IDMixin, TimestampMixin):
         "Simulation",
         back_populates="case",
         foreign_keys="Simulation.case_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    links: Mapped[list[ExternalLink]] = relationship(
+        "ExternalLink",
+        back_populates="case",
+        foreign_keys="ExternalLink.case_id",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
@@ -200,9 +217,30 @@ class Artifact(Base, IDMixin, TimestampMixin):
 
 class ExternalLink(Base, IDMixin, TimestampMixin):
     __tablename__ = "external_links"
+    __table_args__ = (
+        CheckConstraint(
+            "(simulation_id IS NOT NULL) <> (case_id IS NOT NULL)",
+            name="exactly_one_owner",
+        ),
+        Index(
+            "uq_external_links_case_id_kind_url",
+            "case_id",
+            "kind",
+            "url",
+            unique=True,
+            postgresql_where=text("case_id IS NOT NULL"),
+        ),
+    )
 
-    simulation_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE")
+    simulation_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("simulations.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=True,
     )
 
     kind: Mapped[ExternalLinkKind] = mapped_column(
@@ -218,8 +256,15 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     url: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))
 
-    simulation: Mapped[Simulation] = relationship(
+    simulation: Mapped[Simulation | None] = relationship(
         back_populates="links",
         primaryjoin="ExternalLink.simulation_id==Simulation.id",
+        foreign_keys=[simulation_id],
+        passive_deletes=True,
+    )
+    case: Mapped[Case | None] = relationship(
+        back_populates="links",
+        primaryjoin="ExternalLink.case_id==Case.id",
+        foreign_keys=[case_id],
         passive_deletes=True,
     )
