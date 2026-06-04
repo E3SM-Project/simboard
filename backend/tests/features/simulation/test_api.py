@@ -432,6 +432,72 @@ class TestGetCase:
         assert data["hpcUsernames"] == ["case-user"]
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
+        assert data["links"] == []
+
+    def test_endpoint_includes_case_level_diagnostic_links(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_detail_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_detail_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="case-detail-links-exec-1",
+                case_hash="detail-links-hash-1",
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                simulation_type="experimental",
+                status="created",
+                machine_id=machine.id,
+                simulation_start_date="2023-01-01T00:00:00Z",
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.flush()
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/{case.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["links"] == [
+            {
+                "id": data["links"][0]["id"],
+                "kind": "diagnostic",
+                "url": "https://example.com/case-diagnostic",
+                "label": "Case diagnostic",
+                "createdAt": data["links"][0]["createdAt"],
+                "updatedAt": data["links"][0]["updatedAt"],
+            }
+        ]
 
     def test_endpoint_raises_404_if_case_not_found(self, client):
         res = client.get(f"{API_BASE}/cases/{uuid4()}")
@@ -990,6 +1056,86 @@ class TestListSimulations:
         assert data[0]["caseName"] == "combo_case"
         assert data[0]["caseGroup"] == "combo_group"
 
+    def test_list_merges_case_owned_diagnostic_links_without_duplicates(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_list_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_list_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="list-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-only-diagnostic",
+                    label="Case-only diagnostic",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Case shared diagnostic",
+                ),
+                ExternalLink(
+                    simulation_id=sim.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Simulation shared diagnostic",
+                ),
+            ]
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/simulations")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+
+        links_by_url = {link["url"]: link for link in data[0]["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-only-diagnostic",
+            "https://example.com/shared-diagnostic",
+        }
+        assert (
+            links_by_url["https://example.com/shared-diagnostic"]["label"]
+            == "Simulation shared diagnostic"
+        )
+        assert data[0]["groupedLinks"]["diagnostic"][0]["kind"] == "diagnostic"
+
 
 class TestGetSimulation:
     def test_endpoint_succeeds_with_valid_id(
@@ -1110,6 +1256,85 @@ class TestGetSimulation:
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
         assert res.status_code == 404
         assert res.json() == {"detail": "Simulation not found"}
+
+    def test_endpoint_merges_case_owned_diagnostic_links_with_simulation_precedence(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_get_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_simulation_get_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="get-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-diagnostic-only",
+                    label="Case diagnostic only",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Case duplicate",
+                ),
+                ExternalLink(
+                    simulation_id=sim.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Simulation duplicate",
+                ),
+            ]
+        )
+        db.commit()
+        db.refresh(sim)
+
+        res = client.get(f"{API_BASE}/simulations/{sim.id}")
+        assert res.status_code == 200
+        data = res.json()
+
+        links_by_url = {link["url"]: link for link in data["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-diagnostic-only",
+            "https://example.com/shared-diagnostic-detail",
+        }
+        assert (
+            links_by_url["https://example.com/shared-diagnostic-detail"]["label"]
+            == "Simulation duplicate"
+        )
 
 
 class TestUpdateSimulation:

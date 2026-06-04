@@ -663,6 +663,7 @@ class TestCaseOutSchema:
             ],
             machine_names=["chrysalis"],
             hpc_usernames=["ac.tvo"],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
@@ -682,9 +683,11 @@ class TestCaseOutSchema:
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
         assert case_out.simulations == []
         assert case_out.machine_names == []
         assert case_out.hpc_usernames == []
+        assert case_out.links == []

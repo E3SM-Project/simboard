@@ -212,6 +212,34 @@ class TestBuildSimulationSummary:
             "This summary uses only metadata already stored in SimBoard. It does not use retrieval, diagnostics interpretation, or LLM reasoning."
         ]
 
+    def test_case_owned_diagnostics_are_visible_to_summary_and_citations(
+        self, db: Session, normal_user_sync, admin_user_sync
+    ) -> None:
+        simulation = _create_simulation(
+            db,
+            normal_user_sync,
+            admin_user_sync,
+            execution_id="assistant-case-diagnostic",
+            with_diagnostics=False,
+        )
+        db.add(
+            ExternalLink(
+                case_id=simulation.case_id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        db.commit()
+        db.refresh(simulation)
+
+        summary = build_simulation_summary(simulation)
+
+        assert "SimBoard records 1 diagnostic link(s) for this run" in summary.answer
+        assert "links[kind=diagnostic]" in {
+            citation.path for citation in summary.citations
+        }
+
     def test_snapshot_without_case_hash_omits_grouping_sentence(self) -> None:
         summary = build_simulation_summary(
             SimulationSnapshot(
