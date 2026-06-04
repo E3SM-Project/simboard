@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, Info, Pin, Search, Share2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Info, Search, Share2 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -578,9 +578,9 @@ export const CaseDetailsPage = ({
                           size="sm"
                           onClick={() => navigate('/compare')}
                           disabled={isCompareButtonDisabled}
-                        >
-                          Compare Selected
-                        </Button>
+                          >
+                            Compare Selected
+                          </Button>
                         {selectedSimulationIds.length > 0 ? (
                           <Button
                             type="button"
@@ -683,7 +683,6 @@ export const CaseDetailsPage = ({
                             <TableHead className="w-12">Select</TableHead>
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
-                            <TableHead>Role / changes</TableHead>
                             <TableHead>Initialization</TableHead>
                             <TableHead>Simulation dates</TableHead>
                             <TableHead>Run dates</TableHead>
@@ -710,15 +709,6 @@ export const CaseDetailsPage = ({
                                   className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                 >
                                   {summary.executionId}
-                                  {summary.isReference ? (
-                                    <span
-                                      className="inline-flex items-center"
-                                      title="Reference simulation"
-                                      aria-label="Reference simulation"
-                                    >
-                                      <Pin className="h-3.5 w-3.5 text-amber-600" />
-                                    </span>
-                                  ) : null}
                                 </Link>
                               </TableCell>
                               <TableCell className="align-top">
@@ -730,11 +720,6 @@ export const CaseDetailsPage = ({
                                     ? formatCaseHashLabel(summary.caseHash)
                                     : MISSING_CASE_HASH_LABEL}
                                 </span>
-                              </TableCell>
-                              <TableCell className="align-top text-sm text-slate-700">
-                                {summary.isReference
-                                  ? 'Reference baseline'
-                                  : `${summary.changeCount} changes`}
                               </TableCell>
                               <TableCell className="align-top">
                                 <TableCellText
@@ -792,7 +777,6 @@ export const CaseDetailsPage = ({
                             <TableHead className="w-24 bg-slate-50">Runs</TableHead>
                             <TableHead className="bg-slate-50">Simulation window</TableHead>
                             <TableHead className="bg-slate-50">Initialization</TableHead>
-                            <TableHead className="bg-slate-50">Config changes</TableHead>
                             <TableHead className="bg-slate-50">Run dates</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -806,9 +790,6 @@ export const CaseDetailsPage = ({
                             const groupRunWindow = getGroupRunDateWindow(group.simulations);
                             const groupInitializationSummary = summarizeDistinctValues(
                               group.simulations.map(({ details }) => details?.initializationType),
-                            );
-                            const maxChangeCount = Math.max(
-                              ...group.simulations.map(({ summary }) => summary.changeCount),
                             );
                             const showInitializationColumn =
                               countDistinctValues(
@@ -878,9 +859,6 @@ export const CaseDetailsPage = ({
                                   <TableCell className="align-top text-sm text-slate-700">
                                     <TableCellText value={groupInitializationSummary} lines={1} />
                                   </TableCell>
-                                  <TableCell className="align-top text-sm font-medium text-slate-700">
-                                    Up to {maxChangeCount} changes
-                                  </TableCell>
                                   <TableCell className="align-top text-sm text-slate-700">
                                     {groupRunWindow}
                                   </TableCell>
@@ -910,9 +888,6 @@ export const CaseDetailsPage = ({
                                                   </TableHead>
                                                   <TableHead className="bg-white">
                                                     Execution ID
-                                                  </TableHead>
-                                                  <TableHead className="bg-white">
-                                                    Role / changes
                                                   </TableHead>
                                                   {showInitializationColumn ? (
                                                     <TableHead className="bg-white">
@@ -959,21 +934,7 @@ export const CaseDetailsPage = ({
                                                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                                       >
                                                         {summary.executionId}
-                                                        {summary.isReference ? (
-                                                          <span
-                                                            className="inline-flex items-center"
-                                                            title="Reference simulation"
-                                                            aria-label="Reference simulation"
-                                                          >
-                                                            <Pin className="h-3.5 w-3.5 text-amber-600" />
-                                                          </span>
-                                                        ) : null}
                                                       </Link>
-                                                    </TableCell>
-                                                    <TableCell className="align-top text-sm text-slate-700">
-                                                      {summary.isReference
-                                                        ? 'Reference baseline'
-                                                        : `${summary.changeCount} changes`}
                                                     </TableCell>
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">

@@ -43,54 +43,28 @@ def _add_identity_and_status(
     snapshot: SimulationSnapshot,
     draft: SummaryDraft,
 ) -> None:
-    change_count = (
-        len(snapshot.simulation.run_config_deltas)
-        if snapshot.simulation.run_config_deltas
-        else 0
-    )
-
     draft.add_citation("simulation.execution_id")
     draft.add_citation("case.name")
     draft.sentences.append(
         f"Simulation {snapshot.simulation.execution_id} belongs to case {snapshot.case.name}."
     )
 
-    type_bits = [snapshot.simulation.simulation_type]
-    if snapshot.case.reference_simulation_id:
-        draft.add_citation("case.reference_simulation_id")
-
-    if (
-        snapshot.case.reference_simulation_id
-        and snapshot.case.reference_simulation_id == snapshot.simulation.id
-    ):
-        type_bits.append("reference")
-    else:
-        type_bits.append("non-reference")
-        if snapshot.simulation.run_config_deltas:
-            draft.sentences.append(
-                f"It is a non-reference run with {change_count} recorded "
-                "configuration change(s) versus the case reference simulation."
-            )
-            draft.add_citation("simulation.run_config_deltas")
-        else:
-            draft.sentences.append(
-                "It is a non-reference run, but SimBoard does not currently record "
-                "any configuration deltas for it."
-            )
-            draft.caveats.append(
-                "This non-reference simulation has no recorded configuration deltas in SimBoard metadata."
-            )
+    if snapshot.simulation.case_hash:
+        draft.sentences.append(
+            f"It is grouped under CASE_HASH {snapshot.simulation.case_hash} within this case."
+        )
+        draft.add_citation("simulation.case_hash")
 
     if snapshot.machine and snapshot.machine.name:
         draft.sentences.append(
-            f"It is recorded as a {' '.join(type_bits)} simulation on machine "
-            f"{snapshot.machine.name} with status {snapshot.simulation.status}."
+            f"It is recorded as a {snapshot.simulation.simulation_type} simulation on "
+            f"machine {snapshot.machine.name} with status {snapshot.simulation.status}."
         )
         draft.add_citation("machine.name")
     else:
         draft.sentences.append(
-            f"It is recorded as a {' '.join(type_bits)} simulation with status "
-            f"{snapshot.simulation.status}."
+            f"It is recorded as a {snapshot.simulation.simulation_type} simulation "
+            f"with status {snapshot.simulation.status}."
         )
         draft.caveats.append("Machine information is not recorded for this simulation.")
 
@@ -215,14 +189,14 @@ def _add_diagnostics_and_followups(
             "No diagnostic links are recorded for this simulation in SimBoard."
         )
 
-    if snapshot.simulation.run_config_deltas:
+    if snapshot.simulation.case_hash:
         draft.followups.append(
-            "Compare this run against the case reference simulation to review the recorded configuration deltas."
+            "Open the case details page to compare this run with other executions in the same CASE_HASH subgroup."
         )
 
     if snapshot.simulation.known_issues:
         draft.followups.append(
-            "Review the recorded known issues before using this simulation as a baseline."
+            "Review the recorded known issues before drawing conclusions from this run."
         )
 
     output_artifacts = [

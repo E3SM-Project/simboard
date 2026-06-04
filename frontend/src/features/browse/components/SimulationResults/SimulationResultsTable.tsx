@@ -147,22 +147,13 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { width: 220 },
   },
   {
-    accessorKey: 'isReference',
-    header: renderSortableHeader('Reference'),
-    cell: ({ row }) => {
-      const isReference = row.original.isReference;
-      const changeCount = row.original.changeCount;
-      return (
-        <div>
-          {isReference ? 'Yes' : 'No'}
-          {!isReference && changeCount > 0 && (
-            <span className="ml-1 text-slate-400">({changeCount})</span>
-          )}
-        </div>
-      );
-    },
+    accessorKey: 'caseHash',
+    header: renderSortableHeader('Case Hash'),
+    cell: ({ row }) => (
+      <TableCellText value={row.original.caseHash ?? '—'} mono className="text-slate-600" />
+    ),
     enableSorting: true,
-    meta: { width: 110 },
+    meta: { width: 180 },
   },
   {
     accessorKey: 'campaign',

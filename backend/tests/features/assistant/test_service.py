@@ -29,7 +29,7 @@ def _create_simulation(
     *,
     case_name: str = "assistant_case",
     execution_id: str = "assistant-exec-1",
-    is_reference: bool = True,
+    case_hash: str | None = "assistant-hash-1",
     with_diagnostics: bool = True,
     with_optional_metadata: bool = True,
 ) -> Simulation:
@@ -80,40 +80,13 @@ def _create_simulation(
         git_branch="main" if with_optional_metadata else None,
         git_tag="v1.2.3" if with_optional_metadata else None,
         git_commit_hash="abc123def456" if with_optional_metadata else None,
+        case_hash=case_hash,
         created_by=normal_user_sync["id"],
         last_updated_by=admin_user_sync["id"],
         ingestion_id=ingestion.id,
-        run_config_deltas=(
-            None
-            if is_reference
-            else {"compiler": {"reference": "gcc-11", "current": "gcc-12"}}
-        ),
     )
     db.add(simulation)
     db.flush()
-
-    if is_reference:
-        case.reference_simulation_id = simulation.id
-    else:
-        reference = Simulation(
-            case_id=case.id,
-            execution_id=f"{execution_id}-ref",
-            compset="AQUAPLANET",
-            compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
-            simulation_type="experimental",
-            status="completed",
-            initialization_type="startup",
-            machine_id=machine.id,
-            simulation_start_date="2023-01-01T00:00:00Z",
-            created_by=normal_user_sync["id"],
-            last_updated_by=admin_user_sync["id"],
-            ingestion_id=ingestion.id,
-        )
-        db.add(reference)
-        db.flush()
-        case.reference_simulation_id = reference.id
 
     if with_diagnostics:
         db.add(
@@ -194,24 +167,24 @@ class TestBuildSimulationSummary:
             in summary.caveats
         )
 
-    def test_non_reference_simulation_mentions_change_count(
+    def test_case_hash_grouping_is_reflected_in_summary(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
         simulation = _create_simulation(
             db,
             normal_user_sync,
             admin_user_sync,
-            execution_id="assistant-nonref",
-            is_reference=False,
+            execution_id="assistant-grouped",
+            case_hash="assistant-grouped-hash",
         )
 
         summary = build_simulation_summary(simulation)
 
         assert (
-            "non-reference run with 1 recorded configuration change(s)"
+            "It is grouped under CASE_HASH assistant-grouped-hash within this case."
             in summary.answer
         )
-        assert "simulation.run_config_deltas" in {
+        assert "simulation.case_hash" in {
             citation.path for citation in summary.citations
         }
 
@@ -237,12 +210,12 @@ class TestBuildSimulationSummary:
             "This summary uses only metadata already stored in SimBoard. It does not use retrieval, diagnostics interpretation, or LLM reasoning."
         ]
 
-    def test_non_reference_without_deltas_adds_explicit_caveat(self) -> None:
+    def test_snapshot_without_case_hash_omits_grouping_sentence(self) -> None:
         summary = build_simulation_summary(
             SimulationSnapshot(
                 simulation=SnapshotSimulationFields(
                     id="simulation-1",
-                    execution_id="assistant-nonref-no-deltas",
+                    execution_id="assistant-no-case-hash",
                     compset="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
@@ -252,21 +225,11 @@ class TestBuildSimulationSummary:
                     initialization_type="startup",
                     simulation_start_date="2023-01-01T00:00:00Z",
                 ),
-                case=SnapshotCaseFields(
-                    name="assistant_case",
-                    reference_simulation_id="reference-1",
-                ),
+                case=SnapshotCaseFields(name="assistant_case"),
             )
         )
 
-        assert (
-            "It is a non-reference run, but SimBoard does not currently record any configuration deltas for it."
-            in summary.answer
-        )
-        assert (
-            "This non-reference simulation has no recorded configuration deltas in SimBoard metadata."
-            in summary.caveats
-        )
+        assert "CASE_HASH" not in summary.answer
 
     def test_missing_start_date_adds_caveat_and_default_followup(self) -> None:
         summary = build_simulation_summary(

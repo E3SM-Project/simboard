@@ -33,10 +33,8 @@ def _make_snapshot() -> SimulationSnapshot:
             notes_markdown="Notes " * 5,
             key_features="Features " * 5,
             known_issues="Issues " * 5,
+            case_hash="snapshot-hash-1",
             extra={"foo": "bar"},
-            run_config_deltas={
-                "compiler": {"reference": "gcc-11", "current": "gcc-12"}
-            },
         ),
         case=SnapshotCaseFields(name="assistant_case"),
         machine=SnapshotMachineFields(name="perlmutter"),
@@ -113,7 +111,6 @@ class TestSnapshotHelpers:
         assert trimmed.simulation.key_features is None
         assert trimmed.simulation.known_issues is None
         assert trimmed.simulation.extra == {}
-        assert trimmed.simulation.run_config_deltas is None
         assert SNAPSHOT_TRUNCATED_CAVEAT in trimmed.snapshot_caveats
 
     def test_apply_size_budget_drops_remaining_artifacts_after_trim(
@@ -196,5 +193,4 @@ class TestSnapshotHelpers:
         assert exc_info.value.snapshot.simulation.key_features is None
         assert exc_info.value.snapshot.simulation.known_issues is None
         assert exc_info.value.snapshot.simulation.extra == {}
-        assert exc_info.value.snapshot.simulation.run_config_deltas is None
         assert SNAPSHOT_TRUNCATED_CAVEAT in exc_info.value.snapshot.snapshot_caveats

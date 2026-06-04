@@ -116,13 +116,13 @@ _CITATION_REGISTRY = {
         source_type="simulation_field",
         label="Git commit hash",
     ),
+    "simulation.case_hash": CitationRegistryEntry(
+        source_type="simulation_field",
+        label="Case hash",
+    ),
     "simulation.extra": CitationRegistryEntry(
         source_type="simulation_field",
         label="Extra metadata",
-    ),
-    "simulation.run_config_deltas": CitationRegistryEntry(
-        source_type="simulation_field",
-        label="Configuration deltas",
     ),
     "case.name": CitationRegistryEntry(
         source_type="case_field",
@@ -131,10 +131,6 @@ _CITATION_REGISTRY = {
     "case.case_group": CitationRegistryEntry(
         source_type="case_field",
         label="Case group",
-    ),
-    "case.reference_simulation_id": CitationRegistryEntry(
-        source_type="case_field",
-        label="Reference simulation",
     ),
     "machine.name": CitationRegistryEntry(
         source_type="machine_field",

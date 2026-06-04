@@ -256,18 +256,6 @@ class SimulationCreate(CamelInBaseModel):
             description="Optional extra metadata in flexible dictionary/JSON format",
         ),
     ]
-    run_config_deltas: Annotated[
-        dict[str, Any] | None,
-        Field(
-            None,
-            description=(
-                "Configuration differences between this simulation and the "
-                "reference simulation for the same case. None for reference "
-                "simulations or when no differences exist."
-            ),
-        ),
-    ]
-
     # Relationships
     # --------------
     artifacts: Annotated[
@@ -318,23 +306,6 @@ class SimulationSummaryOut(CamelOutBaseModel):
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
-    is_reference: Annotated[
-        bool,
-        Field(
-            ...,
-            description="Whether this simulation is the reference for its case",
-        ),
-    ]
-    change_count: Annotated[
-        int,
-        Field(
-            ...,
-            description=(
-                "Number of configuration differences vs the reference simulation. "
-                "0 for reference simulations."
-            ),
-        ),
-    ]
     simulation_start_date: Annotated[
         datetime, Field(..., description="Start date of the simulation")
     ]
@@ -376,10 +347,6 @@ class CaseOut(CamelOutBaseModel):
                 "Groups related cases (e.g. ensemble members) together."
             ),
         ),
-    ]
-    reference_simulation_id: Annotated[
-        UUID | None,
-        Field(None, description="ID of the reference simulation for this case."),
     ]
     simulations: Annotated[
         list[SimulationSummaryOut],
@@ -452,23 +419,6 @@ class SimulationOut(CamelOutBaseModel):
                 "Optional CASE_HASH parsed from env_case.xml. Used to group "
                 "related executions or sub-cases within a case; not top-level "
                 "case identity."
-            ),
-        ),
-    ]
-    is_reference: Annotated[
-        bool,
-        Field(
-            ...,
-            description="Whether this simulation is the reference for its case",
-        ),
-    ]
-    change_count: Annotated[
-        int,
-        Field(
-            ...,
-            description=(
-                "Number of configuration differences vs the reference simulation. "
-                "0 for reference simulations."
             ),
         ),
     ]
@@ -609,17 +559,6 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             default_factory=dict,
             description="Optional extra metadata in flexible dictionary/JSON format",
-        ),
-    ]
-    run_config_deltas: Annotated[
-        dict[str, Any] | None,
-        Field(
-            None,
-            description=(
-                "Configuration differences between this simulation and the "
-                "reference simulation for the same case. None for reference "
-                "simulations or when no differences exist."
-            ),
         ),
     ]
     summary_capabilities: Annotated[

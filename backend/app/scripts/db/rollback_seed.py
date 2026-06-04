@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
@@ -71,14 +71,6 @@ def rollback_seed(db: Session):
                         Artifact.__table__.c.simulation_id.in_(simulation_ids)
                     )
                 )
-
-                # Clear reference_simulation_id on cases before deleting simulations
-                if case_ids:
-                    db.execute(
-                        update(Case)
-                        .where(Case.__table__.c.id.in_(case_ids))
-                        .values(reference_simulation_id=None)
-                    )
 
                 db.execute(
                     delete(Simulation).where(
