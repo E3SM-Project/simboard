@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Thin SimBoard entrypoint for the existing Chrysalis Jenkins workflow.
-# Keep site-specific setup here; keep ingestion logic in hpc_archive_ingestor.py.
+# Keep site-specific setup here; keep ingestion logic in hpc_upload_archive_ingestor.py.
 
 : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL is required}"
 : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN is required}"
