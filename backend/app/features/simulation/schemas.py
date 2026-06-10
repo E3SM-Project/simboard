@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import Field, HttpUrl, computed_field
@@ -52,6 +52,46 @@ class ExternalLinkOut(CamelOutBaseModel):
         datetime,
         Field(
             ..., description="The timestamp when the external link was last updated."
+        ),
+    ]
+
+
+class DiagnosticsLinkItem(CamelInBaseModel):
+    """Schema for one diagnostic link to attach to a case."""
+
+    name: Annotated[str, Field(..., description="Human-readable diagnostic label.")]
+    url: Annotated[HttpUrl, Field(..., description="Diagnostic URL to attach.")]
+    kind: Literal[ExternalLinkKind.DIAGNOSTIC] = Field(
+        default=ExternalLinkKind.DIAGNOSTIC,
+        description="Link type for diagnostics payloads. Must be 'diagnostic'.",
+    )
+
+
+class DiagnosticsLinkRequest(CamelInBaseModel):
+    """Schema for linking diagnostics to a resolved case."""
+
+    case_name: Annotated[
+        str,
+        Field(..., description="Exact case name used to resolve the target case."),
+    ]
+    machine: Annotated[
+        str,
+        Field(
+            ...,
+            description="Exact machine name used alongside case name to resolve the case.",
+        ),
+    ]
+    hpc_username: Annotated[
+        str,
+        Field(
+            ...,
+            description="Exact HPC username used alongside case name and machine to resolve the case.",
+        ),
+    ]
+    diagnostics: Annotated[
+        list[DiagnosticsLinkItem],
+        Field(
+            ..., min_length=1, description="Diagnostic links to upsert for the case."
         ),
     ]
 
@@ -367,6 +407,13 @@ class CaseOut(CamelOutBaseModel):
         Field(
             default_factory=list,
             description="Unique HPC usernames represented across this case's simulations.",
+        ),
+    ]
+    links: Annotated[
+        list[ExternalLinkOut],
+        Field(
+            default_factory=list,
+            description="Optional list of external links associated with the case.",
         ),
     ]
     created_at: Annotated[

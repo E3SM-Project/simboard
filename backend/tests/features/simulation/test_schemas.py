@@ -1,4 +1,5 @@
 from datetime import datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 from pydantic import HttpUrl
@@ -101,6 +102,42 @@ class TestSimulationCreateSchema:
                         )
             else:
                 assert getattr(simulation_create, snake_case_key) == value
+
+
+class TestExternalLinkOutSchema:
+    def test_validates_simulation_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/simulation-owned",
+            label="Simulation-owned",
+            simulation_id=uuid4(),
+            case_id=None,
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/simulation-owned")
+        assert link_out.label == "Simulation-owned"
+
+    def test_validates_case_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/case-owned",
+            label="Case-owned",
+            simulation_id=None,
+            case_id=uuid4(),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/case-owned")
+        assert link_out.label == "Case-owned"
 
 
 class TestSimulationOutSchema:
@@ -494,6 +531,7 @@ class TestCaseOutSchema:
             ],
             machine_names=["chrysalis"],
             hpc_usernames=["ac.tvo"],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
@@ -513,9 +551,11 @@ class TestCaseOutSchema:
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
         assert case_out.simulations == []
         assert case_out.machine_names == []
         assert case_out.hpc_usernames == []
+        assert case_out.links == []

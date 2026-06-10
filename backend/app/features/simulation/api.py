@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
@@ -9,19 +10,24 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
+from app.features.simulation.enums import ExternalLinkKind
+from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseOut,
+    DiagnosticsLinkRequest,
     SimulationCreate,
     SimulationOut,
     SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
 )
 from app.features.user.manager import current_active_user
-from app.features.user.models import User
+from app.features.user.models import User, UserRole
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
+diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
 
 
 @case_router.get(
@@ -116,7 +122,10 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     """
     case = (
         db.query(Case)
-        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
+        .options(
+            selectinload(Case.simulations).selectinload(Simulation.machine),
+            selectinload(Case.links),
+        )
         .filter(Case.id == case_id)
         .first()
     )
@@ -124,12 +133,12 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    resp = _case_to_out(case)
+    resp = _case_to_out(case, include_links=True)
 
     return resp
 
 
-def _case_to_out(case: Case) -> CaseOut:
+def _case_to_out(case: Case, *, include_links: bool = False) -> CaseOut:
     """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
 
     Parameters
@@ -176,6 +185,7 @@ def _case_to_out(case: Case) -> CaseOut:
         simulations=summaries,
         machine_names=machine_names,
         hpc_usernames=hpc_usernames,
+        links=case.links if include_links else [],
         created_at=case.created_at,
         updated_at=case.updated_at,
     )
@@ -258,7 +268,7 @@ def create_simulation(
     sim_loaded = (
         db.query(Simulation)
         .options(
-            joinedload(Simulation.case),
+            joinedload(Simulation.case).selectinload(Case.links),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -276,6 +286,43 @@ def create_simulation(
     result = _simulation_to_out(sim_loaded)
 
     return result
+
+
+@diagnostics_router.post(
+    "/link",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Diagnostics linked successfully."},
+        401: {"description": "Unauthorized."},
+        403: {"description": "Forbidden."},
+        404: {"description": "Matching case not found."},
+        409: {"description": "Ambiguous case match."},
+        422: {"description": "Validation error."},
+    },
+)
+def link_case_diagnostics(
+    payload: DiagnosticsLinkRequest,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> None:
+    """Resolve one case and upsert case-scoped diagnostic links."""
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and service accounts may link diagnostics.",
+        )
+
+    case_id = _resolve_case_id_for_diagnostics_link(
+        db=db,
+        case_name=payload.case_name,
+        machine_name=payload.machine,
+        hpc_username=payload.hpc_username,
+    )
+    _upsert_case_diagnostic_links(
+        db=db,
+        case_id=case_id,
+        diagnostics=payload.diagnostics,
+    )
 
 
 @simulation_router.get(
@@ -321,7 +368,7 @@ def list_simulations(
         in descending order.
     """
     query = db.query(Simulation).options(
-        joinedload(Simulation.case),
+        joinedload(Simulation.case).selectinload(Case.links),
         joinedload(Simulation.machine),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
@@ -334,6 +381,81 @@ def list_simulations(
 
     sims = query.order_by(Simulation.created_at.desc()).all()
     return [_simulation_to_out(s) for s in sims]
+
+
+def _resolve_case_id_for_diagnostics_link(
+    *,
+    db: Session,
+    case_name: str,
+    machine_name: str,
+    hpc_username: str,
+) -> UUID:
+    """Resolve a unique case ID from case, machine, and HPC username."""
+    matches = (
+        db.query(Case.id)
+        .join(Simulation, Simulation.case_id == Case.id)
+        .join(Machine, Simulation.machine_id == Machine.id)
+        .filter(Case.name == case_name)
+        .filter(Machine.name == machine_name)
+        .filter(Simulation.hpc_username == hpc_username)
+        .distinct()
+        .all()
+    )
+
+    if not matches:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No case matched the provided case_name, machine, and hpc_username.",
+        )
+
+    # TODO(#193): This ambiguity branch is not reachable while Case.name remains
+    # globally unique. If case identity moves to (case_name, machine, hpc_username),
+    # keep this 409 path and replace patched coverage with a DB-backed test.
+    # https://github.com/E3SM-Project/simboard/issues/193
+    if len(matches) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Multiple cases matched the provided case_name, machine, and hpc_username.",
+        )
+
+    return matches[0][0]
+
+
+def _upsert_case_diagnostic_links(
+    *,
+    db: Session,
+    case_id: UUID,
+    diagnostics: list,
+) -> None:
+    """Create or update case-owned diagnostic links idempotently."""
+    now = datetime.now(timezone.utc)
+
+    with transaction(db):
+        for diagnostic in diagnostics:
+            stmt = (
+                pg_insert(ExternalLink)
+                .values(
+                    case_id=case_id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url=str(diagnostic.url),
+                    label=diagnostic.name,
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        ExternalLink.case_id,
+                        ExternalLink.kind,
+                        ExternalLink.url,
+                    ],
+                    index_where=ExternalLink.case_id.is_not(None),
+                    set_={
+                        "label": diagnostic.name,
+                        "updated_at": now,
+                    },
+                )
+            )
+            db.execute(stmt)
 
 
 @simulation_router.get(
@@ -370,7 +492,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     sim = (
         db.query(Simulation)
         .options(
-            joinedload(Simulation.case),
+            joinedload(Simulation.case).selectinload(Case.links),
             joinedload(Simulation.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
@@ -403,12 +525,14 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     """
     case = sim.case
     llm_available = is_summary_llm_available()
+    merged_links = merge_simulation_and_case_links(sim.links, case.links)
 
     result = SimulationOut.model_validate(
         {
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
             "case_group": case.case_group,
+            "links": merged_links,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,

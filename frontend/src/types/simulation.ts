@@ -51,6 +51,7 @@ export interface CaseOut {
   simulations: SimulationSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
+  links: ExternalLinkOut[];
   createdAt: string;
   updatedAt: string;
 }

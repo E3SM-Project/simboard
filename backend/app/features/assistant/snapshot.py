@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 
 SNAPSHOT_TRUNCATED_CAVEAT = (
@@ -201,6 +202,10 @@ def build_simulation_snapshot(
     *,
     max_chars: int | None = None,
 ) -> SimulationSnapshot:
+    merged_links = merge_simulation_and_case_links(
+        simulation.links,
+        simulation.case.links,
+    )
     snapshot = SimulationSnapshot(
         simulation=SnapshotSimulationFields(
             id=str(simulation.id),
@@ -240,7 +245,7 @@ def build_simulation_snapshot(
             else None
         ),
         artifacts=_sorted_artifacts(simulation.artifacts),
-        links=_sorted_links(simulation.links),
+        links=_sorted_links(merged_links),
         snapshot_caveats=[],
     )
 

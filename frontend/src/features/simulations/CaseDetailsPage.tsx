@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, Info, Search, Share2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ExternalLink, Info, Search, Share2 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -30,7 +30,7 @@ import {
 } from '@/features/simulations/caseUtils';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
-import type { SimulationOut, SimulationSummaryOut } from '@/types';
+import type { ExternalLinkOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
 const DetailField = ({
   label,
@@ -86,6 +86,20 @@ const formatGroupSimulationWindow = (simulations: SimulationSummaryOut[]) => {
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
+const RESOURCE_GROUP_LABELS: Record<ExternalLinkOut['kind'], string> = {
+  diagnostic: 'Diagnostics',
+  performance: 'Performance',
+  docs: 'Documentation',
+  other: 'Other resources',
+};
+
+const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
+  diagnostic: 'zppy diagnostic output',
+  performance: 'performance output',
+  docs: 'linked documentation',
+  other: 'linked resource',
+};
+
 interface CaseDetailsPageProps {
   simulations: SimulationOut[];
   selectedSimulationIds: string[];
@@ -139,6 +153,36 @@ const getGroupRunDateWindow = (simulations: GroupSimulation[]) => {
 };
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
+
+const renderResourceLink = (link: ExternalLinkOut) => (
+  <a
+    key={link.id}
+    href={link.url}
+    target="_blank"
+    rel="noreferrer"
+    className="group flex w-full items-start justify-between gap-3 rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+    aria-label={`${link.label || link.url} (${RESOURCE_KIND_DESCRIPTIONS[link.kind]})`}
+  >
+    <div className="min-w-0 space-y-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="break-all text-sm font-medium leading-5 text-slate-900">
+          {link.label || link.url}
+        </p>
+        <Badge
+          variant="outline"
+          className="h-5 rounded-full border-slate-200 px-2 text-[11px] font-medium text-slate-600"
+        >
+          {RESOURCE_GROUP_LABELS[link.kind]}
+        </Badge>
+      </div>
+      <p className="text-xs text-slate-500">{RESOURCE_KIND_DESCRIPTIONS[link.kind]}</p>
+    </div>
+    <div className="flex shrink-0 items-center gap-1 pt-0.5 text-slate-400 transition-colors group-hover:text-slate-600 group-focus-visible:text-slate-600">
+      <ExternalLink className="h-3.5 w-3.5" />
+      <span className="sr-only">Opens in a new tab</span>
+    </div>
+  </a>
+);
 
 export const CaseDetailsPage = ({
   simulations: allSimulations,
@@ -337,6 +381,8 @@ export const CaseDetailsPage = ({
   }
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
+  const resourceLinks = caseRecord.links;
+  const resourceCount = caseRecord.links.length;
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
@@ -473,6 +519,23 @@ export const CaseDetailsPage = ({
               </div>
               <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
                 <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-3">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <h2 className="text-sm font-semibold text-slate-950">Resources</h2>
+                  {resourceCount > 0 ? (
+                    <p className="text-sm text-slate-500">({resourceCount})</p>
+                  ) : null}
+                </div>
+
+                {resourceLinks.length > 0 ? (
+                  <div className="space-y-2">{resourceLinks.map(renderResourceLink)}</div>
+                ) : (
+                  <p className="text-sm text-slate-500">No linked resources yet.</p>
+                )}
               </div>
             </div>
           </CardContent>
