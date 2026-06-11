@@ -891,9 +891,10 @@ class TestUpdateSimulation:
         db.commit()
 
         payload = {
+            "simulationType": "production",
+            "status": "completed",
             "description": "Updated description",
             "campaign": "campaign-updated",
-            "gitRepositoryUrl": "https://example.com/updated",
             "notesMarkdown": "Updated notes",
         }
 
@@ -901,11 +902,13 @@ class TestUpdateSimulation:
 
         assert res.status_code == 200
         data = res.json()
+        assert data["simulationType"] == payload["simulationType"]
+        assert data["status"] == payload["status"]
         assert data["description"] == payload["description"]
         assert data["campaign"] == payload["campaign"]
-        assert data["gitRepositoryUrl"] == payload["gitRepositoryUrl"]
         assert data["notesMarkdown"] == payload["notesMarkdown"]
         assert data["compiler"] == "gcc"
+        assert data["gitRepositoryUrl"] == "https://example.com/original"
         assert data["gitTag"] == "v1.0"
         assert data["hpcUsername"] == "old-user"
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
@@ -914,11 +917,13 @@ class TestUpdateSimulation:
 
         db.expire_all()
         updated_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert updated_sim.simulation_type == payload["simulationType"]
+        assert updated_sim.status == payload["status"]
         assert updated_sim.description == payload["description"]
         assert updated_sim.campaign == payload["campaign"]
-        assert updated_sim.git_repository_url == payload["gitRepositoryUrl"]
         assert updated_sim.notes_markdown == payload["notesMarkdown"]
         assert updated_sim.compiler == "gcc"
+        assert updated_sim.git_repository_url == "https://example.com/original"
         assert updated_sim.git_tag == "v1.0"
         assert updated_sim.last_updated_by == normal_user_sync["id"]
         assert updated_sim.updated_at > original_updated_at
@@ -991,7 +996,7 @@ class TestUpdateSimulation:
 
         res = client.patch(
             f"{API_BASE}/simulations/{sim.id}",
-            json={"caseName": "mutated-case-name"},
+            json={"compiler": "intel"},
         )
 
         assert res.status_code == 422
@@ -999,6 +1004,7 @@ class TestUpdateSimulation:
         db.expire_all()
         unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
         assert unchanged_sim.description == "Original description"
+        assert unchanged_sim.compiler == "gcc"
         assert unchanged_sim.case_id == case.id
 
 

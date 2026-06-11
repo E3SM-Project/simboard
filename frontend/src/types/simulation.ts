@@ -9,6 +9,15 @@ export interface SimulationUserPreview {
   full_name?: string | null;
 }
 
+export type SimulationTypeValue = 'unknown' | 'production' | 'experimental' | 'test' | 'master';
+export type SimulationStatusValue =
+  | 'unknown'
+  | 'created'
+  | 'queued'
+  | 'running'
+  | 'failed'
+  | 'completed';
+
 export type SummaryCitationSourceType =
   | 'simulation_field'
   | 'case_field'
@@ -86,8 +95,8 @@ export interface SimulationCreate {
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
-  simulationType: string;
-  status: string;
+  simulationType: SimulationTypeValue;
+  status: SimulationStatusValue;
   campaign?: string | null;
   experimentType?: string | null;
   initializationType: string;
@@ -133,18 +142,15 @@ export interface SimulationCreate {
 export type SimulationUpdate = Partial<
   Pick<
     SimulationCreate,
+    | 'simulationType'
+    | 'status'
     | 'description'
     | 'campaign'
     | 'experimentType'
-    | 'compiler'
     | 'hpcUsername'
     | 'keyFeatures'
     | 'knownIssues'
     | 'notesMarkdown'
-    | 'gitRepositoryUrl'
-    | 'gitBranch'
-    | 'gitTag'
-    | 'gitCommitHash'
   >
 >;
 

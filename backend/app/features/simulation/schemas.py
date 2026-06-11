@@ -279,6 +279,13 @@ class SimulationUpdate(CamelInBaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    simulation_type: Annotated[
+        SimulationType | None, Field(None, description="Type of the simulation")
+    ]
+    status: Annotated[
+        SimulationStatus | None,
+        Field(None, description="Current status of the simulation"),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional description of the simulation")
     ]
@@ -298,9 +305,6 @@ class SimulationUpdate(CamelInBaseModel):
             ),
         ),
     ]
-    compiler: Annotated[
-        str | None, Field(None, description="Optional compiler used for the simulation")
-    ]
     hpc_username: Annotated[
         str | None,
         Field(
@@ -317,25 +321,6 @@ class SimulationUpdate(CamelInBaseModel):
     notes_markdown: Annotated[
         str | None,
         Field(None, description="Optional additional notes in markdown format"),
-    ]
-    git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
-    ]
-    git_branch: Annotated[
-        str | None,
-        Field(
-            None, description="Optional Git branch name associated with the simulation"
-        ),
-    ]
-    git_tag: Annotated[
-        str | None, Field(None, description="Optional Git tag for the simulation")
-    ]
-    git_commit_hash: Annotated[
-        str | None,
-        Field(
-            None,
-            description="Optional Git commit hash associated with the simulation",
-        ),
     ]
 
 

@@ -108,18 +108,15 @@ class TestSimulationCreateSchema:
 class TestSimulationUpdateSchema:
     def test_accepts_allowed_optional_fields(self):
         payload = {
+            "simulationType": "production",
+            "status": "completed",
             "description": "Updated description",
             "campaign": "campaign-1",
             "experimentType": "historical",
-            "compiler": "intel",
             "hpcUsername": "sim-user",
             "keyFeatures": "feature a\nfeature b",
             "knownIssues": "issue a",
             "notesMarkdown": "## Notes",
-            "gitRepositoryUrl": HttpUrl("https://example.com/repo"),
-            "gitBranch": "main",
-            "gitTag": "v2.0",
-            "gitCommitHash": "abc123def456",
         }
 
         update = SimulationUpdate(**payload)
@@ -127,9 +124,13 @@ class TestSimulationUpdateSchema:
         for key, value in payload.items():
             assert getattr(update, to_snake_case(key)) == value
 
-    def test_rejects_invalid_url(self):
+    def test_rejects_metadata_derived_field(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(gitRepositoryUrl="not-a-url")
+            SimulationUpdate(compiler="intel")
+
+    def test_rejects_invalid_predefined_value(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(status="done")
 
     def test_rejects_out_of_scope_field(self):
         with pytest.raises(ValidationError):

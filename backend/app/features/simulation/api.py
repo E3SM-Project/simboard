@@ -355,7 +355,7 @@ def update_simulation(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> SimulationOut:
-    """Partially update allowed simulation metadata fields."""
+    """Partially update allowed user-managed simulation fields."""
     sim = db.query(Simulation).filter(Simulation.id == sim_id).one_or_none()
 
     if sim is None:
@@ -363,9 +363,6 @@ def update_simulation(
 
     now = datetime.now(timezone.utc)
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
-
-    if "git_repository_url" in updates and updates["git_repository_url"] is not None:
-        updates["git_repository_url"] = str(updates["git_repository_url"])
 
     for field, value in updates.items():
         setattr(sim, field, value)

@@ -9,6 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,7 +28,13 @@ import {
 } from '@/features/simulations/components/SimulationSummaryPanel';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
-import type { SimulationOut, SimulationSummaryResponseOut, SimulationUpdate } from '@/types';
+import type {
+  SimulationOut,
+  SimulationStatusValue,
+  SimulationSummaryResponseOut,
+  SimulationTypeValue,
+  SimulationUpdate,
+} from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
@@ -81,7 +94,10 @@ const ReadonlyInput = ({ value, className }: { value?: string | null; className?
 );
 
 const ReadonlyText = ({ value, className }: { value?: string | null; className?: string }) => (
-  <p className={cn('min-w-0 truncate text-sm text-foreground/90', className)} title={value ?? undefined}>
+  <p
+    className={cn('min-w-0 truncate text-sm text-foreground/90', className)}
+    title={value ?? undefined}
+  >
     {value || '—'}
   </p>
 );
@@ -110,47 +126,60 @@ const ReadonlyTextBlock = ({ value, className }: { value?: string | null; classN
 );
 
 const EDITABLE_FIELDS = [
+  'simulationType',
+  'status',
   'description',
   'campaign',
   'experimentType',
-  'compiler',
   'hpcUsername',
   'keyFeatures',
   'knownIssues',
   'notesMarkdown',
-  'gitRepositoryUrl',
-  'gitBranch',
-  'gitTag',
-  'gitCommitHash',
 ] as const;
 
 type EditableField = (typeof EDITABLE_FIELDS)[number];
 type EditableFormState = Record<EditableField, string>;
 
 const SINGLE_LINE_FIELDS: ReadonlySet<EditableField> = new Set([
+  'simulationType',
+  'status',
   'campaign',
   'experimentType',
-  'compiler',
   'hpcUsername',
-  'gitRepositoryUrl',
-  'gitBranch',
-  'gitTag',
-  'gitCommitHash',
 ]);
 
+const SIMULATION_TYPE_OPTIONS: ReadonlyArray<{
+  value: SimulationTypeValue;
+  label: string;
+}> = [
+  { value: 'unknown', label: 'Not set' },
+  { value: 'production', label: 'Production' },
+  { value: 'experimental', label: 'Experimental' },
+  { value: 'test', label: 'Test' },
+];
+
+const STATUS_OPTIONS: ReadonlyArray<{
+  value: SimulationStatusValue;
+  label: string;
+}> = [
+  { value: 'unknown', label: 'Unknown' },
+  { value: 'created', label: 'Created' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'running', label: 'Running' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'completed', label: 'Completed' },
+];
+
 const toEditableFormState = (simulation: SimulationOut): EditableFormState => ({
+  simulationType: simulation.simulationType,
+  status: simulation.status,
   description: simulation.description ?? '',
   campaign: simulation.campaign ?? '',
   experimentType: simulation.experimentType ?? '',
-  compiler: simulation.compiler ?? '',
   hpcUsername: simulation.hpcUsername ?? '',
   keyFeatures: simulation.keyFeatures ?? '',
   knownIssues: simulation.knownIssues ?? '',
   notesMarkdown: simulation.notesMarkdown ?? '',
-  gitRepositoryUrl: simulation.gitRepositoryUrl ?? '',
-  gitBranch: simulation.gitBranch ?? '',
-  gitTag: simulation.gitTag ?? '',
-  gitCommitHash: simulation.gitCommitHash ?? '',
 });
 
 const normalizeEditableValue = (field: EditableField, value: string): string | null => {
@@ -168,13 +197,14 @@ const buildUpdatePayload = (
   formState: EditableFormState,
 ): SimulationUpdate => {
   const payload: SimulationUpdate = {};
+  const mutablePayload = payload as Record<string, string | null>;
 
   for (const field of EDITABLE_FIELDS) {
     const nextValue = normalizeEditableValue(field, formState[field]);
     const currentValue = simulation[field] ?? null;
 
     if (nextValue !== currentValue) {
-      payload[field] = nextValue;
+      mutablePayload[field] = nextValue;
     }
   }
 
@@ -263,7 +293,7 @@ export const SimulationDetailsView = ({
       date: '2024-02-15T13:45:00Z',
       text: 'The sea-ice diagnostics will be added later.',
     },
-    ]);
+  ]);
 
   useEffect(() => {
     setFormState(toEditableFormState(simulation));
@@ -314,9 +344,7 @@ export const SimulationDetailsView = ({
   const maxCompareSelection = maxCompareSelectionProp ?? 5;
   const isCompareActionDisabled =
     !isCompareSelected && compareSelectionCount >= maxCompareSelection;
-  const compareActionLabel = isCompareSelected
-    ? 'Remove from Comparison'
-    : 'Add to Comparison';
+  const compareActionLabel = isCompareSelected ? 'Remove from Comparison' : 'Add to Comparison';
   const compareActionTooltip = isCompareActionDisabled
     ? `Compare list is full. Remove one of the ${maxCompareSelection} selected runs first.`
     : undefined;
@@ -369,7 +397,11 @@ export const SimulationDetailsView = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span tabIndex={0}>
-                    <Button variant="outline" onClick={onToggleCompare} disabled={isCompareActionDisabled}>
+                    <Button
+                      variant="outline"
+                      onClick={onToggleCompare}
+                      disabled={isCompareActionDisabled}
+                    >
                       {compareActionLabel}
                     </Button>
                   </span>
@@ -455,7 +487,10 @@ export const SimulationDetailsView = ({
                       </FieldRow>
                     )}
                     <FieldRow label="Case Hash">
-                      <ReadonlyInput value={simulation.caseHash ?? undefined} className="font-mono" />
+                      <ReadonlyInput
+                        value={simulation.caseHash ?? undefined}
+                        className="font-mono"
+                      />
                     </FieldRow>
                     <FieldRow label="Model Version">
                       <ReadonlyInput value={simulation.gitTag ?? undefined} />
@@ -476,15 +511,7 @@ export const SimulationDetailsView = ({
                       <ReadonlyInput value={simulation.initializationType ?? undefined} />
                     </FieldRow>
                     <FieldRow label="Compiler">
-                      {isEditing ? (
-                        <Input
-                          value={formState.compiler}
-                          onChange={(event) => updateField('compiler', event.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <ReadonlyInput value={simulation.compiler ?? undefined} />
-                      )}
+                      <ReadonlyInput value={simulation.compiler ?? undefined} />
                     </FieldRow>
                     {(isEditing || simulation.description) && (
                       <div className="pt-2">
@@ -510,10 +537,50 @@ export const SimulationDetailsView = ({
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <FieldRow label="Simulation Type">
-                      <ReadonlyInput value={simulation.simulationType} />
+                      {isEditing ? (
+                        <Select
+                          value={formState.simulationType}
+                          onValueChange={(value: SimulationTypeValue) =>
+                            updateField('simulationType', value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select simulation type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SIMULATION_TYPE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <SimulationTypeBadge simulationType={simulation.simulationType} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Status">
-                      <ReadonlyInput value={simulation.status} />
+                      {isEditing ? (
+                        <Select
+                          value={formState.status}
+                          onValueChange={(value: SimulationStatusValue) =>
+                            updateField('status', value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <SimulationStatusBadge status={simulation.status} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Campaign ID">
                       {isEditing ? (
@@ -686,72 +753,37 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Repository:
                       </Label>
-                      {isEditing ? (
-                        <Input
-                          type="url"
-                          value={formState.gitRepositoryUrl}
-                          onChange={(event) => updateField('gitRepositoryUrl', event.target.value)}
-                          className="h-8 text-sm"
-                        />
+                      {simulation.gitRepositoryUrl ? (
+                        <a
+                          href={simulation.gitRepositoryUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block min-w-0 truncate text-sm text-blue-600 hover:underline"
+                          title={simulation.gitRepositoryUrl}
+                        >
+                          {simulation.gitRepositoryUrl}
+                        </a>
                       ) : (
-                        <>
-                          {simulation.gitRepositoryUrl ? (
-                            <a
-                              href={simulation.gitRepositoryUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block min-w-0 truncate text-sm text-blue-600 hover:underline"
-                              title={simulation.gitRepositoryUrl}
-                            >
-                              {simulation.gitRepositoryUrl}
-                            </a>
-                          ) : (
-                            <p className="text-sm">—</p>
-                          )}
-                        </>
+                        <p className="text-sm">—</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Branch:
                       </Label>
-                      {isEditing ? (
-                        <Input
-                          value={formState.gitBranch}
-                          onChange={(event) => updateField('gitBranch', event.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <ReadonlyText value={simulation.gitBranch} />
-                      )}
+                      <ReadonlyText value={simulation.gitBranch} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Tag:
                       </Label>
-                      {isEditing ? (
-                        <Input
-                          value={formState.gitTag}
-                          onChange={(event) => updateField('gitTag', event.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <ReadonlyText value={simulation.gitTag} />
-                      )}
+                      <ReadonlyText value={simulation.gitTag} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Commit Hash:
                       </Label>
-                      {isEditing ? (
-                        <Input
-                          value={formState.gitCommitHash}
-                          onChange={(event) => updateField('gitCommitHash', event.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <ReadonlyText value={simulation.gitCommitHash} />
-                      )}
+                      <ReadonlyText value={simulation.gitCommitHash} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
