@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, CircleHelp, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ChevronDown, CircleHelp, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -52,7 +52,7 @@ interface SimulationDetailsViewProps {
   maxCompareSelection?: number;
   canEdit?: boolean;
   isSaving?: boolean;
-  saveError?: string | null;
+  saveError?: SimulationSaveError | null;
   backHref?: string;
   backLabel?: string;
   paceLink?: {
@@ -77,6 +77,14 @@ interface SimulationDetailsViewProps {
   showLoginForAiSummary?: boolean;
   isCheckingAuth?: boolean;
   onLoginForSummary?: () => void;
+}
+
+export interface SimulationSaveError {
+  message: string;
+  validationDetails: Array<{
+    loc: Array<string | number>;
+    msg: string;
+  }>;
 }
 
 // -------------------- Small UI helpers --------------------
@@ -148,6 +156,15 @@ type EditableLinkRow = {
   value: string;
 };
 
+type EditableResourceField = 'kind' | 'label' | 'value';
+
+type ResourceRowFieldErrors = Partial<Record<EditableResourceField, string>>;
+
+type ResourceRowErrorsState = {
+  artifacts: ResourceRowFieldErrors[];
+  links: ResourceRowFieldErrors[];
+};
+
 const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
   { value: 'output', label: 'Output' },
   { value: 'archive', label: 'Archive' },
@@ -195,25 +212,121 @@ const normalizeLinkRows = (rows: EditableLinkRow[]): ExternalLinkIn[] =>
     label: normalizeOptionalText(row.label),
   }));
 
-const validateResourceRows = (
+const createEmptyRowErrors = (count: number): ResourceRowFieldErrors[] =>
+  Array.from({ length: count }, () => ({}));
+
+const getClientResourceRowErrors = (
   artifactRows: EditableArtifactRow[],
   linkRows: EditableLinkRow[],
-): string | null => {
-  const hasBlankArtifactValue = artifactRows.some((row) => row.value.trim().length === 0);
-  if (hasBlankArtifactValue) {
-    return 'Artifact URI is required for every artifact row.';
+): ResourceRowErrorsState => ({
+  artifacts: artifactRows.map((row) =>
+    row.value.trim().length === 0 ? { value: 'Artifact URI is required.' } : {},
+  ),
+  links: linkRows.map((row) =>
+    row.value.trim().length === 0 ? { value: 'Link URL is required.' } : {},
+  ),
+});
+
+const normalizeValidationLoc = (loc: Array<string | number>): Array<string | number> =>
+  loc[0] === 'body' ? loc.slice(1) : loc;
+
+const toEditableField = (field: string): EditableResourceField | null => {
+  if (field === 'url' || field === 'uri') {
+    return 'value';
   }
 
-  const hasBlankLinkValue = linkRows.some((row) => row.value.trim().length === 0);
-  if (hasBlankLinkValue) {
-    return 'Link URL is required for every external link row.';
+  if (field === 'kind' || field === 'label') {
+    return field;
   }
 
   return null;
 };
 
+const toValidationPathLabel = (loc: Array<string | number>): string => {
+  const normalizedLoc = normalizeValidationLoc(loc);
+  if (normalizedLoc.length === 0) {
+    return 'Validation error';
+  }
+
+  return normalizedLoc
+    .map((segment) => (typeof segment === 'number' ? `${segment + 1}` : segment))
+    .join(' > ');
+};
+
+const mapSaveValidationErrors = (
+  validationDetails: SimulationSaveError['validationDetails'],
+  artifactCount: number,
+  linkCount: number,
+) => {
+  const rowErrors: ResourceRowErrorsState = {
+    artifacts: createEmptyRowErrors(artifactCount),
+    links: createEmptyRowErrors(linkCount),
+  };
+  const unmappedMessages: string[] = [];
+  let hasMappedLinkValueError = false;
+
+  for (const detail of validationDetails) {
+    const loc = normalizeValidationLoc(detail.loc);
+    const [resourceName, rowIndex, fieldName] = loc;
+
+    if (
+      resourceName === 'artifacts' &&
+      typeof rowIndex === 'number' &&
+      rowIndex >= 0 &&
+      rowIndex < artifactCount &&
+      typeof fieldName === 'string'
+    ) {
+      const field = toEditableField(fieldName);
+      if (field) {
+        rowErrors.artifacts[rowIndex] = {
+          ...rowErrors.artifacts[rowIndex],
+          [field]: detail.msg,
+        };
+        continue;
+      }
+    }
+
+    if (
+      resourceName === 'links' &&
+      typeof rowIndex === 'number' &&
+      rowIndex >= 0 &&
+      rowIndex < linkCount &&
+      typeof fieldName === 'string'
+    ) {
+      const field = toEditableField(fieldName);
+      if (field) {
+        rowErrors.links[rowIndex] = {
+          ...rowErrors.links[rowIndex],
+          [field]: detail.msg,
+        };
+        hasMappedLinkValueError ||= field === 'value';
+        continue;
+      }
+    }
+
+    unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
+  }
+
+  return {
+    rowErrors,
+    unmappedMessages,
+    hasMappedLinkValueError,
+  };
+};
+
 const areResourceListsEqual = (left: unknown, right: unknown): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
+
+const mergeRowFieldErrors = (
+  primary: ResourceRowFieldErrors,
+  secondary: ResourceRowFieldErrors,
+): ResourceRowFieldErrors => ({
+  ...primary,
+  ...secondary,
+});
+
+const hasAnyRowErrors = (rowErrors: ResourceRowErrorsState): boolean =>
+  [...rowErrors.artifacts, ...rowErrors.links].some((row) => Object.keys(row).length > 0);
 
 const EditableResourceList = <TKind extends string>({
   title,
@@ -228,6 +341,7 @@ const EditableResourceList = <TKind extends string>({
   onLabelChange,
   onValueChange,
   onRemove,
+  rowErrors,
 }: {
   title: string;
   description?: string;
@@ -241,6 +355,7 @@ const EditableResourceList = <TKind extends string>({
   onLabelChange: (index: number, value: string) => void;
   onValueChange: (index: number, value: string) => void;
   onRemove: (index: number) => void;
+  rowErrors?: ResourceRowFieldErrors[];
 }) => (
   <div className="space-y-3">
     <div className="flex items-start justify-between gap-3">
@@ -262,8 +377,8 @@ const EditableResourceList = <TKind extends string>({
       <div className="space-y-3">
         {items.map((item, index) => (
           <div key={`${item.kind}-${index}`} className="rounded-md border p-3">
-            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1.4fr)_auto] md:items-end">
-              <div>
+            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1.4fr)_auto] md:items-start">
+              <div className="space-y-1">
                 <Label className="mb-1 block text-xs text-muted-foreground">Kind</Label>
                 <Select
                   value={item.kind}
@@ -280,24 +395,41 @@ const EditableResourceList = <TKind extends string>({
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="min-h-4" aria-hidden="true" />
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label className="mb-1 block text-xs text-muted-foreground">Label</Label>
                 <Input
                   value={item.label}
                   onChange={(event) => onLabelChange(index, event.target.value)}
                   placeholder="Optional label"
-                  className="h-9 text-sm"
+                  className={cn(
+                    'h-9 text-sm',
+                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-200' : '',
+                  )}
                 />
+                {rowErrors?.[index]?.label ? (
+                  <p className="min-h-4 text-xs leading-4 text-red-600">{rowErrors[index].label}</p>
+                ) : (
+                  <div className="min-h-4" aria-hidden="true" />
+                )}
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label className="mb-1 block text-xs text-muted-foreground">{valueLabel}</Label>
                 <Input
                   value={item.value}
                   onChange={(event) => onValueChange(index, event.target.value)}
                   placeholder={valuePlaceholder}
-                  className="h-9 text-sm"
+                  className={cn(
+                    'h-9 text-sm',
+                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-200' : '',
+                  )}
                 />
+                {rowErrors?.[index]?.value ? (
+                  <p className="min-h-4 text-xs leading-4 text-red-600">{rowErrors[index].value}</p>
+                ) : (
+                  <div className="min-h-4" aria-hidden="true" />
+                )}
               </div>
               <Button
                 type="button"
@@ -305,6 +437,7 @@ const EditableResourceList = <TKind extends string>({
                 size="icon"
                 onClick={() => onRemove(index)}
                 aria-label={`Remove ${title} item ${index + 1}`}
+                className="mt-6 self-start"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -447,6 +580,11 @@ export const SimulationDetailsView = ({
     toEditableArtifactRows(simulation),
   );
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() => toEditableLinkRows(simulation));
+  const [serverRowErrors, setServerRowErrors] = useState<ResourceRowErrorsState>({
+    artifacts: [],
+    links: [],
+  });
+  const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -510,7 +648,63 @@ export const SimulationDetailsView = ({
     }
   }, [canEdit, simulation]);
 
-  const resourceValidationError = validateResourceRows(artifactRows, linkRows);
+  useEffect(() => {
+    if (!saveError) {
+      setServerRowErrors({
+        artifacts: createEmptyRowErrors(artifactRows.length),
+        links: createEmptyRowErrors(linkRows.length),
+      });
+      setSaveSummaryMessage(null);
+      return;
+    }
+
+    const mappedErrors = mapSaveValidationErrors(
+      saveError.validationDetails,
+      artifactRows.length,
+      linkRows.length,
+    );
+
+    setServerRowErrors(mappedErrors.rowErrors);
+
+    if (mappedErrors.unmappedMessages.length > 0) {
+      setSaveSummaryMessage(mappedErrors.unmappedMessages.join(' '));
+      return;
+    }
+
+    if (mappedErrors.hasMappedLinkValueError) {
+      setSaveSummaryMessage('One or more links need a full URL including https://.');
+      return;
+    }
+
+    if (hasAnyRowErrors(mappedErrors.rowErrors)) {
+      setSaveSummaryMessage('Fix highlighted resource rows before saving.');
+      return;
+    }
+
+    setSaveSummaryMessage(saveError.message);
+  }, [artifactRows.length, linkRows.length, saveError]);
+
+  const clientRowErrors = getClientResourceRowErrors(artifactRows, linkRows);
+  const combinedRowErrors: ResourceRowErrorsState = {
+    artifacts: artifactRows.map((_, index) =>
+      mergeRowFieldErrors(
+        clientRowErrors.artifacts[index] ?? {},
+        serverRowErrors.artifacts[index] ?? {},
+      ),
+    ),
+    links: linkRows.map((_, index) =>
+      mergeRowFieldErrors(
+        clientRowErrors.links[index] ?? {},
+        serverRowErrors.links[index] ?? {},
+      ),
+    ),
+  };
+  const hasClientResourceErrors = hasAnyRowErrors(clientRowErrors);
+  const summaryErrorMessage = saveSummaryMessage
+    ? saveSummaryMessage
+    : hasClientResourceErrors
+      ? 'Fix highlighted resource rows before saving.'
+      : null;
 
   const updateField = (field: EditableField, value: string) => {
     onClearSaveError?.();
@@ -530,7 +724,7 @@ export const SimulationDetailsView = ({
 
   const handleSave = async () => {
     if (!onSave) return;
-    if (resourceValidationError) {
+    if (hasClientResourceErrors) {
       return;
     }
 
@@ -681,7 +875,7 @@ export const SimulationDetailsView = ({
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={isSaving || !hasUnsavedChanges || resourceValidationError !== null}
+                disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
               >
                 {isSaving ? 'Saving…' : 'Save Changes'}
               </Button>
@@ -689,9 +883,6 @@ export const SimulationDetailsView = ({
           )}
         </div>
       </div>
-      {isEditing && (resourceValidationError || saveError) && (
-        <div className="text-sm text-red-600">{resourceValidationError ?? saveError}</div>
-      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1139,6 +1330,7 @@ export const SimulationDetailsView = ({
                         onLabelChange={(index, value) => updateLinkRow(index, { label: value })}
                         onValueChange={(index, value) => updateLinkRow(index, { value })}
                         onRemove={removeLinkRow}
+                        rowErrors={combinedRowErrors.links}
                       />
                       {paceLink ? (
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
@@ -1383,18 +1575,24 @@ export const SimulationDetailsView = ({
                         </Button>
                         <Button
                           onClick={handleSave}
-                          disabled={isSaving || !hasUnsavedChanges || resourceValidationError !== null}
+                          disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
                         >
                           {isSaving ? 'Saving…' : 'Save Changes'}
                         </Button>
                       </div>
                     </div>
                   )}
-                  {isEditing && (resourceValidationError || saveError) && (
-                    <p className="text-sm text-red-600">
-                      {resourceValidationError ?? saveError}
-                    </p>
-                  )}
+                  {isEditing && summaryErrorMessage ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                          <p className="font-medium">Save blocked</p>
+                          <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -1489,6 +1687,7 @@ export const SimulationDetailsView = ({
                   onLabelChange={(index, value) => updateArtifactRow(index, { label: value })}
                   onValueChange={(index, value) => updateArtifactRow(index, { value })}
                   onRemove={removeArtifactRow}
+                  rowErrors={combinedRowErrors.artifacts}
                 />
               </CardContent>
             </Card>
