@@ -16,12 +16,22 @@ from app.features.simulation.schemas import (
     SimulationOut,
     SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
+    SimulationUpdate,
 )
 from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
+
+
+def _simulation_detail_query(db: Session):
+    return db.query(Simulation).options(
+        joinedload(Simulation.case),
+        joinedload(Simulation.machine),
+        selectinload(Simulation.artifacts),
+        selectinload(Simulation.links),
+    )
 
 
 @case_router.get(
@@ -256,15 +266,7 @@ def create_simulation(
 
     # Re-query with relationships loaded
     sim_loaded = (
-        db.query(Simulation)
-        .options(
-            joinedload(Simulation.case),
-            joinedload(Simulation.machine),
-            selectinload(Simulation.artifacts),
-            selectinload(Simulation.links),
-        )
-        .filter(Simulation.id == sim.id)
-        .one_or_none()
+        _simulation_detail_query(db).filter(Simulation.id == sim.id).one_or_none()
     )
 
     if sim_loaded is None:
@@ -336,6 +338,56 @@ def list_simulations(
     return [_simulation_to_out(s) for s in sims]
 
 
+@simulation_router.patch(
+    "/{sim_id}",
+    response_model=SimulationOut,
+    responses={
+        200: {"description": "Simulation updated successfully."},
+        401: {"description": "Unauthorized."},
+        404: {"description": "Simulation not found."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
+def update_simulation(
+    sim_id: UUID,
+    payload: SimulationUpdate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> SimulationOut:
+    """Partially update allowed user-managed simulation fields."""
+    sim = db.query(Simulation).filter(Simulation.id == sim_id).one_or_none()
+
+    if sim is None:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    now = datetime.now(timezone.utc)
+    updates = payload.model_dump(by_alias=False, exclude_unset=True)
+
+    for field, value in updates.items():
+        setattr(sim, field, value)
+
+    sim.last_updated_by = user.id
+    sim.updated_at = now
+
+    with transaction(db):
+        db.add(sim)
+        db.flush()
+
+    db.expire_all()
+    sim_loaded = (
+        _simulation_detail_query(db).filter(Simulation.id == sim_id).one_or_none()
+    )
+
+    if sim_loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load updated simulation.",
+        )
+
+    return _simulation_to_out(sim_loaded)
+
+
 @simulation_router.get(
     "/{sim_id}",
     response_model=SimulationOut,
@@ -367,17 +419,7 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     HTTPException
         If the simulation with the given ID is not found, raises a 404 HTTP exception.
     """
-    sim = (
-        db.query(Simulation)
-        .options(
-            joinedload(Simulation.case),
-            joinedload(Simulation.machine),
-            selectinload(Simulation.artifacts),
-            selectinload(Simulation.links),
-        )
-        .filter(Simulation.id == sim_id)
-        .one_or_none()
-    )
+    sim = _simulation_detail_query(db).filter(Simulation.id == sim_id).one_or_none()
 
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")

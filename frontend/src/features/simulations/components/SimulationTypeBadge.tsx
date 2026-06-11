@@ -42,7 +42,7 @@ const styles: Record<
   unknown: {
     className: 'text-xs px-2 py-1 bg-gray-400 text-white',
     style: { backgroundColor: '#9ca3af', color: '#fff' },
-    label: 'Unknown Type',
+    label: 'Not Set',
     Icon: HelpCircle,
   },
 };

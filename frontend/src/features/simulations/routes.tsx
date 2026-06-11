@@ -37,6 +37,11 @@ export const simulationsRoutes = ({
   },
   {
     path: '/simulations/:id',
-    element: <SimulationDetailsPage />,
+    element: (
+      <SimulationDetailsPage
+        selectedSimulationIds={selectedSimulationIds}
+        setSelectedSimulationIds={setSelectedSimulationIds}
+      />
+    ),
   },
 ];

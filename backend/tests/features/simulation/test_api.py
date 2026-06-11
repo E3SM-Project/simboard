@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -11,9 +12,10 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import create_simulation
+from app.features.simulation.api import create_simulation, update_simulation
+from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
-from app.features.simulation.schemas import SimulationCreate
+from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -46,6 +48,75 @@ def _create_case(db: Session, name: str = "test_case") -> Case:
     db.flush()
 
     return case
+
+
+def _create_ingestion(
+    db: Session,
+    machine_id,
+    user_id,
+    source_reference: str = "test_simulation_ingestion",
+) -> Ingestion:
+    ingestion = Ingestion(
+        source_type=IngestionSourceType.BROWSER_UPLOAD,
+        source_reference=source_reference,
+        machine_id=machine_id,
+        triggered_by=user_id,
+        status=IngestionStatus.SUCCESS,
+        created_count=1,
+        duplicate_count=0,
+        error_count=0,
+    )
+    db.add(ingestion)
+    db.flush()
+
+    return ingestion
+
+
+def _create_simulation_record(
+    db: Session,
+    *,
+    case: Case,
+    machine_id,
+    ingestion_id,
+    created_by,
+    last_updated_by,
+    execution_id: str = "patch-test-exec-1",
+    description: str | None = "Original description",
+    updated_at: datetime | None = None,
+) -> Simulation:
+    sim = Simulation(
+        case_id=case.id,
+        execution_id=execution_id,
+        description=description,
+        compset="AQUAPLANET",
+        compset_alias="QPC4",
+        grid_name="f19_f19",
+        grid_resolution="1.9x2.5",
+        initialization_type="startup",
+        simulation_type="experimental",
+        status="created",
+        campaign="campaign-original",
+        experiment_type="historical",
+        machine_id=machine_id,
+        simulation_start_date="2023-01-01T00:00:00Z",
+        compiler="gcc",
+        key_features="Original features",
+        known_issues="Original issues",
+        notes_markdown="Original notes",
+        git_repository_url="https://example.com/original",
+        git_branch="main",
+        git_tag="v1.0",
+        git_commit_hash="abc123",
+        hpc_username="old-user",
+        created_by=created_by,
+        last_updated_by=last_updated_by,
+        ingestion_id=ingestion_id,
+        updated_at=updated_at or datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    db.add(sim)
+    db.flush()
+
+    return sim
 
 
 class TestListCases:
@@ -792,6 +863,237 @@ class TestGetSimulation:
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
         assert res.status_code == 404
         assert res.json() == {"detail": "Simulation not found"}
+
+
+class TestUpdateSimulation:
+    def test_endpoint_updates_sparse_metadata_and_audit_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch",
+        )
+        original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            updated_at=original_updated_at,
+        )
+        db.commit()
+
+        payload = {
+            "simulationType": "production",
+            "status": "completed",
+            "description": "Updated description",
+            "campaign": "campaign-updated",
+            "notesMarkdown": "Updated notes",
+        }
+
+        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["simulationType"] == payload["simulationType"]
+        assert data["status"] == payload["status"]
+        assert data["description"] == payload["description"]
+        assert data["campaign"] == payload["campaign"]
+        assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["compiler"] == "gcc"
+        assert data["gitRepositoryUrl"] == "https://example.com/original"
+        assert data["gitTag"] == "v1.0"
+        assert data["hpcUsername"] == "old-user"
+        assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
+        assert data["lastUpdatedByUser"]["email"] == normal_user_sync["email"]
+        assert data["updatedAt"] != original_updated_at.isoformat()
+
+        db.expire_all()
+        updated_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert updated_sim.simulation_type == payload["simulationType"]
+        assert updated_sim.status == payload["status"]
+        assert updated_sim.description == payload["description"]
+        assert updated_sim.campaign == payload["campaign"]
+        assert updated_sim.notes_markdown == payload["notesMarkdown"]
+        assert updated_sim.compiler == "gcc"
+        assert updated_sim.git_repository_url == "https://example.com/original"
+        assert updated_sim.git_tag == "v1.0"
+        assert updated_sim.last_updated_by == normal_user_sync["id"]
+        assert updated_sim.updated_at > original_updated_at
+
+    def test_endpoint_returns_401_without_authentication(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_unauth")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_unauth",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-unauth",
+        )
+        db.commit()
+
+        app.dependency_overrides.pop(current_active_user, None)
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 401
+
+    def test_endpoint_returns_404_when_simulation_not_found(self, client):
+        res = client.patch(
+            f"{API_BASE}/simulations/{uuid4()}",
+            json={"description": "Missing simulation"},
+        )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Simulation not found"}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"compiler": "intel"},
+            {"gitRepositoryUrl": "https://example.com/updated"},
+            {"gitBranch": "feature/test"},
+            {"gitTag": "v2.0"},
+            {"gitCommitHash": "deadbeef"},
+        ],
+    )
+    def test_endpoint_rejects_out_of_scope_fields(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_scope")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_scope",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-scope",
+        )
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+
+        assert res.status_code == 422
+
+        db.expire_all()
+        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert unchanged_sim.description == "Original description"
+        assert unchanged_sim.compiler == "gcc"
+        assert unchanged_sim.case_id == case.id
+
+    @pytest.mark.parametrize("payload", [{"status": None}, {"simulationType": None}])
+    def test_endpoint_rejects_explicit_null_for_enum_fields(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_null_enum")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_null_enum",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-null-enum",
+        )
+        db.commit()
+
+        original_updated_at = sim.updated_at
+
+        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+
+        assert res.status_code == 422
+
+        db.expire_all()
+        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert unchanged_sim.status == SimulationStatus.CREATED
+        assert unchanged_sim.simulation_type == SimulationType.EXPERIMENTAL
+        assert unchanged_sim.updated_at == original_updated_at
+
+    def test_update_simulation_raises_500_when_reload_fails(self) -> None:
+        sim_id = uuid4()
+        user_id = uuid4()
+
+        payload = SimulationUpdate.model_validate({"description": "Updated"})
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+
+        sim = MagicMock()
+        sim_query = MagicMock()
+        sim_query.filter.return_value.one_or_none.return_value = sim
+
+        detail_query = MagicMock()
+        detail_query.filter.return_value.one_or_none.return_value = None
+
+        db = MagicMock(spec=Session)
+        db.query.return_value = sim_query
+
+        with patch(
+            "app.features.simulation.api._simulation_detail_query",
+            return_value=detail_query,
+        ):
+            with patch(
+                "app.features.simulation.api.transaction",
+                return_value=nullcontext(),
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    update_simulation(
+                        sim_id=sim_id,
+                        payload=payload,
+                        db=db,
+                        user=user,
+                    )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load updated simulation."
 
 
 class TestSimulationBrowserIncludesCaseMetadata:

@@ -1,7 +1,8 @@
 from datetime import datetime
 from uuid import uuid4
 
-from pydantic import HttpUrl
+import pytest
+from pydantic import HttpUrl, ValidationError
 
 from app.common.schemas.utils import to_snake_case
 from app.features.machine.schemas import MachineOut
@@ -15,6 +16,7 @@ from app.features.simulation.schemas import (
     SimulationOut,
     SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
+    SimulationUpdate,
 )
 from app.features.user.schemas import UserPreview
 
@@ -101,6 +103,53 @@ class TestSimulationCreateSchema:
                         )
             else:
                 assert getattr(simulation_create, snake_case_key) == value
+
+
+class TestSimulationUpdateSchema:
+    def test_accepts_allowed_optional_fields(self):
+        payload = {
+            "simulationType": "production",
+            "status": "completed",
+            "description": "Updated description",
+            "campaign": "campaign-1",
+            "experimentType": "historical",
+            "hpcUsername": "sim-user",
+            "keyFeatures": "feature a\nfeature b",
+            "knownIssues": "issue a",
+            "notesMarkdown": "## Notes",
+        }
+
+        update = SimulationUpdate(**payload)
+
+        for key, value in payload.items():
+            assert getattr(update, to_snake_case(key)) == value
+
+    @pytest.mark.parametrize(
+        ("field_name", "value"),
+        [
+            ("compiler", "intel"),
+            ("gitRepositoryUrl", "https://example.com/repo"),
+            ("gitBranch", "main"),
+            ("gitTag", "v1.2.3"),
+            ("gitCommitHash", "abc123"),
+        ],
+    )
+    def test_rejects_non_editable_fields(self, field_name: str, value: str):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(**{field_name: value})
+
+    def test_rejects_invalid_predefined_value(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(status="done")
+
+    @pytest.mark.parametrize("field_name", ["status", "simulationType"])
+    def test_rejects_explicit_null_for_non_nullable_enums(self, field_name: str):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(**{field_name: None})
+
+    def test_rejects_out_of_scope_field(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(caseName="new-case")
 
 
 class TestSimulationOutSchema:

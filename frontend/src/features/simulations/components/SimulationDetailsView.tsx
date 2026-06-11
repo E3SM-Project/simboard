@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronDown, CircleHelp } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
@@ -9,6 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,20 +28,36 @@ import {
 } from '@/features/simulations/components/SimulationSummaryPanel';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
-import type { SimulationOut, SimulationSummaryResponseOut } from '@/types';
+import type {
+  SimulationEditableField,
+  SimulationOut,
+  SimulationStatusValue,
+  SimulationSummaryResponseOut,
+  SimulationTypeValue,
+  SimulationUpdate,
+} from '@/types';
+import { SIMULATION_EDITABLE_FIELDS } from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
 interface SimulationDetailsViewProps {
   simulation: SimulationOut;
+  isCompareSelected?: boolean;
+  compareSelectionCount?: number;
+  maxCompareSelection?: number;
   canEdit?: boolean;
+  isSaving?: boolean;
+  saveError?: string | null;
   backHref?: string;
   backLabel?: string;
   paceLink?: {
     href: string;
     label: string;
   } | null;
+  onToggleCompare?: () => void;
+  onSave?: (payload: SimulationUpdate) => Promise<boolean> | boolean;
+  onClearSaveError?: () => void;
   isResolvingPace?: boolean;
   showPaceFallbackInfo?: boolean;
   summary?: SimulationSummaryResponseOut | null;
@@ -56,12 +79,29 @@ interface SimulationDetailsViewProps {
 const FieldRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="grid grid-cols-12 items-center gap-2">
     <Label className="col-span-3 md:col-span-2 text-xs text-muted-foreground">{label}</Label>
-    <div className="col-span-9 md:col-span-10">{children}</div>
+    <div className="col-span-9 min-w-0 md:col-span-10">{children}</div>
   </div>
 );
 
 const ReadonlyInput = ({ value, className }: { value?: string | null; className?: string }) => (
-  <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
+  <div
+    className={cn(
+      'flex min-h-8 min-w-0 items-center truncate rounded-md border border-border/60 bg-muted/35 px-3 py-1.5 text-sm text-foreground/90',
+      className,
+    )}
+    title={value ?? undefined}
+  >
+    {value || '—'}
+  </div>
+);
+
+const ReadonlyText = ({ value, className }: { value?: string | null; className?: string }) => (
+  <p
+    className={cn('min-w-0 truncate text-sm text-foreground/90', className)}
+    title={value ?? undefined}
+  >
+    {value || '—'}
+  </p>
 );
 
 const UserDisplay = ({
@@ -87,13 +127,97 @@ const ReadonlyTextBlock = ({ value, className }: { value?: string | null; classN
   </div>
 );
 
+const EDITABLE_FIELDS = SIMULATION_EDITABLE_FIELDS;
+
+type EditableField = SimulationEditableField;
+type EditableFormState = Record<EditableField, string>;
+
+const SINGLE_LINE_FIELDS: ReadonlySet<EditableField> = new Set([
+  'simulationType',
+  'status',
+  'campaign',
+  'experimentType',
+  'hpcUsername',
+]);
+
+const SIMULATION_TYPE_OPTIONS: ReadonlyArray<{
+  value: SimulationTypeValue;
+  label: string;
+}> = [
+  { value: 'unknown', label: 'Not set' },
+  { value: 'production', label: 'Production' },
+  { value: 'experimental', label: 'Experimental' },
+  { value: 'test', label: 'Test' },
+];
+
+const STATUS_OPTIONS: ReadonlyArray<{
+  value: SimulationStatusValue;
+  label: string;
+}> = [
+  { value: 'unknown', label: 'Unknown' },
+  { value: 'created', label: 'Created' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'running', label: 'Running' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'completed', label: 'Completed' },
+];
+
+const toEditableFormState = (simulation: SimulationOut): EditableFormState => ({
+  simulationType: simulation.simulationType,
+  status: simulation.status,
+  description: simulation.description ?? '',
+  campaign: simulation.campaign ?? '',
+  experimentType: simulation.experimentType ?? '',
+  hpcUsername: simulation.hpcUsername ?? '',
+  keyFeatures: simulation.keyFeatures ?? '',
+  knownIssues: simulation.knownIssues ?? '',
+  notesMarkdown: simulation.notesMarkdown ?? '',
+});
+
+const normalizeEditableValue = (field: EditableField, value: string): string | null => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return SINGLE_LINE_FIELDS.has(field) ? trimmed : value;
+};
+
+const buildUpdatePayload = (
+  simulation: SimulationOut,
+  formState: EditableFormState,
+): SimulationUpdate => {
+  const payload: SimulationUpdate = {};
+  const mutablePayload = payload as Record<string, string | null>;
+
+  for (const field of EDITABLE_FIELDS) {
+    const nextValue = normalizeEditableValue(field, formState[field]);
+    const currentValue = simulation[field] ?? null;
+
+    if (nextValue !== currentValue) {
+      mutablePayload[field] = nextValue;
+    }
+  }
+
+  return payload;
+};
+
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
+  isCompareSelected = false,
+  compareSelectionCount: compareSelectionCountProp = 0,
+  maxCompareSelection: maxCompareSelectionProp = 5,
   canEdit = false,
+  isSaving = false,
+  saveError = null,
   backHref = '/browse',
   backLabel = 'Back to Runs',
   paceLink = null,
+  onToggleCompare,
+  onSave,
+  onClearSaveError,
   isResolvingPace = false,
   showPaceFallbackInfo = false,
   summary = null,
@@ -111,8 +235,11 @@ export const SimulationDetailsView = ({
   onLoginForSummary,
 }: SimulationDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
+  const [isEditing, setIsEditing] = useState(false);
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
-  const [notes, setNotes] = useState(simulation.notesMarkdown || '');
+  const [formState, setFormState] = useState<EditableFormState>(() =>
+    toEditableFormState(simulation),
+  );
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -160,6 +287,60 @@ export const SimulationDetailsView = ({
     },
   ]);
 
+  useEffect(() => {
+    setFormState(toEditableFormState(simulation));
+    setIsEditing(false);
+  }, [simulation]);
+
+  useEffect(() => {
+    if (!canEdit) {
+      setFormState(toEditableFormState(simulation));
+      setIsEditing(false);
+    }
+  }, [canEdit, simulation]);
+
+  const updateField = (field: EditableField, value: string) => {
+    onClearSaveError?.();
+    setFormState((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleCancelEdit = () => {
+    onClearSaveError?.();
+    setFormState(toEditableFormState(simulation));
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!onSave) return;
+
+    const payload = buildUpdatePayload(simulation, formState);
+
+    if (Object.keys(payload).length === 0) {
+      onClearSaveError?.();
+      setIsEditing(false);
+      return;
+    }
+
+    const saved = await onSave(payload);
+
+    if (saved) {
+      setIsEditing(false);
+    }
+  };
+
+  const hasUnsavedChanges = Object.keys(buildUpdatePayload(simulation, formState)).length > 0;
+  const compareSelectionCount = compareSelectionCountProp ?? 0;
+  const maxCompareSelection = maxCompareSelectionProp ?? 5;
+  const isCompareActionDisabled =
+    !isCompareSelected && compareSelectionCount >= maxCompareSelection;
+  const compareActionLabel = isCompareSelected ? 'Remove from Comparison' : 'Add to Comparison';
+  const compareActionTooltip = isCompareActionDisabled
+    ? `Compare list is full. Remove one of the ${maxCompareSelection} selected runs first.`
+    : undefined;
+
   const addComment = () => {
     if (!newComment.trim()) return;
     setComments((prev) => [
@@ -203,12 +384,56 @@ export const SimulationDetailsView = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/compare">Add to Compare</Link>
-          </Button>
-          <Button disabled={!canEdit}>Save</Button>
+          {compareActionTooltip ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button
+                      variant="outline"
+                      onClick={onToggleCompare}
+                      disabled={isCompareActionDisabled}
+                    >
+                      {compareActionLabel}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{compareActionTooltip}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <Button variant="outline" onClick={onToggleCompare}>
+              {compareActionLabel}
+            </Button>
+          )}
+          {!isEditing &&
+            (canEdit ? (
+              <Button onClick={() => setIsEditing(true)}>Edit</Button>
+            ) : (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button disabled>Edit</Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Login required</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          {canEdit && isEditing && (
+            <>
+              <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+                {isSaving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </>
+          )}
         </div>
       </div>
+      {isEditing && saveError && <div className="text-sm text-red-600">{saveError}</div>}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -254,7 +479,10 @@ export const SimulationDetailsView = ({
                       </FieldRow>
                     )}
                     <FieldRow label="Case Hash">
-                      <ReadonlyInput value={simulation.caseHash ?? undefined} className="font-mono" />
+                      <ReadonlyInput
+                        value={simulation.caseHash ?? undefined}
+                        className="font-mono"
+                      />
                     </FieldRow>
                     <FieldRow label="Model Version">
                       <ReadonlyInput value={simulation.gitTag ?? undefined} />
@@ -277,12 +505,20 @@ export const SimulationDetailsView = ({
                     <FieldRow label="Compiler">
                       <ReadonlyInput value={simulation.compiler ?? undefined} />
                     </FieldRow>
-                    {simulation.description && (
+                    {(isEditing || simulation.description) && (
                       <div className="pt-2">
                         <Label className="mb-1 block text-xs text-muted-foreground">
                           Description
                         </Label>
-                        <ReadonlyTextBlock value={simulation.description} />
+                        {isEditing ? (
+                          <Textarea
+                            value={formState.description}
+                            onChange={(event) => updateField('description', event.target.value)}
+                            className="min-h-[120px]"
+                          />
+                        ) : (
+                          <ReadonlyTextBlock value={simulation.description} />
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -293,16 +529,72 @@ export const SimulationDetailsView = ({
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <FieldRow label="Simulation Type">
-                      <ReadonlyInput value={simulation.simulationType} />
+                      {isEditing ? (
+                        <Select
+                          value={formState.simulationType}
+                          onValueChange={(value: SimulationTypeValue) =>
+                            updateField('simulationType', value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select simulation type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SIMULATION_TYPE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <SimulationTypeBadge simulationType={simulation.simulationType} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Status">
-                      <ReadonlyInput value={simulation.status} />
+                      {isEditing ? (
+                        <Select
+                          value={formState.status}
+                          onValueChange={(value: SimulationStatusValue) =>
+                            updateField('status', value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <SimulationStatusBadge status={simulation.status} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Campaign ID">
-                      <ReadonlyInput value={simulation.campaign} />
+                      {isEditing ? (
+                        <Input
+                          value={formState.campaign}
+                          onChange={(event) => updateField('campaign', event.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        <ReadonlyInput value={simulation.campaign} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Experiment Type ID">
-                      <ReadonlyInput value={simulation.experimentType} />
+                      {isEditing ? (
+                        <Input
+                          value={formState.experimentType}
+                          onChange={(event) => updateField('experimentType', event.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        <ReadonlyInput value={simulation.experimentType} />
+                      )}
                     </FieldRow>
                     <FieldRow label="Machine">
                       <ReadonlyInput value={simulation.machine.name} />
@@ -401,13 +693,7 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Simulation UUID:
                       </Label>
-                      <ReadonlyInput
-                        value={
-                          simulation.id
-                            ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`
-                            : undefined
-                        }
-                      />
+                      <ReadonlyInput value={simulation.id} />
                       {simulation.id && (
                         <Button
                           variant="outline"
@@ -424,13 +710,7 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Case ID:
                       </Label>
-                      <ReadonlyInput
-                        value={
-                          simulation.caseId
-                            ? `${simulation.caseId.slice(0, 8)}…${simulation.caseId.slice(-6)}`
-                            : undefined
-                        }
-                      />
+                      <ReadonlyInput value={simulation.caseId} />
                       {simulation.caseId && (
                         <Button
                           variant="outline"
@@ -447,13 +727,7 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Machine ID:
                       </Label>
-                      <ReadonlyInput
-                        value={
-                          simulation.machineId
-                            ? `${simulation.machineId.slice(0, 8)}…${simulation.machineId.slice(-6)}`
-                            : undefined
-                        }
-                      />
+                      <ReadonlyInput value={simulation.machineId} />
                       {simulation.machineId && (
                         <Button
                           variant="outline"
@@ -476,7 +750,8 @@ export const SimulationDetailsView = ({
                           href={simulation.gitRepositoryUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline"
+                          className="block min-w-0 truncate text-sm text-blue-600 hover:underline"
+                          title={simulation.gitRepositoryUrl}
                         >
                           {simulation.gitRepositoryUrl}
                         </a>
@@ -488,50 +763,74 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Branch:
                       </Label>
-                      <p className="text-sm">{simulation.gitBranch ?? '—'}</p>
+                      <ReadonlyText value={simulation.gitBranch} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Tag:
                       </Label>
-                      <p className="text-sm">{simulation.gitTag ?? '—'}</p>
+                      <ReadonlyText value={simulation.gitTag} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Commit Hash:
                       </Label>
-                      <p className="text-sm">{simulation.gitCommitHash ?? '—'}</p>
+                      <ReadonlyText value={simulation.gitCommitHash} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         HPC Username:
                       </Label>
-                      <p className="text-sm">{simulation.hpcUsername ?? '—'}</p>
+                      {isEditing ? (
+                        <Input
+                          value={formState.hpcUsername}
+                          onChange={(event) => updateField('hpcUsername', event.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        <ReadonlyText value={simulation.hpcUsername} />
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {(simulation.keyFeatures || simulation.knownIssues) && (
+              {(isEditing || simulation.keyFeatures || simulation.knownIssues) && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Scientific Metadata</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {simulation.keyFeatures && (
+                    {(isEditing || simulation.keyFeatures) && (
                       <div>
                         <Label className="mb-1 block text-xs text-muted-foreground">
                           Key Features
                         </Label>
-                        <ReadonlyTextBlock value={simulation.keyFeatures} />
+                        {isEditing ? (
+                          <Textarea
+                            value={formState.keyFeatures}
+                            onChange={(event) => updateField('keyFeatures', event.target.value)}
+                            className="min-h-[120px]"
+                          />
+                        ) : (
+                          <ReadonlyTextBlock value={simulation.keyFeatures} />
+                        )}
                       </div>
                     )}
-                    {simulation.knownIssues && (
+                    {(isEditing || simulation.knownIssues) && (
                       <div>
                         <Label className="mb-1 block text-xs text-muted-foreground">
                           Known Issues
                         </Label>
-                        <ReadonlyTextBlock value={simulation.knownIssues} />
+                        {isEditing ? (
+                          <Textarea
+                            value={formState.knownIssues}
+                            onChange={(event) => updateField('knownIssues', event.target.value)}
+                            className="min-h-[120px]"
+                          />
+                        ) : (
+                          <ReadonlyTextBlock value={simulation.knownIssues} />
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -762,22 +1061,37 @@ export const SimulationDetailsView = ({
                   <CardTitle className="text-base">Notes</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Textarea
-                    placeholder="Add notes..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="min-h-[120px]"
-                    readOnly={!canEdit}
-                  />
+                  {isEditing ? (
+                    <Textarea
+                      placeholder="Add notes..."
+                      value={formState.notesMarkdown}
+                      onChange={(event) => updateField('notesMarkdown', event.target.value)}
+                      className="min-h-[160px]"
+                    />
+                  ) : (
+                    <ReadonlyTextBlock value={simulation.notesMarkdown} className="min-h-[160px]" />
+                  )}
                   {!canEdit && (
                     <p className="text-xs text-muted-foreground">
-                      A user account with write privilege is required to update this simulation
-                      page.
+                      Log in to edit simulation metadata. This page stays read-only when signed out.
                     </p>
                   )}
-                  <div>
-                    <Button disabled={!canEdit}>Save</Button>
-                  </div>
+                  {canEdit && isEditing && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Save updates description, provenance, and notes fields only.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+                          {isSaving ? 'Saving…' : 'Save Changes'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {isEditing && saveError && <p className="text-sm text-red-600">{saveError}</p>}
                 </CardContent>
               </Card>
 
@@ -812,16 +1126,19 @@ export const SimulationDetailsView = ({
                   <Separator />
                   <div className="flex items-start gap-2">
                     <Textarea
-                      placeholder="Add a comment ..."
+                      placeholder="Comments editing coming later ..."
                       className="min-h-[80px]"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      readOnly={!canEdit}
+                      readOnly
                     />
-                    <Button onClick={addComment} className="shrink-0" disabled={!canEdit}>
+                    <Button onClick={addComment} className="shrink-0" disabled>
                       Post
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Comments are out of scope for this v1 metadata editor.
+                  </p>
                 </div>
               </div>
             </div>
