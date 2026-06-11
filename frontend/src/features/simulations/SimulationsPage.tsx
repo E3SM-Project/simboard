@@ -52,7 +52,11 @@ interface SimulationsPageProps {
 const statusColors: Record<string, string> = {
   running: 'bg-blue-100 text-blue-800',
   complete: 'bg-green-100 text-green-800',
+  completed: 'bg-green-100 text-green-800',
   failed: 'bg-red-100 text-red-800',
+  created: 'bg-slate-100 text-slate-800',
+  queued: 'bg-indigo-100 text-indigo-800',
+  unknown: 'bg-gray-100 text-gray-800',
   'not-started': 'bg-gray-100 text-gray-800',
 };
 
@@ -60,6 +64,8 @@ const typeColors: Record<SimulationOut['simulationType'], string> = {
   production: 'border-green-600 text-green-700',
   master: 'border-blue-600 text-blue-700',
   experimental: 'border-amber-600 text-amber-700',
+  test: 'border-purple-600 text-purple-700',
+  unknown: 'border-slate-400 text-slate-600',
 };
 
 /**

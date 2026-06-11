@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import Field, HttpUrl, computed_field
+from pydantic import ConfigDict, Field, HttpUrl, computed_field, field_validator
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
@@ -271,6 +271,64 @@ class SimulationCreate(CamelInBaseModel):
             default_factory=list,
             description="Optional list of external links associated with the simulation",
         ),
+    ]
+
+
+class SimulationUpdate(CamelInBaseModel):
+    """Schema for narrow v1 simulation metadata updates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("simulation_type", "status", mode="before")
+    @classmethod
+    def reject_null_enum_updates(cls, value: Any) -> Any:
+        if value is None:
+            msg = "Field may be omitted for PATCH requests, but cannot be null."
+            raise ValueError(msg)
+        return value
+
+    simulation_type: Annotated[
+        SimulationType | None, Field(None, description="Type of the simulation")
+    ]
+    status: Annotated[
+        SimulationStatus | None,
+        Field(None, description="Current status of the simulation"),
+    ]
+    description: Annotated[
+        str | None, Field(None, description="Optional description of the simulation")
+    ]
+    campaign: Annotated[
+        str | None,
+        Field(
+            None, description="Campaign or run grouping (e.g. historical, amip, tuning)"
+        ),
+    ]
+    experiment_type: Annotated[
+        ExperimentType | str | None,
+        Field(
+            None,
+            description=(
+                "High-level experiment category (e.g. historical, amip, piControl). "
+                "Often aligned with CMIP experiment identifiers."
+            ),
+        ),
+    ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ]
+    key_features: Annotated[
+        str | None, Field(None, description="Optional key features of the simulation")
+    ]
+    known_issues: Annotated[
+        str | None, Field(None, description="Optional known issues with the simulation")
+    ]
+    notes_markdown: Annotated[
+        str | None,
+        Field(None, description="Optional additional notes in markdown format"),
     ]
 
 

@@ -9,6 +9,15 @@ export interface SimulationUserPreview {
   full_name?: string | null;
 }
 
+export type SimulationTypeValue = 'unknown' | 'production' | 'experimental' | 'test' | 'master';
+export type SimulationStatusValue =
+  | 'unknown'
+  | 'created'
+  | 'queued'
+  | 'running'
+  | 'failed'
+  | 'completed';
+
 export type SummaryCitationSourceType =
   | 'simulation_field'
   | 'case_field'
@@ -86,8 +95,8 @@ export interface SimulationCreate {
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
-  simulationType: string;
-  status: string;
+  simulationType: SimulationTypeValue;
+  status: SimulationStatusValue;
   campaign?: string | null;
   experimentType?: string | null;
   initializationType: string;
@@ -129,6 +138,23 @@ export interface SimulationCreate {
   artifacts: ArtifactIn[];
   links: ExternalLinkIn[];
 }
+
+export const SIMULATION_EDITABLE_FIELDS = [
+  'simulationType',
+  'status',
+  'description',
+  'campaign',
+  'experimentType',
+  'hpcUsername',
+  'keyFeatures',
+  'knownIssues',
+  'notesMarkdown',
+] as const;
+
+export type SimulationEditableField = (typeof SIMULATION_EDITABLE_FIELDS)[number];
+
+export type SimulationUpdate = Partial<Pick<SimulationCreate, SimulationEditableField>>;
+
 // Extends SimulationCreate with optional fields for file paths.
 export interface SimulationCreateForm extends SimulationCreate {
   outputPath?: string | null;

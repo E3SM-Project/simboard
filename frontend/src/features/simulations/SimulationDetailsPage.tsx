@@ -1,17 +1,63 @@
+import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
-import { resolvePaceExecution } from '@/features/simulations/api/api';
+import { resolvePaceExecution, updateSimulation } from '@/features/simulations/api/api';
 import { SimulationDetailsView } from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 import { useSimulationSummary } from '@/features/simulations/hooks/useSimulationSummary';
+import { toast } from '@/hooks/use-toast';
+import type { SimulationOut, SimulationUpdate } from '@/types';
 
-export const SimulationDetailsPage = () => {
+const MAX_COMPARE_SELECTION = 5;
+
+interface SimulationDetailsPageProps {
+  selectedSimulationIds: string[];
+  setSelectedSimulationIds: (ids: string[]) => void;
+}
+
+const getUpdateErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+
+    if (typeof detail === 'string') {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : null;
+          const message = typeof item?.msg === 'string' ? item.msg : null;
+
+          if (!message) return null;
+          if (typeof field !== 'string') return message;
+
+          return `${field}: ${message}`;
+        })
+        .filter((message): message is string => Boolean(message));
+
+      if (messages.length > 0) {
+        return messages.join(' ');
+      }
+    }
+  }
+
+  return error instanceof Error ? error.message : 'Failed to update simulation.';
+};
+
+export const SimulationDetailsPage = ({
+  selectedSimulationIds,
+  setSelectedSimulationIds,
+}: SimulationDetailsPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  const { data: simulation, loading, error } = useSimulation(id ?? '');
+  const { data: fetchedSimulation, loading, error } = useSimulation(id ?? '');
   const { isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
+  const [simulation, setSimulation] = useState<SimulationOut | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [paceExperimentId, setPaceExperimentId] = useState<string | null>(null);
   const [isResolvingPace, setIsResolvingPace] = useState(false);
   const [paceResolutionAttempted, setPaceResolutionAttempted] = useState(false);
@@ -26,6 +72,7 @@ export const SimulationDetailsPage = () => {
       : normalizedBackHref.startsWith('/simulations')
         ? 'Back to Simulations'
         : 'Back to Runs';
+  const canEdit = !authLoading && isAuthenticated;
   const currentSimulation = simulation?.id === id ? simulation : null;
   const executionId = currentSimulation?.executionId?.trim() ?? '';
   const llmSummaryAvailable = currentSimulation?.summaryCapabilities?.llmAvailable ?? false;
@@ -35,6 +82,18 @@ export const SimulationDetailsPage = () => {
   const summary = useSimulationSummary(id ?? '', {
     autoGenerate: shouldAutoGenerateSummary,
   });
+
+  useEffect(() => {
+    if (fetchedSimulation?.id === id) {
+      setSimulation(fetchedSimulation);
+      setSaveError(null);
+      return;
+    }
+
+    if (!loading && !error) {
+      setSimulation(null);
+    }
+  }, [error, fetchedSimulation, id, loading]);
 
   useEffect(() => {
     if (!executionId) {
@@ -71,6 +130,50 @@ export const SimulationDetailsPage = () => {
       cancelled = true;
     };
   }, [executionId]);
+
+  const handleSave = async (payload: SimulationUpdate): Promise<boolean> => {
+    if (!id) return false;
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const updatedSimulation = await updateSimulation(id, payload);
+      setSimulation(updatedSimulation);
+      return true;
+    } catch (saveErr) {
+      setSaveError(getUpdateErrorMessage(saveErr));
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleCompare = () => {
+    if (!currentSimulation) return;
+
+    if (selectedSimulationIds.includes(currentSimulation.id)) {
+      setSelectedSimulationIds(
+        selectedSimulationIds.filter((simulationId) => simulationId !== currentSimulation.id),
+      );
+      return;
+    }
+
+    if (selectedSimulationIds.length >= MAX_COMPARE_SELECTION) {
+      toast({
+        title: 'Compare list full',
+        description: `You can compare up to ${MAX_COMPARE_SELECTION} runs at a time.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSelectedSimulationIds([...selectedSimulationIds, currentSimulation.id]);
+    toast({
+      title: 'Added to compare',
+      description: `${currentSimulation.executionId} is now in your compare list.`,
+    });
+  };
 
   if (!id) {
     return (
@@ -119,6 +222,9 @@ export const SimulationDetailsPage = () => {
   return (
     <SimulationDetailsView
       simulation={currentSimulation}
+      isCompareSelected={selectedSimulationIds.includes(currentSimulation.id)}
+      compareSelectionCount={selectedSimulationIds.length}
+      maxCompareSelection={MAX_COMPARE_SELECTION}
       backHref={backHref}
       backLabel={backLabel}
       paceLink={paceLink}
@@ -132,6 +238,12 @@ export const SimulationDetailsPage = () => {
       summaryLastDurationMs={summary.lastDurationMs}
       onGenerateSummary={summary.generate}
       canGenerateSummary
+      onToggleCompare={handleToggleCompare}
+      canEdit={canEdit}
+      isSaving={isSaving}
+      saveError={saveError}
+      onSave={handleSave}
+      onClearSaveError={() => setSaveError(null)}
       llmSummaryAvailable={llmSummaryAvailable}
       autoGenerateDeterministicOnLoad={shouldAutoGenerateSummary}
       showLoginForAiSummary={showLoginForAiSummary}
