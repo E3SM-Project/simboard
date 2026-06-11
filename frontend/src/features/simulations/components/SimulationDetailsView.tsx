@@ -51,6 +51,7 @@ interface SimulationDetailsViewProps {
   compareSelectionCount?: number;
   maxCompareSelection?: number;
   canEdit?: boolean;
+  isAuthenticated?: boolean;
   isSaving?: boolean;
   saveError?: SimulationSaveError | null;
   backHref?: string;
@@ -62,6 +63,7 @@ interface SimulationDetailsViewProps {
   onToggleCompare?: () => void;
   onSave?: (payload: SimulationUpdate) => Promise<boolean> | boolean;
   onClearSaveError?: () => void;
+  onLoginToEdit?: () => void;
   isResolvingPace?: boolean;
   showPaceFallbackInfo?: boolean;
   summary?: SimulationSummaryResponseOut | null;
@@ -546,6 +548,7 @@ export const SimulationDetailsView = ({
   compareSelectionCount: compareSelectionCountProp = 0,
   maxCompareSelection: maxCompareSelectionProp = 5,
   canEdit = false,
+  isAuthenticated = false,
   isSaving = false,
   saveError = null,
   backHref = '/browse',
@@ -554,6 +557,7 @@ export const SimulationDetailsView = ({
   onToggleCompare,
   onSave,
   onClearSaveError,
+  onLoginToEdit,
   isResolvingPace = false,
   showPaceFallbackInfo = false,
   summary = null,
@@ -693,10 +697,7 @@ export const SimulationDetailsView = ({
       ),
     ),
     links: linkRows.map((_, index) =>
-      mergeRowFieldErrors(
-        clientRowErrors.links[index] ?? {},
-        serverRowErrors.links[index] ?? {},
-      ),
+      mergeRowFieldErrors(clientRowErrors.links[index] ?? {}, serverRowErrors.links[index] ?? {}),
     ),
   };
   const hasClientResourceErrors = hasAnyRowErrors(clientRowErrors);
@@ -753,6 +754,9 @@ export const SimulationDetailsView = ({
   const compareActionTooltip = isCompareActionDisabled
     ? `Compare list is full. Remove one of the ${maxCompareSelection} selected runs first.`
     : undefined;
+  const editAccessMessage = isAuthenticated
+    ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
+    : 'Log in with GitHub to edit simulation metadata.';
 
   const addComment = () => {
     if (!newComment.trim()) return;
@@ -856,6 +860,10 @@ export const SimulationDetailsView = ({
           {!isEditing &&
             (canEdit ? (
               <Button onClick={() => setIsEditing(true)}>Edit</Button>
+            ) : !isAuthenticated ? (
+              <Button variant="outline" onClick={onLoginToEdit}>
+                Log In to Edit
+              </Button>
             ) : (
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
@@ -864,7 +872,7 @@ export const SimulationDetailsView = ({
                       <Button disabled>Edit</Button>
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>Login required</TooltipContent>
+                  <TooltipContent>{editAccessMessage}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ))}
@@ -1561,7 +1569,9 @@ export const SimulationDetailsView = ({
                   )}
                   {!canEdit && (
                     <p className="text-xs text-muted-foreground">
-                      Log in to edit simulation metadata. This page stays read-only when signed out.
+                      {isAuthenticated
+                        ? 'You are signed in, but this simulation is read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
+                        : 'Log in with GitHub to edit simulation metadata. This page stays read-only while signed out.'}
                     </p>
                   )}
                   {canEdit && isEditing && (

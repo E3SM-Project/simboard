@@ -119,7 +119,7 @@ COOKIE_TRANSPORT = CustomCookieTransport(
 GITHUB_OAUTH_CLIENT = GitHubOAuth2(
     client_id=settings.github_client_id,
     client_secret=settings.github_client_secret,
-    scopes=["read:user", "user:email"],
+    scopes=["read:user", "user:email", "read:org"],
 )
 
 GITHUB_OAUTH_BACKEND: AuthenticationBackend = AuthenticationBackend(

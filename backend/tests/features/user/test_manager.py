@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi import HTTPException
 
 from app.features.user.manager import (
     UserManager,
+    can_edit_managed_content,
     current_active_user,
     optional_current_user,
 )
@@ -27,6 +29,81 @@ class TestUserManager:
         # Assert
         mock_logger.assert_called_once_with(
             "✅ New GitHub user registered: testuser@example.com"
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_persists_verified_state(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="testuser@example.com",
+            role=UserRole.USER,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=True,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": True,
+                "github_org_membership_checked_at": checked_at,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_persists_verified_state_for_admin(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=True,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": True,
+                "github_org_membership_checked_at": checked_at,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_persists_unverified_state(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="user@example.com",
+            role=UserRole.USER,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=False,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": False,
+                "github_org_membership_checked_at": checked_at,
+            },
         )
 
 
@@ -173,3 +250,54 @@ class TestOptionalCurrentUser:
             )
 
         assert result is expected_user
+
+
+class TestCanEditManagedContent:
+    def test_none_user_denied(self):
+        assert can_edit_managed_content(None) is False
+
+    def test_admin_allowed_without_org_membership(self):
+        user = User(
+            id=uuid.uuid4(),
+            email="admin@example.com",
+            role=UserRole.ADMIN,
+            has_verified_e3sm_membership=False,
+        )
+
+        assert can_edit_managed_content(user) is True
+
+    def test_verified_membership_enables_edit_capability(self):
+        user = User(
+            id=uuid.uuid4(),
+            email="user@example.com",
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+        assert can_edit_managed_content(user) is True
+        user.has_verified_e3sm_membership = False
+        assert can_edit_managed_content(user) is False
+
+    def test_unverified_user_and_service_account_are_denied(self):
+        assert (
+            can_edit_managed_content(
+                User(
+                    id=uuid.uuid4(),
+                    email="user@example.com",
+                    role=UserRole.USER,
+                    has_verified_e3sm_membership=False,
+                )
+            )
+            is False
+        )
+        assert (
+            can_edit_managed_content(
+                User(
+                    id=uuid.uuid4(),
+                    email="svc@example.com",
+                    role=UserRole.SERVICE_ACCOUNT,
+                    has_verified_e3sm_membership=True,
+                )
+            )
+            is False
+        )

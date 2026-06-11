@@ -32,12 +32,29 @@ def override_auth_dependency(normal_user_sync):
             is_active=True,
             is_verified=True,
             role=UserRole.USER,
+            has_verified_e3sm_membership=True,
         )
 
     app.dependency_overrides[current_active_user] = fake_current_user
 
     yield
     app.dependency_overrides.clear()
+
+
+def _override_current_user(
+    *, user_id, email: str, role: UserRole, has_membership: bool
+):
+    def fake_current_user():
+        return User(
+            id=user_id,
+            email=email,
+            is_active=True,
+            is_verified=True,
+            role=role,
+            has_verified_e3sm_membership=has_membership,
+        )
+
+    app.dependency_overrides[current_active_user] = fake_current_user
 
 
 def _create_case(db: Session, name: str = "test_case") -> Case:
@@ -1123,6 +1140,82 @@ class TestUpdateSimulation:
 
         assert res.status_code == 401
 
+    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_forbidden_user")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_forbidden_user",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-forbidden-user",
+        )
+        db.commit()
+
+        _override_current_user(
+            user_id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            role=UserRole.USER,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 403
+        assert "verified E3SM GitHub organization membership" in res.json()["detail"]
+
+    def test_admin_can_patch_without_org_membership(
+        self, client, db: Session, admin_user_sync, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_admin")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_admin",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-admin",
+        )
+        db.commit()
+
+        _override_current_user(
+            user_id=admin_user_sync["id"],
+            email=admin_user_sync["email"],
+            role=UserRole.ADMIN,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={"description": "Admin update"},
+        )
+
+        assert res.status_code == 200
+        assert res.json()["description"] == "Admin update"
+
     def test_endpoint_returns_404_when_simulation_not_found(self, client):
         res = client.patch(
             f"{API_BASE}/simulations/{uuid4()}",
@@ -1276,6 +1369,7 @@ class TestUpdateSimulation:
             is_active=True,
             is_verified=True,
             role=UserRole.USER,
+            has_verified_e3sm_membership=True,
         )
 
         sim = MagicMock()

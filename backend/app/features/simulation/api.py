@@ -18,7 +18,7 @@ from app.features.simulation.schemas import (
     SimulationSummaryOut,
     SimulationUpdate,
 )
-from app.features.user.manager import current_active_user
+from app.features.user.manager import can_edit_managed_content, current_active_user
 from app.features.user.models import User
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
@@ -275,6 +275,7 @@ def list_simulations(
     responses={
         200: {"description": "Simulation updated successfully."},
         401: {"description": "Unauthorized."},
+        403: {"description": "Forbidden."},
         404: {"description": "Simulation not found."},
         422: {"description": "Validation error."},
         500: {"description": "Internal server error."},
@@ -287,6 +288,15 @@ def update_simulation(
     user: User = Depends(current_active_user),
 ) -> SimulationOut:
     """Partially update allowed user-managed simulation fields."""
+    if not can_edit_managed_content(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Editing simulation metadata requires SimBoard admin access or "
+                "verified E3SM GitHub organization membership."
+            ),
+        )
+
     sim = db.query(Simulation).filter(Simulation.id == sim_id).one_or_none()
 
     if sim is None:

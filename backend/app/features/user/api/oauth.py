@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from fastapi_users.authentication.strategy import Strategy
@@ -10,6 +13,7 @@ from fastapi_users.router.oauth import (
     decode_jwt,
     generate_state_token,
 )
+from httpx import AsyncClient, HTTPError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 
 from app.core.config import settings
@@ -33,6 +37,8 @@ oauth2_authorize_callback = OAuth2AuthorizeCallback(
     GITHUB_OAUTH_CLIENT,
     redirect_url=settings.github_redirect_url,
 )
+E3SM_GITHUB_ORG = "E3SM-Project"
+GitHubOrgMembershipState = Literal[True, False, None]
 
 
 # --- GitHub OAuth Routes ---
@@ -172,12 +178,60 @@ async def github_callback(
             detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
         )
 
+    has_verified_e3sm_membership = await _fetch_verified_e3sm_membership(
+        token["access_token"]
+    )
+
+    if has_verified_e3sm_membership is not None and hasattr(
+        user_manager, "refresh_github_org_membership"
+    ):
+        user = await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=has_verified_e3sm_membership,
+            checked_at=datetime.now(timezone.utc),
+        )
+
     response = await GITHUB_OAUTH_BACKEND.login(strategy, user)
     response.headers["location"] = _build_frontend_auth_redirect_url(
         state_data.get("return_to")
     )
     await user_manager.on_after_login(user, request, response)
     return response
+
+
+async def _fetch_verified_e3sm_membership(
+    access_token: str,
+) -> GitHubOrgMembershipState:
+    """Return membership state, or None when GitHub result is indeterminate."""
+
+    try:
+        async with AsyncClient(timeout=10.0) as http_client:
+            response = await http_client.get(
+                f"https://api.github.com/user/memberships/orgs/{E3SM_GITHUB_ORG}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+    except HTTPError:
+        return None
+
+    if response.status_code == status.HTTP_404_NOT_FOUND:
+        return False
+
+    if response.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        return None
+
+    if response.status_code >= status.HTTP_400_BAD_REQUEST:
+        return None
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+
+    return payload.get("state") == "active"
 
 
 # --- JWT Login Routes ---

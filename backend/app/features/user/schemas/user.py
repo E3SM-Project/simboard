@@ -2,13 +2,23 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi_users import schemas
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, computed_field
+
+from app.features.user.models import UserRole
 
 
 class UserRead(schemas.BaseUser[UUID]):
     """Returned when reading a user (e.g. /users/me)."""
 
     role: Annotated[str, "The role of the user"]
+    has_verified_e3sm_membership: bool = False
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def can_edit_managed_content(self) -> bool:
+        return self.role == UserRole.ADMIN.value or (
+            self.role == UserRole.USER.value and self.has_verified_e3sm_membership
+        )
 
 
 class UserCreate(schemas.BaseUserCreate):

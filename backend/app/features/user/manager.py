@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
@@ -12,7 +13,7 @@ from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.features.user.auth.oauth import GITHUB_OAUTH_BACKEND
 from app.features.user.auth.token import JWT_BEARER_BACKEND, validate_token
-from app.features.user.models import OAuthAccount, User
+from app.features.user.models import OAuthAccount, User, UserRole
 
 logger = _setup_custom_logger(__name__)
 
@@ -24,6 +25,23 @@ async def get_user_db(session: AsyncSession = Depends(get_async_session)):  # no
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(self, user: User, request=None):
         logger.info(f"✅ New GitHub user registered: {user.email}")
+
+    async def refresh_github_org_membership(
+        self,
+        user: User,
+        *,
+        is_verified_member: bool,
+        checked_at: datetime | None = None,
+    ) -> User:
+        membership_checked_at = checked_at or datetime.now(timezone.utc)
+
+        return await self.user_db.update(
+            user,
+            {
+                "has_verified_e3sm_membership": is_verified_member,
+                "github_org_membership_checked_at": membership_checked_at,
+            },
+        )
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008
@@ -93,6 +111,18 @@ async def optional_current_user(
         return oauth_user
 
     return _resolve_api_token_user(request, db, allow_missing=True)
+
+
+def can_edit_managed_content(user: User | None) -> bool:
+    """Return whether user may edit human-managed SimBoard content."""
+
+    if user is None:
+        return False
+
+    if user.role == UserRole.ADMIN:
+        return True
+
+    return user.role == UserRole.USER and user.has_verified_e3sm_membership
 
 
 def _resolve_api_token_user(

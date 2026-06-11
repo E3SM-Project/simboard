@@ -7,6 +7,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 - archive ingestion and validation
 - case, simulation, machine, and ingestion persistence
 - GitHub OAuth and API-token authentication
+- managed-content authorization for human editors and service accounts
 - PACE execution lookup
 - API schemas and routing
 
@@ -41,3 +42,10 @@ Backend env templates live in `.envs/example/backend.env.example`. Local develop
 Restart the backend after changing local env values.
 
 For repo-wide setup, assistant LLM configuration, and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).
+
+## Authorization Notes
+
+- Authenticated read access to simulations remains broad.
+- Managed content edits must reuse `app.features.user.manager.can_edit_managed_content`.
+- Policy shape: `admin` always allowed, `user` allowed only with verified E3SM GitHub org membership, `service_account` denied for human UI-managed edits.
+- Routes that enforce this policy should preserve `401` for unauthenticated requests and return `403` for authenticated users who lack edit permission.
