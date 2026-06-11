@@ -25,15 +25,6 @@ simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
 
 
-def _simulation_detail_query(db: Session):
-    return db.query(Simulation).options(
-        joinedload(Simulation.case),
-        joinedload(Simulation.machine),
-        selectinload(Simulation.artifacts),
-        selectinload(Simulation.links),
-    )
-
-
 @case_router.get(
     "",
     response_model=list[CaseOut],
@@ -139,60 +130,6 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     return resp
 
 
-def _case_to_out(case: Case) -> CaseOut:
-    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
-
-    Parameters
-    ----------
-    case : Case
-        The Case ORM instance to convert.
-
-    Returns
-    -------
-    CaseOut
-        The corresponding CaseOut schema instance with nested
-        SimulationSummaryOut
-    """
-    summaries = []
-    machine_names = sorted(
-        {
-            sim.machine.name
-            for sim in case.simulations
-            if sim.machine is not None and sim.machine.name
-        },
-        key=lambda name: name.lower(),
-    )
-    hpc_usernames = sorted(
-        {sim.hpc_username for sim in case.simulations if sim.hpc_username},
-        key=lambda username: username.lower(),
-    )
-
-    for sim in case.simulations:
-        summaries.append(
-            SimulationSummaryOut(
-                id=sim.id,
-                execution_id=sim.execution_id,
-                case_hash=sim.case_hash,
-                status=sim.status,
-                simulation_start_date=sim.simulation_start_date,
-                simulation_end_date=sim.simulation_end_date,
-            )
-        )
-
-    result = CaseOut(
-        id=case.id,
-        name=case.name,
-        case_group=case.case_group,
-        simulations=summaries,
-        machine_names=machine_names,
-        hpc_usernames=hpc_usernames,
-        created_at=case.created_at,
-        updated_at=case.updated_at,
-    )
-
-    return result
-
-
 @simulation_router.post(
     "",
     response_model=SimulationOut,
@@ -249,16 +186,10 @@ def create_simulation(
     sim.ingestion = ingestion
 
     if payload.artifacts:
-        for artifact in payload.artifacts:
-            artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
-            artifact_data["uri"] = str(artifact.uri)
-            sim.artifacts.append(Artifact(**artifact_data))
+        sim.artifacts.extend(_build_artifact_models(payload.artifacts))
 
     if payload.links:
-        for link in payload.links:
-            link_data = link.model_dump(by_alias=False, exclude_unset=True)
-            link_data["url"] = str(link.url)
-            sim.links.append(ExternalLink(**link_data))
+        sim.links.extend(_build_external_link_models(payload.links))
 
     with transaction(db):
         db.add(sim)
@@ -363,9 +294,17 @@ def update_simulation(
 
     now = datetime.now(timezone.utc)
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    updates.pop("artifacts", None)
+    updates.pop("links", None)
 
     for field, value in updates.items():
         setattr(sim, field, value)
+
+    if "artifacts" in payload.model_fields_set:
+        sim.artifacts = _build_artifact_models(payload.artifacts or [])
+
+    if "links" in payload.model_fields_set:
+        sim.links = _build_external_link_models(payload.links or [])
 
     sim.last_updated_by = user.id
     sim.updated_at = now
@@ -425,6 +364,91 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
         raise HTTPException(status_code=404, detail="Simulation not found")
 
     return _simulation_to_out(sim)
+
+
+def _case_to_out(case: Case) -> CaseOut:
+    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
+
+    Parameters
+    ----------
+    case : Case
+        The Case ORM instance to convert.
+
+    Returns
+    -------
+    CaseOut
+        The corresponding CaseOut schema instance with nested
+        SimulationSummaryOut
+    """
+    summaries = []
+    machine_names = sorted(
+        {
+            sim.machine.name
+            for sim in case.simulations
+            if sim.machine is not None and sim.machine.name
+        },
+        key=lambda name: name.lower(),
+    )
+    hpc_usernames = sorted(
+        {sim.hpc_username for sim in case.simulations if sim.hpc_username},
+        key=lambda username: username.lower(),
+    )
+
+    for sim in case.simulations:
+        summaries.append(
+            SimulationSummaryOut(
+                id=sim.id,
+                execution_id=sim.execution_id,
+                case_hash=sim.case_hash,
+                status=sim.status,
+                simulation_start_date=sim.simulation_start_date,
+                simulation_end_date=sim.simulation_end_date,
+            )
+        )
+
+    result = CaseOut(
+        id=case.id,
+        name=case.name,
+        case_group=case.case_group,
+        simulations=summaries,
+        machine_names=machine_names,
+        hpc_usernames=hpc_usernames,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )
+
+    return result
+
+
+def _build_artifact_models(artifacts: list) -> list[Artifact]:
+    models: list[Artifact] = []
+
+    for artifact in artifacts:
+        artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
+        artifact_data["uri"] = str(artifact.uri)
+        models.append(Artifact(**artifact_data))
+
+    return models
+
+
+def _build_external_link_models(links: list) -> list[ExternalLink]:
+    models: list[ExternalLink] = []
+
+    for link in links:
+        link_data = link.model_dump(by_alias=False, exclude_unset=True)
+        link_data["url"] = str(link.url)
+        models.append(ExternalLink(**link_data))
+
+    return models
+
+
+def _simulation_detail_query(db: Session):
+    return db.query(Simulation).options(
+        joinedload(Simulation.case),
+        joinedload(Simulation.machine),
+        selectinload(Simulation.artifacts),
+        selectinload(Simulation.links),
+    )
 
 
 def _simulation_to_out(sim: Simulation) -> SimulationOut:

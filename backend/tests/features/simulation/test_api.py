@@ -14,7 +14,7 @@ from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.api import create_simulation, update_simulation
 from app.features.simulation.enums import SimulationStatus, SimulationType
-from app.features.simulation.models import Case, Simulation
+from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
@@ -929,6 +929,167 @@ class TestUpdateSimulation:
         assert updated_sim.last_updated_by == normal_user_sync["id"]
         assert updated_sim.updated_at > original_updated_at
 
+    def test_endpoint_replaces_artifacts_and_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_resources",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-resources",
+        )
+        sim.artifacts.extend(
+            [
+                Artifact(kind="output", uri="/tmp/output-old", label="Old output"),
+                Artifact(kind="archive", uri="/tmp/archive-old", label="Old archive"),
+            ]
+        )
+        sim.links.extend(
+            [
+                ExternalLink(
+                    kind="diagnostic",
+                    url="https://example.com/diagnostic-old",
+                    label="Old diagnostic",
+                ),
+                ExternalLink(
+                    kind="performance",
+                    url="https://example.com/performance-old",
+                    label="Old performance",
+                ),
+            ]
+        )
+        db.commit()
+
+        payload = {
+            "artifacts": [
+                {
+                    "kind": "output",
+                    "uri": "  /tmp/output-new  ",
+                    "label": "  New output  ",
+                },
+                {
+                    "kind": "run_script",
+                    "uri": "s3://bucket/run.sh",
+                    "label": "Run script",
+                },
+            ],
+            "links": [
+                {
+                    "kind": "diagnostic",
+                    "url": "https://example.com/diagnostic-new",
+                    "label": "Updated diagnostics",
+                },
+                {
+                    "kind": "docs",
+                    "url": "https://example.com/docs/new",
+                    "label": "Docs",
+                },
+            ],
+        }
+
+        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert {artifact["uri"] for artifact in data["artifacts"]} == {
+            "/tmp/output-new",
+            "s3://bucket/run.sh",
+        }
+        assert {artifact["kind"] for artifact in data["artifacts"]} == {
+            "output",
+            "run_script",
+        }
+        assert data["groupedArtifacts"]["output"][0]["label"] == "New output"
+        assert (
+            data["groupedLinks"]["diagnostic"][0]["url"]
+            == "https://example.com/diagnostic-new"
+        )
+        assert data["groupedLinks"]["docs"][0]["label"] == "Docs"
+
+        db.expire_all()
+        updated_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert {
+            (artifact.kind.value, artifact.uri) for artifact in updated_sim.artifacts
+        } == {
+            ("output", "/tmp/output-new"),
+            ("run_script", "s3://bucket/run.sh"),
+        }
+        assert {(link.kind.value, link.url) for link in updated_sim.links} == {
+            ("diagnostic", "https://example.com/diagnostic-new"),
+            ("docs", "https://example.com/docs/new"),
+        }
+        assert db.query(Artifact).filter(Artifact.simulation_id == sim.id).count() == 2
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.simulation_id == sim.id).count()
+            == 2
+        )
+
+    def test_endpoint_can_clear_artifacts_and_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_clear_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_clear_resources",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-clear-resources",
+        )
+        sim.artifacts.append(
+            Artifact(kind="output", uri="/tmp/output-old", label="Old output")
+        )
+        sim.links.append(
+            ExternalLink(
+                kind="diagnostic",
+                url="https://example.com/diagnostic-old",
+                label="Old diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={"artifacts": [], "links": []},
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["artifacts"] == []
+        assert data["links"] == []
+        assert data["groupedArtifacts"] == {}
+        assert data["groupedLinks"] == {}
+
+        db.expire_all()
+        assert db.query(Artifact).filter(Artifact.simulation_id == sim.id).count() == 0
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.simulation_id == sim.id).count()
+            == 0
+        )
+
     def test_endpoint_returns_401_without_authentication(
         self, client, db: Session, normal_user_sync
     ):
@@ -1051,6 +1212,55 @@ class TestUpdateSimulation:
         assert unchanged_sim.status == SimulationStatus.CREATED
         assert unchanged_sim.simulation_type == SimulationType.EXPERIMENTAL
         assert unchanged_sim.updated_at == original_updated_at
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"links": [{"kind": "diagnostic", "url": "not-a-url", "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": "   ", "label": "Bad"}]},
+            {
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "One",
+                    },
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "Two",
+                    },
+                ]
+            },
+        ],
+    )
+    def test_endpoint_rejects_invalid_resource_payloads(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_invalid_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_invalid_resources",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-invalid-resources",
+        )
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+
+        assert res.status_code == 422
 
     def test_update_simulation_raises_500_when_reload_fails(self) -> None:
         sim_id = uuid4()
