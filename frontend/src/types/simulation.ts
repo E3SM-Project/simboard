@@ -139,20 +139,21 @@ export interface SimulationCreate {
   links: ExternalLinkIn[];
 }
 
-export type SimulationUpdate = Partial<
-  Pick<
-    SimulationCreate,
-    | 'simulationType'
-    | 'status'
-    | 'description'
-    | 'campaign'
-    | 'experimentType'
-    | 'hpcUsername'
-    | 'keyFeatures'
-    | 'knownIssues'
-    | 'notesMarkdown'
-  >
->;
+export const SIMULATION_EDITABLE_FIELDS = [
+  'simulationType',
+  'status',
+  'description',
+  'campaign',
+  'experimentType',
+  'hpcUsername',
+  'keyFeatures',
+  'knownIssues',
+  'notesMarkdown',
+] as const;
+
+export type SimulationEditableField = (typeof SIMULATION_EDITABLE_FIELDS)[number];
+
+export type SimulationUpdate = Partial<Pick<SimulationCreate, SimulationEditableField>>;
 
 // Extends SimulationCreate with optional fields for file paths.
 export interface SimulationCreateForm extends SimulationCreate {

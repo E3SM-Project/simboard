@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, HttpUrl, computed_field
+from pydantic import ConfigDict, Field, HttpUrl, computed_field, field_validator
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
@@ -278,6 +278,14 @@ class SimulationUpdate(CamelInBaseModel):
     """Schema for narrow v1 simulation metadata updates."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("simulation_type", "status", mode="before")
+    @classmethod
+    def reject_null_enum_updates(cls, value: Any) -> Any:
+        if value is None:
+            msg = "Field may be omitted for PATCH requests, but cannot be null."
+            raise ValueError(msg)
+        return value
 
     simulation_type: Annotated[
         SimulationType | None, Field(None, description="Type of the simulation")

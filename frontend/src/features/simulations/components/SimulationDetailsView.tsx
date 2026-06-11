@@ -29,12 +29,14 @@ import {
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
 import type {
+  SimulationEditableField,
   SimulationOut,
   SimulationStatusValue,
   SimulationSummaryResponseOut,
   SimulationTypeValue,
   SimulationUpdate,
 } from '@/types';
+import { SIMULATION_EDITABLE_FIELDS } from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
@@ -125,19 +127,9 @@ const ReadonlyTextBlock = ({ value, className }: { value?: string | null; classN
   </div>
 );
 
-const EDITABLE_FIELDS = [
-  'simulationType',
-  'status',
-  'description',
-  'campaign',
-  'experimentType',
-  'hpcUsername',
-  'keyFeatures',
-  'knownIssues',
-  'notesMarkdown',
-] as const;
+const EDITABLE_FIELDS = SIMULATION_EDITABLE_FIELDS;
 
-type EditableField = (typeof EDITABLE_FIELDS)[number];
+type EditableField = SimulationEditableField;
 type EditableFormState = Record<EditableField, string>;
 
 const SINGLE_LINE_FIELDS: ReadonlySet<EditableField> = new Set([

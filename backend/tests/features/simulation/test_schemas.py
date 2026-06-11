@@ -124,13 +124,28 @@ class TestSimulationUpdateSchema:
         for key, value in payload.items():
             assert getattr(update, to_snake_case(key)) == value
 
-    def test_rejects_metadata_derived_field(self):
+    @pytest.mark.parametrize(
+        ("field_name", "value"),
+        [
+            ("compiler", "intel"),
+            ("gitRepositoryUrl", "https://example.com/repo"),
+            ("gitBranch", "main"),
+            ("gitTag", "v1.2.3"),
+            ("gitCommitHash", "abc123"),
+        ],
+    )
+    def test_rejects_non_editable_fields(self, field_name: str, value: str):
         with pytest.raises(ValidationError):
-            SimulationUpdate(compiler="intel")
+            SimulationUpdate(**{field_name: value})
 
     def test_rejects_invalid_predefined_value(self):
         with pytest.raises(ValidationError):
             SimulationUpdate(status="done")
+
+    @pytest.mark.parametrize("field_name", ["status", "simulationType"])
+    def test_rejects_explicit_null_for_non_nullable_enums(self, field_name: str):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(**{field_name: None})
 
     def test_rejects_out_of_scope_field(self):
         with pytest.raises(ValidationError):
