@@ -4,7 +4,10 @@ import { useLocation, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
 import { resolvePaceExecution, updateSimulation } from '@/features/simulations/api/api';
-import { SimulationDetailsView } from '@/features/simulations/components/SimulationDetailsView';
+import {
+  SimulationDetailsView,
+  type SimulationSaveError,
+} from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 import { useSimulationSummary } from '@/features/simulations/hooks/useSimulationSummary';
 import { toast } from '@/hooks/use-toast';
@@ -17,34 +20,49 @@ interface SimulationDetailsPageProps {
   setSelectedSimulationIds: (ids: string[]) => void;
 }
 
-const getUpdateErrorMessage = (error: unknown): string => {
+const getUpdateError = (error: unknown): SimulationSaveError => {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;
 
     if (typeof detail === 'string') {
-      return detail;
+      return {
+        message: detail,
+        validationDetails: [],
+      };
     }
 
     if (Array.isArray(detail)) {
-      const messages = detail
+      const validationDetails = detail
         .map((item) => {
-          const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : null;
           const message = typeof item?.msg === 'string' ? item.msg : null;
+          const loc = Array.isArray(item?.loc)
+            ? item.loc.filter(
+                (part: unknown): part is string | number =>
+                  typeof part === 'string' || typeof part === 'number',
+              )
+            : [];
 
           if (!message) return null;
-          if (typeof field !== 'string') return message;
-
-          return `${field}: ${message}`;
+          return {
+            loc,
+            msg: message,
+          };
         })
-        .filter((message): message is string => Boolean(message));
+        .filter((item): item is SimulationSaveError['validationDetails'][number] => Boolean(item));
 
-      if (messages.length > 0) {
-        return messages.join(' ');
+      if (validationDetails.length > 0) {
+        return {
+          message: 'One or more fields need attention before this simulation can be saved.',
+          validationDetails,
+        };
       }
     }
   }
 
-  return error instanceof Error ? error.message : 'Failed to update simulation.';
+  return {
+    message: error instanceof Error ? error.message : 'Failed to update simulation.',
+    validationDetails: [],
+  };
 };
 
 export const SimulationDetailsPage = ({
@@ -57,7 +75,7 @@ export const SimulationDetailsPage = ({
   const { isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [simulation, setSimulation] = useState<SimulationOut | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<SimulationSaveError | null>(null);
   const [paceExperimentId, setPaceExperimentId] = useState<string | null>(null);
   const [isResolvingPace, setIsResolvingPace] = useState(false);
   const [paceResolutionAttempted, setPaceResolutionAttempted] = useState(false);
@@ -142,7 +160,7 @@ export const SimulationDetailsPage = ({
       setSimulation(updatedSimulation);
       return true;
     } catch (saveErr) {
-      setSaveError(getUpdateErrorMessage(saveErr));
+      setSaveError(getUpdateError(saveErr));
       return false;
     } finally {
       setIsSaving(false);

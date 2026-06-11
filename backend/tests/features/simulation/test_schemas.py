@@ -7,6 +7,7 @@ from pydantic import HttpUrl, ValidationError
 from app.common.schemas.utils import to_snake_case
 from app.features.machine.schemas import MachineOut
 from app.features.simulation.schemas import (
+    ArtifactCreate,
     ArtifactKind,
     ArtifactOut,
     CaseOut,
@@ -17,6 +18,7 @@ from app.features.simulation.schemas import (
     SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
     SimulationUpdate,
+    _normalize_optional_label,
 )
 from app.features.user.schemas import UserPreview
 
@@ -106,6 +108,9 @@ class TestSimulationCreateSchema:
 
 
 class TestSimulationUpdateSchema:
+    def test_normalize_optional_label_accepts_none(self):
+        assert _normalize_optional_label(None) is None
+
     def test_accepts_allowed_optional_fields(self):
         payload = {
             "simulationType": "production",
@@ -147,9 +152,90 @@ class TestSimulationUpdateSchema:
         with pytest.raises(ValidationError):
             SimulationUpdate(**{field_name: None})
 
+    @pytest.mark.parametrize("field_name", ["artifacts", "links"])
+    def test_rejects_explicit_null_for_resource_fields(self, field_name: str):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(**{field_name: None})
+
     def test_rejects_out_of_scope_field(self):
         with pytest.raises(ValidationError):
             SimulationUpdate(caseName="new-case")
+
+    def test_accepts_resource_replacement_payloads(self):
+        update = SimulationUpdate(
+            artifacts=[
+                {
+                    "kind": "archive",
+                    "uri": "  /global/cfs/project/archive/run-1  ",
+                    "label": "  Main archive  ",
+                }
+            ],
+            links=[
+                {
+                    "kind": "docs",
+                    "url": "https://example.com/docs/run-1",
+                    "label": "  Run docs  ",
+                }
+            ],
+        )
+
+        assert update.artifacts is not None
+        assert update.links is not None
+        assert update.artifacts[0].uri == "/global/cfs/project/archive/run-1"
+        assert update.artifacts[0].label == "Main archive"
+        assert str(update.links[0].url) == "https://example.com/docs/run-1"
+        assert update.links[0].label == "Run docs"
+
+    def test_rejects_blank_artifact_uri(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(
+                artifacts=[{"kind": "output", "uri": "   ", "label": "Blank"}]
+            )
+
+    @pytest.mark.parametrize("uri", [None, 123])
+    def test_artifact_create_rejects_non_string_uri(self, uri):
+        with pytest.raises(ValidationError):
+            ArtifactCreate(kind="output", uri=uri, label="Bad")
+
+    @pytest.mark.parametrize("uri", [None, 123])
+    def test_update_rejects_non_string_artifact_uri(self, uri):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(artifacts=[{"kind": "output", "uri": uri, "label": "Bad"}])
+
+    def test_rejects_invalid_external_link_url(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(
+                links=[{"kind": "diagnostic", "url": "not-a-url", "label": "Bad"}]
+            )
+
+    def test_rejects_duplicate_resource_pairs(self):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(
+                artifacts=[
+                    {"kind": "archive", "uri": "/tmp/archive", "label": "One"},
+                    {"kind": "archive", "uri": "/tmp/archive", "label": "Two"},
+                ]
+            )
+
+        with pytest.raises(ValidationError):
+            SimulationUpdate(
+                links=[
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "One",
+                    },
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "Two",
+                    },
+                ]
+            )
+
+    def test_update_resource_validators_accept_none_when_called_directly(self):
+        assert SimulationUpdate.validate_update_artifacts(None) is None
+        assert SimulationUpdate.validate_update_links(None) is None
 
 
 class TestSimulationOutSchema:
