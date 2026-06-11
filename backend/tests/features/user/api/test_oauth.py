@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi_users.exceptions import UserAlreadyExists
 from fastapi_users.router.oauth import STATE_TOKEN_AUDIENCE, decode_jwt
-from httpx import AsyncClient
+from httpx import AsyncClient, HTTPError
 from starlette.requests import Request
 
 from app.api.version import API_BASE
@@ -136,10 +136,11 @@ class TestAuthRoutes:
     async def test_github_oauth_callback_rejects_missing_state(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        membership_fetch = AsyncMock(return_value=False)
         monkeypatch.setattr(
             oauth,
             "_fetch_verified_e3sm_membership",
-            AsyncMock(return_value=False),
+            membership_fetch,
         )
         monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
@@ -156,6 +157,7 @@ class TestAuthRoutes:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        membership_fetch.assert_not_awaited()
 
     async def test_github_oauth_callback_rejects_existing_user_conflict(
         self, monkeypatch: pytest.MonkeyPatch
@@ -190,10 +192,11 @@ class TestAuthRoutes:
     async def test_github_oauth_callback_rejects_inactive_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        membership_fetch = AsyncMock(return_value=False)
         monkeypatch.setattr(
             oauth,
             "_fetch_verified_e3sm_membership",
-            AsyncMock(return_value=False),
+            membership_fetch,
         )
         monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
@@ -216,6 +219,7 @@ class TestAuthRoutes:
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
         assert exc_info.value.detail == oauth.ErrorCode.LOGIN_BAD_CREDENTIALS
+        membership_fetch.assert_not_awaited()
 
     async def test_github_oauth_callback_logs_in_and_redirects(
         self, monkeypatch: pytest.MonkeyPatch
@@ -351,6 +355,36 @@ class TestAuthRoutes:
         client.__aenter__.return_value = client
         client.__aexit__.return_value = None
         client.get.return_value = failed_response
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert result is None
+
+    async def test_fetch_verified_e3sm_membership_request_error_returns_none(
+        self,
+    ) -> None:
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.side_effect = HTTPError("boom")
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert result is None
+
+    async def test_fetch_verified_e3sm_membership_invalid_json_returns_none(
+        self,
+    ) -> None:
+        invalid_json_response = SimpleNamespace(
+            status_code=200,
+            json=lambda: (_ for _ in ()).throw(ValueError("bad json")),
+        )
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.return_value = invalid_json_response
 
         with patch.object(oauth, "AsyncClient", return_value=client):
             result = await oauth._fetch_verified_e3sm_membership("token")

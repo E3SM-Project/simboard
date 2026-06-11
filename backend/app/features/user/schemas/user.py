@@ -28,7 +28,7 @@ class UserCreate(schemas.BaseUserCreate):
     role: Annotated[str, "The role of the user"] = "user"
 
     # password is optional for OAuth.
-    password: Annotated[str, "The user's password"] = None  # type: ignore[assignment]
+    password: Annotated[str | None, "The user's password"] = None
 
 
 class UserUpdate(schemas.BaseUserUpdate):

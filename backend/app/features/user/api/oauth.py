@@ -13,7 +13,7 @@ from fastapi_users.router.oauth import (
     decode_jwt,
     generate_state_token,
 )
-from httpx import AsyncClient
+from httpx import AsyncClient, HTTPError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 
 from app.core.config import settings
@@ -135,9 +135,6 @@ async def github_callback(
     account_id, account_email = await GITHUB_OAUTH_CLIENT.get_id_email(
         token["access_token"]
     )
-    has_verified_e3sm_membership = await _fetch_verified_e3sm_membership(
-        token["access_token"]
-    )
 
     if account_email is None:
         raise HTTPException(
@@ -181,6 +178,10 @@ async def github_callback(
             detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
         )
 
+    has_verified_e3sm_membership = await _fetch_verified_e3sm_membership(
+        token["access_token"]
+    )
+
     if has_verified_e3sm_membership is not None and hasattr(
         user_manager, "refresh_github_org_membership"
     ):
@@ -203,15 +204,18 @@ async def _fetch_verified_e3sm_membership(
 ) -> GitHubOrgMembershipState:
     """Return membership state, or None when GitHub result is indeterminate."""
 
-    async with AsyncClient(timeout=10.0) as http_client:
-        response = await http_client.get(
-            f"https://api.github.com/user/memberships/orgs/{E3SM_GITHUB_ORG}",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+    try:
+        async with AsyncClient(timeout=10.0) as http_client:
+            response = await http_client.get(
+                f"https://api.github.com/user/memberships/orgs/{E3SM_GITHUB_ORG}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+    except HTTPError:
+        return None
 
     if response.status_code == status.HTTP_404_NOT_FOUND:
         return False
@@ -222,7 +226,11 @@ async def _fetch_verified_e3sm_membership(
     if response.status_code >= status.HTTP_400_BAD_REQUEST:
         return None
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+
     return payload.get("state") == "active"
 
 
