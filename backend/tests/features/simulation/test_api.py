@@ -1218,6 +1218,8 @@ class TestUpdateSimulation:
         [
             {"links": [{"kind": "diagnostic", "url": "not-a-url", "label": "Bad"}]},
             {"artifacts": [{"kind": "output", "uri": "   ", "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": None, "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": 123, "label": "Bad"}]},
             {
                 "links": [
                     {

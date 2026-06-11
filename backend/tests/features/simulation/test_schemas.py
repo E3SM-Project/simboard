@@ -7,6 +7,7 @@ from pydantic import HttpUrl, ValidationError
 from app.common.schemas.utils import to_snake_case
 from app.features.machine.schemas import MachineOut
 from app.features.simulation.schemas import (
+    ArtifactCreate,
     ArtifactKind,
     ArtifactOut,
     CaseOut,
@@ -153,8 +154,8 @@ class TestSimulationUpdateSchema:
 
     @pytest.mark.parametrize("field_name", ["artifacts", "links"])
     def test_rejects_explicit_null_for_resource_fields(self, field_name: str):
-        with pytest.raises(ValueError):
-            SimulationUpdate.reject_null_resource_updates(None)
+        with pytest.raises(ValidationError):
+            SimulationUpdate(**{field_name: None})
 
     def test_rejects_out_of_scope_field(self):
         with pytest.raises(ValidationError):
@@ -190,6 +191,16 @@ class TestSimulationUpdateSchema:
             SimulationUpdate(
                 artifacts=[{"kind": "output", "uri": "   ", "label": "Blank"}]
             )
+
+    @pytest.mark.parametrize("uri", [None, 123])
+    def test_artifact_create_rejects_non_string_uri(self, uri):
+        with pytest.raises(ValidationError):
+            ArtifactCreate(kind="output", uri=uri, label="Bad")
+
+    @pytest.mark.parametrize("uri", [None, 123])
+    def test_update_rejects_non_string_artifact_uri(self, uri):
+        with pytest.raises(ValidationError):
+            SimulationUpdate(artifacts=[{"kind": "output", "uri": uri, "label": "Bad"}])
 
     def test_rejects_invalid_external_link_url(self):
         with pytest.raises(ValidationError):

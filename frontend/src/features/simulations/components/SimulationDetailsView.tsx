@@ -195,6 +195,23 @@ const normalizeLinkRows = (rows: EditableLinkRow[]): ExternalLinkIn[] =>
     label: normalizeOptionalText(row.label),
   }));
 
+const validateResourceRows = (
+  artifactRows: EditableArtifactRow[],
+  linkRows: EditableLinkRow[],
+): string | null => {
+  const hasBlankArtifactValue = artifactRows.some((row) => row.value.trim().length === 0);
+  if (hasBlankArtifactValue) {
+    return 'Artifact URI is required for every artifact row.';
+  }
+
+  const hasBlankLinkValue = linkRows.some((row) => row.value.trim().length === 0);
+  if (hasBlankLinkValue) {
+    return 'Link URL is required for every external link row.';
+  }
+
+  return null;
+};
+
 const areResourceListsEqual = (left: unknown, right: unknown): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
@@ -493,6 +510,8 @@ export const SimulationDetailsView = ({
     }
   }, [canEdit, simulation]);
 
+  const resourceValidationError = validateResourceRows(artifactRows, linkRows);
+
   const updateField = (field: EditableField, value: string) => {
     onClearSaveError?.();
     setFormState((current) => ({
@@ -511,6 +530,9 @@ export const SimulationDetailsView = ({
 
   const handleSave = async () => {
     if (!onSave) return;
+    if (resourceValidationError) {
+      return;
+    }
 
     const payload = buildUpdatePayload(simulation, formState, artifactRows, linkRows);
 
@@ -657,14 +679,19 @@ export const SimulationDetailsView = ({
               <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || !hasUnsavedChanges || resourceValidationError !== null}
+              >
                 {isSaving ? 'Saving…' : 'Save Changes'}
               </Button>
             </>
           )}
         </div>
       </div>
-      {isEditing && saveError && <div className="text-sm text-red-600">{saveError}</div>}
+      {isEditing && (resourceValidationError || saveError) && (
+        <div className="text-sm text-red-600">{resourceValidationError ?? saveError}</div>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1354,13 +1381,20 @@ export const SimulationDetailsView = ({
                         <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
                           Cancel
                         </Button>
-                        <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+                        <Button
+                          onClick={handleSave}
+                          disabled={isSaving || !hasUnsavedChanges || resourceValidationError !== null}
+                        >
                           {isSaving ? 'Saving…' : 'Save Changes'}
                         </Button>
                       </div>
                     </div>
                   )}
-                  {isEditing && saveError && <p className="text-sm text-red-600">{saveError}</p>}
+                  {isEditing && (resourceValidationError || saveError) && (
+                    <p className="text-sm text-red-600">
+                      {resourceValidationError ?? saveError}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 

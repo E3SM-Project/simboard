@@ -27,7 +27,11 @@ def _normalize_optional_label(value: str | None) -> str | None:
     return stripped or None
 
 
-def _normalize_required_resource_value(value: str, *, field_name: str) -> str:
+def _normalize_required_resource_value(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str):
+        msg = f"{field_name} must be a non-empty string."
+        raise ValueError(msg)
+
     stripped = value.strip()
 
     if not stripped:
@@ -111,7 +115,7 @@ class ArtifactCreate(CamelInBaseModel):
 
     @field_validator("uri", mode="before")
     @classmethod
-    def normalize_uri(cls, value: str) -> str:
+    def normalize_uri(cls, value: Any) -> str:
         return _normalize_required_resource_value(value, field_name="uri")
 
     @field_validator("label", mode="before")
