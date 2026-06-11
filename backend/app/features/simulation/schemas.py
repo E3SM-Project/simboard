@@ -19,6 +19,44 @@ from app.features.user.schemas import UserPreview
 KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
 
 
+def _normalize_optional_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    return stripped or None
+
+
+def _normalize_required_resource_value(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str):
+        msg = f"{field_name} must be a non-empty string."
+        raise ValueError(msg)
+
+    stripped = value.strip()
+
+    if not stripped:
+        msg = f"{field_name} must be a non-empty string."
+        raise ValueError(msg)
+
+    return stripped
+
+
+def _validate_unique_resources(items: list[Any], *, value_attr: str) -> list[Any]:
+    seen: set[tuple[str, str]] = set()
+
+    for item in items:
+        value = getattr(item, value_attr)
+        normalized_key = (item.kind.value, str(value))
+
+        if normalized_key in seen:
+            msg = f"Duplicate {item.kind.value} {value_attr} values are not allowed."
+            raise ValueError(msg)
+
+        seen.add(normalized_key)
+
+    return items
+
+
 class ExternalLinkCreate(CamelInBaseModel):
     """Schema for creating a new External Link."""
 
@@ -29,6 +67,11 @@ class ExternalLinkCreate(CamelInBaseModel):
     label: Annotated[
         str | None, Field(None, description="An optional label for the external link.")
     ]
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def normalize_label(cls, value: str | None) -> str | None:
+        return _normalize_optional_label(value)
 
 
 class ExternalLinkOut(CamelOutBaseModel):
@@ -69,6 +112,16 @@ class ArtifactCreate(CamelInBaseModel):
     label: Annotated[
         str | None, Field(None, description="An optional label for the artifact.")
     ]
+
+    @field_validator("uri", mode="before")
+    @classmethod
+    def normalize_uri(cls, value: Any) -> str:
+        return _normalize_required_resource_value(value, field_name="uri")
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def normalize_label(cls, value: str | None) -> str | None:
+        return _normalize_optional_label(value)
 
 
 class ArtifactOut(CamelOutBaseModel):
@@ -273,6 +326,20 @@ class SimulationCreate(CamelInBaseModel):
         ),
     ]
 
+    @field_validator("artifacts")
+    @classmethod
+    def validate_unique_artifacts(
+        cls, value: list[ArtifactCreate]
+    ) -> list[ArtifactCreate]:
+        return _validate_unique_resources(value, value_attr="uri")
+
+    @field_validator("links")
+    @classmethod
+    def validate_unique_links(
+        cls, value: list[ExternalLinkCreate]
+    ) -> list[ExternalLinkCreate]:
+        return _validate_unique_resources(value, value_attr="url")
+
 
 class SimulationUpdate(CamelInBaseModel):
     """Schema for narrow v1 simulation metadata updates."""
@@ -282,6 +349,14 @@ class SimulationUpdate(CamelInBaseModel):
     @field_validator("simulation_type", "status", mode="before")
     @classmethod
     def reject_null_enum_updates(cls, value: Any) -> Any:
+        if value is None:
+            msg = "Field may be omitted for PATCH requests, but cannot be null."
+            raise ValueError(msg)
+        return value
+
+    @field_validator("artifacts", "links", mode="before")
+    @classmethod
+    def reject_null_resource_updates(cls, value: Any) -> Any:
         if value is None:
             msg = "Field may be omitted for PATCH requests, but cannot be null."
             raise ValueError(msg)
@@ -330,6 +405,38 @@ class SimulationUpdate(CamelInBaseModel):
         str | None,
         Field(None, description="Optional additional notes in markdown format"),
     ]
+    artifacts: Annotated[
+        list[ArtifactCreate] | None,
+        Field(
+            None,
+            description="Full replacement list of artifacts associated with the simulation",
+        ),
+    ]
+    links: Annotated[
+        list[ExternalLinkCreate] | None,
+        Field(
+            None,
+            description="Full replacement list of external links associated with the simulation",
+        ),
+    ]
+
+    @field_validator("artifacts")
+    @classmethod
+    def validate_update_artifacts(
+        cls, value: list[ArtifactCreate] | None
+    ) -> list[ArtifactCreate] | None:
+        if value is None:
+            return value
+        return _validate_unique_resources(value, value_attr="uri")
+
+    @field_validator("links")
+    @classmethod
+    def validate_update_links(
+        cls, value: list[ExternalLinkCreate] | None
+    ) -> list[ExternalLinkCreate] | None:
+        if value is None:
+            return value
+        return _validate_unique_resources(value, value_attr="url")
 
 
 class SimulationSummaryOut(CamelOutBaseModel):

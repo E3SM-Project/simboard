@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, CircleHelp } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ChevronDown, CircleHelp, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -29,6 +29,10 @@ import {
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { cn } from '@/lib/utils';
 import type {
+  ArtifactIn,
+  ArtifactKind,
+  ExternalLinkIn,
+  ExternalLinkKind,
   SimulationEditableField,
   SimulationOut,
   SimulationStatusValue,
@@ -48,7 +52,7 @@ interface SimulationDetailsViewProps {
   maxCompareSelection?: number;
   canEdit?: boolean;
   isSaving?: boolean;
-  saveError?: string | null;
+  saveError?: SimulationSaveError | null;
   backHref?: string;
   backLabel?: string;
   paceLink?: {
@@ -73,6 +77,14 @@ interface SimulationDetailsViewProps {
   showLoginForAiSummary?: boolean;
   isCheckingAuth?: boolean;
   onLoginForSummary?: () => void;
+}
+
+export interface SimulationSaveError {
+  message: string;
+  validationDetails: Array<{
+    loc: Array<string | number>;
+    msg: string;
+  }>;
 }
 
 // -------------------- Small UI helpers --------------------
@@ -124,6 +136,316 @@ const ReadonlyTextBlock = ({ value, className }: { value?: string | null; classN
     )}
   >
     {value?.trim() ? value : '—'}
+  </div>
+);
+
+type ResourceKindOption<TKind extends string> = {
+  value: TKind;
+  label: string;
+};
+
+type EditableArtifactRow = {
+  kind: ArtifactKind;
+  label: string;
+  value: string;
+};
+
+type EditableLinkRow = {
+  kind: ExternalLinkKind;
+  label: string;
+  value: string;
+};
+
+type EditableResourceField = 'kind' | 'label' | 'value';
+
+type ResourceRowFieldErrors = Partial<Record<EditableResourceField, string>>;
+
+type ResourceRowErrorsState = {
+  artifacts: ResourceRowFieldErrors[];
+  links: ResourceRowFieldErrors[];
+};
+
+const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
+  { value: 'output', label: 'Output' },
+  { value: 'archive', label: 'Archive' },
+  { value: 'run_script', label: 'Run Script' },
+  { value: 'postprocessing_script', label: 'Post-processing Script' },
+];
+
+const EXTERNAL_LINK_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ExternalLinkKind>> = [
+  { value: 'diagnostic', label: 'Diagnostic' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'docs', label: 'Docs' },
+  { value: 'other', label: 'Other' },
+];
+
+const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[] =>
+  simulation.artifacts.map((artifact) => ({
+    kind: artifact.kind,
+    label: artifact.label ?? '',
+    value: artifact.uri,
+  }));
+
+const toEditableLinkRows = (simulation: SimulationOut): EditableLinkRow[] =>
+  simulation.links.map((link) => ({
+    kind: link.kind,
+    label: link.label ?? '',
+    value: link.url,
+  }));
+
+const normalizeOptionalText = (value: string): string | null => {
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+const normalizeArtifactRows = (rows: EditableArtifactRow[]): ArtifactIn[] =>
+  rows.map((row) => ({
+    kind: row.kind,
+    uri: row.value.trim(),
+    label: normalizeOptionalText(row.label),
+  }));
+
+const normalizeLinkRows = (rows: EditableLinkRow[]): ExternalLinkIn[] =>
+  rows.map((row) => ({
+    kind: row.kind,
+    url: row.value.trim(),
+    label: normalizeOptionalText(row.label),
+  }));
+
+const createEmptyRowErrors = (count: number): ResourceRowFieldErrors[] =>
+  Array.from({ length: count }, () => ({}));
+
+const getClientResourceRowErrors = (
+  artifactRows: EditableArtifactRow[],
+  linkRows: EditableLinkRow[],
+): ResourceRowErrorsState => ({
+  artifacts: artifactRows.map((row) =>
+    row.value.trim().length === 0 ? { value: 'Artifact URI is required.' } : {},
+  ),
+  links: linkRows.map((row) =>
+    row.value.trim().length === 0 ? { value: 'Link URL is required.' } : {},
+  ),
+});
+
+const normalizeValidationLoc = (loc: Array<string | number>): Array<string | number> =>
+  loc[0] === 'body' ? loc.slice(1) : loc;
+
+const toEditableField = (field: string): EditableResourceField | null => {
+  if (field === 'url' || field === 'uri') {
+    return 'value';
+  }
+
+  if (field === 'kind' || field === 'label') {
+    return field;
+  }
+
+  return null;
+};
+
+const toValidationPathLabel = (loc: Array<string | number>): string => {
+  const normalizedLoc = normalizeValidationLoc(loc);
+  if (normalizedLoc.length === 0) {
+    return 'Validation error';
+  }
+
+  return normalizedLoc
+    .map((segment) => (typeof segment === 'number' ? `${segment + 1}` : segment))
+    .join(' > ');
+};
+
+const mapSaveValidationErrors = (
+  validationDetails: SimulationSaveError['validationDetails'],
+  artifactCount: number,
+  linkCount: number,
+) => {
+  const rowErrors: ResourceRowErrorsState = {
+    artifacts: createEmptyRowErrors(artifactCount),
+    links: createEmptyRowErrors(linkCount),
+  };
+  const unmappedMessages: string[] = [];
+  let hasMappedLinkValueError = false;
+
+  for (const detail of validationDetails) {
+    const loc = normalizeValidationLoc(detail.loc);
+    const [resourceName, rowIndex, fieldName] = loc;
+
+    if (
+      resourceName === 'artifacts' &&
+      typeof rowIndex === 'number' &&
+      rowIndex >= 0 &&
+      rowIndex < artifactCount &&
+      typeof fieldName === 'string'
+    ) {
+      const field = toEditableField(fieldName);
+      if (field) {
+        rowErrors.artifacts[rowIndex] = {
+          ...rowErrors.artifacts[rowIndex],
+          [field]: detail.msg,
+        };
+        continue;
+      }
+    }
+
+    if (
+      resourceName === 'links' &&
+      typeof rowIndex === 'number' &&
+      rowIndex >= 0 &&
+      rowIndex < linkCount &&
+      typeof fieldName === 'string'
+    ) {
+      const field = toEditableField(fieldName);
+      if (field) {
+        rowErrors.links[rowIndex] = {
+          ...rowErrors.links[rowIndex],
+          [field]: detail.msg,
+        };
+        hasMappedLinkValueError ||= field === 'value';
+        continue;
+      }
+    }
+
+    unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
+  }
+
+  return {
+    rowErrors,
+    unmappedMessages,
+    hasMappedLinkValueError,
+  };
+};
+
+const areResourceListsEqual = (left: unknown, right: unknown): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const mergeRowFieldErrors = (
+  primary: ResourceRowFieldErrors,
+  secondary: ResourceRowFieldErrors,
+): ResourceRowFieldErrors => ({
+  ...primary,
+  ...secondary,
+});
+
+const hasAnyRowErrors = (rowErrors: ResourceRowErrorsState): boolean =>
+  [...rowErrors.artifacts, ...rowErrors.links].some((row) => Object.keys(row).length > 0);
+
+const EditableResourceList = <TKind extends string>({
+  title,
+  description,
+  items,
+  kindOptions,
+  valueLabel,
+  valuePlaceholder,
+  addLabel,
+  onAdd,
+  onKindChange,
+  onLabelChange,
+  onValueChange,
+  onRemove,
+  rowErrors,
+}: {
+  title: string;
+  description?: string;
+  items: Array<{ kind: TKind; label: string; value: string }>;
+  kindOptions: ReadonlyArray<ResourceKindOption<TKind>>;
+  valueLabel: string;
+  valuePlaceholder: string;
+  addLabel: string;
+  onAdd: () => void;
+  onKindChange: (index: number, kind: TKind) => void;
+  onLabelChange: (index: number, value: string) => void;
+  onValueChange: (index: number, value: string) => void;
+  onRemove: (index: number) => void;
+  rowErrors?: ResourceRowFieldErrors[];
+}) => (
+  <div className="space-y-3">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <Label className="text-sm font-medium">{title}</Label>
+        {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+        <Plus className="mr-1 h-4 w-4" />
+        {addLabel}
+      </Button>
+    </div>
+
+    {items.length === 0 ? (
+      <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+        No entries yet.
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={`${item.kind}-${index}`} className="rounded-md border p-3">
+            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1.4fr)_auto] md:items-start">
+              <div className="space-y-1">
+                <Label className="mb-1 block text-xs text-muted-foreground">Kind</Label>
+                <Select
+                  value={item.kind}
+                  onValueChange={(value: TKind) => onKindChange(index, value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select kind" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {kindOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="min-h-4" aria-hidden="true" />
+              </div>
+              <div className="space-y-1">
+                <Label className="mb-1 block text-xs text-muted-foreground">Label</Label>
+                <Input
+                  value={item.label}
+                  onChange={(event) => onLabelChange(index, event.target.value)}
+                  placeholder="Optional label"
+                  className={cn(
+                    'h-9 text-sm',
+                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-200' : '',
+                  )}
+                />
+                {rowErrors?.[index]?.label ? (
+                  <p className="min-h-4 text-xs leading-4 text-red-600">{rowErrors[index].label}</p>
+                ) : (
+                  <div className="min-h-4" aria-hidden="true" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label className="mb-1 block text-xs text-muted-foreground">{valueLabel}</Label>
+                <Input
+                  value={item.value}
+                  onChange={(event) => onValueChange(index, event.target.value)}
+                  placeholder={valuePlaceholder}
+                  className={cn(
+                    'h-9 text-sm',
+                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-200' : '',
+                  )}
+                />
+                {rowErrors?.[index]?.value ? (
+                  <p className="min-h-4 text-xs leading-4 text-red-600">{rowErrors[index].value}</p>
+                ) : (
+                  <div className="min-h-4" aria-hidden="true" />
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onRemove(index)}
+                aria-label={`Remove ${title} item ${index + 1}`}
+                className="mt-6 self-start"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 );
 
@@ -187,6 +509,8 @@ const normalizeEditableValue = (field: EditableField, value: string): string | n
 const buildUpdatePayload = (
   simulation: SimulationOut,
   formState: EditableFormState,
+  artifactRows: EditableArtifactRow[],
+  linkRows: EditableLinkRow[],
 ): SimulationUpdate => {
   const payload: SimulationUpdate = {};
   const mutablePayload = payload as Record<string, string | null>;
@@ -198,6 +522,18 @@ const buildUpdatePayload = (
     if (nextValue !== currentValue) {
       mutablePayload[field] = nextValue;
     }
+  }
+
+  const nextArtifacts = normalizeArtifactRows(artifactRows);
+  const currentArtifacts = normalizeArtifactRows(toEditableArtifactRows(simulation));
+  if (!areResourceListsEqual(nextArtifacts, currentArtifacts)) {
+    payload.artifacts = nextArtifacts;
+  }
+
+  const nextLinks = normalizeLinkRows(linkRows);
+  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation));
+  if (!areResourceListsEqual(nextLinks, currentLinks)) {
+    payload.links = nextLinks;
   }
 
   return payload;
@@ -240,6 +576,15 @@ export const SimulationDetailsView = ({
   const [formState, setFormState] = useState<EditableFormState>(() =>
     toEditableFormState(simulation),
   );
+  const [artifactRows, setArtifactRows] = useState<EditableArtifactRow[]>(() =>
+    toEditableArtifactRows(simulation),
+  );
+  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() => toEditableLinkRows(simulation));
+  const [serverRowErrors, setServerRowErrors] = useState<ResourceRowErrorsState>({
+    artifacts: [],
+    links: [],
+  });
+  const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -289,15 +634,77 @@ export const SimulationDetailsView = ({
 
   useEffect(() => {
     setFormState(toEditableFormState(simulation));
+    setArtifactRows(toEditableArtifactRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation));
     setIsEditing(false);
   }, [simulation]);
 
   useEffect(() => {
     if (!canEdit) {
       setFormState(toEditableFormState(simulation));
+      setArtifactRows(toEditableArtifactRows(simulation));
+      setLinkRows(toEditableLinkRows(simulation));
       setIsEditing(false);
     }
   }, [canEdit, simulation]);
+
+  useEffect(() => {
+    if (!saveError) {
+      setServerRowErrors({
+        artifacts: createEmptyRowErrors(artifactRows.length),
+        links: createEmptyRowErrors(linkRows.length),
+      });
+      setSaveSummaryMessage(null);
+      return;
+    }
+
+    const mappedErrors = mapSaveValidationErrors(
+      saveError.validationDetails,
+      artifactRows.length,
+      linkRows.length,
+    );
+
+    setServerRowErrors(mappedErrors.rowErrors);
+
+    if (mappedErrors.unmappedMessages.length > 0) {
+      setSaveSummaryMessage(mappedErrors.unmappedMessages.join(' '));
+      return;
+    }
+
+    if (mappedErrors.hasMappedLinkValueError) {
+      setSaveSummaryMessage('One or more links need a full URL including https://.');
+      return;
+    }
+
+    if (hasAnyRowErrors(mappedErrors.rowErrors)) {
+      setSaveSummaryMessage('Fix highlighted resource rows before saving.');
+      return;
+    }
+
+    setSaveSummaryMessage(saveError.message);
+  }, [artifactRows.length, linkRows.length, saveError]);
+
+  const clientRowErrors = getClientResourceRowErrors(artifactRows, linkRows);
+  const combinedRowErrors: ResourceRowErrorsState = {
+    artifacts: artifactRows.map((_, index) =>
+      mergeRowFieldErrors(
+        clientRowErrors.artifacts[index] ?? {},
+        serverRowErrors.artifacts[index] ?? {},
+      ),
+    ),
+    links: linkRows.map((_, index) =>
+      mergeRowFieldErrors(
+        clientRowErrors.links[index] ?? {},
+        serverRowErrors.links[index] ?? {},
+      ),
+    ),
+  };
+  const hasClientResourceErrors = hasAnyRowErrors(clientRowErrors);
+  const summaryErrorMessage = saveSummaryMessage
+    ? saveSummaryMessage
+    : hasClientResourceErrors
+      ? 'Fix highlighted resource rows before saving.'
+      : null;
 
   const updateField = (field: EditableField, value: string) => {
     onClearSaveError?.();
@@ -310,13 +717,18 @@ export const SimulationDetailsView = ({
   const handleCancelEdit = () => {
     onClearSaveError?.();
     setFormState(toEditableFormState(simulation));
+    setArtifactRows(toEditableArtifactRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation));
     setIsEditing(false);
   };
 
   const handleSave = async () => {
     if (!onSave) return;
+    if (hasClientResourceErrors) {
+      return;
+    }
 
-    const payload = buildUpdatePayload(simulation, formState);
+    const payload = buildUpdatePayload(simulation, formState, artifactRows, linkRows);
 
     if (Object.keys(payload).length === 0) {
       onClearSaveError?.();
@@ -331,7 +743,8 @@ export const SimulationDetailsView = ({
     }
   };
 
-  const hasUnsavedChanges = Object.keys(buildUpdatePayload(simulation, formState)).length > 0;
+  const hasUnsavedChanges =
+    Object.keys(buildUpdatePayload(simulation, formState, artifactRows, linkRows)).length > 0;
   const compareSelectionCount = compareSelectionCountProp ?? 0;
   const maxCompareSelection = maxCompareSelectionProp ?? 5;
   const isCompareActionDisabled =
@@ -353,6 +766,40 @@ export const SimulationDetailsView = ({
       },
     ]);
     setNewComment('');
+  };
+
+  const updateArtifactRow = (index: number, updates: Partial<EditableArtifactRow>) => {
+    onClearSaveError?.();
+    setArtifactRows((current) =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...updates } : row)),
+    );
+  };
+
+  const updateLinkRow = (index: number, updates: Partial<EditableLinkRow>) => {
+    onClearSaveError?.();
+    setLinkRows((current) =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...updates } : row)),
+    );
+  };
+
+  const addArtifactRow = () => {
+    onClearSaveError?.();
+    setArtifactRows((current) => [...current, { kind: 'output', label: '', value: '' }]);
+  };
+
+  const addLinkRow = () => {
+    onClearSaveError?.();
+    setLinkRows((current) => [...current, { kind: 'diagnostic', label: '', value: '' }]);
+  };
+
+  const removeArtifactRow = (index: number) => {
+    onClearSaveError?.();
+    setArtifactRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  };
+
+  const removeLinkRow = (index: number) => {
+    onClearSaveError?.();
+    setLinkRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
   };
 
   return (
@@ -426,14 +873,16 @@ export const SimulationDetailsView = ({
               <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
+              >
                 {isSaving ? 'Saving…' : 'Save Changes'}
               </Button>
             </>
           )}
         </div>
       </div>
-      {isEditing && saveError && <div className="text-sm text-red-600">{saveError}</div>}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -866,193 +1315,232 @@ export const SimulationDetailsView = ({
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div>
-                      <Label className="mb-1 block text-sm">Diagnostics</Label>
-                      {simulation.groupedLinks.diagnostic?.length ? (
-                        <ul className="list-disc pl-5 text-sm">
-                          {simulation.groupedLinks.diagnostic.map((d) => (
-                            <li key={d.url} className="flex items-center gap-2">
-                              <a
-                                className="flex items-center gap-1 text-blue-600 hover:underline"
-                                href={d.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="16"
-                                  height="16"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  className="inline-block"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                  />
-                                </svg>
-                                {d.label}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="mb-2 text-sm text-muted-foreground">
-                          Links to diagnostics will appear here once available.
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      <EditableResourceList
+                        title="Saved External Links"
+                        description="Add, relabel, or remove diagnostic, performance, docs, and other links."
+                        items={linkRows}
+                        kindOptions={EXTERNAL_LINK_KIND_OPTIONS}
+                        valueLabel="URL"
+                        valuePlaceholder="https://example.com/resource"
+                        addLabel="Add link"
+                        onAdd={addLinkRow}
+                        onKindChange={(index, kind) => updateLinkRow(index, { kind })}
+                        onLabelChange={(index, value) => updateLinkRow(index, { label: value })}
+                        onValueChange={(index, value) => updateLinkRow(index, { value })}
+                        onRemove={removeLinkRow}
+                        rowErrors={combinedRowErrors.links}
+                      />
+                      {paceLink ? (
+                        <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
+                          <div className="font-medium">PACE helper link</div>
+                          <div className="mt-1 text-muted-foreground">
+                            This derived link is shown for convenience and is not saved with the
+                            simulation.
+                          </div>
+                          <a
+                            className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline"
+                            href={paceLink.href}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {paceLink.label}
+                          </a>
                         </div>
-                      )}
+                      ) : null}
                     </div>
-                    <div>
-                      <Label className="mb-1 block text-sm">Performance</Label>
-                      {performanceLinks.length || paceLink ? (
-                        <ul className="list-disc pl-5 text-sm">
-                          {performanceLinks.map((p) => (
-                            <li key={p.url} className="flex items-center gap-2">
-                              <a
-                                className="flex items-center gap-1 text-blue-600 hover:underline"
-                                href={p.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="16"
-                                  height="16"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  className="inline-block"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                  />
-                                </svg>
-                                {p.label}
-                              </a>
-                            </li>
-                          ))}
-                          {paceLink && (
-                            <li className="flex items-center gap-2">
-                              <a
-                                className="flex items-center gap-1 text-blue-600 hover:underline"
-                                href={paceLink.href}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="16"
-                                  height="16"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  className="inline-block"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                  />
-                                </svg>
-                                {paceLink.label}
-                              </a>
-                              {isResolvingPace && (
-                                <>
-                                  <Spinner className="size-3 text-muted-foreground" />
-                                  <TooltipProvider delayDuration={150}>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <button
-                                          type="button"
-                                          aria-label="PACE link resolution status"
-                                          className="text-muted-foreground hover:text-foreground"
-                                        >
-                                          <CircleHelp className="size-3" />
-                                        </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        Checking for a direct PACE experiment link
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </>
-                              )}
-                              {!isResolvingPace && showPaceFallbackInfo && (
-                                <TooltipProvider delayDuration={150}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        aria-label="PACE link fallback information"
-                                        className="text-muted-foreground hover:text-foreground"
-                                      >
-                                        <CircleHelp className="size-3" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      Direct PACE experiment link not found. Search results may
-                                      still contain this run.
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                            </li>
-                          )}
-                        </ul>
-                      ) : (
-                        <div className="mb-2 text-sm text-muted-foreground">
-                          Links to performance metrics will appear here once available.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    {Object.entries(simulation.groupedLinks)
-                      .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
-                      .map(([key, linkList]) => (
-                        <div key={key} className="mb-4">
-                          <h4 className="text-sm font-medium capitalize">{key}</h4>
-                          <ul className="list-disc pl-5 text-sm">
-                            {linkList.map((link) => (
-                              <li key={link.url} className="flex items-center gap-2">
-                                <a
-                                  className="flex items-center gap-1 text-blue-600 hover:underline"
-                                  href={link.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="16"
-                                    height="16"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    className="inline-block"
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div>
+                          <Label className="mb-1 block text-sm">Diagnostics</Label>
+                          {simulation.groupedLinks.diagnostic?.length ? (
+                            <ul className="list-disc pl-5 text-sm">
+                              {simulation.groupedLinks.diagnostic.map((d) => (
+                                <li key={d.url} className="flex items-center gap-2">
+                                  <a
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                                    href={d.url}
+                                    target="_blank"
+                                    rel="noreferrer"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                    />
-                                  </svg>
-                                  {link.label}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="16"
+                                      height="16"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                      className="inline-block"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                      />
+                                    </svg>
+                                    {d.label}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="mb-2 text-sm text-muted-foreground">
+                              Links to diagnostics will appear here once available.
+                            </div>
+                          )}
                         </div>
-                      ))}
-                  </div>
+                        <div>
+                          <Label className="mb-1 block text-sm">Performance</Label>
+                          {performanceLinks.length || paceLink ? (
+                            <ul className="list-disc pl-5 text-sm">
+                              {performanceLinks.map((p) => (
+                                <li key={p.url} className="flex items-center gap-2">
+                                  <a
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                                    href={p.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="16"
+                                      height="16"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                      className="inline-block"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                      />
+                                    </svg>
+                                    {p.label}
+                                  </a>
+                                </li>
+                              ))}
+                              {paceLink && (
+                                <li className="flex items-center gap-2">
+                                  <a
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                                    href={paceLink.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="16"
+                                      height="16"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                      className="inline-block"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                      />
+                                    </svg>
+                                    {paceLink.label}
+                                  </a>
+                                  {isResolvingPace && (
+                                    <>
+                                      <Spinner className="size-3 text-muted-foreground" />
+                                      <TooltipProvider delayDuration={150}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              aria-label="PACE link resolution status"
+                                              className="text-muted-foreground hover:text-foreground"
+                                            >
+                                              <CircleHelp className="size-3" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            Checking for a direct PACE experiment link
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </>
+                                  )}
+                                  {!isResolvingPace && showPaceFallbackInfo && (
+                                    <TooltipProvider delayDuration={150}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <button
+                                            type="button"
+                                            aria-label="PACE link fallback information"
+                                            className="text-muted-foreground hover:text-foreground"
+                                          >
+                                            <CircleHelp className="size-3" />
+                                          </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Direct PACE experiment link not found. Search results may
+                                          still contain this run.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </li>
+                              )}
+                            </ul>
+                          ) : (
+                            <div className="mb-2 text-sm text-muted-foreground">
+                              Links to performance metrics will appear here once available.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        {Object.entries(simulation.groupedLinks)
+                          .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
+                          .map(([key, linkList]) => (
+                            <div key={key} className="mb-4">
+                              <h4 className="text-sm font-medium capitalize">{key}</h4>
+                              <ul className="list-disc pl-5 text-sm">
+                                {linkList.map((link) => (
+                                  <li key={link.url} className="flex items-center gap-2">
+                                    <a
+                                      className="flex items-center gap-1 text-blue-600 hover:underline"
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        className="inline-block"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
+                                        />
+                                      </svg>
+                                      {link.label}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1079,19 +1567,32 @@ export const SimulationDetailsView = ({
                   {canEdit && isEditing && (
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs text-muted-foreground">
-                        Save updates description, provenance, and notes fields only.
+                        Save updates metadata, notes, artifacts, and external links together.
                       </div>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
                           Cancel
                         </Button>
-                        <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+                        <Button
+                          onClick={handleSave}
+                          disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
+                        >
                           {isSaving ? 'Saving…' : 'Save Changes'}
                         </Button>
                       </div>
                     </div>
                   )}
-                  {isEditing && saveError && <p className="text-sm text-red-600">{saveError}</p>}
+                  {isEditing && summaryErrorMessage ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                          <p className="font-medium">Save blocked</p>
+                          <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -1167,34 +1668,61 @@ export const SimulationDetailsView = ({
 
         {/* OUTPUTS TAB */}
         <TabsContent value="outputs" className="space-y-6">
-          <SimulationPathCard
-            kind="output"
-            title="Output Paths"
-            description="These are the primary output files generated by the simulation."
-            paths={outputArtifacts}
-            emptyText="No output paths available."
-          />
-          <SimulationPathCard
-            kind="archive"
-            title="Archive Paths"
-            description="These paths contain archived data files from the simulation."
-            paths={archiveArtifacts}
-            emptyText="No archive artifacts available."
-          />
-          <SimulationPathCard
-            kind="run_script"
-            title="Run Script Paths"
-            description="Scripts used to run the simulation."
-            paths={runScriptArtifacts}
-            emptyText="No run script artifacts available."
-          />
-          <SimulationPathCard
-            kind="postprocessing_script"
-            title="Post-processing Script Paths"
-            description="Scripts used after the main run to transform or analyze outputs."
-            paths={postprocessingScriptArtifacts}
-            emptyText="No post-processing script artifacts available."
-          />
+          {isEditing ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Artifacts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EditableResourceList
+                  title="Saved Artifacts"
+                  description="Manage output, archive, run script, and post-processing artifact paths or URIs."
+                  items={artifactRows}
+                  kindOptions={ARTIFACT_KIND_OPTIONS}
+                  valueLabel="Path or URI"
+                  valuePlaceholder="/path/to/resource or s3://bucket/object"
+                  addLabel="Add artifact"
+                  onAdd={addArtifactRow}
+                  onKindChange={(index, kind) => updateArtifactRow(index, { kind })}
+                  onLabelChange={(index, value) => updateArtifactRow(index, { label: value })}
+                  onValueChange={(index, value) => updateArtifactRow(index, { value })}
+                  onRemove={removeArtifactRow}
+                  rowErrors={combinedRowErrors.artifacts}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <SimulationPathCard
+                kind="output"
+                title="Output Paths"
+                description="These are the primary output files generated by the simulation."
+                paths={outputArtifacts}
+                emptyText="No output paths available."
+              />
+              <SimulationPathCard
+                kind="archive"
+                title="Archive Paths"
+                description="These paths contain archived data files from the simulation."
+                paths={archiveArtifacts}
+                emptyText="No archive artifacts available."
+              />
+              <SimulationPathCard
+                kind="run_script"
+                title="Run Script Paths"
+                description="Scripts used to run the simulation."
+                paths={runScriptArtifacts}
+                emptyText="No run script artifacts available."
+              />
+              <SimulationPathCard
+                kind="postprocessing_script"
+                title="Post-processing Script Paths"
+                description="Scripts used after the main run to transform or analyze outputs."
+                paths={postprocessingScriptArtifacts}
+                emptyText="No post-processing script artifacts available."
+              />
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

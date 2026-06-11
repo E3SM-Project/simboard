@@ -153,7 +153,10 @@ export const SIMULATION_EDITABLE_FIELDS = [
 
 export type SimulationEditableField = (typeof SIMULATION_EDITABLE_FIELDS)[number];
 
-export type SimulationUpdate = Partial<Pick<SimulationCreate, SimulationEditableField>>;
+export interface SimulationUpdate extends Partial<Pick<SimulationCreate, SimulationEditableField>> {
+  artifacts?: ArtifactIn[];
+  links?: ExternalLinkIn[];
+}
 
 // Extends SimulationCreate with optional fields for file paths.
 export interface SimulationCreateForm extends SimulationCreate {
