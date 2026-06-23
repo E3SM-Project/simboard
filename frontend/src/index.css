@@ -79,6 +79,18 @@
 }
 
 @layer components {
+  .simboard-markdown-content ul:has(> li > input[type='checkbox']) {
+    @apply ml-0 list-none pl-0;
+  }
+
+  .simboard-markdown-content li:has(> input[type='checkbox']) {
+    @apply list-none pl-0;
+  }
+
+  .simboard-markdown-content input[type='checkbox'] {
+    @apply mr-2 align-middle;
+  }
+
   .sb-mdxeditor-shell {
     @apply overflow-hidden;
   }
@@ -135,6 +147,27 @@
 
   .sb-mdxeditor-content li {
     @apply pl-1;
+  }
+
+  .sb-mdxeditor-content ul:has(> li[class*='_listItemUnchecked_']),
+  .sb-mdxeditor-content ul:has(> li[class*='_listItemChecked_']) {
+    margin-left: 0;
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .sb-mdxeditor-content li[class*='_listItemUnchecked_'],
+  .sb-mdxeditor-content li[class*='_listItemChecked_'] {
+    margin-left: 0;
+    margin-inline-start: 0;
+    padding-left: 1.5rem;
+    padding-right: 0;
+    list-style: none;
+  }
+
+  .sb-mdxeditor-content li[class*='_listItemUnchecked_']::marker,
+  .sb-mdxeditor-content li[class*='_listItemChecked_']::marker {
+    content: '';
   }
 
   .sb-mdxeditor-content a {
