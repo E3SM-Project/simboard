@@ -77,3 +77,148 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .simboard-markdown-content ul:has(> li > input[type='checkbox']) {
+    @apply ml-0 list-none pl-0;
+  }
+
+  .simboard-markdown-content li:has(> input[type='checkbox']) {
+    @apply list-none pl-0;
+  }
+
+  .simboard-markdown-content input[type='checkbox'] {
+    @apply mr-2 align-middle;
+  }
+
+  .sb-mdxeditor-shell {
+    @apply overflow-hidden;
+  }
+
+  .sb-mdxeditor {
+    @apply bg-background text-foreground;
+  }
+
+  .sb-mdxeditor-toolbar {
+    @apply flex flex-wrap gap-1 border-b border-border bg-muted/20 px-2 py-1;
+  }
+
+  .sb-mdxeditor-content {
+    @apply px-3 py-2 text-sm leading-6 text-foreground outline-none;
+    min-height: inherit;
+  }
+
+  .sb-mdxeditor-content h1 {
+    @apply mt-1 text-xl font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h2 {
+    @apply mt-1 text-lg font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h3 {
+    @apply mt-1 text-base font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h4 {
+    @apply mt-1 text-sm font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content p {
+    @apply leading-6;
+  }
+
+  .sb-mdxeditor-content p + p,
+  .sb-mdxeditor-content p + ul,
+  .sb-mdxeditor-content p + ol,
+  .sb-mdxeditor-content p + blockquote,
+  .sb-mdxeditor-content p + pre,
+  .sb-mdxeditor-content p + table {
+    @apply mt-3;
+  }
+
+  .sb-mdxeditor-content ul {
+    @apply ml-5 list-disc space-y-1;
+  }
+
+  .sb-mdxeditor-content ol {
+    @apply ml-5 list-decimal space-y-1;
+  }
+
+  .sb-mdxeditor-content li {
+    @apply pl-1;
+  }
+
+  .sb-mdxeditor-content ul:has(> li[class*='_listItemUnchecked_']),
+  .sb-mdxeditor-content ul:has(> li[class*='_listItemChecked_']) {
+    margin-left: 0;
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .sb-mdxeditor-content li[class*='_listItemUnchecked_'],
+  .sb-mdxeditor-content li[class*='_listItemChecked_'] {
+    margin-left: 0;
+    margin-inline-start: 0;
+    padding-left: 1.5rem;
+    padding-right: 0;
+    list-style: none;
+  }
+
+  .sb-mdxeditor-content li[class*='_listItemUnchecked_']::marker,
+  .sb-mdxeditor-content li[class*='_listItemChecked_']::marker {
+    content: '';
+  }
+
+  .sb-mdxeditor-content a {
+    @apply font-medium text-blue-600 underline underline-offset-4;
+  }
+
+  .sb-mdxeditor-content code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em];
+  }
+
+  .sb-mdxeditor .cm-editor,
+  .sb-mdxeditor .cm-scroller,
+  .sb-mdxeditor [contenteditable='true'] {
+    min-height: inherit;
+  }
+
+  .sb-mdxeditor .cm-editor,
+  .sb-mdxeditor .cm-scroller,
+  .sb-mdxeditor .cm-content {
+    @apply text-sm;
+  }
+
+  .sb-mdxeditor .cm-editor {
+    @apply border-0;
+  }
+
+  .sb-mdxeditor :is([contenteditable='true'], .cm-editor) {
+    @apply bg-background;
+  }
+
+  .sb-mdxeditor table {
+    @apply my-4 w-full border-collapse text-left text-sm;
+  }
+
+  .sb-mdxeditor th {
+    @apply border border-border bg-muted/40 px-3 py-2 font-semibold;
+  }
+
+  .sb-mdxeditor td {
+    @apply border border-border px-3 py-2 align-top;
+  }
+
+  .sb-mdxeditor blockquote {
+    @apply border-l-2 border-border/80 pl-4 italic text-muted-foreground;
+  }
+
+  .sb-mdxeditor pre {
+    @apply overflow-x-auto rounded-md bg-slate-950 px-3 py-2 text-sm text-slate-50;
+  }
+
+  .sb-mdxeditor hr {
+    @apply my-4 border-border;
+  }
+}

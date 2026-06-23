@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, ChevronDown, CircleHelp, Plus, Trash2 } from 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { MarkdownContent } from '@/components/shared/MarkdownContent';
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import {
   SimulationSummaryLauncher,
@@ -129,17 +131,6 @@ const UserDisplay = ({
   if (fallbackId) return <span className="text-sm">by {fallbackId}</span>;
   return null;
 };
-
-const ReadonlyTextBlock = ({ value, className }: { value?: string | null; className?: string }) => (
-  <div
-    className={cn(
-      'min-h-[80px] whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-sm break-words',
-      className,
-    )}
-  >
-    {value?.trim() ? value : '—'}
-  </div>
-);
 
 type ResourceKindOption<TKind extends string> = {
   value: TKind;
@@ -964,17 +955,20 @@ export const SimulationDetailsView = ({
                     </FieldRow>
                     {(isEditing || simulation.description) && (
                       <div className="pt-2">
-                        <Label className="mb-1 block text-xs text-muted-foreground">
-                          Description
-                        </Label>
                         {isEditing ? (
-                          <Textarea
+                          <MarkdownEditorField
+                            label="Description"
                             value={formState.description}
-                            onChange={(event) => updateField('description', event.target.value)}
-                            className="min-h-[120px]"
+                            onChange={(value) => updateField('description', value)}
+                            placeholder="Add description..."
                           />
                         ) : (
-                          <ReadonlyTextBlock value={simulation.description} />
+                          <>
+                            <Label className="mb-1 block text-xs text-muted-foreground">
+                              Description
+                            </Label>
+                            <MarkdownContent content={simulation.description} />
+                          </>
                         )}
                       </div>
                     )}
@@ -1260,33 +1254,39 @@ export const SimulationDetailsView = ({
                   <CardContent className="space-y-4">
                     {(isEditing || simulation.keyFeatures) && (
                       <div>
-                        <Label className="mb-1 block text-xs text-muted-foreground">
-                          Key Features
-                        </Label>
                         {isEditing ? (
-                          <Textarea
+                          <MarkdownEditorField
+                            label="Key Features"
                             value={formState.keyFeatures}
-                            onChange={(event) => updateField('keyFeatures', event.target.value)}
-                            className="min-h-[120px]"
+                            onChange={(value) => updateField('keyFeatures', value)}
+                            placeholder="Add key features..."
                           />
                         ) : (
-                          <ReadonlyTextBlock value={simulation.keyFeatures} />
+                          <>
+                            <Label className="mb-1 block text-xs text-muted-foreground">
+                              Key Features
+                            </Label>
+                            <MarkdownContent content={simulation.keyFeatures} />
+                          </>
                         )}
                       </div>
                     )}
                     {(isEditing || simulation.knownIssues) && (
                       <div>
-                        <Label className="mb-1 block text-xs text-muted-foreground">
-                          Known Issues
-                        </Label>
                         {isEditing ? (
-                          <Textarea
+                          <MarkdownEditorField
+                            label="Known Issues"
                             value={formState.knownIssues}
-                            onChange={(event) => updateField('knownIssues', event.target.value)}
-                            className="min-h-[120px]"
+                            onChange={(value) => updateField('knownIssues', value)}
+                            placeholder="Add known issues..."
                           />
                         ) : (
-                          <ReadonlyTextBlock value={simulation.knownIssues} />
+                          <>
+                            <Label className="mb-1 block text-xs text-muted-foreground">
+                              Known Issues
+                            </Label>
+                            <MarkdownContent content={simulation.knownIssues} />
+                          </>
                         )}
                       </div>
                     )}
@@ -1558,14 +1558,15 @@ export const SimulationDetailsView = ({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {isEditing ? (
-                    <Textarea
-                      placeholder="Add notes..."
+                    <MarkdownEditorField
+                      label="Notes"
                       value={formState.notesMarkdown}
-                      onChange={(event) => updateField('notesMarkdown', event.target.value)}
-                      className="min-h-[160px]"
+                      onChange={(value) => updateField('notesMarkdown', value)}
+                      placeholder="Add notes..."
+                      minHeightClassName="min-h-[160px]"
                     />
                   ) : (
-                    <ReadonlyTextBlock value={simulation.notesMarkdown} className="min-h-[160px]" />
+                    <MarkdownContent content={simulation.notesMarkdown} className="min-h-[160px]" />
                   )}
                   {!canEdit && (
                     <p className="text-xs text-muted-foreground">
