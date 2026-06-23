@@ -96,6 +96,55 @@
     min-height: inherit;
   }
 
+  .sb-mdxeditor-content h1 {
+    @apply mt-1 text-xl font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h2 {
+    @apply mt-1 text-lg font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h3 {
+    @apply mt-1 text-base font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content h4 {
+    @apply mt-1 text-sm font-semibold tracking-tight;
+  }
+
+  .sb-mdxeditor-content p {
+    @apply leading-6;
+  }
+
+  .sb-mdxeditor-content p + p,
+  .sb-mdxeditor-content p + ul,
+  .sb-mdxeditor-content p + ol,
+  .sb-mdxeditor-content p + blockquote,
+  .sb-mdxeditor-content p + pre,
+  .sb-mdxeditor-content p + table {
+    @apply mt-3;
+  }
+
+  .sb-mdxeditor-content ul {
+    @apply ml-5 list-disc space-y-1;
+  }
+
+  .sb-mdxeditor-content ol {
+    @apply ml-5 list-decimal space-y-1;
+  }
+
+  .sb-mdxeditor-content li {
+    @apply pl-1;
+  }
+
+  .sb-mdxeditor-content a {
+    @apply font-medium text-blue-600 underline underline-offset-4;
+  }
+
+  .sb-mdxeditor-content code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em];
+  }
+
   .sb-mdxeditor .cm-editor,
   .sb-mdxeditor .cm-scroller,
   .sb-mdxeditor [contenteditable='true'] {
