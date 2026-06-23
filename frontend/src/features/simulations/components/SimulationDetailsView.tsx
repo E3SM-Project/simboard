@@ -22,6 +22,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import {
   SimulationSummaryLauncher,
@@ -531,62 +532,6 @@ const buildUpdatePayload = (
   return payload;
 };
 
-const MARKDOWN_PREVIEW_EMPTY_STATE = 'Nothing to preview yet.';
-
-const MarkdownFieldEditor = ({
-  label,
-  value,
-  onChange,
-  placeholder,
-  className,
-  minHeightClassName = 'min-h-[120px]',
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  className?: string;
-  minHeightClassName?: string;
-}) => {
-  const [mode, setMode] = useState<'write' | 'preview'>('write');
-
-  return (
-    <div className={className}>
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <Label className="block text-xs text-muted-foreground">{label}</Label>
-        <span className="text-xs text-muted-foreground">
-          Markdown supported: headings, lists, links, code.
-        </span>
-      </div>
-      <Tabs value={mode} onValueChange={(nextValue) => setMode(nextValue as 'write' | 'preview')}>
-        <TabsList className="h-8">
-          <TabsTrigger value="write" className="px-2 py-1 text-xs">
-            Write
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="px-2 py-1 text-xs">
-            Preview
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="write" className="mt-2">
-          <Textarea
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={placeholder}
-            className={minHeightClassName}
-          />
-        </TabsContent>
-        <TabsContent value="preview" className="mt-2">
-          <MarkdownContent
-            content={value}
-            placeholder={MARKDOWN_PREVIEW_EMPTY_STATE}
-            className={minHeightClassName}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-};
-
 // -------------------- View Component --------------------
 export const SimulationDetailsView = ({
   simulation,
@@ -1011,7 +956,7 @@ export const SimulationDetailsView = ({
                     {(isEditing || simulation.description) && (
                       <div className="pt-2">
                         {isEditing ? (
-                          <MarkdownFieldEditor
+                          <MarkdownEditorField
                             label="Description"
                             value={formState.description}
                             onChange={(value) => updateField('description', value)}
@@ -1310,7 +1255,7 @@ export const SimulationDetailsView = ({
                     {(isEditing || simulation.keyFeatures) && (
                       <div>
                         {isEditing ? (
-                          <MarkdownFieldEditor
+                          <MarkdownEditorField
                             label="Key Features"
                             value={formState.keyFeatures}
                             onChange={(value) => updateField('keyFeatures', value)}
@@ -1329,7 +1274,7 @@ export const SimulationDetailsView = ({
                     {(isEditing || simulation.knownIssues) && (
                       <div>
                         {isEditing ? (
-                          <MarkdownFieldEditor
+                          <MarkdownEditorField
                             label="Known Issues"
                             value={formState.knownIssues}
                             onChange={(value) => updateField('knownIssues', value)}
@@ -1613,7 +1558,7 @@ export const SimulationDetailsView = ({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {isEditing ? (
-                    <MarkdownFieldEditor
+                    <MarkdownEditorField
                       label="Notes"
                       value={formState.notesMarkdown}
                       onChange={(value) => updateField('notesMarkdown', value)}
