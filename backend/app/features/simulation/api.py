@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import distinct
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
@@ -23,6 +24,42 @@ from app.features.user.models import User
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
+
+
+def _normalize_hpc_username(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    return normalized
+
+
+def _validate_simulation_case_identity(
+    *,
+    case: Case,
+    machine_id: UUID,
+    hpc_username: str | None,
+) -> str:
+    if machine_id != case.machine_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=("Simulation machine_id must match selected case identity."),
+        )
+
+    normalized_hpc_username = _normalize_hpc_username(hpc_username)
+    if normalized_hpc_username is None:
+        return case.hpc_username
+
+    if normalized_hpc_username != case.hpc_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=("Simulation hpc_username must match selected case identity."),
+        )
+
+    return case.hpc_username
 
 
 @case_router.get(
@@ -85,7 +122,7 @@ def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
     list[str]
         Alphabetically sorted case names.
     """
-    names = db.query(Case.name).order_by(Case.name).all()
+    names = db.query(distinct(Case.name)).order_by(Case.name).all()
 
     return [n[0] for n in names]
 
@@ -158,12 +195,19 @@ def create_simulation(
             detail=f"Case '{payload.case_id}' not found.",
         )
 
+    validated_hpc_username = _validate_simulation_case_identity(
+        case=case,
+        machine_id=payload.machine_id,
+        hpc_username=payload.hpc_username,
+    )
+
     sim = Simulation(
         **payload.model_dump(
             by_alias=False,
             exclude={"artifacts", "links"},
             exclude_unset=True,
         ),
+        hpc_username=validated_hpc_username,
         created_by=user.id,
         last_updated_by=user.id,
         created_at=now,
@@ -306,6 +350,13 @@ def update_simulation(
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
     updates.pop("artifacts", None)
     updates.pop("links", None)
+
+    if "hpc_username" in payload.model_fields_set:
+        updates["hpc_username"] = _validate_simulation_case_identity(
+            case=sim.case,
+            machine_id=sim.machine_id,
+            hpc_username=payload.hpc_username,
+        )
 
     for field, value in updates.items():
         setattr(sim, field, value)

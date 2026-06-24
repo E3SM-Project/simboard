@@ -23,6 +23,8 @@ logger = _setup_custom_logger(__name__)
 _STRING_ADAPTER = TypeAdapter(str)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
+UNKNOWN_HPC_USERNAME = "__unknown__"
+CaseIdentity = tuple[str, UUID, str]
 
 
 @dataclass
@@ -89,10 +91,11 @@ def ingest_archive(
     db: Session,
     *,
     strict_validation: bool = False,
+    hpc_username: str | None = None,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    - Case lookup/creation is done by ``case_name`` from timing files.
+    - Case lookup/creation is done by ``case_name`` + machine + HPC username.
     - Duplicate detection is based on ``execution_id`` uniqueness.
     - CASE_HASH is preserved as per-execution metadata for grouping.
 
@@ -136,7 +139,7 @@ def ingest_archive(
     simulations: list[SimulationCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
-    case_hash_cache: dict[str, str] = {}
+    case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
 
     for parsed_simulation in parsed_simulations:
@@ -146,6 +149,7 @@ def ingest_archive(
                 db=db,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
+                request_hpc_username=hpc_username,
             )
 
             if is_duplicate:
@@ -185,8 +189,9 @@ def ingest_archive(
 def _process_simulation_for_ingest(
     parsed_simulation: ParsedSimulation,
     db: Session,
-    case_hash_cache: dict[str, str],
+    case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
+    request_hpc_username: str | None = None,
 ) -> tuple[SimulationCreate | None, bool]:
     """Process one parsed simulation entry.
 
@@ -206,12 +211,26 @@ def _process_simulation_for_ingest(
     execution_id = parsed_simulation.execution_id
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
+    resolved_hpc_username = _resolve_case_hpc_username(
+        parsed_simulation,
+        request_hpc_username,
+    )
 
     if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
         return None, True
 
-    prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
-    case = _resolve_case(parsed_simulation, case_name, db)
+    prevalidated_draft = _prevalidate_simulation_create(
+        parsed_simulation,
+        machine_id,
+        resolved_hpc_username,
+    )
+    case = _resolve_case(
+        parsed_simulation,
+        case_name,
+        machine_id,
+        resolved_hpc_username,
+        db,
+    )
     _track_case_hash_grouping(
         parsed_simulation=parsed_simulation,
         case=case,
@@ -232,7 +251,7 @@ def _process_simulation_for_ingest(
 def _track_case_hash_grouping(
     parsed_simulation: ParsedSimulation,
     case: Case,
-    case_hash_cache: dict[str, str],
+    case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     db: Session,
 ) -> None:
@@ -248,10 +267,10 @@ def _track_case_hash_grouping(
         db=db,
     )
     if known_hash is None:
-        case_hash_cache.setdefault(case.name, current_hash)
+        case_hash_cache.setdefault(_case_identity_key(case), current_hash)
         return
 
-    case_hash_cache.setdefault(case.name, known_hash)
+    case_hash_cache.setdefault(_case_identity_key(case), known_hash)
     if known_hash == current_hash:
         return
 
@@ -267,7 +286,7 @@ def _track_case_hash_grouping(
 
 def _get_known_case_hash(
     case: Case,
-    case_hash_cache: dict[str, str],
+    case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     db: Session,
 ) -> str | None:
@@ -285,13 +304,13 @@ def _get_known_case_hash(
         )
         persisted_case_hash_cache[case.id] = known_hash
         if known_hash is not None:
-            case_hash_cache.setdefault(case.name, known_hash)
+            case_hash_cache.setdefault(_case_identity_key(case), known_hash)
 
     known_hash = persisted_case_hash_cache[case.id]
     if known_hash is not None:
         return known_hash
 
-    return case_hash_cache.get(case.name)
+    return case_hash_cache.get(_case_identity_key(case))
 
 
 def _require_case_name(parsed_simulation: ParsedSimulation) -> str:
@@ -308,12 +327,22 @@ def _require_case_name(parsed_simulation: ParsedSimulation) -> str:
 
 
 def _resolve_case(
-    parsed_simulation: ParsedSimulation, case_name: str, db: Session
+    parsed_simulation: ParsedSimulation,
+    case_name: str,
+    machine_id: UUID,
+    hpc_username: str,
+    db: Session,
 ) -> Case:
     """Resolve or create the Case for the current metadata row."""
     case_group = parsed_simulation.case_group
 
-    result = _get_or_create_case(db, name=case_name, case_group=case_group)
+    result = _get_or_create_case(
+        db,
+        name=case_name,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+        case_group=case_group,
+    )
 
     return result
 
@@ -441,12 +470,14 @@ def _normalize_path_candidate(path_value: str | None) -> str | None:
 def _prevalidate_simulation_create(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
+    hpc_username: str,
 ) -> SimulationCreateDraft:
     """Build and validate non-case simulation fields before creating a new case."""
     draft = _build_simulation_create_draft(
         parsed_simulation=parsed_simulation,
         machine_id=machine_id,
         case_id=None,
+        hpc_username=hpc_username,
     )
 
     _validate_pre_case_draft(draft)
@@ -472,8 +503,14 @@ def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
         _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
 
 
-def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -> Case:
-    """Get or create a Case record by case name.
+def _get_or_create_case(
+    db: Session,
+    name: str,
+    machine_id: UUID,
+    hpc_username: str,
+    case_group: str | None = None,
+) -> Case:
+    """Get or create a Case record by normalized identity.
 
     Parameters
     ----------
@@ -481,7 +518,10 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
         Active database session.
     name : str
         Case name derived from the execution (e.g. from timing files).
-        Used as the stable identity for case grouping.
+    machine_id : UUID
+        Resolved machine identifier for the execution.
+    hpc_username : str
+        Resolved HPC username for the execution.
     case_group : str | None
         Optional CASE_GROUP from env_case.xml.  Stored on ``Case``
         if present.  An existing non-null value is never overwritten
@@ -493,13 +533,26 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
     Case
         The existing or newly created Case object.
     """
-    case = db.query(Case).filter(Case.name == name).first()
+    case = (
+        db.query(Case)
+        .filter(
+            Case.name == name,
+            Case.machine_id == machine_id,
+            Case.hpc_username == hpc_username,
+        )
+        .first()
+    )
 
     if not case:
-        case = Case(name=name, case_group=case_group)
+        case = Case(
+            name=name,
+            machine_id=machine_id,
+            hpc_username=hpc_username,
+            case_group=case_group,
+        )
         db.add(case)
         db.flush()
-        logger.info(f"Created new Case: {name}")
+        logger.info("Created new Case: %s [%s, %s]", name, machine_id, hpc_username)
     elif case_group is not None:
         if case.case_group is None:
             case.case_group = case_group
@@ -512,6 +565,39 @@ def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -
             )
 
     return case
+
+
+def _case_identity_key(case: Case) -> CaseIdentity:
+    return (case.name, case.machine_id, case.hpc_username)
+
+
+def _normalize_hpc_username(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    return normalized
+
+
+def _resolve_case_hpc_username(
+    parsed_simulation: ParsedSimulation,
+    request_hpc_username: str | None,
+) -> str:
+    resolved_hpc_username = _normalize_hpc_username(parsed_simulation.hpc_username)
+    if resolved_hpc_username is not None:
+        return resolved_hpc_username
+
+    request_hpc_username = _normalize_hpc_username(request_hpc_username)
+    if request_hpc_username is not None:
+        return request_hpc_username
+
+    raise ValueError(
+        f"hpc_username is required but missing from '{parsed_simulation.execution_dir}'. "
+        "Provide it in parsed metadata or request payload."
+    )
 
 
 def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
@@ -619,6 +705,7 @@ def _build_simulation_create_draft(
     parsed_simulation: ParsedSimulation,
     machine_id: UUID,
     case_id: UUID | None,
+    hpc_username: str,
 ) -> SimulationCreateDraft:
     """Build a normalized internal draft for ``SimulationCreate`` validation.
 
@@ -672,7 +759,7 @@ def _build_simulation_create_draft(
         git_commit_hash=parsed_simulation.git_commit_hash,
         created_by=None,
         last_updated_by=None,
-        hpc_username=parsed_simulation.hpc_username,
+        hpc_username=hpc_username,
         case_hash=parsed_simulation.case_hash,
     )
 

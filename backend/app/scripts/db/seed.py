@@ -44,6 +44,7 @@ if env == "production":
 
 DEV_EMAIL = f"simboard-dev@{settings.domain}"
 DEV_OAUTH_PROVIDER = "github"
+DEV_HPC_USERNAME = "simboard-dev"
 
 
 # --------------------------------------------------------------------
@@ -162,8 +163,15 @@ def seed_from_json(db: Session, json_path: str):
         if not simulations_data:
             raise ValueError(f"No simulations for case '{case_name}'")
 
+        case_machine = _resolve_seed_case_machine(db, simulations_data, case_name)
+
         # Create the Case record
-        case = Case(name=case_name, case_group=case_group)
+        case = Case(
+            name=case_name,
+            machine_id=case_machine.id,
+            hpc_username=DEV_HPC_USERNAME,
+            case_group=case_group,
+        )
         db.add(case)
         db.flush()
 
@@ -186,6 +194,37 @@ def _parse_datetime(value):
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except Exception:
         return None
+
+
+def _resolve_seed_case_machine(
+    db: Session, simulations_data: list[dict], case_name: str
+) -> Machine:
+    first_simulation = simulations_data[0]
+    machine_name = first_simulation.get("machine", {}).get("name")
+    if not machine_name:
+        raise ValueError(
+            f"Missing 'machine.name' in first simulation entry for case '{case_name}'"
+        )
+
+    machine = db.query(Machine).filter(Machine.name == machine_name).one_or_none()
+    if not machine:
+        raise ValueError(
+            f"No machine found in DB with name '{machine_name}' for case '{case_name}'"
+        )
+
+    for sim_entry in simulations_data[1:]:
+        current_machine_name = sim_entry.get("machine", {}).get("name")
+        if not current_machine_name:
+            raise ValueError(
+                f"Missing 'machine.name' in simulation entry for case '{case_name}'"
+            )
+        if current_machine_name != machine_name:
+            raise ValueError(
+                f"Seed case '{case_name}' mixes machines '{machine_name}' and "
+                f"'{current_machine_name}', which is not allowed for normalized case identity"
+            )
+
+    return machine
 
 
 def _seed_simulation(

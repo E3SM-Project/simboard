@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -34,10 +34,24 @@ class Case(Base, IDMixin, TimestampMixin):
 
     __tablename__ = "cases"
 
-    name: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "machine_id",
+            "hpc_username",
+            name="uq_cases_name_machine_id_hpc_username",
+        ),
+    )
+
+    name: Mapped[str] = mapped_column(Text, index=True)
+    machine_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("machines.id"), index=True, nullable=False
+    )
+    hpc_username: Mapped[str] = mapped_column(String(200), nullable=False)
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
 
     # Relationships
+    machine: Mapped[Machine] = relationship("Machine", foreign_keys=[machine_id])
     simulations: Mapped[list[Simulation]] = relationship(
         "Simulation",
         back_populates="case",

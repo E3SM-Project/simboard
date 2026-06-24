@@ -16,7 +16,10 @@ from app.features.simulation.models import Artifact, Case, ExternalLink, Simulat
 
 
 def _create_case(db: Session, name: str = "assistant_case") -> Case:
-    case = Case(name=name)
+    machine = db.query(Machine).first()
+    assert machine is not None
+
+    case = Case(name=name, machine_id=machine.id, hpc_username="assistant-user")
     db.add(case)
     db.flush()
     return case

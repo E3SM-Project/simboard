@@ -74,7 +74,11 @@ class TestIngestionWithAPIToken:
         db.add(machine)
         db.flush()
 
-        case = Case(name="state-token-case")
+        case = Case(
+            name="state-token-case",
+            machine_id=machine.id,
+            hpc_username="token-user",
+        )
         db.add(case)
         db.flush()
 
@@ -383,7 +387,11 @@ class TestIngestionWithAPIToken:
         db.commit()
 
         # Create a case for the test simulation
-        case = Case(name="test_case")
+        case = Case(
+            name="test_case",
+            machine_id=machine.id,
+            hpc_username="token-user",
+        )
         db.add(case)
         db.flush()
         db.commit()

@@ -104,6 +104,7 @@ def ingest_from_path(
             archive_path=str(archive_path),
             output_dir=tmpdir,
             db=db,
+            hpc_username=payload.hpc_username,
         )
 
     response = _process_ingestion(
@@ -186,6 +187,7 @@ def ingest_from_upload(
                 output_dir=tmpdir,
                 db=db,
                 strict_validation=True,
+                hpc_username=hpc_username,
             )
 
         if ingest_result.errors:
@@ -295,6 +297,7 @@ def ingest_from_hpc_upload(
                 archive_path=str(archive_path),
                 output_dir=tmpdir,
                 db=db,
+                hpc_username=payload.hpc_username,
             )
 
         _validate_single_case_upload_ingest_result(ingest_result, payload.case_path)
@@ -526,6 +529,7 @@ def _run_ingest_archive(
     db: Session,
     *,
     strict_validation: bool = False,
+    hpc_username: str | None = None,
 ) -> IngestArchiveResult:
     try:
         return ingest_archive(
@@ -533,6 +537,7 @@ def _run_ingest_archive(
             output_dir=output_dir,
             db=db,
             strict_validation=strict_validation,
+            hpc_username=hpc_username,
         )
     except ArchiveValidationError as exc:
         _raise_archive_validation_error(exc.errors)
@@ -714,7 +719,7 @@ def _persist_simulations(
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
 
-        if hpc_username is not None:
+        if data.get("hpc_username") is None and hpc_username is not None:
             data["hpc_username"] = hpc_username
 
         sim = Simulation(

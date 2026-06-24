@@ -48,7 +48,9 @@ def _parsed_simulations_from_mapping(
                 case_name=metadata.get("case_name"),
                 case_group=metadata.get("case_group"),
                 machine=metadata.get("machine"),
-                hpc_username=metadata.get("hpc_username") or metadata.get("user"),
+                hpc_username=metadata.get("hpc_username")
+                or metadata.get("user")
+                or "test-user",
                 compset=metadata.get("compset"),
                 compset_alias=metadata.get("compset_alias"),
                 grid_name=metadata.get("grid_name"),
@@ -87,6 +89,25 @@ def _require_execution_id(
         )
 
     return execution_id
+
+
+def _create_case(
+    db: Session,
+    *,
+    name: str,
+    machine: Machine,
+    hpc_username: str = "test-user",
+    case_group: str | None = None,
+) -> Case:
+    case = Case(
+        name=name,
+        machine_id=machine.id,
+        hpc_username=hpc_username,
+        case_group=case_group,
+    )
+    db.add(case)
+    db.flush()
+    return case
 
 
 class TestIngestArchive:
@@ -729,9 +750,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.flush()
 
         # Create a Case and Simulation directly in the database
-        case = Case(name="existing_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="existing_case", machine=machine)
 
         existing_sim = Simulation(
             case_id=case.id,
@@ -858,9 +877,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(ingestion)
         db.flush()
 
-        case = Case(name="existing_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="existing_case", machine=machine)
 
         existing_sim = Simulation(
             case_id=case.id,
@@ -946,9 +963,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(ingestion)
         db.flush()
 
-        case = Case(name="existing_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="existing_case", machine=machine)
 
         existing_sim = Simulation(
             case_id=case.id,
@@ -1404,6 +1419,7 @@ class TestCaseHashIngestion:
             "grid_name": "grid1",
             "grid_resolution": "0.9x1.25",
             "machine": machine,
+            "hpc_username": "test-user",
             "simulation_start_date": simulation_start_date,
             "initialization_type": "test",
             "simulation_type": "test_type",
@@ -1478,9 +1494,7 @@ class TestCaseHashIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="case1", machine=machine)
 
         sim = Simulation(
             case_id=case.id,
@@ -1545,9 +1559,7 @@ class TestCaseHashIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="case1", machine=machine)
 
         sim = Simulation(
             case_id=case.id,
@@ -1621,9 +1633,7 @@ class TestCaseHashIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="case1", machine=machine)
 
         sim = Simulation(
             case_id=case.id,
@@ -1692,9 +1702,7 @@ class TestCaseHashIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="case1", machine=machine)
 
         sim = Simulation(
             case_id=case.id,
@@ -1772,6 +1780,97 @@ class TestCaseHashIngestion:
         case = db.query(Case).filter(Case.name == "case1").first()
         assert case is not None
 
+    def test_same_case_name_and_same_identity_reuses_case(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081195.251218-200955": self._make_metadata(
+                execution_id="1081195.251218-200955",
+                case_name="case1",
+                machine=machine.name,
+                hpc_username="shared-user",
+            ),
+            "/path/to/1081196.251218-200956": self._make_metadata(
+                execution_id="1081196.251218-200956",
+                case_name="case1",
+                machine=machine.name,
+                hpc_username="shared-user",
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 2
+        assert len({simulation.case_id for simulation in result.simulations}) == 1
+
+    def test_same_case_name_and_different_hpc_username_splits_case(
+        self, db: Session
+    ) -> None:
+        machine = self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081195.251218-200955": self._make_metadata(
+                execution_id="1081195.251218-200955",
+                case_name="case1",
+                machine=machine.name,
+                hpc_username="user-one",
+            ),
+            "/path/to/1081196.251218-200956": self._make_metadata(
+                execution_id="1081196.251218-200956",
+                case_name="case1",
+                machine=machine.name,
+                hpc_username="user-two",
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 2
+        assert len({simulation.case_id for simulation in result.simulations}) == 2
+        assert db.query(Case).filter(Case.name == "case1").count() == 2
+
+    def test_same_case_name_and_different_machine_splits_case(
+        self, db: Session
+    ) -> None:
+        first_machine = self._create_machine(db, "test-machine")
+        second_machine = self._create_machine(db, "other-machine")
+
+        mock_simulations = {
+            "/path/to/1081195.251218-200955": self._make_metadata(
+                execution_id="1081195.251218-200955",
+                case_name="case1",
+                machine=first_machine.name,
+                hpc_username="shared-user",
+            ),
+            "/path/to/1081196.251218-200956": self._make_metadata(
+                execution_id="1081196.251218-200956",
+                case_name="case1",
+                machine=second_machine.name,
+                hpc_username="shared-user",
+                simulation_start_date="2020-06-01",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 2
+        assert len({simulation.case_id for simulation in result.simulations}) == 2
+        assert db.query(Case).filter(Case.name == "case1").count() == 2
+
     def test_case_hash_is_persisted_on_created_simulation(self, db: Session) -> None:
         """Parsed CASE_HASH should be preserved on created simulations."""
         self._create_machine(db, "test-machine")
@@ -1819,9 +1918,7 @@ class TestCaseHashIngestion:
         db.add(ingestion)
         db.commit()
 
-        case = Case(name="case1")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, name="case1", machine=machine)
 
         sim = Simulation(
             case_id=case.id,
@@ -1871,6 +1968,86 @@ class TestCaseHashIngestion:
         )
         assert db.query(Case).filter(Case.name == "case1").count() == 1
         assert any(
+            call.args and "Observed additional CASE_HASH for case '%s'" in call.args[0]
+            for call in mock_info.call_args_list
+        )
+
+    def test_case_hash_grouping_cache_is_scoped_to_normalized_case(
+        self, db: Session
+    ) -> None:
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        existing_case = _create_case(
+            db,
+            name="case1",
+            machine=machine,
+            hpc_username="user-one",
+        )
+
+        db.add(
+            Simulation(
+                case_id=existing_case.id,
+                execution_id="1081192.251218-200952",
+                case_hash="existing-hash",
+                compset="FHIST",
+                compset_alias="test_alias",
+                grid_name="grid1",
+                grid_resolution="0.9x1.25",
+                machine_id=machine.id,
+                simulation_start_date=datetime(2020, 1, 1),
+                initialization_type="test",
+                status=SimulationStatus.CREATED,
+                simulation_type=SimulationType.UNKNOWN,
+                created_by=user.id,
+                last_updated_by=user.id,
+                ingestion_id=ingestion.id,
+                hpc_username="user-one",
+            )
+        )
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081193.251218-200953": self._make_metadata(
+                execution_id="1081193.251218-200953",
+                case_name="case1",
+                machine=machine.name,
+                hpc_username="user-two",
+                simulation_start_date="2020-06-01",
+                case_hash="other-user-hash",
+            ),
+        }
+
+        with (
+            patch(
+                "app.features.ingestion.ingest.main_parser",
+                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            ),
+            patch("app.features.ingestion.ingest.logger.info") as mock_info,
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.simulations[0].case_hash == "other-user-hash"
+        assert result.simulations[0].case_id != existing_case.id
+        assert not any(
             call.args and "Observed additional CASE_HASH for case '%s'" in call.args[0]
             for call in mock_info.call_args_list
         )
@@ -1935,24 +2112,42 @@ class TestIngestHelpers:
         assert _normalize_path_candidate(value) is None
 
     def test_get_or_create_case_sets_missing_case_group(self, db: Session) -> None:
-        case = Case(name="case_group_test", case_group=None)
-        db.add(case)
+        machine = TestIngestArchive._create_machine(db, "case-group-machine")
+        case = _create_case(
+            db,
+            name="case_group_test",
+            machine=machine,
+            case_group=None,
+        )
         db.commit()
 
-        updated = _get_or_create_case(db, name="case_group_test", case_group="groupA")
+        updated = _get_or_create_case(
+            db,
+            name="case_group_test",
+            machine_id=machine.id,
+            hpc_username="test-user",
+            case_group="groupA",
+        )
 
         assert updated.id == case.id
         assert updated.case_group == "groupA"
 
     def test_get_or_create_case_keeps_existing_on_conflict(self, db: Session) -> None:
-        case = Case(name="case_group_conflict", case_group="groupA")
-        db.add(case)
+        machine = TestIngestArchive._create_machine(db, "case-group-conflict-machine")
+        case = _create_case(
+            db,
+            name="case_group_conflict",
+            machine=machine,
+            case_group="groupA",
+        )
         db.commit()
 
         with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
             updated = _get_or_create_case(
                 db,
                 name="case_group_conflict",
+                machine_id=machine.id,
+                hpc_username="test-user",
                 case_group="groupB",
             )
 
@@ -1960,15 +2155,41 @@ class TestIngestHelpers:
         assert updated.case_group == "groupA"
         mock_warning.assert_called_once()
 
+    def test_get_or_create_case_scopes_case_group_by_normalized_identity(
+        self, db: Session
+    ) -> None:
+        machine = TestIngestArchive._create_machine(db, "case-group-scope-machine")
+        existing = _create_case(
+            db,
+            name="case_group_scope",
+            machine=machine,
+            hpc_username="user-one",
+            case_group="groupA",
+        )
+        db.commit()
+
+        created = _get_or_create_case(
+            db,
+            name="case_group_scope",
+            machine_id=machine.id,
+            hpc_username="user-two",
+            case_group="groupB",
+        )
+
+        assert created.id != existing.id
+        assert created.case_group == "groupB"
+
     def test_get_known_case_hash_uses_persisted_cache_on_second_lookup(
         self,
     ) -> None:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_cache_case"
+        case.machine_id = uuid4()
+        case.hpc_username = "test-user"
 
         db = MagicMock(spec=Session)
-        case_hash_cache: dict[str, str] = {}
+        case_hash_cache: dict[tuple[str, UUID, str], str] = {}
         persisted_case_hash_cache: dict[UUID, str | None] = {case.id: "baseline-hash"}
 
         with patch.object(db, "query", side_effect=AssertionError):
@@ -2012,8 +2233,10 @@ class TestIngestHelpers:
         )
         case = MagicMock(spec=Case)
         case.name = "case_hash_case"
+        case.machine_id = uuid4()
+        case.hpc_username = "test-user"
 
-        case_hash_cache: dict[str, str] = {}
+        case_hash_cache: dict[tuple[str, UUID, str], str] = {}
 
         with (
             patch(
@@ -2030,7 +2253,9 @@ class TestIngestHelpers:
                 db=MagicMock(spec=Session),
             )
 
-        assert case_hash_cache == {"case_hash_case": "matching-hash"}
+        assert case_hash_cache == {
+            ("case_hash_case", case.machine_id, "test-user"): "matching-hash"
+        }
         mock_info.assert_not_called()
 
     def test_track_case_hash_grouping_uses_in_batch_hash_when_reference_hash_missing(
@@ -2091,8 +2316,10 @@ class TestIngestHelpers:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_case"
+        case.machine_id = uuid4()
+        case.hpc_username = "test-user"
 
-        case_hash_cache: dict[str, str] = {}
+        case_hash_cache: dict[tuple[str, UUID, str], str] = {}
         persisted_case_hash_cache: dict[UUID, str | None] = {}
 
         with (
@@ -2117,7 +2344,9 @@ class TestIngestHelpers:
                 db=MagicMock(spec=Session),
             )
 
-        assert case_hash_cache == {"case_hash_case": "first-hash"}
+        assert case_hash_cache == {
+            ("case_hash_case", case.machine_id, "test-user"): "first-hash"
+        }
         mock_info.assert_called_once()
 
     def test_simulation_create_draft_validates_by_field_name(self) -> None:
@@ -2190,6 +2419,7 @@ class TestIngestHelpers:
             parsed_simulation=parsed,
             machine_id=uuid4(),
             case_id=uuid4(),
+            hpc_username="test-user",
         )
 
         assert draft.simulation_type == SimulationType.UNKNOWN
