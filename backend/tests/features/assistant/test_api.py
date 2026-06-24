@@ -36,7 +36,10 @@ def authenticated_client(async_client: AsyncClient, normal_user):
 
 
 async def _create_case(db: AsyncSession, name: str = "assistant_api_case") -> Case:
-    case = Case(name=name)
+    machine = (await db.execute(select(Machine))).scalars().first()
+    assert machine is not None
+
+    case = Case(name=name, machine_id=machine.id, hpc_username="assistant-user")
     db.add(case)
     await db.flush()
     return case

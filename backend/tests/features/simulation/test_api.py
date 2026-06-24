@@ -12,7 +12,11 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import create_simulation, update_simulation
+from app.features.simulation.api import (
+    _validate_simulation_case_identity,
+    create_simulation,
+    update_simulation,
+)
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
@@ -59,7 +63,10 @@ def _override_current_user(
 
 def _create_case(db: Session, name: str = "test_case") -> Case:
     """Helper to create a Case."""
-    case = Case(name=name)
+    machine = db.query(Machine).first()
+    assert machine is not None
+
+    case = Case(name=name, machine_id=machine.id, hpc_username="test-user")
 
     db.add(case)
     db.flush()
@@ -257,6 +264,35 @@ class TestListCaseNames:
         assert res.status_code == 200
         assert res.json() == ["alpha_case", "beta_case", "zeta_case"]
 
+    def test_endpoint_returns_distinct_case_names_when_name_repeats(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        _create_case(db, "dup_case")
+        second_machine = Machine(
+            name="dup-case-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.flush()
+        db.add(
+            Case(
+                name="dup_case",
+                machine_id=second_machine.id,
+                hpc_username="other-user",
+            )
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == ["dup_case"]
+
 
 class TestGetCase:
     def test_endpoint_returns_case_with_simulations(
@@ -293,6 +329,7 @@ class TestGetCase:
             status="created",
             machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
+            hpc_username="case-user",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
@@ -307,7 +344,7 @@ class TestGetCase:
         assert data["name"] == "test_case_detail"
         assert len(data["simulations"]) == 1
         assert data["machineNames"] == [machine.name]
-        assert data["hpcUsernames"] == []
+        assert data["hpcUsernames"] == ["case-user"]
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
 
@@ -367,6 +404,22 @@ class TestCreateSimulation:
         assert len(data["artifacts"]) == 1
         assert len(data["links"]) == 1
 
+    def test_validate_case_identity_accepts_trimmed_hpc_username(
+        self, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_trimmed_hpc_username")
+
+        assert (
+            _validate_simulation_case_identity(
+                case=case,
+                machine_id=machine.id,
+                hpc_username="  test-user  ",
+            )
+            == "test-user"
+        )
+
     def test_endpoint_returns_400_when_case_not_found(
         self, client, db: Session
     ) -> None:
@@ -424,6 +477,96 @@ class TestCreateSimulation:
         assert "changeCount" not in data
         assert "runConfigDeltas" not in data
 
+    def test_endpoint_accepts_matching_case_hpc_username(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_create_matching_hpc")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200924",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "hpcUsername": "test-user",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+
+        assert res.status_code == 201
+        assert res.json()["hpcUsername"] == "test-user"
+
+    def test_endpoint_rejects_case_machine_mismatch(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_machine_mismatch")
+
+        second_machine = Machine(
+            name="test-case-machine-mismatch",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200924",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(second_machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+
+        assert res.status_code == 400
+        assert "machine_id must match selected case identity" in res.json()["detail"]
+
+    def test_endpoint_rejects_case_hpc_username_mismatch(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_hpc_mismatch")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200925",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "hpcUsername": "other-user",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+
+        assert res.status_code == 400
+        assert "hpc_username must match selected case identity" in res.json()["detail"]
+
     def test_create_simulation_raises_500_when_reload_fails(self) -> None:
         case_id = uuid4()
         machine_id = uuid4()
@@ -453,7 +596,12 @@ class TestCreateSimulation:
             role=UserRole.USER,
         )
 
-        case = Case(id=case_id, name="reload_fail_case")
+        case = Case(
+            id=case_id,
+            name="reload_fail_case",
+            machine_id=machine_id,
+            hpc_username="test-user",
+        )
 
         db = MagicMock(spec=Session)
         case_query = MagicMock()
@@ -657,9 +805,10 @@ class TestListSimulations:
         machine = db.query(Machine).first()
         assert machine is not None
 
-        case_g1 = Case(name="case_group1", case_group="ensemble_A")
-        case_g2 = Case(name="case_group2", case_group="ensemble_B")
-        db.add_all([case_g1, case_g2])
+        case_g1 = _create_case(db, "case_group1")
+        case_g1.case_group = "ensemble_A"
+        case_g2 = _create_case(db, "case_group2")
+        case_g2.case_group = "ensemble_B"
         db.flush()
 
         ingestion = Ingestion(
@@ -702,15 +851,101 @@ class TestListSimulations:
         assert len(data) == 1
         assert data[0]["caseGroup"] == "ensemble_A"
 
+    def test_filter_by_case_name_returns_simulations_across_normalized_cases(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        second_machine = Machine(
+            name="normalized-case-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.flush()
+
+        first_case = _create_case(db, "normalized_case")
+        second_case = Case(
+            name="normalized_case",
+            machine_id=second_machine.id,
+            hpc_username="other-user",
+        )
+        db.add(second_case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_normalized_case_name",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add_all(
+            [
+                Simulation(
+                    case_id=first_case.id,
+                    execution_id="normalized-exec-1",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    machine_id=machine.id,
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                ),
+                Simulation(
+                    case_id=second_case.id,
+                    execution_id="normalized-exec-2",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    machine_id=second_machine.id,
+                    simulation_start_date="2023-01-02T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                ),
+            ]
+        )
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/simulations", params={"case_name": "normalized_case"}
+        )
+        assert res.status_code == 200
+        assert {sim["executionId"] for sim in res.json()} == {
+            "normalized-exec-1",
+            "normalized-exec-2",
+        }
+
     def test_filter_by_case_name_and_case_group(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         machine = db.query(Machine).first()
         assert machine is not None
 
-        case = Case(name="combo_case", case_group="combo_group")
-        case_other = Case(name="other_case", case_group="combo_group")
-        db.add_all([case, case_other])
+        case = _create_case(db, "combo_case")
+        case.case_group = "combo_group"
+        case_other = _create_case(db, "other_case")
+        case_other.case_group = "combo_group"
         db.flush()
 
         ingestion = Ingestion(
@@ -1356,6 +1591,42 @@ class TestUpdateSimulation:
         res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
 
         assert res.status_code == 422
+
+    def test_endpoint_rejects_hpc_username_mismatch(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_hpc_identity")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_hpc_identity",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-hpc-identity",
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={"hpcUsername": "other-user"},
+        )
+
+        assert res.status_code == 400
+        assert "hpc_username must match selected case identity" in res.json()["detail"]
+
+        db.expire_all()
+        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        assert unchanged_sim.hpc_username == "old-user"
 
     def test_update_simulation_raises_500_when_reload_fails(self) -> None:
         sim_id = uuid4()

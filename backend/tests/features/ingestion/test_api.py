@@ -71,6 +71,29 @@ def fake_non_admin_user():
     )
 
 
+def _create_case(
+    db: Session,
+    name: str,
+    *,
+    machine: Machine | None = None,
+    hpc_username: str = "test-user",
+    case_group: str | None = None,
+) -> Case:
+    if machine is None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+    case = Case(
+        name=name,
+        machine_id=machine.id,
+        hpc_username=hpc_username,
+        case_group=case_group,
+    )
+    db.add(case)
+    db.flush()
+    return case
+
+
 class TestGetIngestionStateEndpoint:
     @staticmethod
     def _create_machine(db: Session, name: str) -> Machine:
@@ -100,9 +123,7 @@ class TestGetIngestionStateEndpoint:
         execution_id: str,
         case_name: str,
     ) -> None:
-        case = Case(name=case_name)
-        db.add(case)
-        db.flush()
+        case = _create_case(db, case_name, machine=machine)
 
         ingestion = Ingestion(
             source_type=source_type,
@@ -224,9 +245,7 @@ class TestGetIngestionStateEndpoint:
         machine = self._create_machine(db, "perlmutter")
         user_id = normal_user_sync["id"]
 
-        partial_case = Case(name="state_case_partial")
-        db.add(partial_case)
-        db.flush()
+        partial_case = _create_case(db, "state_case_partial", machine=machine)
 
         partial_ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_PATH,
@@ -292,9 +311,7 @@ class TestGetIngestionStateEndpoint:
         self, client, db: Session, normal_user_sync
     ) -> None:
         machine = self._create_machine(db, "perlmutter")
-        case = Case(name="legacy_state_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "legacy_state_case", machine=machine)
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_PATH,
@@ -342,9 +359,7 @@ class TestGetIngestionStateEndpoint:
         self, client, db: Session, normal_user_sync
     ) -> None:
         machine = self._create_machine(db, "perlmutter")
-        case = Case(name="legacy_hpc_upload_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "legacy_hpc_upload_case", machine=machine)
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_UPLOAD,
@@ -397,9 +412,7 @@ class TestGetIngestionStateEndpoint:
         legacy_case_count = 200
 
         for index in range(legacy_case_count):
-            case = Case(name=f"legacy_state_case_{index}")
-            db.add(case)
-            db.flush()
+            case = _create_case(db, f"legacy_state_case_{index}", machine=machine)
 
             ingestion = Ingestion(
                 source_type=IngestionSourceType.HPC_PATH,
@@ -504,9 +517,7 @@ class TestGetIngestionStateEndpoint:
             )
         )
 
-        blank_execution_case = Case(name="blank_execution_case")
-        db.add(blank_execution_case)
-        db.flush()
+        blank_execution_case = _create_case(db, "blank_execution_case", machine=machine)
 
         blank_execution_ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_PATH,
@@ -602,9 +613,7 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -665,10 +674,8 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case1 = Case(name="test_case_errors")
-        case2 = Case(name="case2_errors")
-        db.add_all([case1, case2])
-        db.flush()
+        case1 = _create_case(db, "test_case_errors", machine=machine)
+        case2 = _create_case(db, "case2_errors", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -748,9 +755,7 @@ class TestIngestFromPathEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_audit")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_audit", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -894,9 +899,7 @@ class TestIngestFromPathEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine_alias}
 
-        case = Case(name=f"test_case_alias_{machine_alias}")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, f"test_case_alias_{machine_alias}", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -951,9 +954,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"  # ZIP file magic bytes
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_zip")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_zip", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1006,9 +1007,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"\x1f\x8b\x08"  # GZIP magic bytes
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_targz")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_targz", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1086,9 +1085,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04test content"
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_sha256")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_sha256", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1148,9 +1145,7 @@ class TestIngestFromUploadEndpoint:
         file_content = b"PK\x03\x04"
         file = BytesIO(file_content)
 
-        case = Case(name="test_case_partial")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_partial", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1618,9 +1613,7 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_artifacts")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_artifacts", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1677,9 +1670,7 @@ class TestIngestFromUploadEndpoint:
         archive_path = self._create_archive_file(tmp_path, "archive_with_links.tar.gz")
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_links")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_links", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1755,9 +1746,7 @@ class TestIngestFromUploadEndpoint:
         )
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
-        case = Case(name="test_case_git_url")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_git_url", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1813,9 +1802,7 @@ class TestIngestFromUploadEndpoint:
             "hpc_username": "nersc-user",
         }
 
-        case = Case(name="test_case_hpc_username")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_hpc_username", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1855,6 +1842,68 @@ class TestIngestFromUploadEndpoint:
         assert simulation is not None
         assert simulation.hpc_username == "nersc-user"
 
+    def test_path_ingestion_uses_request_hpc_username_when_metadata_missing(
+        self, client, db: Session, tmp_path
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        archive_path = self._create_archive_file(
+            tmp_path, "archive_with_request_hpc_username.tar.gz"
+        )
+        payload = {
+            "archive_path": str(archive_path),
+            "machine_name": machine.name,
+            "hpc_username": "fallback-user",
+        }
+        execution_id = "1083012.260305-120012"
+        parsed_simulations = [
+            ParsedSimulation(
+                execution_dir=str(tmp_path / "archive" / execution_id),
+                execution_id=execution_id,
+                case_name="request_fallback_case",
+                case_group=None,
+                machine=machine.name,
+                hpc_username=None,
+                compset="FHIST",
+                compset_alias="test_alias",
+                grid_name="grid1",
+                grid_resolution="0.9x1.25",
+                campaign=None,
+                experiment_type=None,
+                initialization_type="branch",
+                simulation_start_date="2020-01-01",
+                simulation_end_date=None,
+                run_start_date=None,
+                run_end_date=None,
+                compiler="gnu",
+                git_repository_url=None,
+                git_branch=None,
+                git_tag=None,
+                git_commit_hash=None,
+                status="completed",
+            )
+        ]
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(parsed_simulations, 0),
+        ):
+            res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+        assert res.status_code == 201
+        assert res.json()["simulations"][0]["case_name"] == "request_fallback_case"
+
+        simulation = (
+            db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
+        )
+        assert simulation is not None
+        assert simulation.hpc_username == "fallback-user"
+
+        case = db.query(Case).filter(Case.id == simulation.case_id).first()
+        assert case is not None
+        assert case.hpc_username == "fallback-user"
+
 
 class TestIngestFromHpcUploadEndpoint:
     def test_endpoint_returns_403_for_non_admin_user(self, client, db: Session):
@@ -1885,9 +1934,7 @@ class TestIngestFromHpcUploadEndpoint:
         machine = db.query(Machine).first()
         assert machine is not None
 
-        case = Case(name="test_case_hpc_upload")
-        db.add(case)
-        db.flush()
+        case = _create_case(db, "test_case_hpc_upload", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1993,10 +2040,8 @@ class TestIngestFromHpcUploadEndpoint:
         machine = db.query(Machine).first()
         assert machine is not None
 
-        first_case = Case(name="multi_case_first")
-        second_case = Case(name="multi_case_second")
-        db.add_all([first_case, second_case])
-        db.flush()
+        first_case = _create_case(db, "multi_case_first", machine=machine)
+        second_case = _create_case(db, "multi_case_second", machine=machine)
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -2079,7 +2124,9 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
 
-    def test_run_ingest_archive_forwards_strict_validation(self, db: Session):
+    def test_run_ingest_archive_forwards_strict_validation_and_hpc_username(
+        self, db: Session
+    ):
         expected_result = IngestArchiveResult(
             simulations=[],
             created_count=0,
@@ -2096,6 +2143,7 @@ class TestIngestionApiCoverage:
                 "/tmp",
                 db,
                 strict_validation=True,
+                hpc_username="request-user",
             )
 
         assert result == expected_result
@@ -2104,6 +2152,7 @@ class TestIngestionApiCoverage:
             output_dir="/tmp",
             db=db,
             strict_validation=True,
+            hpc_username="request-user",
         )
 
     def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):
