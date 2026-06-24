@@ -10,6 +10,7 @@ from dateutil import parser as dateutil_parser
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
@@ -569,17 +570,6 @@ def _get_or_create_case(
 
 def _case_identity_key(case: Case) -> CaseIdentity:
     return (case.name, case.machine_id, case.hpc_username)
-
-
-def _normalize_hpc_username(value: str | None) -> str | None:
-    if value is None:
-        return None
-
-    normalized = value.strip()
-    if not normalized:
-        return None
-
-    return normalized
 
 
 def _resolve_case_hpc_username(

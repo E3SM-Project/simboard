@@ -6,6 +6,7 @@ from sqlalchemy import distinct
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
+from app.common.utils import _normalize_hpc_username
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -24,17 +25,6 @@ from app.features.user.models import User
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
-
-
-def _normalize_hpc_username(value: str | None) -> str | None:
-    if value is None:
-        return None
-
-    normalized = value.strip()
-    if not normalized:
-        return None
-
-    return normalized
 
 
 def _validate_simulation_case_identity(
