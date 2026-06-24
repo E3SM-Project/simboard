@@ -152,6 +152,8 @@ class ArtifactOut(CamelOutBaseModel):
 class SimulationCreate(CamelInBaseModel):
     """Schema for creating a new Simulation."""
 
+    model_config = ConfigDict(extra="forbid")
+
     # Configuration
     # --------------
     case_id: Annotated[
@@ -221,9 +223,6 @@ class SimulationCreate(CamelInBaseModel):
     ]
     # Model timeline
     # --------------
-    machine_id: Annotated[
-        UUID, Field(..., description="ID of the machine used for the simulation")
-    ]
     simulation_start_date: Annotated[
         datetime, Field(..., description="Start date of the simulation")
     ]
@@ -292,14 +291,6 @@ class SimulationCreate(CamelInBaseModel):
             description="User ID who last updated the simulation, defined at update time.",
         ),
     ]
-    hpc_username: Annotated[
-        str | None,
-        Field(
-            None,
-            description="HPC username for provenance (trusted, informational only)",
-        ),
-    ]
-
     # Miscellaneous
     # -----------------
     extra: Annotated[
@@ -386,13 +377,6 @@ class SimulationUpdate(CamelInBaseModel):
                 "High-level experiment category (e.g. historical, amip, piControl). "
                 "Often aligned with CMIP experiment identifiers."
             ),
-        ),
-    ]
-    hpc_username: Annotated[
-        str | None,
-        Field(
-            None,
-            description="HPC username for provenance (trusted, informational only)",
         ),
     ]
     key_features: Annotated[
@@ -631,7 +615,11 @@ class SimulationOut(CamelOutBaseModel):
     # Model timeline
     # --------------
     machine_id: Annotated[
-        UUID, Field(..., description="ID of the machine used for the simulation")
+        UUID,
+        Field(
+            ...,
+            description="ID of machine in selected case identity (derived from Case)",
+        ),
     ]
     simulation_start_date: Annotated[
         datetime, Field(..., description="Start date of the simulation")
@@ -713,7 +701,7 @@ class SimulationOut(CamelOutBaseModel):
         str | None,
         Field(
             None,
-            description="HPC username for provenance (trusted, informational only)",
+            description="HPC username in selected case identity (derived from Case)",
         ),
     ]
 

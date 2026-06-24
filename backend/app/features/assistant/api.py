@@ -12,7 +12,7 @@ from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.features.assistant.orchestrator import generate_simulation_summary
 from app.features.assistant.schemas import SimulationSummaryResponse
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Case, Simulation
 from app.features.user.manager import optional_current_user
 from app.features.user.models import User
 
@@ -42,8 +42,7 @@ async def summarize_simulation(
     stmt = (
         select(Simulation)
         .options(
-            joinedload(Simulation.case),
-            joinedload(Simulation.machine),
+            joinedload(Simulation.case).joinedload(Case.machine),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )

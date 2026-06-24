@@ -719,9 +719,6 @@ def _persist_simulations(
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
 
-        if data.get("hpc_username") is None and hpc_username is not None:
-            data["hpc_username"] = hpc_username
-
         sim = Simulation(
             **data,
             ingestion_id=ingestion_id,

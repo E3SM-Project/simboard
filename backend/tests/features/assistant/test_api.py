@@ -79,7 +79,6 @@ async def _create_simulation(
         simulation_type="experimental",
         status="completed",
         initialization_type="startup",
-        machine_id=machine.id,
         simulation_start_date="2023-01-01T00:00:00Z",
         git_tag="v2.0.0",
         created_by=UUID(normal_user["id"]),

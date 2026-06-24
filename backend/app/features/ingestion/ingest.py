@@ -69,7 +69,6 @@ class SimulationCreateDraft:
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None
-    machine_id: UUID
     simulation_start_date: datetime | None
     simulation_end_date: datetime | None
     run_start_date: datetime | None
@@ -81,7 +80,6 @@ class SimulationCreateDraft:
     git_commit_hash: str | None
     created_by: UUID | None
     last_updated_by: UUID | None
-    hpc_username: str | None
     case_hash: str | None = None
 
 
@@ -222,8 +220,6 @@ def _process_simulation_for_ingest(
 
     prevalidated_draft = _prevalidate_simulation_create(
         parsed_simulation,
-        machine_id,
-        resolved_hpc_username,
     )
     case = _resolve_case(
         parsed_simulation,
@@ -470,15 +466,11 @@ def _normalize_path_candidate(path_value: str | None) -> str | None:
 
 def _prevalidate_simulation_create(
     parsed_simulation: ParsedSimulation,
-    machine_id: UUID,
-    hpc_username: str,
 ) -> SimulationCreateDraft:
     """Build and validate non-case simulation fields before creating a new case."""
     draft = _build_simulation_create_draft(
         parsed_simulation=parsed_simulation,
-        machine_id=machine_id,
         case_id=None,
-        hpc_username=hpc_username,
     )
 
     _validate_pre_case_draft(draft)
@@ -693,9 +685,7 @@ def _normalize_git_url(url: str | None) -> str | None:
 
 def _build_simulation_create_draft(
     parsed_simulation: ParsedSimulation,
-    machine_id: UUID,
     case_id: UUID | None,
-    hpc_username: str,
 ) -> SimulationCreateDraft:
     """Build a normalized internal draft for ``SimulationCreate`` validation.
 
@@ -737,7 +727,6 @@ def _build_simulation_create_draft(
         campaign=parsed_simulation.campaign,
         experiment_type=parsed_simulation.experiment_type,
         initialization_type=parsed_simulation.initialization_type,
-        machine_id=machine_id,
         simulation_start_date=simulation_start_date,
         simulation_end_date=simulation_end_date,
         run_start_date=run_start_date,
@@ -749,7 +738,6 @@ def _build_simulation_create_draft(
         git_commit_hash=parsed_simulation.git_commit_hash,
         created_by=None,
         last_updated_by=None,
-        hpc_username=hpc_username,
         case_hash=parsed_simulation.case_hash,
     )
 

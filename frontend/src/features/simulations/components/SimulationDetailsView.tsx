@@ -452,7 +452,6 @@ const SINGLE_LINE_FIELDS: ReadonlySet<EditableField> = new Set([
   'status',
   'campaign',
   'experimentType',
-  'hpcUsername',
 ]);
 
 const SIMULATION_TYPE_OPTIONS: ReadonlyArray<{
@@ -483,7 +482,6 @@ const toEditableFormState = (simulation: SimulationOut): EditableFormState => ({
   description: simulation.description ?? '',
   campaign: simulation.campaign ?? '',
   experimentType: simulation.experimentType ?? '',
-  hpcUsername: simulation.hpcUsername ?? '',
   keyFeatures: simulation.keyFeatures ?? '',
   knownIssues: simulation.knownIssues ?? '',
   notesMarkdown: simulation.notesMarkdown ?? '',
@@ -1232,15 +1230,7 @@ export const SimulationDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         HPC Username:
                       </Label>
-                      {isEditing ? (
-                        <Input
-                          value={formState.hpcUsername}
-                          onChange={(event) => updateField('hpcUsername', event.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <ReadonlyText value={simulation.hpcUsername} />
-                      )}
+                      <ReadonlyText value={simulation.hpcUsername} />
                     </div>
                   </CardContent>
                 </Card>

@@ -235,8 +235,8 @@ def build_simulation_snapshot(
             case_group=simulation.case.case_group,
         ),
         machine=(
-            SnapshotMachineFields(name=simulation.machine.name)
-            if simulation.machine is not None
+            SnapshotMachineFields(name=simulation.case.machine.name)
+            if simulation.case.machine is not None
             else None
         ),
         artifacts=_sorted_artifacts(simulation.artifacts),

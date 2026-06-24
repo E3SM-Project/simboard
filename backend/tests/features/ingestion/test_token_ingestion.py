@@ -106,7 +106,6 @@ class TestIngestionWithAPIToken:
                 simulation_type=SimulationType.PRODUCTION,
                 status=SimulationStatus.COMPLETED,
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=svc_user.id,
                 last_updated_by=svc_user.id,
@@ -361,8 +360,8 @@ class TestIngestionWithAPIToken:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_hpc_username_stored_with_simulation(self, client, db):
-        """Test that hpc_username is stored with simulation when provided."""
+    def test_hpc_username_stored_with_case(self, client, db):
+        """Test that hpc_username is stored with the resolved case when provided."""
         # Create SERVICE_ACCOUNT user and API token
         svc_user = _create_service_account(db)
         raw_token, token_hash = generate_token()
@@ -390,7 +389,7 @@ class TestIngestionWithAPIToken:
         case = Case(
             name="test_case",
             machine_id=machine.id,
-            hpc_username="token-user",
+            hpc_username="hpc_user_test",
         )
         db.add(case)
         db.flush()
@@ -413,7 +412,6 @@ class TestIngestionWithAPIToken:
                 simulationType=SimulationType.PRODUCTION,
                 status=SimulationStatus.RUNNING,
                 initializationType="cold",
-                machineId=machine.id,
                 simulationStartDate=datetime.now(timezone.utc),
             )
 
@@ -438,12 +436,14 @@ class TestIngestionWithAPIToken:
 
             assert response.status_code == status.HTTP_201_CREATED
 
-            # Verify hpc_username was stored
-
             simulation = (
                 db.query(Simulation)
                 .filter(Simulation.execution_id == "1081156.251218-200923")
                 .first()
             )
             assert simulation is not None
-            assert simulation.hpc_username == "hpc_user_test"
+            persisted_case = (
+                db.query(Case).filter(Case.id == simulation.case_id).first()
+            )
+            assert persisted_case is not None
+            assert persisted_case.hpc_username == "hpc_user_test"
