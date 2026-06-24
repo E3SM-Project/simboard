@@ -24,7 +24,6 @@ logger = _setup_custom_logger(__name__)
 _STRING_ADAPTER = TypeAdapter(str)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
-UNKNOWN_HPC_USERNAME = "__unknown__"
 CaseIdentity = tuple[str, UUID, str]
 
 

@@ -162,14 +162,18 @@ def upgrade() -> None:
     op.execute(
         """
         DO $$
+        DECLARE
+            unresolved_count INTEGER;
         BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM cases
-                WHERE machine_id IS NULL OR hpc_username IS NULL
-            ) THEN
+            SELECT COUNT(*)
+            INTO unresolved_count
+            FROM cases
+            WHERE machine_id IS NULL OR hpc_username IS NULL;
+
+            IF unresolved_count > 0 THEN
                 RAISE EXCEPTION
-                    'Case identity backfill failed; unresolved rows remain in cases.';
+                    'Case identity backfill failed; % unresolved case row(s) remain with NULL machine_id or hpc_username. Hint: inspect legacy cases without simulations or with incomplete identity data before rerunning migration.',
+                    unresolved_count;
             END IF;
         END
         $$;
