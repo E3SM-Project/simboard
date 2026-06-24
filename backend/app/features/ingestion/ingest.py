@@ -209,15 +209,16 @@ def _process_simulation_for_ingest(
         ``execution_id`` was found.
     """
     execution_id = parsed_simulation.execution_id
+
+    if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
+        return None, True
+
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
     resolved_hpc_username = _resolve_case_hpc_username(
         parsed_simulation,
         request_hpc_username,
     )
-
-    if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
-        return None, True
 
     prevalidated_draft = _prevalidate_simulation_create(
         parsed_simulation,

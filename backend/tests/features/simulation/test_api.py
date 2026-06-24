@@ -477,6 +477,34 @@ class TestCreateSimulation:
         assert "changeCount" not in data
         assert "runConfigDeltas" not in data
 
+    def test_endpoint_accepts_matching_case_hpc_username(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_create_matching_hpc")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200924",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "hpcUsername": "test-user",
+        }
+
+        res = client.post(f"{API_BASE}/simulations", json=payload)
+
+        assert res.status_code == 201
+        assert res.json()["hpcUsername"] == "test-user"
+
     def test_endpoint_rejects_case_machine_mismatch(self, client, db: Session) -> None:
         machine = db.query(Machine).first()
         assert machine is not None, "No machine found in the database"

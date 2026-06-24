@@ -194,7 +194,7 @@ def create_simulation(
     sim = Simulation(
         **payload.model_dump(
             by_alias=False,
-            exclude={"artifacts", "links"},
+            exclude={"artifacts", "hpc_username", "links"},
             exclude_unset=True,
         ),
         hpc_username=validated_hpc_username,
