@@ -12,7 +12,11 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import create_simulation, update_simulation
+from app.features.simulation.api import (
+    _validate_simulation_case_identity,
+    create_simulation,
+    update_simulation,
+)
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
@@ -399,6 +403,22 @@ class TestCreateSimulation:
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
         assert len(data["artifacts"]) == 1
         assert len(data["links"]) == 1
+
+    def test_validate_case_identity_accepts_trimmed_hpc_username(
+        self, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_trimmed_hpc_username")
+
+        assert (
+            _validate_simulation_case_identity(
+                case=case,
+                machine_id=machine.id,
+                hpc_username="  test-user  ",
+            )
+            == "test-user"
+        )
 
     def test_endpoint_returns_400_when_case_not_found(
         self, client, db: Session
