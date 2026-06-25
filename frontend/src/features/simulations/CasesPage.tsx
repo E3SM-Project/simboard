@@ -37,7 +37,7 @@ import {
 } from '@/features/simulations/caseUtils';
 import { useCases } from '@/features/simulations/hooks/useCases';
 import { cn } from '@/lib/utils';
-import type { CaseOut, SimulationOut, SimulationSummaryOut } from '@/types';
+import type { CaseSummaryOut, SimulationOut, SimulationSummaryOut } from '@/types';
 
 type ActiveFilterKey =
   | 'caseName'
@@ -460,7 +460,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     [filteredCases, hasActiveSimulationFilters, matchingSimulationsByCaseId, simulationsByCaseId],
   );
 
-  const columns = useMemo<ColumnDef<CaseOut>[]>(
+  const columns = useMemo<ColumnDef<CaseSummaryOut>[]>(
     () => [
       {
         id: 'expand',
@@ -609,7 +609,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     </div>
   );
 
-  const renderExpandedContent = (caseRecord: CaseOut) => {
+  const renderExpandedContent = (caseRecord: CaseSummaryOut) => {
     const detailedCaseSimulations = simulationsByCaseId.get(caseRecord.id);
     const summaryCaseSimulations = caseRecord.simulations;
     const isUsingSummaryFallback =

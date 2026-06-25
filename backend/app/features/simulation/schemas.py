@@ -27,6 +27,17 @@ def _normalize_optional_label(value: str | None) -> str | None:
     return stripped or None
 
 
+def _normalize_optional_text(value: Any) -> Any:
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+
+    return value
+
+
 def _normalize_required_resource_value(value: Any, *, field_name: str) -> str:
     if not isinstance(value, str):
         msg = f"{field_name} must be a non-empty string."
@@ -424,7 +435,7 @@ class SimulationUpdate(CamelInBaseModel):
 
 
 class SimulationSummaryOut(CamelOutBaseModel):
-    """Lightweight schema for simulation summaries nested inside CaseOut.
+    """Lightweight schema for simulation summaries nested inside case responses.
 
     Only includes the fields needed for case-level overview — avoids loading
     heavy relationships (machine, artifacts, links, user objects).
@@ -482,8 +493,8 @@ class SimulationSummaryCapabilitiesOut(CamelOutBaseModel):
     ]
 
 
-class CaseOut(CamelOutBaseModel):
-    """Schema for representing a Case with nested simulation summaries."""
+class CaseSummaryOut(CamelOutBaseModel):
+    """Schema for representing a Case summary with nested simulation summaries."""
 
     id: Annotated[UUID, Field(..., description="The unique identifier of the case.")]
     name: Annotated[str, Field(..., description="The case name.")]
@@ -524,6 +535,55 @@ class CaseOut(CamelOutBaseModel):
     updated_at: Annotated[
         datetime, Field(..., description="Timestamp when the case was last updated")
     ]
+
+
+class CaseDetailOut(CaseSummaryOut):
+    """Schema for representing full case details used by Case Details."""
+
+    description: Annotated[
+        str | None, Field(None, description="Optional shared description of the case")
+    ]
+    key_features: Annotated[
+        str | None, Field(None, description="Optional shared key features of the case")
+    ]
+    known_issues: Annotated[
+        str | None, Field(None, description="Optional shared known issues of the case")
+    ]
+    notes_markdown: Annotated[
+        str | None,
+        Field(
+            None, description="Optional shared notes for the case in markdown format"
+        ),
+    ]
+
+
+class CaseUpdate(CamelInBaseModel):
+    """Schema for narrow v1 case metadata updates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: Annotated[
+        str | None, Field(None, description="Optional shared description of the case")
+    ]
+    key_features: Annotated[
+        str | None, Field(None, description="Optional shared key features of the case")
+    ]
+    known_issues: Annotated[
+        str | None, Field(None, description="Optional shared known issues of the case")
+    ]
+    notes_markdown: Annotated[
+        str | None,
+        Field(
+            None, description="Optional shared notes for the case in markdown format"
+        ),
+    ]
+
+    @field_validator(
+        "description", "key_features", "known_issues", "notes_markdown", mode="before"
+    )
+    @classmethod
+    def normalize_optional_metadata(cls, value: Any) -> Any:
+        return _normalize_optional_text(value)
 
 
 class SimulationOut(CamelOutBaseModel):

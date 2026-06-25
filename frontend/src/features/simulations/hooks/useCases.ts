@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
 import { listCases } from '@/features/simulations/api/api';
-import type { CaseOut } from '@/types';
+import type { CaseSummaryOut } from '@/types';
 
 export const useCases = () => {
-  const [data, setData] = useState<CaseOut[]>([]);
+  const [data, setData] = useState<CaseSummaryOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

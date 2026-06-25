@@ -49,6 +49,10 @@ class Case(Base, IDMixin, TimestampMixin):
     )
     hpc_username: Mapped[str] = mapped_column(String(200), nullable=False)
     case_group: Mapped[str | None] = mapped_column(Text, index=True, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    key_features: Mapped[str | None] = mapped_column(Text, nullable=True)
+    known_issues: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     machine: Mapped[Machine] = relationship("Machine", foreign_keys=[machine_id])

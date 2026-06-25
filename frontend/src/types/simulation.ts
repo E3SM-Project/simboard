@@ -51,9 +51,9 @@ export interface SimulationSummaryCapabilitiesOut {
 }
 
 /**
- * API response model for a Case with nested simulation summaries.
+ * Lightweight API response model for a Case with nested simulation summaries.
  */
-export interface CaseOut {
+export interface CaseSummaryOut {
   id: string;
   name: string;
   caseGroup: string | null;
@@ -63,6 +63,24 @@ export interface CaseOut {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CaseDetailOut extends CaseSummaryOut {
+  description: string | null;
+  keyFeatures: string | null;
+  knownIssues: string | null;
+  notesMarkdown: string | null;
+}
+
+export const CASE_EDITABLE_FIELDS = [
+  'description',
+  'keyFeatures',
+  'knownIssues',
+  'notesMarkdown',
+] as const;
+
+export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
+
+export type CaseUpdate = Partial<Record<CaseEditableField, string | null>>;
 
 /**
  * Lightweight simulation summary for case-level nesting.

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
 import { getCaseById } from '@/features/simulations/api/api';
-import type { CaseOut } from '@/types';
+import type { CaseDetailOut } from '@/types';
 
 export const useCase = (id: string) => {
-  const [data, setData] = useState<CaseOut | null>(null);
+  const [data, setData] = useState<CaseDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

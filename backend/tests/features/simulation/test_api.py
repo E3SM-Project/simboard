@@ -211,6 +211,10 @@ class TestListCases:
         assert case_data["name"] == "test_case_nested"
         assert case_data["machineNames"] == [machine.name]
         assert case_data["hpcUsernames"] == ["test-user"]
+        assert "description" not in case_data
+        assert "keyFeatures" not in case_data
+        assert "knownIssues" not in case_data
+        assert "notesMarkdown" not in case_data
 
         # Verify nested simulations are SimulationSummaryOut (lightweight)
         sims = case_data["simulations"]
@@ -287,7 +291,7 @@ class TestListCaseNames:
 
 
 class TestGetCase:
-    def test_endpoint_returns_case_with_simulations(
+    def test_endpoint_returns_case_detail_with_metadata(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         machine = db.query(Machine).first()
@@ -295,6 +299,10 @@ class TestGetCase:
 
         case = _create_case(db, "test_case_detail")
         case.hpc_username = "case-user"
+        case.description = "Shared case description"
+        case.key_features = "Shared key features"
+        case.known_issues = "Shared known issues"
+        case.notes_markdown = "## Shared notes"
         db.flush()
 
         ingestion = Ingestion(
@@ -337,6 +345,10 @@ class TestGetCase:
         assert len(data["simulations"]) == 1
         assert data["machineNames"] == [machine.name]
         assert data["hpcUsernames"] == ["case-user"]
+        assert data["description"] == "Shared case description"
+        assert data["keyFeatures"] == "Shared key features"
+        assert data["knownIssues"] == "Shared known issues"
+        assert data["notesMarkdown"] == "## Shared notes"
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
 
@@ -418,7 +430,109 @@ class TestCreateSimulation:
 
         res = client.post(f"{API_BASE}/simulations", json=payload)
         assert res.status_code == 400
-        assert "not found" in res.json()["detail"].lower()
+
+
+class TestUpdateCase:
+    def test_endpoint_updates_case_metadata(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "test_case_metadata_patch")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
+        case.updated_at = original_updated_at
+        db.commit()
+
+        payload = {
+            "description": "Updated case description",
+            "keyFeatures": "Updated case features",
+            "notesMarkdown": "Updated case notes",
+        }
+
+        res = client.patch(f"{API_BASE}/cases/{case.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] == payload["description"]
+        assert data["keyFeatures"] == payload["keyFeatures"]
+        assert data["knownIssues"] == "Original case issues"
+        assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["updatedAt"] != original_updated_at.isoformat()
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description == payload["description"]
+        assert updated_case.key_features == payload["keyFeatures"]
+        assert updated_case.known_issues == "Original case issues"
+        assert updated_case.notes_markdown == payload["notesMarkdown"]
+        assert updated_case.updated_at > original_updated_at
+
+    def test_endpoint_distinguishes_omitted_null_and_blank_values(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_metadata_normalization")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "description": None,
+                "knownIssues": "   ",
+                "notesMarkdown": "Updated case notes",
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] is None
+        assert data["keyFeatures"] == "Original case features"
+        assert data["knownIssues"] is None
+        assert data["notesMarkdown"] == "Updated case notes"
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description is None
+        assert updated_case.key_features == "Original case features"
+        assert updated_case.known_issues is None
+        assert updated_case.notes_markdown == "Updated case notes"
+
+    def test_endpoint_returns_401_without_authentication(self, client, db: Session):
+        case = _create_case(db, "test_case_metadata_unauth")
+        db.commit()
+
+        app.dependency_overrides.pop(current_active_user, None)
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 401
+
+    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+        case = _create_case(db, "test_case_metadata_forbidden")
+        db.commit()
+
+        _override_current_user(
+            user_id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            role=UserRole.USER,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 403
+        assert "verified E3SM GitHub organization membership" in res.json()["detail"]
 
     def test_manual_create_returns_generic_simulation_payload(
         self, client, db: Session

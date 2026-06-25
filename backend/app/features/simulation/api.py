@@ -12,7 +12,9 @@ from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
-    CaseOut,
+    CaseDetailOut,
+    CaseSummaryOut,
+    CaseUpdate,
     SimulationCreate,
     SimulationOut,
     SimulationSummaryCapabilitiesOut,
@@ -28,13 +30,13 @@ case_router = APIRouter(prefix="/cases", tags=["Cases"])
 
 @case_router.get(
     "",
-    response_model=list[CaseOut],
+    response_model=list[CaseSummaryOut],
     responses={
         200: {"description": "List all cases."},
         500: {"description": "Internal server error."},
     },
 )
-def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
+def list_cases(db: Session = Depends(get_database_session)) -> list[CaseSummaryOut]:
     """Retrieve all cases with nested simulation summaries.
 
     Parameters
@@ -45,7 +47,7 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
 
     Returns
     -------
-    list[CaseOut]
+    list[CaseSummaryOut]
         A list of cases, each with nested summaries of their associated
         simulations.
     """
@@ -56,7 +58,7 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
         .all()
     )
 
-    resp = [_case_to_out(c) for c in cases]
+    resp = [_case_to_summary_out(c) for c in cases]
 
     return resp
 
@@ -93,14 +95,16 @@ def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
 
 @case_router.get(
     "/{case_id}",
-    response_model=CaseOut,
+    response_model=CaseDetailOut,
     responses={
         200: {"description": "Case found."},
         404: {"description": "Case not found."},
         500: {"description": "Internal server error."},
     },
 )
-def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> CaseOut:
+def get_case(
+    case_id: UUID, db: Session = Depends(get_database_session)
+) -> CaseDetailOut:
     """Retrieve a case by its unique identifier.
 
     Parameters
@@ -113,7 +117,7 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
 
     Returns
     -------
-    CaseOut
+    CaseDetailOut
         The case object with nested simulation summaries if found.
     """
     case = (
@@ -126,9 +130,74 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    resp = _case_to_out(case)
+    resp = _case_to_detail_out(case)
 
     return resp
+
+
+@case_router.patch(
+    "/{case_id}",
+    response_model=CaseDetailOut,
+    responses={
+        200: {"description": "Case updated successfully."},
+        401: {"description": "Unauthorized."},
+        403: {"description": "Forbidden."},
+        404: {"description": "Case not found."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
+def update_case(
+    case_id: UUID,
+    payload: CaseUpdate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> CaseDetailOut:
+    """Partially update allowed user-managed case metadata fields."""
+    if not can_edit_managed_content(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Editing case metadata requires SimBoard admin access or "
+                "verified E3SM GitHub organization membership."
+            ),
+        )
+
+    case = (
+        db.query(Case)
+        .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .filter(Case.id == case_id)
+        .one_or_none()
+    )
+
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    for field, value in updates.items():
+        setattr(case, field, value)
+
+    case.updated_at = datetime.now(timezone.utc)
+
+    with transaction(db):
+        db.add(case)
+        db.flush()
+
+    db.expire_all()
+    case_loaded = (
+        db.query(Case)
+        .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .filter(Case.id == case_id)
+        .one_or_none()
+    )
+
+    if case_loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load updated case.",
+        )
+
+    return _case_to_detail_out(case_loaded)
 
 
 @simulation_router.post(
@@ -376,20 +445,8 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     return _simulation_to_out(sim)
 
 
-def _case_to_out(case: Case) -> CaseOut:
-    """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
-
-    Parameters
-    ----------
-    case : Case
-        The Case ORM instance to convert.
-
-    Returns
-    -------
-    CaseOut
-        The corresponding CaseOut schema instance with nested
-        SimulationSummaryOut
-    """
+def _build_case_summary(case: Case) -> dict:
+    """Build shared summary data for case response schemas."""
     summaries = []
     machine_names = sorted(
         {case.machine.name}
@@ -414,15 +471,45 @@ def _case_to_out(case: Case) -> CaseOut:
             )
         )
 
-    result = CaseOut(
-        id=case.id,
-        name=case.name,
-        case_group=case.case_group,
-        simulations=summaries,
-        machine_names=machine_names,
-        hpc_usernames=hpc_usernames,
-        created_at=case.created_at,
-        updated_at=case.updated_at,
+    return {
+        "id": case.id,
+        "name": case.name,
+        "case_group": case.case_group,
+        "simulations": summaries,
+        "machine_names": machine_names,
+        "hpc_usernames": hpc_usernames,
+        "created_at": case.created_at,
+        "updated_at": case.updated_at,
+    }
+
+
+def _case_to_summary_out(case: Case) -> CaseSummaryOut:
+    """Convert a Case ORM instance to CaseSummaryOut with nested summaries.
+
+    Parameters
+    ----------
+    case : Case
+        The Case ORM instance to convert.
+
+    Returns
+    -------
+    CaseSummaryOut
+        The corresponding CaseSummaryOut schema instance with nested
+        SimulationSummaryOut
+    """
+    result = CaseSummaryOut(**_build_case_summary(case))
+
+    return result
+
+
+def _case_to_detail_out(case: Case) -> CaseDetailOut:
+    """Convert a Case ORM instance to CaseDetailOut."""
+    result = CaseDetailOut(
+        **_build_case_summary(case),
+        description=case.description,
+        key_features=case.key_features,
+        known_issues=case.known_issues,
+        notes_markdown=case.notes_markdown,
     )
 
     return result

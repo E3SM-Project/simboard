@@ -10,7 +10,9 @@ from app.features.simulation.schemas import (
     ArtifactCreate,
     ArtifactKind,
     ArtifactOut,
-    CaseOut,
+    CaseDetailOut,
+    CaseSummaryOut,
+    CaseUpdate,
     ExternalLinkKind,
     ExternalLinkOut,
     SimulationCreate,
@@ -233,6 +235,39 @@ class TestSimulationUpdateSchema:
     def test_update_resource_validators_accept_none_when_called_directly(self):
         assert SimulationUpdate.validate_update_artifacts(None) is None
         assert SimulationUpdate.validate_update_links(None) is None
+
+
+class TestCaseUpdateSchema:
+    def test_omitted_fields_produce_empty_patch(self):
+        update = CaseUpdate()
+
+        assert update.model_dump(exclude_unset=True) == {}
+        assert update.model_fields_set == set()
+
+    def test_explicit_null_is_preserved_for_clear(self):
+        update = CaseUpdate(description=None)
+
+        assert update.model_dump(exclude_unset=True) == {"description": None}
+        assert "description" in update.model_fields_set
+
+    @pytest.mark.parametrize(
+        ("input_field", "model_field"),
+        [
+            ("description", "description"),
+            ("keyFeatures", "key_features"),
+            ("knownIssues", "known_issues"),
+            ("notesMarkdown", "notes_markdown"),
+        ],
+    )
+    def test_blank_strings_normalize_to_null(self, input_field: str, model_field: str):
+        update = CaseUpdate(**{input_field: "   "})
+
+        assert getattr(update, model_field) is None
+        assert update.model_dump(exclude_unset=True) == {model_field: None}
+
+    def test_rejects_out_of_scope_fields(self):
+        with pytest.raises(ValidationError):
+            CaseUpdate(caseName="new-case")
 
 
 class TestSimulationOutSchema:
@@ -599,10 +634,10 @@ class TestSimulationSummaryOutSchema:
         assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
 
 
-class TestCaseOutSchema:
-    def test_case_out_with_nested_simulations(self):
+class TestCaseSchemas:
+    def test_case_summary_out_with_nested_simulations(self):
         sim_id = uuid4()
-        case_out = CaseOut(
+        case_out = CaseSummaryOut(
             id=uuid4(),
             name="v3.LR.historical_0121",
             case_group="ensemble_v3",
@@ -637,17 +672,22 @@ class TestCaseOutSchema:
         assert case_out.hpc_usernames == ["ac.tvo"]
         assert case_out.simulations[1].case_hash == "hash-2"
 
-    def test_case_out_empty_simulations(self):
-        case_out = CaseOut(
+    def test_case_detail_out_includes_shared_metadata(self):
+        case_out = CaseDetailOut(
             id=uuid4(),
             name="empty_case",
             case_group=None,
+            description="Shared description",
+            key_features="Shared features",
+            known_issues="Shared known issues",
+            notes_markdown="## Notes",
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
-        assert case_out.simulations == []
-        assert case_out.machine_names == []
-        assert case_out.hpc_usernames == []
+        assert case_out.description == "Shared description"
+        assert case_out.key_features == "Shared features"
+        assert case_out.known_issues == "Shared known issues"
+        assert case_out.notes_markdown == "## Notes"

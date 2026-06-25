@@ -1,12 +1,16 @@
-import { ArrowLeft, ChevronDown, Info, Search, Share2 } from 'lucide-react';
+import axios from 'axios';
+import { AlertTriangle, ArrowLeft, ChevronDown, Info, Search, Share2 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/hooks/useAuth';
+import { MarkdownContent } from '@/components/shared/MarkdownContent';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -17,6 +21,7 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { updateCase } from '@/features/simulations/api/api';
 import {
   formatCaseDate,
   formatCaseHashLabel,
@@ -28,9 +33,16 @@ import {
   MISSING_CASE_HASH_LABEL,
   type SimulationSummaryGroupFilter,
 } from '@/features/simulations/caseUtils';
+import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
-import type { SimulationOut, SimulationSummaryOut } from '@/types';
+import type {
+  CaseDetailOut,
+  CaseEditableField,
+  CaseUpdate,
+  SimulationOut,
+  SimulationSummaryOut,
+} from '@/types';
 
 const DetailField = ({
   label,
@@ -98,6 +110,7 @@ interface GroupSimulation {
 }
 
 type SimulationViewMode = 'grouped' | 'flat';
+type EditableFormState = Record<CaseEditableField, string>;
 
 const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
@@ -140,6 +153,66 @@ const getGroupRunDateWindow = (simulations: GroupSimulation[]) => {
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
 
+const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
+  'description',
+  'keyFeatures',
+  'knownIssues',
+  'notesMarkdown',
+];
+
+const toEditableFormState = (caseRecord: CaseDetailOut): EditableFormState => ({
+  description: caseRecord.description ?? '',
+  keyFeatures: caseRecord.keyFeatures ?? '',
+  knownIssues: caseRecord.knownIssues ?? '',
+  notesMarkdown: caseRecord.notesMarkdown ?? '',
+});
+
+const normalizeEditableValue = (value: string): string | null => {
+  const trimmed = value.trim();
+  return trimmed ? value : null;
+};
+
+const buildUpdatePayload = (caseRecord: CaseDetailOut, formState: EditableFormState): CaseUpdate => {
+  const payload: CaseUpdate = {};
+
+  for (const field of CASE_EDIT_FIELDS) {
+    const nextValue = normalizeEditableValue(formState[field]);
+    const currentValue = caseRecord[field] ?? null;
+
+    if (nextValue !== currentValue) {
+      payload[field] = nextValue;
+    }
+  }
+
+  return payload;
+};
+
+const getUpdateErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+
+    if (typeof detail === 'string') {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          const path = Array.isArray(item?.loc) ? item.loc.slice(1).join(' > ') : 'body';
+          const message = typeof item?.msg === 'string' ? item.msg : null;
+          return message ? `${path}: ${message}` : null;
+        })
+        .filter((message): message is string => Boolean(message));
+
+      if (messages.length > 0) {
+        return messages.join(' ');
+      }
+    }
+  }
+
+  return error instanceof Error ? error.message : 'Failed to update case.';
+};
+
 export const CaseDetailsPage = ({
   simulations: allSimulations,
   selectedSimulationIds,
@@ -148,11 +221,17 @@ export const CaseDetailsPage = ({
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<SimulationViewMode>('flat');
   const [groupFilterMode, setGroupFilterMode] = useState<SimulationSummaryGroupFilter>('all');
   const [caseHashQuery, setCaseHashQuery] = useState('');
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
-  const { data: caseRecord, loading, error } = useCase(id ?? '');
+  const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
+  const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
+  const [formState, setFormState] = useState<EditableFormState | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const currentPath = `${location.pathname}${location.search}`;
   const state = location.state as { from?: string } | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
@@ -262,6 +341,32 @@ export const CaseDetailsPage = ({
       : filteredFlatSimulations.length > SCROLLABLE_FLAT_ROWS_THRESHOLD;
 
   useEffect(() => {
+    if (fetchedCaseRecord && fetchedCaseRecord.id === id) {
+      setCaseRecord(fetchedCaseRecord);
+      setFormState(toEditableFormState(fetchedCaseRecord));
+      setIsEditing(false);
+      setSaveError(null);
+      return;
+    }
+
+    if (!loading && !error) {
+      setCaseRecord(null);
+      setFormState(null);
+    }
+  }, [error, fetchedCaseRecord, id, loading]);
+
+  useEffect(() => {
+    if (!caseRecord) {
+      return;
+    }
+
+    if (!authLoading && user?.can_edit_managed_content !== true) {
+      setFormState(toEditableFormState(caseRecord));
+      setIsEditing(false);
+    }
+  }, [authLoading, caseRecord, user?.can_edit_managed_content]);
+
+  useEffect(() => {
     setExpandedGroupKeys(getDefaultExpandedGroupKeys(sortedSimulationGroups));
   }, [sortedSimulationGroups]);
 
@@ -304,6 +409,48 @@ export const CaseDetailsPage = ({
     }
   };
 
+  const canEdit = !authLoading && user?.can_edit_managed_content === true;
+  const editAccessMessage = isAuthenticated
+    ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
+    : 'Log in with GitHub to edit case metadata.';
+
+  const updateField = (field: CaseEditableField, value: string) => {
+    setSaveError(null);
+    setFormState((current) => (current ? { ...current, [field]: value } : current));
+  };
+
+  const handleCancelEdit = () => {
+    if (!caseRecord) return;
+    setSaveError(null);
+    setFormState(toEditableFormState(caseRecord));
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!id || !caseRecord || !formState) return;
+
+    const payload = buildUpdatePayload(caseRecord, formState);
+    if (Object.keys(payload).length === 0) {
+      setSaveError(null);
+      setIsEditing(false);
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const updatedCaseRecord = await updateCase(id, payload);
+      setCaseRecord(updatedCaseRecord);
+      setFormState(toEditableFormState(updatedCaseRecord));
+      setIsEditing(false);
+    } catch (saveErr) {
+      setSaveError(getUpdateErrorMessage(saveErr));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!id) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -335,6 +482,8 @@ export const CaseDetailsPage = ({
       </div>
     );
   }
+  const hasUnsavedChanges =
+    formState != null && Object.keys(buildUpdatePayload(caseRecord, formState)).length > 0;
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
@@ -424,6 +573,39 @@ export const CaseDetailsPage = ({
             <Share2 className="h-4 w-4" />
             Share Case
           </Button>
+          {!isEditing &&
+            (canEdit ? (
+              <Button size="sm" type="button" onClick={() => setIsEditing(true)}>
+                Edit Metadata
+              </Button>
+            ) : !isAuthenticated ? (
+              <Button variant="outline" size="sm" onClick={loginWithGithub}>
+                Log In to Edit
+              </Button>
+            ) : (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button size="sm" disabled>
+                        Edit Metadata
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{editAccessMessage}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          {canEdit && isEditing && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
+                {isSaving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -478,6 +660,112 @@ export const CaseDetailsPage = ({
           </CardContent>
         </Card>
       </div>
+
+      <section>
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="space-y-5 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
+                <p className="text-sm text-muted-foreground">
+                  Shared notes for this case identity. Applies across runs in this case.
+                </p>
+              </div>
+              {!canEdit ? (
+                <p className="text-xs text-muted-foreground">{editAccessMessage}</p>
+              ) : null}
+            </div>
+
+            {formState ? (
+              <div className="space-y-5">
+                <div>
+                  {isEditing ? (
+                    <MarkdownEditorField
+                      label="Description"
+                      value={formState.description}
+                      onChange={(value) => updateField('description', value)}
+                      placeholder="Add shared case description..."
+                    />
+                  ) : (
+                    <>
+                      <Label className="mb-1 block text-xs text-muted-foreground">
+                        Description
+                      </Label>
+                      <MarkdownContent content={caseRecord.description} />
+                    </>
+                  )}
+                </div>
+
+                <div className="grid gap-5 xl:grid-cols-2">
+                  <div>
+                    {isEditing ? (
+                      <MarkdownEditorField
+                        label="Key Features"
+                        value={formState.keyFeatures}
+                        onChange={(value) => updateField('keyFeatures', value)}
+                        placeholder="Add shared key features..."
+                      />
+                    ) : (
+                      <>
+                        <Label className="mb-1 block text-xs text-muted-foreground">
+                          Key Features
+                        </Label>
+                        <MarkdownContent content={caseRecord.keyFeatures} />
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    {isEditing ? (
+                      <MarkdownEditorField
+                        label="Known Issues"
+                        value={formState.knownIssues}
+                        onChange={(value) => updateField('knownIssues', value)}
+                        placeholder="Add shared known issues..."
+                      />
+                    ) : (
+                      <>
+                        <Label className="mb-1 block text-xs text-muted-foreground">
+                          Known Issues
+                        </Label>
+                        <MarkdownContent content={caseRecord.knownIssues} />
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  {isEditing ? (
+                    <MarkdownEditorField
+                      label="Notes"
+                      value={formState.notesMarkdown}
+                      onChange={(value) => updateField('notesMarkdown', value)}
+                      placeholder="Add shared case notes..."
+                      minHeightClassName="min-h-[160px]"
+                    />
+                  ) : (
+                    <>
+                      <Label className="mb-1 block text-xs text-muted-foreground">Notes</Label>
+                      <MarkdownContent content={caseRecord.notesMarkdown} className="min-h-[160px]" />
+                    </>
+                  )}
+                </div>
+
+                {isEditing && saveError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div>
+                        <p className="font-medium">Save blocked</p>
+                        <p className="mt-1 text-red-700">{saveError}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </section>
 
       <section className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

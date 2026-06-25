@@ -1,6 +1,8 @@
 import { api } from '@/api/api';
 import type {
-  CaseOut,
+  CaseDetailOut,
+  CaseSummaryOut,
+  CaseUpdate,
   SimulationCreate,
   SimulationOut,
   SimulationSummaryResponseOut,
@@ -69,18 +71,24 @@ export const resolvePaceExecution = async (executionId: string): Promise<PaceRes
   return res.data;
 };
 
-export const listCases = async (url: string = CASES_URL): Promise<CaseOut[]> => {
-  const res = await api.get<CaseOut[]>(url, {
+export const listCases = async (url: string = CASES_URL): Promise<CaseSummaryOut[]> => {
+  const res = await api.get<CaseSummaryOut[]>(url, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
   return res.data;
 };
 
-export const getCaseById = async (id: string): Promise<CaseOut> => {
-  const res = await api.get<CaseOut>(`${CASES_URL}/${id}`, {
+export const getCaseById = async (id: string): Promise<CaseDetailOut> => {
+  const res = await api.get<CaseDetailOut>(`${CASES_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
+
+  return res.data;
+};
+
+export const updateCase = async (id: string, data: CaseUpdate): Promise<CaseDetailOut> => {
+  const res = await api.patch<CaseDetailOut>(`${CASES_URL}/${id}`, data);
 
   return res.data;
 };
