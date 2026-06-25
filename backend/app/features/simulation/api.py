@@ -227,7 +227,6 @@ def create_simulation(
         401: {"description": "Unauthorized."},
         403: {"description": "Forbidden."},
         404: {"description": "Matching case not found."},
-        409: {"description": "Ambiguous case match."},
         422: {"description": "Validation error."},
     },
 )
@@ -392,12 +391,10 @@ def _resolve_case_id_for_diagnostics_link(
     """Resolve a unique case ID from case, machine, and HPC username."""
     matches = (
         db.query(Case.id)
-        .join(Simulation, Simulation.case_id == Case.id)
-        .join(Machine, Simulation.machine_id == Machine.id)
+        .join(Machine, Case.machine_id == Machine.id)
         .filter(Case.name == case_name)
         .filter(Machine.name == machine_name)
-        .filter(Simulation.hpc_username == hpc_username)
-        .distinct()
+        .filter(Case.hpc_username == hpc_username)
         .all()
     )
 
@@ -405,16 +402,6 @@ def _resolve_case_id_for_diagnostics_link(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No case matched the provided case_name, machine, and hpc_username.",
-        )
-
-    # TODO(#193): This ambiguity branch is not reachable while Case.name remains
-    # globally unique. If case identity moves to (case_name, machine, hpc_username),
-    # keep this 409 path and replace patched coverage with a DB-backed test.
-    # https://github.com/E3SM-Project/simboard/issues/193
-    if len(matches) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Multiple cases matched the provided case_name, machine, and hpc_username.",
         )
 
     return matches[0][0]
@@ -575,7 +562,6 @@ def _simulation_detail_query(db: Session):
     return db.query(Simulation).options(
         joinedload(Simulation.case).joinedload(Case.machine),
         joinedload(Simulation.case).selectinload(Case.links),
-        joinedload(Simulation.machine),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
     )

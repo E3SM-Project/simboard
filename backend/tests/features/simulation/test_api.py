@@ -77,12 +77,22 @@ def _override_current_user(
     app.dependency_overrides[current_active_user] = fake_current_user
 
 
-def _create_case(db: Session, name: str = "test_case") -> Case:
+def _create_case(
+    db: Session,
+    name: str = "test_case",
+    *,
+    machine_id=None,
+    hpc_username: str = "test-user",
+) -> Case:
     """Helper to create a Case."""
-    machine = db.query(Machine).first()
+    machine = (
+        db.query(Machine).filter(Machine.id == machine_id).one_or_none()
+        if machine_id is not None
+        else db.query(Machine).first()
+    )
     assert machine is not None
 
-    case = Case(name=name, machine_id=machine.id, hpc_username="test-user")
+    case = Case(name=name, machine_id=machine.id, hpc_username=hpc_username)
 
     db.add(case)
     db.flush()
@@ -131,7 +141,12 @@ def _create_matching_simulation(
     hpc_username: str,
     source_reference: str,
 ) -> tuple[Case, Simulation]:
-    case = _create_case(db, case_name)
+    case = _create_case(
+        db,
+        case_name,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+    )
     ingestion = _create_ingestion(
         db,
         machine_id,
@@ -149,12 +164,10 @@ def _create_matching_simulation(
         initialization_type="startup",
         simulation_type=SimulationType.EXPERIMENTAL,
         status=SimulationStatus.CREATED,
-        machine_id=machine_id,
         simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
         created_by=user_id,
         last_updated_by=user_id,
         ingestion_id=ingestion.id,
-        hpc_username=hpc_username,
         extra={"machineName": machine_name},
     )
     db.add(simulation)
@@ -2231,43 +2244,62 @@ class TestLinkCaseDiagnostics:
 
         assert response.status_code == 404
 
-    def test_endpoint_returns_409_for_ambiguous_match(self, client) -> None:
-        def fake_admin_user():
-            return User(
-                id=uuid4(),
-                email="admin-diagnostics@example.com",
-                is_active=True,
-                is_verified=True,
-                role=UserRole.ADMIN,
-            )
+    @use_real_auth
+    def test_endpoint_resolves_duplicate_case_name_by_hpc_username(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
 
-        app.dependency_overrides[current_active_user] = fake_admin_user
+        service_user, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-shared-name-{uuid4()}"
+        first_case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-a-{uuid4()}",
+            hpc_username="diag-user-a",
+            source_reference=f"diag-shared-source-a-{uuid4()}",
+        )
+        second_case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-b-{uuid4()}",
+            hpc_username="diag-user-b",
+            source_reference=f"diag-shared-source-b-{uuid4()}",
+        )
 
-        with patch(
-            "app.features.simulation.api._resolve_case_id_for_diagnostics_link",
-            side_effect=HTTPException(
-                status_code=409,
-                detail=(
-                    "Multiple cases matched the provided case_name, machine, and hpc_username."
-                ),
-            ),
-        ):
-            response = client.post(
-                f"{API_BASE}/diagnostics/link",
-                json={
-                    "caseName": "ambiguous-case",
-                    "machine": "perlmutter",
-                    "hpcUsername": "diag-user",
-                    "diagnostics": [
-                        {
-                            "name": "Ambiguous diagnostics",
-                            "url": "https://example.com/diag/ambiguous",
-                        }
-                    ],
-                },
-            )
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user-b",
+                "diagnostics": [
+                    {
+                        "name": "Selected diagnostics",
+                        "url": "https://example.com/diag/selected",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
 
-        assert response.status_code == 409
+        assert response.status_code == 204
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == first_case.id).count()
+            == 0
+        )
+        links = (
+            db.query(ExternalLink).filter(ExternalLink.case_id == second_case.id).all()
+        )
+        assert len(links) == 1
+        assert links[0].label == "Selected diagnostics"
 
     @use_real_auth
     def test_endpoint_returns_422_for_invalid_payload(
