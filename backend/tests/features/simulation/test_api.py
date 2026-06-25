@@ -738,6 +738,66 @@ class TestUpdateCase:
             ("other", "https://example.com/new-resource")
         ]
 
+    def test_endpoint_updates_existing_case_link_in_place(self, client, db: Session):
+        case = _create_case(db, "test_case_link_update_in_place")
+        existing_link = ExternalLink(
+            case_id=case.id,
+            kind=ExternalLinkKind.DOCS,
+            url="https://example.com/case-docs",
+            label="Old docs label",
+        )
+        db.add(existing_link)
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/case-docs",
+                        "label": "Updated docs label",
+                    },
+                    {
+                        "kind": "performance",
+                        "url": "https://example.com/case-performance",
+                        "label": "Case performance",
+                    },
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert {
+            (link["kind"], link["url"], link["label"]) for link in data["links"]
+        } == {
+            ("docs", "https://example.com/case-docs", "Updated docs label"),
+            (
+                "performance",
+                "https://example.com/case-performance",
+                "Case performance",
+            ),
+        }
+
+        db.expire_all()
+        case_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert len(case_links) == 2
+        assert existing_link.id in {link.id for link in case_links}
+        assert [(link.kind.value, link.url, link.label) for link in case_links] == [
+            ("docs", "https://example.com/case-docs", "Updated docs label"),
+            (
+                "performance",
+                "https://example.com/case-performance",
+                "Case performance",
+            ),
+        ]
+
     def test_endpoint_clears_case_links_with_empty_list(self, client, db: Session):
         case = _create_case(db, "test_case_link_clear")
         db.add(
