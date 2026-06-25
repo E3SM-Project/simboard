@@ -1,8 +1,8 @@
 """Allow external links to belong to either simulations or cases.
 
 Revision ID: 20260625_130000
-Revises: 20260624_163700
-Create Date: 2026-06-24 13:00:00.000000
+Revises: 20260625_120000
+Create Date: 2026-06-25 13:00:00.000000
 """
 
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "20260625_130000"
-down_revision: Union[str, Sequence[str], None] = "20260624_163700"
+down_revision: Union[str, Sequence[str], None] = "20260625_120000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
