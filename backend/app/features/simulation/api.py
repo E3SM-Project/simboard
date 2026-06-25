@@ -185,8 +185,12 @@ def update_case(
         raise HTTPException(status_code=404, detail="Case not found")
 
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    updates.pop("links", None)
     for field, value in updates.items():
         setattr(case, field, value)
+
+    if "links" in payload.model_fields_set:
+        _replace_case_links(case, payload.links or [])
 
     case.updated_at = datetime.now(timezone.utc)
 
@@ -658,6 +662,26 @@ def _build_external_link_models(links: list) -> list[ExternalLink]:
         models.append(ExternalLink(**link_data))
 
     return models
+
+
+def _replace_case_links(case: Case, links: list) -> None:
+    existing_by_key = {(link.kind, link.url): link for link in case.links}
+    next_links: list[ExternalLink] = []
+
+    for link in links:
+        link_data = link.model_dump(by_alias=False, exclude_unset=True)
+        link_data["url"] = str(link.url)
+        key = (link_data["kind"], link_data["url"])
+        existing = existing_by_key.pop(key, None)
+
+        if existing is not None:
+            existing.label = link_data.get("label")
+            next_links.append(existing)
+            continue
+
+        next_links.append(ExternalLink(**link_data))
+
+    case.links = next_links
 
 
 def _external_link_to_out(link: ExternalLink) -> dict:

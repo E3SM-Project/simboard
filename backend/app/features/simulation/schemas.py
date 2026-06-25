@@ -670,6 +670,14 @@ class CaseUpdate(CamelInBaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("links", mode="before")
+    @classmethod
+    def reject_null_link_updates(cls, value: Any) -> Any:
+        if value is None:
+            msg = "Field may be omitted for PATCH requests, but cannot be null."
+            raise ValueError(msg)
+        return value
+
     description: Annotated[
         str | None, Field(None, description="Optional shared description of the case")
     ]
@@ -685,6 +693,13 @@ class CaseUpdate(CamelInBaseModel):
             None, description="Optional shared notes for the case in markdown format"
         ),
     ]
+    links: Annotated[
+        list[ExternalLinkCreate] | None,
+        Field(
+            None,
+            description="Full replacement list of external links associated with the case",
+        ),
+    ]
 
     @field_validator(
         "description", "key_features", "known_issues", "notes_markdown", mode="before"
@@ -692,6 +707,15 @@ class CaseUpdate(CamelInBaseModel):
     @classmethod
     def normalize_optional_metadata(cls, value: Any) -> Any:
         return _normalize_optional_text(value)
+
+    @field_validator("links")
+    @classmethod
+    def validate_update_links(
+        cls, value: list[ExternalLinkCreate] | None
+    ) -> list[ExternalLinkCreate] | None:
+        if value is None:
+            return value
+        return _validate_unique_resources(value, value_attr="url")
 
 
 class SimulationOut(CamelOutBaseModel):

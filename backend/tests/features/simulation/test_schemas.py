@@ -251,6 +251,9 @@ class TestCaseUpdateSchema:
 
         assert _normalize_optional_text(marker) is marker
 
+    def test_update_link_validator_accepts_none_when_called_directly(self):
+        assert CaseUpdate.validate_update_links(None) is None
+
     def test_omitted_fields_produce_empty_patch(self):
         update = CaseUpdate()
 
