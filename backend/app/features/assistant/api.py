@@ -43,6 +43,7 @@ async def summarize_simulation(
         select(Simulation)
         .options(
             joinedload(Simulation.case).joinedload(Case.machine),
+            joinedload(Simulation.case).selectinload(Case.links),
             selectinload(Simulation.artifacts),
             selectinload(Simulation.links),
         )

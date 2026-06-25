@@ -1,9 +1,16 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, HttpUrl, computed_field, field_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    HttpUrl,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
@@ -88,6 +95,50 @@ class ExternalLinkCreate(CamelInBaseModel):
 class ExternalLinkOut(CamelOutBaseModel):
     """Schema for representing an External Link object."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_owner_type(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            if "owner_type" in value or "ownerType" in value:
+                return value
+
+            if (
+                value.get("simulation_id") is not None
+                or value.get("simulationId") is not None
+            ):
+                return {**value, "owner_type": "simulation"}
+
+            if value.get("case_id") is not None or value.get("caseId") is not None:
+                return {**value, "owner_type": "case"}
+
+            return value
+
+        if getattr(value, "owner_type", None) is not None:
+            return value
+
+        simulation_id = getattr(value, "simulation_id", None)
+        case_id = getattr(value, "case_id", None)
+        owner_type = (
+            "simulation"
+            if simulation_id is not None
+            else "case"
+            if case_id is not None
+            else None
+        )
+
+        if owner_type is None:
+            return value
+
+        return {
+            "id": value.id,
+            "kind": value.kind,
+            "url": value.url,
+            "label": value.label,
+            "owner_type": owner_type,
+            "created_at": value.created_at,
+            "updated_at": value.updated_at,
+        }
+
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the external link.")
     ]
@@ -98,6 +149,16 @@ class ExternalLinkOut(CamelOutBaseModel):
     label: Annotated[
         str | None, Field(None, description="An optional label for the external link.")
     ]
+    owner_type: Annotated[
+        Literal["simulation", "case"],
+        Field(
+            ...,
+            description=(
+                "Owner of this link in SimBoard storage. Simulation-owned links are "
+                "editable from simulation PATCH; case-owned links are read-only there."
+            ),
+        ),
+    ]
     created_at: Annotated[
         datetime,
         Field(..., description="The timestamp when the external link was created."),
@@ -106,6 +167,46 @@ class ExternalLinkOut(CamelOutBaseModel):
         datetime,
         Field(
             ..., description="The timestamp when the external link was last updated."
+        ),
+    ]
+
+
+class DiagnosticsLinkItem(CamelInBaseModel):
+    """Schema for one diagnostic link to attach to a case."""
+
+    name: Annotated[str, Field(..., description="Human-readable diagnostic label.")]
+    url: Annotated[HttpUrl, Field(..., description="Diagnostic URL to attach.")]
+    kind: Literal[ExternalLinkKind.DIAGNOSTIC] = Field(
+        default=ExternalLinkKind.DIAGNOSTIC,
+        description="Link type for diagnostics payloads. Must be 'diagnostic'.",
+    )
+
+
+class DiagnosticsLinkRequest(CamelInBaseModel):
+    """Schema for linking diagnostics to a resolved case."""
+
+    case_name: Annotated[
+        str,
+        Field(..., description="Exact case name used to resolve the target case."),
+    ]
+    machine: Annotated[
+        str,
+        Field(
+            ...,
+            description="Exact machine name used alongside case name to resolve the case.",
+        ),
+    ]
+    hpc_username: Annotated[
+        str,
+        Field(
+            ...,
+            description="Exact HPC username used alongside case name and machine to resolve the case.",
+        ),
+    ]
+    diagnostics: Annotated[
+        list[DiagnosticsLinkItem],
+        Field(
+            ..., min_length=1, description="Diagnostic links to upsert for the case."
         ),
     ]
 
@@ -527,6 +628,13 @@ class CaseSummaryOut(CamelOutBaseModel):
         Field(
             default_factory=list,
             description="Unique HPC usernames represented across this case's simulations.",
+        ),
+    ]
+    links: Annotated[
+        list[ExternalLinkOut],
+        Field(
+            default_factory=list,
+            description="Optional list of external links associated with the case.",
         ),
     ]
     created_at: Annotated[

@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -5,9 +6,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.common.dependencies import get_database_session
 from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
@@ -17,21 +21,37 @@ from app.features.simulation.api import (
     update_case,
     update_simulation,
 )
-from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.simulation.enums import (
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseUpdate,
     SimulationCreate,
     SimulationUpdate,
 )
+from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
-from app.features.user.models import User, UserRole
+from app.features.user.models import ApiToken, User, UserRole
 from app.main import app
+from tests.conftest import TestingSessionLocal, engine
+
+
+def use_real_auth(test_func):
+    """Flag tests that should bypass the default auth override."""
+    test_func._use_real_auth = True
+    return test_func
 
 
 @pytest.fixture(autouse=True)
-def override_auth_dependency(normal_user_sync):
+def override_auth_dependency(request, normal_user_sync):
     """Auto-login a test user for endpoints requiring authentication."""
+    if getattr(request.node.function, "_use_real_auth", False):
+        yield
+        app.dependency_overrides.clear()
+        return
 
     def fake_current_user():
         return User(
@@ -65,17 +85,103 @@ def _override_current_user(
     app.dependency_overrides[current_active_user] = fake_current_user
 
 
-def _create_case(db: Session, name: str = "test_case") -> Case:
+def _create_case(
+    db: Session,
+    name: str = "test_case",
+    *,
+    machine_id=None,
+    hpc_username: str = "test-user",
+) -> Case:
     """Helper to create a Case."""
-    machine = db.query(Machine).first()
+    machine = (
+        db.query(Machine).filter(Machine.id == machine_id).one_or_none()
+        if machine_id is not None
+        else db.query(Machine).first()
+    )
     assert machine is not None
 
-    case = Case(name=name, machine_id=machine.id, hpc_username="test-user")
+    case = Case(name=name, machine_id=machine.id, hpc_username=hpc_username)
 
     db.add(case)
     db.flush()
 
     return case
+
+
+def _create_service_account_token(
+    db: Session,
+    *,
+    email: str | None = None,
+) -> tuple[User, str]:
+    user = User(
+        email=email or f"svc-{uuid4()}@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.flush()
+
+    raw_token, token_hash = generate_token()
+    db.add(
+        ApiToken(
+            name="Diagnostics Link Token",
+            token_hash=token_hash,
+            user_id=user.id,
+            created_at=datetime.now(timezone.utc),
+            revoked=False,
+        )
+    )
+    db.commit()
+    db.refresh(user)
+
+    return user, raw_token
+
+
+def _create_matching_simulation(
+    db: Session,
+    *,
+    case_name: str,
+    machine_id,
+    machine_name: str,
+    user_id,
+    execution_id: str,
+    hpc_username: str,
+    source_reference: str,
+) -> tuple[Case, Simulation]:
+    case = _create_case(
+        db,
+        case_name,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+    )
+    ingestion = _create_ingestion(
+        db,
+        machine_id,
+        user_id,
+        source_reference=source_reference,
+    )
+
+    simulation = Simulation(
+        case_id=case.id,
+        execution_id=execution_id,
+        compset="AQUAPLANET",
+        compset_alias="QPC4",
+        grid_name="f19_f19",
+        grid_resolution="1.9x2.5",
+        initialization_type="startup",
+        simulation_type=SimulationType.EXPERIMENTAL,
+        status=SimulationStatus.CREATED,
+        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        created_by=user_id,
+        last_updated_by=user_id,
+        ingestion_id=ingestion.id,
+        extra={"machineName": machine_name},
+    )
+    db.add(simulation)
+    db.commit()
+
+    return case, simulation
 
 
 def _create_ingestion(
@@ -359,6 +465,72 @@ class TestGetCase:
         assert data["notesMarkdown"] == "## Shared notes"
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
+        assert data["links"] == []
+
+    def test_endpoint_includes_case_level_diagnostic_links(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_detail_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_detail_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="case-detail-links-exec-1",
+                case_hash="detail-links-hash-1",
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                simulation_type="experimental",
+                status="created",
+                simulation_start_date="2023-01-01T00:00:00Z",
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.flush()
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/{case.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["links"] == [
+            {
+                "id": data["links"][0]["id"],
+                "kind": "diagnostic",
+                "url": "https://example.com/case-diagnostic",
+                "label": "Case diagnostic",
+                "ownerType": "case",
+                "createdAt": data["links"][0]["createdAt"],
+                "updatedAt": data["links"][0]["updatedAt"],
+            }
+        ]
 
     def test_endpoint_raises_404_if_case_not_found(self, client):
         res = client.get(f"{API_BASE}/cases/{uuid4()}")
@@ -1069,6 +1241,93 @@ class TestListSimulations:
         assert data[0]["caseName"] == "combo_case"
         assert data[0]["caseGroup"] == "combo_group"
 
+    def test_list_merges_case_owned_diagnostic_links_without_duplicates(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_list_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_list_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="list-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-only-diagnostic",
+                    label="Case-only diagnostic",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Case shared diagnostic",
+                ),
+                ExternalLink(
+                    simulation_id=sim.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Simulation shared diagnostic",
+                ),
+            ]
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/simulations")
+        assert res.status_code == 200
+        data = res.json()
+        assert len(data) == 1
+
+        links_by_url = {link["url"]: link for link in data[0]["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-only-diagnostic",
+            "https://example.com/shared-diagnostic",
+        }
+        assert (
+            links_by_url["https://example.com/case-only-diagnostic"]["ownerType"]
+            == "case"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic"]["label"]
+            == "Simulation shared diagnostic"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic"]["ownerType"]
+            == "simulation"
+        )
+        assert data[0]["groupedLinks"]["diagnostic"][0]["kind"] == "diagnostic"
+
 
 class TestGetSimulation:
     def test_endpoint_succeeds_with_valid_id(
@@ -1189,6 +1448,92 @@ class TestGetSimulation:
         res = client.get(f"{API_BASE}/simulations/{uuid4()}")
         assert res.status_code == 404
         assert res.json() == {"detail": "Simulation not found"}
+
+    def test_endpoint_merges_case_owned_diagnostic_links_with_simulation_precedence(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_get_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_simulation_get_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="get-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-diagnostic-only",
+                    label="Case diagnostic only",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Case duplicate",
+                ),
+                ExternalLink(
+                    simulation_id=sim.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Simulation duplicate",
+                ),
+            ]
+        )
+        db.commit()
+        db.refresh(sim)
+
+        res = client.get(f"{API_BASE}/simulations/{sim.id}")
+        assert res.status_code == 200
+        data = res.json()
+
+        links_by_url = {link["url"]: link for link in data["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-diagnostic-only",
+            "https://example.com/shared-diagnostic-detail",
+        }
+        assert (
+            links_by_url["https://example.com/case-diagnostic-only"]["ownerType"]
+            == "case"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic-detail"]["label"]
+            == "Simulation duplicate"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic-detail"]["ownerType"]
+            == "simulation"
+        )
 
 
 class TestUpdateSimulation:
@@ -1415,6 +1760,87 @@ class TestUpdateSimulation:
             db.query(ExternalLink).filter(ExternalLink.simulation_id == sim.id).count()
             == 0
         )
+
+    def test_endpoint_replaces_only_simulation_owned_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_preserves_case_links")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_simulation_patch_preserves_case_links",
+        )
+        sim = _create_simulation_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-preserve-case-links",
+        )
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind="diagnostic",
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        sim.links.append(
+            ExternalLink(
+                kind="diagnostic",
+                url="https://example.com/simulation-diagnostic-old",
+                label="Old simulation diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/simulations/{sim.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/simulation-docs-new",
+                        "label": "Simulation docs",
+                    }
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        links_by_url = {link["url"]: link for link in data["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-diagnostic",
+            "https://example.com/simulation-docs-new",
+        }
+        assert (
+            links_by_url["https://example.com/case-diagnostic"]["ownerType"] == "case"
+        )
+        assert (
+            links_by_url["https://example.com/simulation-docs-new"]["ownerType"]
+            == "simulation"
+        )
+
+        db.expire_all()
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 1
+        )
+        simulation_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.simulation_id == sim.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind.value, link.url) for link in simulation_links] == [
+            ("docs", "https://example.com/simulation-docs-new")
+        ]
 
     def test_endpoint_returns_401_without_authentication(
         self, client, db: Session, normal_user_sync
@@ -1795,3 +2221,446 @@ class TestSimulationBrowserIncludesCaseMetadata:
         assert data[0]["caseId"] == str(case.id)
         assert data[0]["caseName"] == "test_case_browser"
         assert data[0]["executionId"] == "browser-exec-1"
+
+
+class TestLinkCaseDiagnostics:
+    @pytest.mark.parametrize(
+        "machine_input",
+        ["pm", "pm-cpu", "pm-gpu", "Perlmutter"],
+    )
+    @use_real_auth
+    def test_endpoint_resolves_machine_aliases(
+        self, client, db: Session, machine_input: str
+    ) -> None:
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").one_or_none()
+        if machine is None:
+            machine = Machine(
+                name="perlmutter",
+                site="NERSC",
+                architecture="gpu",
+                scheduler="slurm",
+                gpu=True,
+            )
+            db.add(machine)
+            db.commit()
+            db.refresh(machine)
+
+        service_user, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-machine-alias-{uuid4()}"
+        case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-machine-alias-{uuid4()}",
+            hpc_username="alias-user",
+            source_reference=f"diag-machine-alias-source-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine_input,
+                "hpcUsername": "alias-user",
+                "diagnostics": [
+                    {
+                        "name": f"Diagnostics via {machine_input}",
+                        "url": f"https://example.com/diag/{uuid4()}",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        links = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).all()
+        assert len(links) == 1
+
+    @use_real_auth
+    def test_endpoint_creates_case_scoped_diagnostic_links(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        _, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-case-{uuid4()}"
+        case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=db.query(User)
+            .filter(User.role == UserRole.SERVICE_ACCOUNT)
+            .one()
+            .id,
+            execution_id=f"diag-exec-{uuid4()}",
+            hpc_username="diag-user",
+            source_reference=f"diag-source-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Atmosphere diagnostics",
+                        "url": "https://example.com/diag/atmosphere",
+                    },
+                    {
+                        "name": "Ocean diagnostics",
+                        "url": "https://example.com/diag/ocean",
+                    },
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind, link.label, link.url) for link in links] == [
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Atmosphere diagnostics",
+                "https://example.com/diag/atmosphere",
+            ),
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Ocean diagnostics",
+                "https://example.com/diag/ocean",
+            ),
+        ]
+
+    @use_real_auth
+    def test_duplicate_request_remains_idempotent(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        service_user, raw_token = _create_service_account_token(db)
+        case, _ = _create_matching_simulation(
+            db,
+            case_name=f"diagnostics-idempotent-{uuid4()}",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-idempotent-exec-{uuid4()}",
+            hpc_username="idempotent-user",
+            source_reference=f"diag-idempotent-source-{uuid4()}",
+        )
+        payload = {
+            "caseName": case.name,
+            "machine": machine.name,
+            "hpcUsername": "idempotent-user",
+            "diagnostics": [
+                {
+                    "name": "Shared diagnostics",
+                    "url": "https://example.com/diag/shared",
+                }
+            ],
+        }
+
+        first = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        second = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert first.status_code == 204
+        assert second.status_code == 204
+        links = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).all()
+        assert len(links) == 1
+        assert links[0].label == "Shared diagnostics"
+
+    @use_real_auth
+    def test_concurrent_duplicate_request_remains_idempotent(self) -> None:
+        SessionFactory = TestingSessionLocal
+        seed_session = SessionFactory(bind=engine.connect())
+        cleanup_session = None
+        service_user: User | None = None
+        app.dependency_overrides.pop(current_active_user, None)
+
+        def override_get_database_session():
+            session = SessionFactory(bind=engine.connect())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        app.dependency_overrides[get_database_session] = override_get_database_session
+
+        try:
+            machine = seed_session.query(Machine).first()
+            assert machine is not None
+
+            service_user, raw_token = _create_service_account_token(seed_session)
+            case_name = f"diagnostics-concurrent-{uuid4()}"
+            execution_id = f"diag-concurrent-exec-{uuid4()}"
+            source_reference = f"diag-concurrent-source-{uuid4()}"
+            case, _ = _create_matching_simulation(
+                seed_session,
+                case_name=case_name,
+                machine_id=machine.id,
+                machine_name=machine.name,
+                user_id=service_user.id,
+                execution_id=execution_id,
+                hpc_username="concurrent-user",
+                source_reference=source_reference,
+            )
+
+            payload = {
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "concurrent-user",
+                "diagnostics": [
+                    {
+                        "name": "Concurrent diagnostics",
+                        "url": "https://example.com/diag/concurrent",
+                    }
+                ],
+            }
+
+            with TestClient(app) as local_client:
+
+                def send_request() -> int:
+                    response = local_client.post(
+                        f"{API_BASE}/diagnostics/link",
+                        json=payload,
+                        headers={"Authorization": f"Bearer {raw_token}"},
+                    )
+                    return response.status_code
+
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    statuses = list(executor.map(lambda _: send_request(), range(2)))
+
+            assert statuses == [204, 204]
+
+            cleanup_session = SessionFactory(bind=engine.connect())
+            links = (
+                cleanup_session.query(ExternalLink)
+                .filter(ExternalLink.case_id == case.id)
+                .all()
+            )
+            assert len(links) == 1
+        finally:
+            app.dependency_overrides.pop(get_database_session, None)
+            if cleanup_session is None:
+                cleanup_session = SessionFactory(bind=engine.connect())
+            cleanup_session.execute(
+                delete(ExternalLink).where(
+                    ExternalLink.url == "https://example.com/diag/concurrent"
+                )
+            )
+            cleanup_session.execute(
+                delete(Simulation).where(
+                    Simulation.execution_id == locals().get("execution_id")
+                )
+            )
+            cleanup_session.execute(
+                delete(Ingestion).where(
+                    Ingestion.source_reference == locals().get("source_reference")
+                )
+            )
+            cleanup_session.execute(
+                delete(Case).where(Case.name == locals().get("case_name"))
+            )
+            if service_user is not None:
+                cleanup_session.execute(
+                    delete(ApiToken).where(ApiToken.user_id == service_user.id)
+                )
+                cleanup_session.execute(
+                    delete(User).where(User.email == service_user.email)
+                )
+            cleanup_session.commit()
+            cleanup_session.close()
+            seed_session.close()
+
+    @use_real_auth
+    def test_endpoint_requires_authentication(self, client) -> None:
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-auth-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing auth",
+                        "url": "https://example.com/diag/auth",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_endpoint_rejects_non_admin_non_service_account(self, client) -> None:
+        def fake_non_admin_user():
+            return User(
+                id=uuid4(),
+                email="forbidden@example.com",
+                is_active=True,
+                is_verified=True,
+                role=UserRole.USER,
+            )
+
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "forbidden-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Forbidden diagnostics",
+                        "url": "https://example.com/diag/forbidden",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Only administrators and service accounts may link diagnostics."
+        )
+
+    @use_real_auth
+    def test_endpoint_returns_404_when_case_match_is_missing(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing case diagnostics",
+                        "url": "https://example.com/diag/missing-case",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 404
+
+    @use_real_auth
+    def test_endpoint_returns_404_for_unknown_machine(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-machine-case",
+                "machine": "unknown-machine",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing machine diagnostics",
+                        "url": "https://example.com/diag/missing-machine",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 404
+
+    @use_real_auth
+    def test_endpoint_resolves_duplicate_case_name_by_hpc_username(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        service_user, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-shared-name-{uuid4()}"
+        first_case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-a-{uuid4()}",
+            hpc_username="diag-user-a",
+            source_reference=f"diag-shared-source-a-{uuid4()}",
+        )
+        second_case, _ = _create_matching_simulation(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-b-{uuid4()}",
+            hpc_username="diag-user-b",
+            source_reference=f"diag-shared-source-b-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user-b",
+                "diagnostics": [
+                    {
+                        "name": "Selected diagnostics",
+                        "url": "https://example.com/diag/selected",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == first_case.id).count()
+            == 0
+        )
+        links = (
+            db.query(ExternalLink).filter(ExternalLink.case_id == second_case.id).all()
+        )
+        assert len(links) == 1
+        assert links[0].label == "Selected diagnostics"
+
+    @use_real_auth
+    def test_endpoint_returns_422_for_invalid_payload(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "invalid-payload-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [{"name": "Broken diagnostics", "url": "not-a-url"}],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 422

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -14,7 +15,12 @@ from app.features.assistant.snapshot import (
     SnapshotSimulationFields,
     _SnapshotSizeBudget,
 )
-from app.features.simulation.enums import SimulationStatus
+from app.features.simulation.enums import (
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
+from app.features.simulation.models import Case, ExternalLink, Simulation
 
 
 def _make_snapshot() -> SimulationSnapshot:
@@ -194,3 +200,63 @@ class TestSnapshotHelpers:
         assert exc_info.value.snapshot.simulation.known_issues is None
         assert exc_info.value.snapshot.simulation.extra == {}
         assert SNAPSHOT_TRUNCATED_CAVEAT in exc_info.value.snapshot.snapshot_caveats
+
+    def test_build_snapshot_merges_case_links_with_simulation_precedence(self) -> None:
+        case = Case(
+            id=uuid4(),
+            name="snapshot-case",
+            machine_id=uuid4(),
+            hpc_username="snapshot-user",
+            case_group="snapshot-group",
+        )
+        simulation = Simulation(
+            id=uuid4(),
+            case=case,
+            case_id=case.id,
+            execution_id="snapshot-exec",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            simulation_type=SimulationType.EXPERIMENTAL,
+            status=SimulationStatus.COMPLETED,
+            initialization_type="startup",
+            simulation_start_date=datetime(2024, 1, 1, tzinfo=UTC),
+            created_by=uuid4(),
+            last_updated_by=uuid4(),
+            ingestion_id=uuid4(),
+            extra={},
+        )
+        case.links = [
+            ExternalLink(
+                case=case,
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/case-only",
+                label="Case only",
+            ),
+            ExternalLink(
+                case=case,
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/shared",
+                label="Case shared",
+            ),
+        ]
+        simulation.links = [
+            ExternalLink(
+                simulation=simulation,
+                simulation_id=simulation.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/shared",
+                label="Simulation shared",
+            )
+        ]
+        simulation.artifacts = []
+
+        snapshot = snapshot_module.build_simulation_snapshot(simulation)
+
+        assert [(link.url, link.label) for link in snapshot.links] == [
+            ("https://example.com/case-only", "Case only"),
+            ("https://example.com/shared", "Simulation shared"),
+        ]

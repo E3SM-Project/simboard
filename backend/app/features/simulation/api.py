@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import distinct
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
@@ -10,11 +11,15 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
+from app.features.machine.utils import resolve_machine_by_name
+from app.features.simulation.enums import ExternalLinkKind
+from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseDetailOut,
     CaseSummaryOut,
     CaseUpdate,
+    DiagnosticsLinkRequest,
     SimulationCreate,
     SimulationOut,
     SimulationSummaryCapabilitiesOut,
@@ -22,10 +27,11 @@ from app.features.simulation.schemas import (
     SimulationUpdate,
 )
 from app.features.user.manager import can_edit_managed_content, current_active_user
-from app.features.user.models import User
+from app.features.user.models import User, UserRole
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
+diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
 
 
 @case_router.get(
@@ -123,6 +129,7 @@ def get_case(
     case = (
         db.query(Case)
         .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .options(selectinload(Case.links))
         .filter(Case.id == case_id)
         .first()
     )
@@ -165,7 +172,11 @@ def update_case(
 
     case = (
         db.query(Case)
-        .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .options(
+            selectinload(Case.machine),
+            selectinload(Case.simulations),
+            selectinload(Case.links),
+        )
         .filter(Case.id == case_id)
         .one_or_none()
     )
@@ -186,7 +197,11 @@ def update_case(
     db.expire_all()
     case_loaded = (
         db.query(Case)
-        .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .options(
+            selectinload(Case.machine),
+            selectinload(Case.simulations),
+            selectinload(Case.links),
+        )
         .filter(Case.id == case_id)
         .one_or_none()
     )
@@ -281,6 +296,42 @@ def create_simulation(
     return result
 
 
+@diagnostics_router.post(
+    "/link",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Diagnostics linked successfully."},
+        401: {"description": "Unauthorized."},
+        403: {"description": "Forbidden."},
+        404: {"description": "Matching case not found."},
+        422: {"description": "Validation error."},
+    },
+)
+def link_case_diagnostics(
+    payload: DiagnosticsLinkRequest,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> None:
+    """Resolve one case and upsert case-scoped diagnostic links."""
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and service accounts may link diagnostics.",
+        )
+
+    case_id = _resolve_case_id_for_diagnostics_link(
+        db=db,
+        case_name=payload.case_name,
+        machine_name=payload.machine,
+        hpc_username=payload.hpc_username,
+    )
+    _upsert_case_diagnostic_links(
+        db=db,
+        case_id=case_id,
+        diagnostics=payload.diagnostics,
+    )
+
+
 @simulation_router.get(
     "",
     response_model=list[SimulationOut],
@@ -325,6 +376,7 @@ def list_simulations(
     """
     query = db.query(Simulation).options(
         joinedload(Simulation.case).joinedload(Case.machine),
+        joinedload(Simulation.case).selectinload(Case.links),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
     )
@@ -406,6 +458,76 @@ def update_simulation(
     return _simulation_to_out(sim_loaded)
 
 
+def _resolve_case_id_for_diagnostics_link(
+    *,
+    db: Session,
+    case_name: str,
+    machine_name: str,
+    hpc_username: str,
+) -> UUID:
+    """Resolve a unique case ID from case, machine, and HPC username."""
+    machine = resolve_machine_by_name(db, machine_name)
+
+    if machine is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No case matched the provided case_name, machine, and hpc_username.",
+        )
+
+    match = (
+        db.query(Case.id)
+        .filter(Case.name == case_name)
+        .filter(Case.machine_id == machine.id)
+        .filter(Case.hpc_username == hpc_username)
+        .one_or_none()
+    )
+
+    if match is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No case matched the provided case_name, machine, and hpc_username.",
+        )
+
+    return match[0]
+
+
+def _upsert_case_diagnostic_links(
+    *,
+    db: Session,
+    case_id: UUID,
+    diagnostics: list,
+) -> None:
+    """Create or update case-owned diagnostic links idempotently."""
+    now = datetime.now(timezone.utc)
+
+    with transaction(db):
+        for diagnostic in diagnostics:
+            stmt = (
+                pg_insert(ExternalLink)
+                .values(
+                    case_id=case_id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url=str(diagnostic.url),
+                    label=diagnostic.name,
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        ExternalLink.case_id,
+                        ExternalLink.kind,
+                        ExternalLink.url,
+                    ],
+                    index_where=ExternalLink.case_id.is_not(None),
+                    set_={
+                        "label": diagnostic.name,
+                        "updated_at": now,
+                    },
+                )
+            )
+            db.execute(stmt)
+
+
 @simulation_router.get(
     "/{sim_id}",
     response_model=SimulationOut,
@@ -478,6 +600,7 @@ def _build_case_summary(case: Case) -> dict:
         "simulations": summaries,
         "machine_names": machine_names,
         "hpc_usernames": hpc_usernames,
+        "links": [_external_link_to_out(link) for link in case.links],
         "created_at": case.created_at,
         "updated_at": case.updated_at,
     }
@@ -537,9 +660,24 @@ def _build_external_link_models(links: list) -> list[ExternalLink]:
     return models
 
 
+def _external_link_to_out(link: ExternalLink) -> dict:
+    owner_type = "simulation" if link.simulation_id is not None else "case"
+
+    return {
+        "id": link.id,
+        "kind": link.kind,
+        "url": link.url,
+        "label": link.label,
+        "owner_type": owner_type,
+        "created_at": link.created_at,
+        "updated_at": link.updated_at,
+    }
+
+
 def _simulation_detail_query(db: Session):
     return db.query(Simulation).options(
         joinedload(Simulation.case).joinedload(Case.machine),
+        joinedload(Simulation.case).selectinload(Case.links),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
     )
@@ -563,6 +701,8 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     """
     case = sim.case
     llm_available = is_summary_llm_available()
+    merged_links = merge_simulation_and_case_links(sim.links, case.links)
+    serialized_links = [_external_link_to_out(link) for link in merged_links]
 
     result = SimulationOut.model_validate(
         {
@@ -572,6 +712,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             "machine_id": case.machine_id,
             "hpc_username": case.hpc_username,
             "machine": case.machine,
+            "links": serialized_links,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,

@@ -60,6 +60,7 @@ export interface CaseSummaryOut {
   simulations: SimulationSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
+  links: ExternalLinkOut[];
   createdAt: string;
   updatedAt: string;
 }
@@ -207,7 +208,7 @@ export interface SimulationOut extends SimulationCreate {
   // Relationships
   // ~~~~~~~~~~~~~~
   artifacts: ArtifactOut[];
-  links: ExternalLinkOut[];
+  links: ExternalLinkOut[]; // merged simulation-owned + case-owned links, with ownerType metadata
   machine: Machine;
 
   // Computed fields

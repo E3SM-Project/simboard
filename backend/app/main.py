@@ -11,7 +11,11 @@ from app.features.assistant.api import router as assistant_router
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.pace.api import router as pace_router
-from app.features.simulation.api import case_router, simulation_router
+from app.features.simulation.api import (
+    case_router,
+    diagnostics_router,
+    simulation_router,
+)
 from app.features.user.api.oauth import auth_router, user_router
 from app.features.user.api.token import router as token_router
 
@@ -36,6 +40,7 @@ def create_app() -> FastAPI:
 
     # Register routers.
     app.include_router(simulation_router, prefix=API_BASE)
+    app.include_router(diagnostics_router, prefix=API_BASE)
     app.include_router(assistant_router, prefix=API_BASE)
     app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)
