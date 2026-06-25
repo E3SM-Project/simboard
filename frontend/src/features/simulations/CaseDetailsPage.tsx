@@ -41,7 +41,20 @@ import {
   MISSING_CASE_HASH_LABEL,
   type SimulationSummaryGroupFilter,
 } from '@/features/simulations/caseUtils';
+import { EditableExternalLinkList } from '@/features/simulations/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
+import {
+  areResourceListsEqual,
+  createEmptyRowErrors,
+  type EditableLinkRow,
+  getClientLinkRowErrors,
+  hasAnyResourceRowErrors,
+  mapLinkSaveValidationErrors,
+  normalizeLinkRows,
+  type ResourceRowFieldErrors,
+  toEditableLinkRows,
+  type ValidationDetail,
+} from '@/features/simulations/externalLinkEditing';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import { toast } from '@/hooks/use-toast';
 import type {
@@ -134,6 +147,10 @@ interface GroupSimulation {
 
 type SimulationViewMode = 'grouped' | 'flat';
 type EditableFormState = Record<CaseEditableField, string>;
+type CaseSaveError = {
+  message: string;
+  validationDetails: ValidationDetail[];
+};
 
 const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
@@ -198,6 +215,7 @@ const normalizeEditableValue = (value: string): string | null => {
 const buildUpdatePayload = (
   caseRecord: CaseDetailOut,
   formState: EditableFormState,
+  linkRows: EditableLinkRow[],
 ): CaseUpdate => {
   const payload: CaseUpdate = {};
 
@@ -210,33 +228,58 @@ const buildUpdatePayload = (
     }
   }
 
+  const nextLinks = normalizeLinkRows(linkRows);
+  const currentLinks = normalizeLinkRows(toEditableLinkRows(caseRecord.links, 'case'));
+  if (!areResourceListsEqual(nextLinks, currentLinks)) {
+    payload.links = nextLinks;
+  }
+
   return payload;
 };
 
-const getUpdateErrorMessage = (error: unknown): string => {
+const getUpdateError = (error: unknown): CaseSaveError => {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;
 
     if (typeof detail === 'string') {
-      return detail;
+      return {
+        message: detail,
+        validationDetails: [],
+      };
     }
 
     if (Array.isArray(detail)) {
-      const messages = detail
+      const validationDetails = detail
         .map((item) => {
-          const path = Array.isArray(item?.loc) ? item.loc.slice(1).join(' > ') : 'body';
           const message = typeof item?.msg === 'string' ? item.msg : null;
-          return message ? `${path}: ${message}` : null;
-        })
-        .filter((message): message is string => Boolean(message));
+          const loc = Array.isArray(item?.loc)
+            ? item.loc.filter(
+                (part: unknown): part is string | number =>
+                  typeof part === 'string' || typeof part === 'number',
+              )
+            : [];
 
-      if (messages.length > 0) {
-        return messages.join(' ');
+          if (!message) return null;
+          return {
+            loc,
+            msg: message,
+          };
+        })
+        .filter((item): item is CaseSaveError['validationDetails'][number] => Boolean(item));
+
+      if (validationDetails.length > 0) {
+        return {
+          message: 'One or more fields need attention before this case can be saved.',
+          validationDetails,
+        };
       }
     }
   }
 
-  return error instanceof Error ? error.message : 'Failed to update case.';
+  return {
+    message: error instanceof Error ? error.message : 'Failed to update case.',
+    validationDetails: [],
+  };
 };
 
 const renderResourceLink = (link: ExternalLinkOut) => (
@@ -269,6 +312,14 @@ const renderResourceLink = (link: ExternalLinkOut) => (
   </a>
 );
 
+const mergeRowFieldErrors = (
+  primary: ResourceRowFieldErrors,
+  secondary: ResourceRowFieldErrors,
+): ResourceRowFieldErrors => ({
+  ...primary,
+  ...secondary,
+});
+
 export const CaseDetailsPage = ({
   simulations: allSimulations,
   selectedSimulationIds,
@@ -285,9 +336,12 @@ export const CaseDetailsPage = ({
   const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
   const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
   const [formState, setFormState] = useState<EditableFormState | null>(null);
+  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<CaseSaveError | null>(null);
+  const [serverLinkRowErrors, setServerLinkRowErrors] = useState<ResourceRowFieldErrors[]>([]);
+  const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const currentPath = `${location.pathname}${location.search}`;
   const state = location.state as { from?: string } | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
@@ -400,6 +454,7 @@ export const CaseDetailsPage = ({
     if (loading || (fetchedCaseRecord && fetchedCaseRecord.id !== id)) {
       setCaseRecord(null);
       setFormState(null);
+      setLinkRows([]);
       setIsEditing(false);
       setSaveError(null);
       return;
@@ -408,6 +463,7 @@ export const CaseDetailsPage = ({
     if (fetchedCaseRecord && fetchedCaseRecord.id === id) {
       setCaseRecord(fetchedCaseRecord);
       setFormState(toEditableFormState(fetchedCaseRecord));
+      setLinkRows(toEditableLinkRows(fetchedCaseRecord.links, 'case'));
       setIsEditing(false);
       setSaveError(null);
       return;
@@ -416,6 +472,7 @@ export const CaseDetailsPage = ({
     if (!loading && !error) {
       setCaseRecord(null);
       setFormState(null);
+      setLinkRows([]);
       setIsEditing(false);
       setSaveError(null);
     }
@@ -428,9 +485,38 @@ export const CaseDetailsPage = ({
 
     if (!authLoading && user?.can_edit_managed_content !== true) {
       setFormState(toEditableFormState(caseRecord));
+      setLinkRows(toEditableLinkRows(caseRecord.links, 'case'));
       setIsEditing(false);
     }
   }, [authLoading, caseRecord, user?.can_edit_managed_content]);
+
+  useEffect(() => {
+    if (!saveError) {
+      setServerLinkRowErrors(createEmptyRowErrors(linkRows.length));
+      setSaveSummaryMessage(null);
+      return;
+    }
+
+    const mappedErrors = mapLinkSaveValidationErrors(saveError.validationDetails, linkRows.length);
+    setServerLinkRowErrors(mappedErrors.rowErrors);
+
+    if (mappedErrors.unmappedMessages.length > 0) {
+      setSaveSummaryMessage(mappedErrors.unmappedMessages.join(' '));
+      return;
+    }
+
+    if (mappedErrors.hasMappedLinkValueError) {
+      setSaveSummaryMessage('One or more links need a full URL including https://.');
+      return;
+    }
+
+    if (hasAnyResourceRowErrors(mappedErrors.rowErrors)) {
+      setSaveSummaryMessage('Fix highlighted resource rows before saving.');
+      return;
+    }
+
+    setSaveSummaryMessage(saveError.message);
+  }, [linkRows.length, saveError]);
 
   useEffect(() => {
     setExpandedGroupKeys(getDefaultExpandedGroupKeys(sortedSimulationGroups));
@@ -485,17 +571,39 @@ export const CaseDetailsPage = ({
     setFormState((current) => (current ? { ...current, [field]: value } : current));
   };
 
+  const addLinkRow = () => {
+    setSaveError(null);
+    setLinkRows((current) => [...current, { kind: 'diagnostic', label: '', value: '' }]);
+  };
+
+  const updateLinkRow = (index: number, updates: Partial<EditableLinkRow>) => {
+    setSaveError(null);
+    setLinkRows((current) =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...updates } : row)),
+    );
+  };
+
+  const removeLinkRow = (index: number) => {
+    setSaveError(null);
+    setLinkRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  };
+
   const handleCancelEdit = () => {
     if (!caseRecord) return;
     setSaveError(null);
     setFormState(toEditableFormState(caseRecord));
+    setLinkRows(toEditableLinkRows(caseRecord.links, 'case'));
     setIsEditing(false);
   };
 
   const handleSave = async () => {
     if (!id || !caseRecord || !formState) return;
 
-    const payload = buildUpdatePayload(caseRecord, formState);
+    if (hasAnyResourceRowErrors(getClientLinkRowErrors(linkRows))) {
+      return;
+    }
+
+    const payload = buildUpdatePayload(caseRecord, formState, linkRows);
     if (Object.keys(payload).length === 0) {
       setSaveError(null);
       setIsEditing(false);
@@ -509,9 +617,10 @@ export const CaseDetailsPage = ({
       const updatedCaseRecord = await updateCase(id, payload);
       setCaseRecord(updatedCaseRecord);
       setFormState(toEditableFormState(updatedCaseRecord));
+      setLinkRows(toEditableLinkRows(updatedCaseRecord.links, 'case'));
       setIsEditing(false);
     } catch (saveErr) {
-      setSaveError(getUpdateErrorMessage(saveErr));
+      setSaveError(getUpdateError(saveErr));
     } finally {
       setIsSaving(false);
     }
@@ -548,12 +657,22 @@ export const CaseDetailsPage = ({
       </div>
     );
   }
+  const clientLinkRowErrors = getClientLinkRowErrors(linkRows);
+  const combinedLinkRowErrors = linkRows.map((_, index) =>
+    mergeRowFieldErrors(clientLinkRowErrors[index] ?? {}, serverLinkRowErrors[index] ?? {}),
+  );
+  const hasClientLinkErrors = hasAnyResourceRowErrors(clientLinkRowErrors);
+  const summaryErrorMessage = saveSummaryMessage
+    ? saveSummaryMessage
+    : hasClientLinkErrors
+      ? 'Fix highlighted resource rows before saving.'
+      : null;
   const hasUnsavedChanges =
-    formState != null && Object.keys(buildUpdatePayload(caseRecord, formState)).length > 0;
+    formState != null && Object.keys(buildUpdatePayload(caseRecord, formState, linkRows)).length > 0;
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
-  const resourceCount = caseRecord.links.length;
+  const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
@@ -702,7 +821,21 @@ export const CaseDetailsPage = ({
                   ) : null}
                 </div>
 
-                {resourceLinks.length > 0 ? (
+                {isEditing ? (
+                  <EditableExternalLinkList
+                    title="Case-level external links"
+                    description="Add, relabel, or remove links shared across runs in this case."
+                    items={linkRows}
+                    valuePlaceholder="https://example.com/resource"
+                    addLabel="Add link"
+                    onAdd={addLinkRow}
+                    onKindChange={(index, kind) => updateLinkRow(index, { kind })}
+                    onLabelChange={(index, value) => updateLinkRow(index, { label: value })}
+                    onValueChange={(index, value) => updateLinkRow(index, { value })}
+                    onRemove={removeLinkRow}
+                    rowErrors={combinedLinkRowErrors}
+                  />
+                ) : resourceLinks.length > 0 ? (
                   <div className="space-y-2">{resourceLinks.map(renderResourceLink)}</div>
                 ) : (
                   <p className="text-sm text-slate-500">No linked resources yet.</p>
@@ -760,7 +893,7 @@ export const CaseDetailsPage = ({
                     <Button
                       size="sm"
                       onClick={handleSave}
-                      disabled={isSaving || !hasUnsavedChanges}
+                      disabled={isSaving || !hasUnsavedChanges || hasClientLinkErrors}
                     >
                       {isSaving ? 'Saving…' : 'Save Changes'}
                     </Button>
@@ -849,13 +982,13 @@ export const CaseDetailsPage = ({
                   )}
                 </div>
 
-                {isEditing && saveError ? (
+                {isEditing && summaryErrorMessage ? (
                   <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <div>
                         <p className="font-medium">Save blocked</p>
-                        <p className="mt-1 text-red-700">{saveError}</p>
+                        <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
                       </div>
                     </div>
                   </div>

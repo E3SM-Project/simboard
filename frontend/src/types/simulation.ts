@@ -81,7 +81,9 @@ export const CASE_EDITABLE_FIELDS = [
 
 export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
 
-export type CaseUpdate = Partial<Record<CaseEditableField, string | null>>;
+export type CaseUpdate = Partial<Record<CaseEditableField, string | null>> & {
+  links?: ExternalLinkIn[];
+};
 
 /**
  * Lightweight simulation summary for case-level nesting.

@@ -185,8 +185,12 @@ def update_case(
         raise HTTPException(status_code=404, detail="Case not found")
 
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    updates.pop("links", None)
     for field, value in updates.items():
         setattr(case, field, value)
+
+    if "links" in payload.model_fields_set:
+        case.links = _build_external_link_models(payload.links or [])
 
     case.updated_at = datetime.now(timezone.utc)
 

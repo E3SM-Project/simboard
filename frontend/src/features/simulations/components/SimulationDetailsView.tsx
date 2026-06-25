@@ -22,6 +22,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { EditableExternalLinkList } from '@/features/simulations/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import {
@@ -29,11 +30,24 @@ import {
   SimulationSummaryRail,
 } from '@/features/simulations/components/SimulationSummaryPanel';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
+import {
+  areResourceListsEqual,
+  createEmptyRowErrors,
+  type EditableLinkRow,
+  type EditableResourceField,
+  formatLinkKindLabel,
+  getClientLinkRowErrors,
+  hasAnyResourceRowErrors,
+  mapLinkSaveValidationErrors,
+  normalizeLinkRows,
+  normalizeOptionalText,
+  type ResourceRowFieldErrors,
+  toEditableLinkRows,
+} from '@/features/simulations/externalLinkEditing';
 import { cn } from '@/lib/utils';
 import type {
   ArtifactIn,
   ArtifactKind,
-  ExternalLinkIn,
   ExternalLinkKind,
   ExternalLinkOut,
   SimulationEditableField,
@@ -144,16 +158,6 @@ type EditableArtifactRow = {
   value: string;
 };
 
-type EditableLinkRow = {
-  kind: ExternalLinkKind;
-  label: string;
-  value: string;
-};
-
-type EditableResourceField = 'kind' | 'label' | 'value';
-
-type ResourceRowFieldErrors = Partial<Record<EditableResourceField, string>>;
-
 type ResourceRowErrorsState = {
   artifacts: ResourceRowFieldErrors[];
   links: ResourceRowFieldErrors[];
@@ -166,13 +170,6 @@ const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
   { value: 'postprocessing_script', label: 'Post-processing Script' },
 ];
 
-const EXTERNAL_LINK_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ExternalLinkKind>> = [
-  { value: 'diagnostic', label: 'Diagnostic' },
-  { value: 'performance', label: 'Performance' },
-  { value: 'docs', label: 'Docs' },
-  { value: 'other', label: 'Other' },
-];
-
 const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[] =>
   simulation.artifacts.map((artifact) => ({
     kind: artifact.kind,
@@ -180,20 +177,8 @@ const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[
     value: artifact.uri,
   }));
 
-const toEditableLinkRows = (simulation: SimulationOut): EditableLinkRow[] =>
-  simulation.links
-    .filter((link) => link.ownerType === 'simulation')
-    .map((link) => ({
-      kind: link.kind,
-      label: link.label ?? '',
-      value: link.url,
-    }));
-
 const toInheritedCaseLinks = (simulation: SimulationOut) =>
   simulation.links.filter((link) => link.ownerType === 'case');
-
-const formatLinkKindLabel = (kind: ExternalLinkKind): string =>
-  EXTERNAL_LINK_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind;
 
 const groupLinksByKind = (links: ExternalLinkOut[]): Record<ExternalLinkKind, ExternalLinkOut[]> => ({
   diagnostic: links.filter((link) => link.kind === 'diagnostic'),
@@ -281,27 +266,12 @@ const ExternalResourceGroup = ({
   );
 };
 
-const normalizeOptionalText = (value: string): string | null => {
-  const trimmed = value.trim();
-  return trimmed || null;
-};
-
 const normalizeArtifactRows = (rows: EditableArtifactRow[]): ArtifactIn[] =>
   rows.map((row) => ({
     kind: row.kind,
     uri: row.value.trim(),
     label: normalizeOptionalText(row.label),
   }));
-
-const normalizeLinkRows = (rows: EditableLinkRow[]): ExternalLinkIn[] =>
-  rows.map((row) => ({
-    kind: row.kind,
-    url: row.value.trim(),
-    label: normalizeOptionalText(row.label),
-  }));
-
-const createEmptyRowErrors = (count: number): ResourceRowFieldErrors[] =>
-  Array.from({ length: count }, () => ({}));
 
 const getClientResourceRowErrors = (
   artifactRows: EditableArtifactRow[],
@@ -310,9 +280,7 @@ const getClientResourceRowErrors = (
   artifacts: artifactRows.map((row) =>
     row.value.trim().length === 0 ? { value: 'Artifact URI is required.' } : {},
   ),
-  links: linkRows.map((row) =>
-    row.value.trim().length === 0 ? { value: 'Link URL is required.' } : {},
-  ),
+  links: getClientLinkRowErrors(linkRows),
 });
 
 const normalizeValidationLoc = (loc: Array<string | number>): Array<string | number> =>
@@ -346,12 +314,15 @@ const mapSaveValidationErrors = (
   artifactCount: number,
   linkCount: number,
 ) => {
+  const linkMappings = mapLinkSaveValidationErrors(
+    validationDetails.filter((detail) => normalizeValidationLoc(detail.loc)[0] === 'links'),
+    linkCount,
+  );
   const rowErrors: ResourceRowErrorsState = {
     artifacts: createEmptyRowErrors(artifactCount),
-    links: createEmptyRowErrors(linkCount),
+    links: linkMappings.rowErrors,
   };
-  const unmappedMessages: string[] = [];
-  let hasMappedLinkValueError = false;
+  const unmappedMessages = [...linkMappings.unmappedMessages];
 
   for (const detail of validationDetails) {
     const loc = normalizeValidationLoc(detail.loc);
@@ -374,36 +345,17 @@ const mapSaveValidationErrors = (
       }
     }
 
-    if (
-      resourceName === 'links' &&
-      typeof rowIndex === 'number' &&
-      rowIndex >= 0 &&
-      rowIndex < linkCount &&
-      typeof fieldName === 'string'
-    ) {
-      const field = toEditableField(fieldName);
-      if (field) {
-        rowErrors.links[rowIndex] = {
-          ...rowErrors.links[rowIndex],
-          [field]: detail.msg,
-        };
-        hasMappedLinkValueError ||= field === 'value';
-        continue;
-      }
+    if (resourceName !== 'links') {
+      unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
     }
-
-    unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
   }
 
   return {
     rowErrors,
     unmappedMessages,
-    hasMappedLinkValueError,
+    hasMappedLinkValueError: linkMappings.hasMappedLinkValueError,
   };
 };
-
-const areResourceListsEqual = (left: unknown, right: unknown): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
 
 const mergeRowFieldErrors = (
   primary: ResourceRowFieldErrors,
@@ -414,7 +366,7 @@ const mergeRowFieldErrors = (
 });
 
 const hasAnyRowErrors = (rowErrors: ResourceRowErrorsState): boolean =>
-  [...rowErrors.artifacts, ...rowErrors.links].some((row) => Object.keys(row).length > 0);
+  hasAnyResourceRowErrors([...rowErrors.artifacts, ...rowErrors.links]);
 
 const EditableResourceList = <TKind extends string>({
   title,
@@ -617,7 +569,7 @@ const buildUpdatePayload = (
   }
 
   const nextLinks = normalizeLinkRows(linkRows);
-  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation));
+  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
   if (!areResourceListsEqual(nextLinks, currentLinks)) {
     payload.links = nextLinks;
   }
@@ -667,7 +619,9 @@ export const SimulationDetailsView = ({
   const [artifactRows, setArtifactRows] = useState<EditableArtifactRow[]>(() =>
     toEditableArtifactRows(simulation),
   );
-  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() => toEditableLinkRows(simulation));
+  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() =>
+    toEditableLinkRows(simulation.links, 'simulation'),
+  );
   const [serverRowErrors, setServerRowErrors] = useState<ResourceRowErrorsState>({
     artifacts: [],
     links: [],
@@ -732,7 +686,7 @@ export const SimulationDetailsView = ({
   useEffect(() => {
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
     setIsEditing(false);
   }, [simulation]);
 
@@ -740,7 +694,7 @@ export const SimulationDetailsView = ({
     if (!canEdit) {
       setFormState(toEditableFormState(simulation));
       setArtifactRows(toEditableArtifactRows(simulation));
-      setLinkRows(toEditableLinkRows(simulation));
+      setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
       setIsEditing(false);
     }
   }, [canEdit, simulation]);
@@ -812,7 +766,7 @@ export const SimulationDetailsView = ({
     onClearSaveError?.();
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
     setIsEditing(false);
   };
 
@@ -1419,11 +1373,10 @@ export const SimulationDetailsView = ({
                 <CardContent>
                   {isEditing ? (
                     <div className="space-y-4">
-                      <EditableResourceList
+                      <EditableExternalLinkList
                         title="Simulation-specific external links"
                         description="Add, relabel, or remove links saved directly on this simulation."
                         items={linkRows}
-                        kindOptions={EXTERNAL_LINK_KIND_OPTIONS}
                         valueLabel="URL"
                         valuePlaceholder="https://example.com/resource"
                         addLabel="Add link"
