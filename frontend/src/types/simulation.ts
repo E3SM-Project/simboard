@@ -155,7 +155,8 @@ export interface SimulationUpdate extends Partial<Pick<SimulationCreate, Simulat
   links?: ExternalLinkIn[];
 }
 
-// Extends SimulationCreate with optional fields for file paths.
+// UI-only create form shape. Extends API create payload with optional identity
+// selectors and local path fields used during manual creation/import flows.
 export interface SimulationCreateForm extends SimulationCreate {
   machineId?: string;
   hpcUsername?: string | null;

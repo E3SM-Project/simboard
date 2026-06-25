@@ -435,6 +435,8 @@ class TestIngestionWithAPIToken:
             )
 
             assert response.status_code == status.HTTP_201_CREATED
+            mock_ingest.assert_called_once()
+            assert mock_ingest.call_args.kwargs["hpc_username"] == "hpc_user_test"
 
             simulation = (
                 db.query(Simulation)
