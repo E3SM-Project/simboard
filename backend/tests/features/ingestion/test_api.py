@@ -150,7 +150,6 @@ class TestGetIngestionStateEndpoint:
                 simulation_type="production",
                 status="completed",
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=user_id,
                 last_updated_by=user_id,
@@ -271,7 +270,6 @@ class TestGetIngestionStateEndpoint:
                 simulation_type="production",
                 status="completed",
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=user_id,
                 last_updated_by=user_id,
@@ -337,7 +335,6 @@ class TestGetIngestionStateEndpoint:
                 simulation_type="production",
                 status="completed",
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
@@ -385,7 +382,6 @@ class TestGetIngestionStateEndpoint:
                 simulation_type="production",
                 status="completed",
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
@@ -439,7 +435,6 @@ class TestGetIngestionStateEndpoint:
                     simulation_type="production",
                     status="completed",
                     initialization_type="branch",
-                    machine_id=machine.id,
                     simulation_start_date=datetime.now(timezone.utc),
                     created_by=user_id,
                     last_updated_by=user_id,
@@ -543,7 +538,6 @@ class TestGetIngestionStateEndpoint:
                 simulation_type="production",
                 status="completed",
                 initialization_type="branch",
-                machine_id=machine.id,
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=user_id,
                 last_updated_by=user_id,
@@ -627,7 +621,6 @@ class TestIngestFromPathEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -689,7 +682,6 @@ class TestIngestFromPathEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -706,7 +698,6 @@ class TestIngestFromPathEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "def456",
@@ -769,7 +760,6 @@ class TestIngestFromPathEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -913,7 +903,6 @@ class TestIngestFromPathEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -968,7 +957,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1021,7 +1009,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1099,7 +1086,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1159,7 +1145,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1627,7 +1612,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1684,7 +1668,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1760,7 +1743,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1802,7 +1784,12 @@ class TestIngestFromUploadEndpoint:
             "hpc_username": "nersc-user",
         }
 
-        case = _create_case(db, "test_case_hpc_username", machine=machine)
+        case = _create_case(
+            db,
+            "test_case_hpc_username",
+            machine=machine,
+            hpc_username="nersc-user",
+        )
 
         mock_simulations = [
             SimulationCreate.model_validate(
@@ -1816,7 +1803,6 @@ class TestIngestFromUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
@@ -1840,7 +1826,9 @@ class TestIngestFromUploadEndpoint:
         simulation = db.query(Simulation).filter(Simulation.case_id == case.id).first()
 
         assert simulation is not None
-        assert simulation.hpc_username == "nersc-user"
+        persisted_case = db.query(Case).filter(Case.id == simulation.case_id).first()
+        assert persisted_case is not None
+        assert persisted_case.hpc_username == "nersc-user"
 
     def test_path_ingestion_uses_request_hpc_username_when_metadata_missing(
         self, client, db: Session, tmp_path
@@ -1898,7 +1886,6 @@ class TestIngestFromUploadEndpoint:
             db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
         )
         assert simulation is not None
-        assert simulation.hpc_username == "fallback-user"
 
         case = db.query(Case).filter(Case.id == simulation.case_id).first()
         assert case is not None
@@ -1948,7 +1935,6 @@ class TestIngestFromHpcUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                 }
             )
@@ -2055,7 +2041,6 @@ class TestIngestFromHpcUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                 }
             ),
@@ -2070,7 +2055,6 @@ class TestIngestFromHpcUploadEndpoint:
                     "initializationType": "startup",
                     "simulationType": "experimental",
                     "status": "created",
-                    "machineId": str(machine.id),
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                 }
             ),

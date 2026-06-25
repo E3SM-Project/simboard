@@ -12,11 +12,7 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import (
-    _validate_simulation_case_identity,
-    create_simulation,
-    update_simulation,
-)
+from app.features.simulation.api import create_simulation, update_simulation
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
@@ -100,7 +96,7 @@ def _create_simulation_record(
     db: Session,
     *,
     case: Case,
-    machine_id,
+    machine_id=None,
     ingestion_id,
     created_by,
     last_updated_by,
@@ -121,7 +117,6 @@ def _create_simulation_record(
         status="created",
         campaign="campaign-original",
         experiment_type="historical",
-        machine_id=machine_id,
         simulation_start_date="2023-01-01T00:00:00Z",
         compiler="gcc",
         key_features="Original features",
@@ -131,7 +126,6 @@ def _create_simulation_record(
         git_branch="main",
         git_tag="v1.0",
         git_commit_hash="abc123",
-        hpc_username="old-user",
         created_by=created_by,
         last_updated_by=last_updated_by,
         ingestion_id=ingestion_id,
@@ -182,7 +176,6 @@ class TestListCases:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
@@ -199,7 +192,6 @@ class TestListCases:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-02-01T00:00:00Z",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
@@ -218,7 +210,7 @@ class TestListCases:
         case_data = data[0]
         assert case_data["name"] == "test_case_nested"
         assert case_data["machineNames"] == [machine.name]
-        assert case_data["hpcUsernames"] == []
+        assert case_data["hpcUsernames"] == ["test-user"]
 
         # Verify nested simulations are SimulationSummaryOut (lightweight)
         sims = case_data["simulations"]
@@ -302,6 +294,8 @@ class TestGetCase:
         assert machine is not None
 
         case = _create_case(db, "test_case_detail")
+        case.hpc_username = "case-user"
+        db.flush()
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.BROWSER_UPLOAD,
@@ -327,9 +321,7 @@ class TestGetCase:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
-            hpc_username="case-user",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
@@ -373,7 +365,6 @@ class TestCreateSimulation:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
             "gitTag": "v1.0",
             "gitCommitHash": "abc123",
@@ -401,24 +392,10 @@ class TestCreateSimulation:
         assert data["executionId"] == "1081156.251218-200923"
         assert data["createdBy"] == str(normal_user_sync["id"])
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
+        assert data["machineId"] == str(case.machine_id)
+        assert data["hpcUsername"] == case.hpc_username
         assert len(data["artifacts"]) == 1
         assert len(data["links"]) == 1
-
-    def test_validate_case_identity_accepts_trimmed_hpc_username(
-        self, db: Session
-    ) -> None:
-        machine = db.query(Machine).first()
-        assert machine is not None, "No machine found in the database"
-        case = _create_case(db, "test_case_trimmed_hpc_username")
-
-        assert (
-            _validate_simulation_case_identity(
-                case=case,
-                machine_id=machine.id,
-                hpc_username="  test-user  ",
-            )
-            == "test-user"
-        )
 
     def test_endpoint_returns_400_when_case_not_found(
         self, client, db: Session
@@ -436,7 +413,6 @@ class TestCreateSimulation:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
 
@@ -462,7 +438,6 @@ class TestCreateSimulation:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
 
@@ -477,7 +452,7 @@ class TestCreateSimulation:
         assert "changeCount" not in data
         assert "runConfigDeltas" not in data
 
-    def test_endpoint_accepts_matching_case_hpc_username(
+    def test_endpoint_rejects_removed_case_identity_fields(
         self, client, db: Session
     ) -> None:
         machine = db.query(Machine).first()
@@ -495,77 +470,14 @@ class TestCreateSimulation:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
+            "machineId": str(machine.id),
             "hpcUsername": "test-user",
         }
 
         res = client.post(f"{API_BASE}/simulations", json=payload)
 
-        assert res.status_code == 201
-        assert res.json()["hpcUsername"] == "test-user"
-
-    def test_endpoint_rejects_case_machine_mismatch(self, client, db: Session) -> None:
-        machine = db.query(Machine).first()
-        assert machine is not None, "No machine found in the database"
-        case = _create_case(db, "test_case_machine_mismatch")
-
-        second_machine = Machine(
-            name="test-case-machine-mismatch",
-            site="Test Site",
-            architecture="x86_64",
-            scheduler="slurm",
-            gpu=False,
-        )
-        db.add(second_machine)
-        db.commit()
-
-        payload = {
-            "caseId": str(case.id),
-            "executionId": "1081156.251218-200924",
-            "compset": "AQUAPLANET",
-            "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
-            "initializationType": "startup",
-            "simulationType": "experimental",
-            "status": "created",
-            "machineId": str(second_machine.id),
-            "simulationStartDate": "2023-01-01T00:00:00Z",
-        }
-
-        res = client.post(f"{API_BASE}/simulations", json=payload)
-
-        assert res.status_code == 400
-        assert "machine_id must match selected case identity" in res.json()["detail"]
-
-    def test_endpoint_rejects_case_hpc_username_mismatch(
-        self, client, db: Session
-    ) -> None:
-        machine = db.query(Machine).first()
-        assert machine is not None, "No machine found in the database"
-        case = _create_case(db, "test_case_hpc_mismatch")
-        db.commit()
-
-        payload = {
-            "caseId": str(case.id),
-            "executionId": "1081156.251218-200925",
-            "compset": "AQUAPLANET",
-            "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
-            "initializationType": "startup",
-            "simulationType": "experimental",
-            "status": "created",
-            "machineId": str(machine.id),
-            "simulationStartDate": "2023-01-01T00:00:00Z",
-            "hpcUsername": "other-user",
-        }
-
-        res = client.post(f"{API_BASE}/simulations", json=payload)
-
-        assert res.status_code == 400
-        assert "hpc_username must match selected case identity" in res.json()["detail"]
+        assert res.status_code == 422
 
     def test_create_simulation_raises_500_when_reload_fails(self) -> None:
         case_id = uuid4()
@@ -583,7 +495,6 @@ class TestCreateSimulation:
                 "initializationType": "startup",
                 "simulationType": "experimental",
                 "status": "created",
-                "machineId": str(machine_id),
                 "simulationStartDate": "2023-01-01T00:00:00Z",
             }
         )
@@ -662,7 +573,6 @@ class TestListSimulations:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             git_tag="v1.0",
             git_commit_hash="abc123",
@@ -722,7 +632,6 @@ class TestListSimulations:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
@@ -773,7 +682,6 @@ class TestListSimulations:
                     initialization_type="startup",
                     simulation_type="experimental",
                     status="created",
-                    machine_id=machine.id,
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
                     last_updated_by=admin_user_sync["id"],
@@ -836,7 +744,6 @@ class TestListSimulations:
                     initialization_type="startup",
                     simulation_type="experimental",
                     status="created",
-                    machine_id=machine.id,
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
                     last_updated_by=admin_user_sync["id"],
@@ -901,7 +808,6 @@ class TestListSimulations:
                     initialization_type="startup",
                     simulation_type="experimental",
                     status="created",
-                    machine_id=machine.id,
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
                     last_updated_by=admin_user_sync["id"],
@@ -917,7 +823,6 @@ class TestListSimulations:
                     initialization_type="startup",
                     simulation_type="experimental",
                     status="created",
-                    machine_id=second_machine.id,
                     simulation_start_date="2023-01-02T00:00:00Z",
                     created_by=normal_user_sync["id"],
                     last_updated_by=admin_user_sync["id"],
@@ -973,7 +878,6 @@ class TestListSimulations:
                     initialization_type="startup",
                     simulation_type="experimental",
                     status="created",
-                    machine_id=machine.id,
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
                     last_updated_by=admin_user_sync["id"],
@@ -1033,7 +937,6 @@ class TestGetSimulation:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             git_tag="v1.0",
             git_commit_hash="abc123",
@@ -1093,7 +996,6 @@ class TestGetSimulation:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
@@ -1163,7 +1065,7 @@ class TestUpdateSimulation:
         assert data["compiler"] == "gcc"
         assert data["gitRepositoryUrl"] == "https://example.com/original"
         assert data["gitTag"] == "v1.0"
-        assert data["hpcUsername"] == "old-user"
+        assert data["hpcUsername"] == "test-user"
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
         assert data["lastUpdatedByUser"]["email"] == normal_user_sync["email"]
         assert data["updatedAt"] != original_updated_at.isoformat()
@@ -1592,7 +1494,7 @@ class TestUpdateSimulation:
 
         assert res.status_code == 422
 
-    def test_endpoint_rejects_hpc_username_mismatch(
+    def test_endpoint_rejects_hpc_username_update_field(
         self, client, db: Session, normal_user_sync
     ):
         machine = db.query(Machine).first()
@@ -1621,12 +1523,11 @@ class TestUpdateSimulation:
             json={"hpcUsername": "other-user"},
         )
 
-        assert res.status_code == 400
-        assert "hpc_username must match selected case identity" in res.json()["detail"]
+        assert res.status_code == 422
 
         db.expire_all()
         unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
-        assert unchanged_sim.hpc_username == "old-user"
+        assert unchanged_sim.case_id == case.id
 
     def test_update_simulation_raises_500_when_reload_fails(self) -> None:
         sim_id = uuid4()
@@ -1706,7 +1607,6 @@ class TestSimulationBrowserIncludesCaseMetadata:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            machine_id=machine.id,
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],

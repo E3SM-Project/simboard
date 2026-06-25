@@ -6,7 +6,6 @@ from sqlalchemy import distinct
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
-from app.common.utils import _normalize_hpc_username
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -25,31 +24,6 @@ from app.features.user.models import User
 
 simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
-
-
-def _validate_simulation_case_identity(
-    *,
-    case: Case,
-    machine_id: UUID,
-    hpc_username: str | None,
-) -> str:
-    if machine_id != case.machine_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=("Simulation machine_id must match selected case identity."),
-        )
-
-    normalized_hpc_username = _normalize_hpc_username(hpc_username)
-    if normalized_hpc_username is None:
-        return case.hpc_username
-
-    if normalized_hpc_username != case.hpc_username:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=("Simulation hpc_username must match selected case identity."),
-        )
-
-    return case.hpc_username
 
 
 @case_router.get(
@@ -77,7 +51,7 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
     """
     cases = (
         db.query(Case)
-        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
+        .options(selectinload(Case.machine), selectinload(Case.simulations))
         .order_by(Case.created_at.desc())
         .all()
     )
@@ -144,7 +118,7 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     """
     case = (
         db.query(Case)
-        .options(selectinload(Case.simulations).selectinload(Simulation.machine))
+        .options(selectinload(Case.machine), selectinload(Case.simulations))
         .filter(Case.id == case_id)
         .first()
     )
@@ -185,19 +159,12 @@ def create_simulation(
             detail=f"Case '{payload.case_id}' not found.",
         )
 
-    validated_hpc_username = _validate_simulation_case_identity(
-        case=case,
-        machine_id=payload.machine_id,
-        hpc_username=payload.hpc_username,
-    )
-
     sim = Simulation(
         **payload.model_dump(
             by_alias=False,
-            exclude={"artifacts", "hpc_username", "links"},
+            exclude={"artifacts", "links"},
             exclude_unset=True,
         ),
-        hpc_username=validated_hpc_username,
         created_by=user.id,
         last_updated_by=user.id,
         created_at=now,
@@ -207,7 +174,7 @@ def create_simulation(
     ingestion = Ingestion(
         source_type=IngestionSourceType.BROWSER_UPLOAD,
         source_reference="manual_simulation_create",
-        machine_id=payload.machine_id,
+        machine_id=case.machine_id,
         triggered_by=user.id,
         status=IngestionStatus.SUCCESS,
         created_count=1,
@@ -288,8 +255,7 @@ def list_simulations(
         in descending order.
     """
     query = db.query(Simulation).options(
-        joinedload(Simulation.case),
-        joinedload(Simulation.machine),
+        joinedload(Simulation.case).joinedload(Case.machine),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
     )
@@ -340,13 +306,6 @@ def update_simulation(
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
     updates.pop("artifacts", None)
     updates.pop("links", None)
-
-    if "hpc_username" in payload.model_fields_set:
-        updates["hpc_username"] = _validate_simulation_case_identity(
-            case=sim.case,
-            machine_id=sim.machine_id,
-            hpc_username=payload.hpc_username,
-        )
 
     for field, value in updates.items():
         setattr(sim, field, value)
@@ -433,15 +392,13 @@ def _case_to_out(case: Case) -> CaseOut:
     """
     summaries = []
     machine_names = sorted(
-        {
-            sim.machine.name
-            for sim in case.simulations
-            if sim.machine is not None and sim.machine.name
-        },
+        {case.machine.name}
+        if case.machine is not None and case.machine.name
+        else set(),
         key=lambda name: name.lower(),
     )
     hpc_usernames = sorted(
-        {sim.hpc_username for sim in case.simulations if sim.hpc_username},
+        {case.hpc_username} if case.hpc_username else set(),
         key=lambda username: username.lower(),
     )
 
@@ -495,8 +452,7 @@ def _build_external_link_models(links: list) -> list[ExternalLink]:
 
 def _simulation_detail_query(db: Session):
     return db.query(Simulation).options(
-        joinedload(Simulation.case),
-        joinedload(Simulation.machine),
+        joinedload(Simulation.case).joinedload(Case.machine),
         selectinload(Simulation.artifacts),
         selectinload(Simulation.links),
     )
@@ -526,6 +482,9 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
             "case_group": case.case_group,
+            "machine_id": case.machine_id,
+            "hpc_username": case.hpc_username,
+            "machine": case.machine,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,

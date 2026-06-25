@@ -2,7 +2,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.features.machine.models import Machine
-from app.scripts.db.seed import _resolve_seed_case_machine
+from app.features.simulation.models import Case
+from app.scripts.db.seed import (
+    DEV_HPC_USERNAME,
+    _resolve_seed_case_machine,
+    _seed_simulation,
+)
 
 
 class TestResolveSeedCaseMachine:
@@ -58,3 +63,50 @@ class TestResolveSeedCaseMachine:
                 ],
                 case_name="mixed_seed_case",
             )
+
+
+class TestSeedSimulation:
+    def test_strips_seed_only_identity_fields(
+        self, db: Session, normal_user_sync
+    ) -> None:
+        machine = Machine(
+            name="seed-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(machine)
+        db.flush()
+
+        case = Case(
+            name="seed-case",
+            machine_id=machine.id,
+            hpc_username=DEV_HPC_USERNAME,
+        )
+        db.add(case)
+        db.flush()
+
+        simulation = _seed_simulation(
+            db,
+            sim_entry={
+                "machine": {"name": "seed-machine"},
+                "machineId": str(machine.id),
+                "hpcUsername": "override-me",
+                "executionId": "1081156.251218-200923",
+                "compset": "AQUAPLANET",
+                "compsetAlias": "QPC4",
+                "gridName": "f19_f19",
+                "gridResolution": "1.9x2.5",
+                "initializationType": "startup",
+                "simulationType": "production",
+                "status": "created",
+                "simulationStartDate": "2023-01-01T00:00:00Z",
+            },
+            case=case,
+            case_name="seed-case",
+            user_id=normal_user_sync["id"],
+        )
+
+        assert simulation.case_id == case.id
+        assert simulation.ingestion_id is not None

@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from sqlalchemy import Boolean, CheckConstraint, Index, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.schema import conv
 
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
-
-if TYPE_CHECKING:
-    from app.features.simulation.models import Simulation
 
 
 class Machine(Base, IDMixin, TimestampMixin):
@@ -29,8 +24,4 @@ class Machine(Base, IDMixin, TimestampMixin):
             name=conv("ck_machines_name_lowercase"),
         ),
         Index("uq_machines_name_lower", func.lower(name), unique=True),
-    )
-
-    simulations: Mapped[list[Simulation]] = relationship(
-        back_populates="machine", cascade="all,save-update"
     )

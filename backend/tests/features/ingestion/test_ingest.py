@@ -497,7 +497,10 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.simulations) == 1
-        assert ingest_result.simulations[0].machine_id == machine.id
+        resolved_case = (
+            db.query(Case).filter(Case.id == ingest_result.simulations[0].case_id).one()
+        )
+        assert resolved_case.machine_id == machine.id
 
         # Test with missing machine
         invalid_mock = {
@@ -584,7 +587,10 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.simulations) == 1
-        assert ingest_result.simulations[0].machine_id == machine.id
+        resolved_case = (
+            db.query(Case).filter(Case.id == ingest_result.simulations[0].case_id).one()
+        )
+        assert resolved_case.machine_id == machine.id
 
 
 class TestIngestArchiveContinued(TestIngestArchive):
@@ -759,7 +765,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
@@ -886,7 +891,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
@@ -972,7 +976,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
@@ -1503,7 +1506,6 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
@@ -1567,12 +1569,10 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
-            hpc_username="test-user",
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1633,7 +1633,6 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
@@ -1707,7 +1706,6 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
@@ -1777,7 +1775,6 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
@@ -1993,7 +1990,6 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            machine_id=machine.id,
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=SimulationStatus.CREATED,
@@ -2076,7 +2072,6 @@ class TestCaseHashIngestion:
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
-                machine_id=machine.id,
                 simulation_start_date=datetime(2020, 1, 1),
                 initialization_type="test",
                 status=SimulationStatus.CREATED,
@@ -2084,7 +2079,6 @@ class TestCaseHashIngestion:
                 created_by=user.id,
                 last_updated_by=user.id,
                 ingestion_id=ingestion.id,
-                hpc_username="user-one",
             )
         )
         db.commit()
@@ -2427,7 +2421,6 @@ class TestIngestHelpers:
             campaign="campaign",
             experiment_type="historical",
             initialization_type="test",
-            machine_id=uuid4(),
             simulation_start_date=datetime(2020, 1, 1),
             simulation_end_date=None,
             run_start_date=None,
@@ -2439,7 +2432,6 @@ class TestIngestHelpers:
             git_commit_hash="abc123",
             created_by=None,
             last_updated_by=None,
-            hpc_username="test-user",
             case_hash="abc123",
         )
 
@@ -2482,9 +2474,7 @@ class TestIngestHelpers:
 
         draft = _build_simulation_create_draft(
             parsed_simulation=parsed,
-            machine_id=uuid4(),
             case_id=uuid4(),
-            hpc_username="test-user",
         )
 
         assert draft.simulation_type == SimulationType.UNKNOWN

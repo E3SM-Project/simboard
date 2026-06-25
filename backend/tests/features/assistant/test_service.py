@@ -69,7 +69,6 @@ def _create_simulation(
         campaign="historical" if with_optional_metadata else None,
         experiment_type="historical" if with_optional_metadata else None,
         initialization_type="startup",
-        machine_id=machine.id,
         simulation_start_date="2023-01-01T00:00:00Z",
         simulation_end_date="2023-12-31T00:00:00Z" if with_optional_metadata else None,
         compiler="gcc",

@@ -263,11 +263,16 @@ def _seed_simulation(
             f"No machine found in DB with name '{machine_name}' for case '{case_name}'"
         )
 
+    seed_payload = {
+        key: value
+        for key, value in sim_entry.items()
+        if key not in {"machine", "machineId", "hpcUsername"}
+    }
+
     sim_in = SimulationCreate(
         **{
-            **sim_entry,
+            **seed_payload,
             "caseId": case.id,
-            "machineId": machine.id,
             "simulationStartDate": _parse_datetime(
                 sim_entry.get("simulationStartDate")
             ),

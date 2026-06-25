@@ -110,9 +110,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Model timeline
     # ~~~~~~~~~~~~~~
-    machine_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("machines.id"), index=True
-    )
     simulation_start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     simulation_end_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
@@ -145,8 +142,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     ingestion_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("ingestions.id"), index=True, nullable=False
     )
-    hpc_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
-
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
@@ -162,9 +157,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     )
     ingestion: Mapped[Ingestion] = relationship(
         "Ingestion", back_populates="simulations"
-    )
-    machine: Mapped[Machine] = relationship(
-        back_populates="simulations", foreign_keys=[machine_id]
     )
     artifacts: Mapped[list[Artifact]] = relationship(
         back_populates="simulation", cascade="all, delete-orphan"

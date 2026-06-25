@@ -103,7 +103,6 @@ export interface SimulationCreate {
 
   // Model timeline
   // ~~~~~~~~~~~~~~
-  machineId: string; // UUID
   simulationStartDate: string; // ISO datetime
   simulationEndDate?: string | null;
   runStartDate?: string | null;
@@ -127,7 +126,6 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdBy?: string | null;
   lastUpdatedBy?: string | null;
-  hpcUsername?: string | null;
 
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
@@ -145,7 +143,6 @@ export const SIMULATION_EDITABLE_FIELDS = [
   'description',
   'campaign',
   'experimentType',
-  'hpcUsername',
   'keyFeatures',
   'knownIssues',
   'notesMarkdown',
@@ -158,8 +155,11 @@ export interface SimulationUpdate extends Partial<Pick<SimulationCreate, Simulat
   links?: ExternalLinkIn[];
 }
 
-// Extends SimulationCreate with optional fields for file paths.
+// UI-only create form shape. Extends API create payload with optional identity
+// selectors and local path fields used during manual creation/import flows.
 export interface SimulationCreateForm extends SimulationCreate {
+  machineId?: string;
+  hpcUsername?: string | null;
   outputPath?: string | null;
   archivePaths?: string[] | null;
   runScriptPaths?: string[] | null;
@@ -179,6 +179,8 @@ export interface SimulationOut extends SimulationCreate {
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
+  machineId: string;
+  hpcUsername?: string | null;
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
   createdByUser?: SimulationUserPreview | null;
