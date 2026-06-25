@@ -755,7 +755,42 @@ export const CaseDetailsPage = ({
           </Button>
           <h1 className="text-2xl font-bold">{caseRecord.name}</h1>
         </div>
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {canEdit && isEditing ? (
+            <>
+              <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || !hasUnsavedChanges || hasClientLinkErrors}
+              >
+                {isSaving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </>
+          ) : canEdit ? (
+            <Button size="sm" type="button" onClick={() => setIsEditing(true)}>
+              Edit
+            </Button>
+          ) : !isAuthenticated ? (
+            <Button variant="outline" size="sm" onClick={loginWithGithub}>
+              Log In to Edit
+            </Button>
+          ) : (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button size="sm" disabled>
+                      Edit
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{editAccessMessage}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <Button variant="outline" size="sm" type="button" onClick={handleShareCase}>
             <Share2 className="h-4 w-4" />
             Share Case
@@ -857,48 +892,6 @@ export const CaseDetailsPage = ({
                 </p>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
-                {!isEditing &&
-                  (canEdit ? (
-                    <Button size="sm" type="button" onClick={() => setIsEditing(true)}>
-                      Edit
-                    </Button>
-                  ) : !isAuthenticated ? (
-                    <Button variant="outline" size="sm" onClick={loginWithGithub}>
-                      Log In to Edit
-                    </Button>
-                  ) : (
-                    <TooltipProvider delayDuration={150}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span tabIndex={0}>
-                            <Button size="sm" disabled>
-                              Edit
-                            </Button>
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>{editAccessMessage}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ))}
-                {canEdit && isEditing ? (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      disabled={isSaving}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleSave}
-                      disabled={isSaving || !hasUnsavedChanges || hasClientLinkErrors}
-                    >
-                      {isSaving ? 'Saving…' : 'Save Changes'}
-                    </Button>
-                  </div>
-                ) : null}
                 {!canEdit ? (
                   <p className="text-xs text-muted-foreground">{editAccessMessage}</p>
                 ) : null}
