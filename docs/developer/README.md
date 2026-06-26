@@ -38,6 +38,25 @@ flowchart LR
 | Automated ingestion | Runs on supported HPC sites, scans E3SM `performance_archive` locations, and submits changed metadata to SimBoard.                                                           |
 | External services   | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |
 
+### Deployed API Base URLs
+
+The backend is served from a dedicated `-api` subdomain, separate from the
+frontend origin. The route prefix is `/api/v1` (`API_BASE` in
+`backend/app/api/version.py`); the frontend resolves the origin from the
+`VITE_API_BASE_URL` build variable (`frontend/src/api/api.ts`).
+
+| Environment | Frontend                          | API base URL                                  |
+| ----------- | --------------------------------- | --------------------------------------------- |
+| Dev         | `https://simboard-dev.e3sm.org/`  | `https://simboard-dev-api.e3sm.org/api/v1`    |
+| Prod        | `https://simboard.e3sm.org/`      | `https://simboard-api.e3sm.org/api/v1`        |
+
+- OpenAPI schema: `/openapi.json`
+- Interactive docs (Swagger UI): `/docs`
+
+Requests to the frontend origin under `/api/...` return `404`; clients must use
+the `-api` subdomain. Locally the backend serves both the API and `/docs` on the
+same origin (see [Local Environment Setup](#local-environment-setup)).
+
 ## Metadata Ingestion
 
 SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed dedupe state and submit changed `performance_archive` cases through ingestion API routes.
