@@ -234,7 +234,9 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 ### Workload 3: NERSC Archive Ingestion CronJob (`nersc-archive-ingestor`)
 
-Use a Rancher-managed `CronJob` to run incremental ingestion every 15 minutes.
+Use a Rancher-managed `CronJob` to run incremental collection every 15 minutes.
+
+In this runbook, the CronJob performs site-side collection from `PERF_ARCHIVE_ROOT` and submits changed case directories to SimBoard, where backend ingestion occurs.
 
 Prerequisites for this section:
 
@@ -314,7 +316,7 @@ Key table for step 3 (`simboard-ingestion-env`):
 5. **Validate once with dry run**
    - Set `DRY_RUN=true` in `simboard-ingestion-env`.
    - Trigger a one-off job from the CronJob.
-   - Confirm logs include `scan_completed` and candidate discovery.
+   - Confirm logs include `scan_completed` and changed-case discovery during collection.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
 6. **Verify steady-state behavior**
