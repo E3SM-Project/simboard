@@ -84,6 +84,13 @@ class Case(Base, IDMixin, TimestampMixin):
 
 class Simulation(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
+    __table_args__ = (
+        UniqueConstraint(
+            "case_id",
+            "execution_id",
+            name="uq_simulations_case_id_execution_id",
+        ),
+    )
 
     # Configuration
     # ~~~~~~~~~~~~~~
@@ -93,9 +100,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
         index=True,
         nullable=False,
     )
-    execution_id: Mapped[str] = mapped_column(
-        Text, unique=True, index=True, nullable=False
-    )
+    execution_id: Mapped[str] = mapped_column(Text, index=True, nullable=False)
     case_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))

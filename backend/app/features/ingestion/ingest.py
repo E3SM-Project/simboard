@@ -94,7 +94,7 @@ def ingest_archive(
     """Ingest a simulation archive and return summary counts.
 
     - Case lookup/creation is done by ``case_name`` + machine + HPC username.
-    - Duplicate detection is based on ``execution_id`` uniqueness.
+    - Duplicate detection is based on ``(case_id, execution_id)`` uniqueness.
     - CASE_HASH is preserved as per-execution metadata for grouping.
 
     Parameters
@@ -204,13 +204,9 @@ def _process_simulation_for_ingest(
     tuple[SimulationCreate | None, bool]
         ``(simulation, is_duplicate)`` where ``simulation`` is populated
         only for new records and ``is_duplicate`` is True when an existing
-        ``execution_id`` was found.
+        ``(case_id, execution_id)`` pair was found.
     """
     execution_id = parsed_simulation.execution_id
-
-    if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
-        return None, True
-
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
     resolved_hpc_username = _resolve_case_hpc_username(
@@ -228,6 +224,15 @@ def _process_simulation_for_ingest(
         resolved_hpc_username,
         db,
     )
+
+    if _is_duplicate_simulation(
+        case=case,
+        execution_id=execution_id,
+        execution_dir=parsed_simulation.execution_dir,
+        db=db,
+    ):
+        return None, True
+
     _track_case_hash_grouping(
         parsed_simulation=parsed_simulation,
         case=case,
@@ -235,7 +240,6 @@ def _process_simulation_for_ingest(
         persisted_case_hash_cache=persisted_case_hash_cache,
         db=db,
     )
-
     simulation = _build_simulation_create(
         parsed_simulation=parsed_simulation,
         prevalidated_draft=prevalidated_draft,
@@ -345,17 +349,20 @@ def _resolve_case(
 
 
 def _is_duplicate_simulation(
-    execution_id: str, execution_dir: str, db: Session
+    case: Case, execution_id: str, execution_dir: str, db: Session
 ) -> bool:
-    """Return True when a simulation with execution_id already exists."""
-    existing_sim = _find_existing_simulation(db, execution_id)
+    """Return True when a simulation with the same case/execution already exists."""
+    existing_sim = _find_existing_simulation(db, case.id, execution_id)
 
     if not existing_sim:
         return False
 
     logger.info(
-        f"Simulation with execution_id='{execution_id}' "
-        f"already exists. Skipping duplicate from {execution_dir}."
+        "Simulation with case_name='%s' and execution_id='%s' already exists. "
+        "Skipping duplicate from %s.",
+        case.name,
+        execution_id,
+        execution_dir,
     )
     return True
 
@@ -613,24 +620,33 @@ def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
     return machine.id
 
 
-def _find_existing_simulation(db: Session, execution_id: str) -> Simulation | None:
-    """Find existing simulation by execution_id.
+def _find_existing_simulation(
+    db: Session, case_id: UUID, execution_id: str
+) -> Simulation | None:
+    """Find an existing simulation by case/execution pair.
 
     Parameters
     ----------
     db : Session
         Active database session for querying the Simulation table.
+    case_id : UUID
+        Case identifier paired with the execution identifier.
     execution_id : str
-        Unique execution identifier derived from the timing-file LID.
+        Execution identifier derived from the timing-file LID.
 
     Returns
     -------
     Simulation | None
-        The existing Simulation object with the given execution_id, or None if
-        not found.
+        The existing Simulation object with the given case/execution pair,
+        or None if not found.
     """
     result = (
-        db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
+        db.query(Simulation)
+        .filter(
+            Simulation.case_id == case_id,
+            Simulation.execution_id == execution_id,
+        )
+        .first()
     )
 
     return result
