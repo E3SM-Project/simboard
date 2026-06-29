@@ -1609,6 +1609,68 @@ class TestCaseHashIngestion:
         assert result.duplicate_count == 1
         assert result.errors == []
 
+    def test_duplicate_reingestion_skips_non_identity_validation(
+        self, db: Session
+    ) -> None:
+        """Duplicate executions should short-circuit before non-identity validation."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = _create_case(db, name="case1", machine=machine)
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081191.251218-200951",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim)
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081191.251218-200951": self._make_metadata(
+                execution_id="1081191.251218-200951",
+                simulation_start_date="2020-01-01",
+                compset=None,
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 0
+        assert result.duplicate_count == 1
+        assert result.errors == []
+
     def test_incremental_ingestion_new_run_keeps_case_grouping(
         self, db: Session
     ) -> None:

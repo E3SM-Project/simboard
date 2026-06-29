@@ -214,25 +214,30 @@ def _process_simulation_for_ingest(
         request_hpc_username,
     )
 
-    prevalidated_draft = _prevalidate_simulation_create(
-        parsed_simulation,
-    )
-    case = _resolve_case(
-        parsed_simulation,
-        case_name,
-        machine_id,
-        resolved_hpc_username,
+    existing_case = _find_case(
         db,
+        name=case_name,
+        machine_id=machine_id,
+        hpc_username=resolved_hpc_username,
     )
-
-    if _is_duplicate_simulation(
-        case=case,
+    if existing_case is not None and _is_duplicate_simulation(
+        case=existing_case,
         execution_id=execution_id,
         execution_dir=parsed_simulation.execution_dir,
         db=db,
     ):
         return None, True
 
+    prevalidated_draft = _prevalidate_simulation_create(
+        parsed_simulation,
+    )
+    case = existing_case or _resolve_case(
+        parsed_simulation,
+        case_name,
+        machine_id,
+        resolved_hpc_username,
+        db,
+    )
     _track_case_hash_grouping(
         parsed_simulation=parsed_simulation,
         case=case,
@@ -346,6 +351,24 @@ def _resolve_case(
     )
 
     return result
+
+
+def _find_case(
+    db: Session,
+    name: str,
+    machine_id: UUID,
+    hpc_username: str,
+) -> Case | None:
+    """Return existing Case by normalized identity without creating one."""
+    return (
+        db.query(Case)
+        .filter(
+            Case.name == name,
+            Case.machine_id == machine_id,
+            Case.hpc_username == hpc_username,
+        )
+        .first()
+    )
 
 
 def _is_duplicate_simulation(
@@ -474,7 +497,7 @@ def _normalize_path_candidate(path_value: str | None) -> str | None:
 def _prevalidate_simulation_create(
     parsed_simulation: ParsedSimulation,
 ) -> SimulationCreateDraft:
-    """Build and validate non-case simulation fields before creating a new case."""
+    """Build and validate non-identity simulation fields before create."""
     draft = _build_simulation_create_draft(
         parsed_simulation=parsed_simulation,
         case_id=None,
@@ -533,14 +556,11 @@ def _get_or_create_case(
     Case
         The existing or newly created Case object.
     """
-    case = (
-        db.query(Case)
-        .filter(
-            Case.name == name,
-            Case.machine_id == machine_id,
-            Case.hpc_username == hpc_username,
-        )
-        .first()
+    case = _find_case(
+        db,
+        name=name,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
     )
 
     if not case:
