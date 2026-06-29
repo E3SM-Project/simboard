@@ -1103,7 +1103,6 @@ class TestUpdateCase:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
 
@@ -1140,7 +1139,6 @@ class TestUpdateCase:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "machineId": str(machine.id),
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
 

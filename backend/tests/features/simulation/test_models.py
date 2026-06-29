@@ -200,16 +200,14 @@ class TestSimulationModelCreateAllSchema:
         )
         simulation_create_all_db.commit()
 
-        _create_simulation(
-            simulation_create_all_db,
-            case_id=case_one.id,
-            ingestion_id=ingestion.id,
-            user_id=user.id,
-            execution_id="shared-exec",
-        )
-
         with pytest.raises(IntegrityError):
-            simulation_create_all_db.commit()
+            _create_simulation(
+                simulation_create_all_db,
+                case_id=case_one.id,
+                ingestion_id=ingestion.id,
+                user_id=user.id,
+                execution_id="shared-exec",
+            )
 
         simulation_create_all_db.rollback()
 
