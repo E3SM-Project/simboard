@@ -344,6 +344,75 @@ class TestCreateSimulation:
         assert case.reference_simulation_id is not None
         assert str(case.reference_simulation_id) == data["id"]
 
+    def test_same_execution_id_in_different_case_succeeds(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case_one = _create_case(db, "test_case_exec_scope_one")
+        case_two = _create_case(db, "test_case_exec_scope_two")
+        db.commit()
+
+        payload = {
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        first_response = client.post(
+            f"{API_BASE}/simulations",
+            json={**payload, "caseId": str(case_one.id)},
+        )
+        second_response = client.post(
+            f"{API_BASE}/simulations",
+            json={**payload, "caseId": str(case_two.id)},
+        )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201
+        assert second_response.json()["caseId"] == str(case_two.id)
+        assert second_response.json()["executionId"] == payload["executionId"]
+
+    def test_same_execution_id_in_same_case_returns_409(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_exec_scope_conflict")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "machineId": str(machine.id),
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        first_response = client.post(f"{API_BASE}/simulations", json=payload)
+        second_response = client.post(f"{API_BASE}/simulations", json=payload)
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 409
+        assert second_response.json()["detail"] == (
+            "Constraint violation while writing to the database."
+        )
+
     def test_create_simulation_raises_500_when_reload_fails(self) -> None:
         case_id = uuid4()
         machine_id = uuid4()

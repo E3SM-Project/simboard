@@ -9,7 +9,7 @@ Reference simulation semantics for performance_archive ingestion:
   - Reference simulations have run_config_deltas = None.
   - Non-reference runs store config differences vs the reference.
   - Incomplete runs are skipped at the parser level.
-  - Re-processing is idempotent due to execution_id uniqueness.
+  - Re-processing is idempotent for an existing ``(case_id, execution_id)`` pair.
 
 Caching for reference lookup:
   - reference_cache: reference metadata for new cases in this ingest batch,
@@ -118,7 +118,7 @@ def ingest_archive(
       (``run_config_deltas = None``).
     - Non-reference simulations store a single dict of configuration
       differences versus the reference.
-    - Duplicate detection is based on ``execution_id`` uniqueness.
+    - Duplicate detection is based on ``(case_id, execution_id)`` uniqueness.
     - Uses two caches to avoid redundant work:
        - ``reference_cache``: Tracks the reference simulation metadata for each
            new case found in the current ingest batch (keyed by case_name). This
@@ -240,20 +240,24 @@ def _process_simulation_for_ingest(
     tuple[SimulationCreate | None, bool]
         ``(simulation, is_duplicate)`` where ``simulation`` is populated
         only for new records and ``is_duplicate`` is True when an existing
-        ``execution_id`` was found.
+        ``(case_id, execution_id)`` pair was found.
     """
     execution_id = parsed_simulation.execution_id
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
+    prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
+    case = _resolve_case(parsed_simulation, case_name, db)
 
-    if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
+    if _is_duplicate_simulation(
+        case=case,
+        execution_id=execution_id,
+        execution_dir=parsed_simulation.execution_dir,
+        db=db,
+    ):
         _seed_reference_cache_from_duplicate(
             case_name, parsed_simulation, reference_cache
         )
         return None, True
-
-    prevalidated_draft = _prevalidate_simulation_create(parsed_simulation, machine_id)
-    case = _resolve_case(parsed_simulation, case_name, db)
 
     simulation = _build_simulation_create(
         parsed_simulation=parsed_simulation,
@@ -292,17 +296,20 @@ def _resolve_case(
 
 
 def _is_duplicate_simulation(
-    execution_id: str, execution_dir: str, db: Session
+    case: Case, execution_id: str, execution_dir: str, db: Session
 ) -> bool:
-    """Return True when a simulation with execution_id already exists."""
-    existing_sim = _find_existing_simulation(db, execution_id)
+    """Return True when a simulation with the same case/execution already exists."""
+    existing_sim = _find_existing_simulation(db, case.id, execution_id)
 
     if not existing_sim:
         return False
 
     logger.info(
-        f"Simulation with execution_id='{execution_id}' "
-        f"already exists. Skipping duplicate from {execution_dir}."
+        "Simulation with case_name='%s' and execution_id='%s' already exists. "
+        "Skipping duplicate from %s.",
+        case.name,
+        execution_id,
+        execution_dir,
     )
     return True
 
@@ -676,24 +683,33 @@ def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
     return machine.id
 
 
-def _find_existing_simulation(db: Session, execution_id: str) -> Simulation | None:
-    """Find existing simulation by execution_id.
+def _find_existing_simulation(
+    db: Session, case_id: UUID, execution_id: str
+) -> Simulation | None:
+    """Find an existing simulation by case/execution pair.
 
     Parameters
     ----------
     db : Session
         Active database session for querying the Simulation table.
+    case_id : UUID
+        Case identifier paired with the execution identifier.
     execution_id : str
-        Unique execution identifier derived from the timing-file LID.
+        Execution identifier derived from the timing-file LID.
 
     Returns
     -------
     Simulation | None
-        The existing Simulation object with the given execution_id, or None if
-        not found.
+        The existing Simulation object with the given case/execution pair,
+        or None if not found.
     """
     result = (
-        db.query(Simulation).filter(Simulation.execution_id == execution_id).first()
+        db.query(Simulation)
+        .filter(
+            Simulation.case_id == case_id,
+            Simulation.execution_id == execution_id,
+        )
+        .first()
     )
 
     return result

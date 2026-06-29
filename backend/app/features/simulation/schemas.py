@@ -109,8 +109,8 @@ class SimulationCreate(CamelInBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the "
-                "timing-file LID (e.g. 1125772.260116-181605)"
+                "Execution identifier for this run, derived from the timing-file "
+                "LID (e.g. 1125772.260116-181605). Unique within its case."
             ),
         ),
     ]
@@ -290,7 +290,8 @@ class SimulationSummaryOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the timing-file LID"
+                "Execution identifier for this run, derived from the timing-file "
+                "LID. Unique within its case."
             ),
         ),
     ]
@@ -400,7 +401,8 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the timing-file LID"
+                "Execution identifier for this run, derived from the timing-file "
+                "LID. Unique within its case."
             ),
         ),
     ]

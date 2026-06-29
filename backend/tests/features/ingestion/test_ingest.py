@@ -710,8 +710,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """Test that duplicate simulations are skipped during ingestion.
 
         This test verifies the deduplication logic by:
-        1. Creating a simulation directly in the database with an execution_id
-        2. Attempting to ingest a simulation with the same execution_id
+        1. Creating a simulation directly in the database with a case/execution pair
+        2. Attempting to ingest a simulation with the same case/execution pair
         3. Verifying it's skipped and not returned
         """
         machine = self._create_machine(db, "test-machine")
@@ -760,7 +760,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(existing_sim)
         db.commit()
 
-        # Try to ingest a simulation with the same execution_id
+        # Try to ingest a simulation with the same case/execution pair
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
@@ -797,7 +797,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             )
 
             # Duplicate should be skipped, result should be empty
+            assert ingest_result.created_count == 0
+            assert ingest_result.duplicate_count == 1
             assert len(ingest_result.simulations) == 0
+            assert db.query(Case).filter(Case.name == "existing_case").count() == 1
 
     def test_validation_error_does_not_persist_empty_case(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
@@ -844,7 +847,9 @@ class TestIngestArchiveContinued(TestIngestArchive):
             db.query(Case).filter(Case.name == "orphan_case_validation").first() is None
         )
 
-    def test_duplicate_does_not_persist_new_empty_case(self, db: Session) -> None:
+    def test_cross_case_matching_execution_id_is_not_duplicate(
+        self, db: Session
+    ) -> None:
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -855,7 +860,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_PATH,
-            source_reference="test_duplicate_does_not_persist_new_empty_case",
+            source_reference="test_cross_case_matching_execution_id_is_not_duplicate",
             machine_id=machine.id,
             triggered_by=user.id,
             status=IngestionStatus.SUCCESS,
@@ -924,12 +929,14 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.created_count == 0
-        assert ingest_result.duplicate_count == 1
-        assert ingest_result.simulations == []
-        assert (
-            db.query(Case).filter(Case.name == "orphan_case_duplicate").first() is None
-        )
+        assert ingest_result.created_count == 1
+        assert ingest_result.duplicate_count == 0
+        assert len(ingest_result.simulations) == 1
+        assert ingest_result.simulations[0].execution_id == "1081175.251218-200941"
+
+        new_case = db.query(Case).filter(Case.name == "orphan_case_duplicate").first()
+        assert new_case is not None
+        assert ingest_result.simulations[0].case_id == new_case.id
 
     def test_ingest_archive_counts(self, db: Session) -> None:
         """Test that summary counts reflect created and duplicate simulations."""
@@ -1003,7 +1010,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "last_updated_by": None,
             },
             "/path/to/1081177.251218-200937": {
-                "execution_id": "1081177.251218-200937",
+                "execution_id": "1081176.251218-200936",
                 "case_name": "new_case",
                 "compset": "FHIST",
                 "compset_alias": "test_alias",
@@ -1039,7 +1046,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.created_count == 1
             assert ingest_result.duplicate_count == 1
             assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].execution_id == "1081177.251218-200937"
+            assert ingest_result.simulations[0].execution_id == "1081176.251218-200936"
+            new_case = db.query(Case).filter(Case.name == "new_case").first()
+            assert new_case is not None
+            assert ingest_result.simulations[0].case_id == new_case.id
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
@@ -1619,7 +1629,7 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.commit()
 
-        # Now re-ingest with the same execution_id
+        # Now re-ingest with the same case/execution pair
         mock_simulations = {
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",

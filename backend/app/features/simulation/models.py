@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -59,6 +59,13 @@ class Case(Base, IDMixin, TimestampMixin):
 
 class Simulation(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
+    __table_args__ = (
+        UniqueConstraint(
+            "case_id",
+            "execution_id",
+            name="uq_simulations_case_id_execution_id",
+        ),
+    )
 
     # Configuration
     # ~~~~~~~~~~~~~~
@@ -68,9 +75,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
         index=True,
         nullable=False,
     )
-    execution_id: Mapped[str] = mapped_column(
-        Text, unique=True, index=True, nullable=False
-    )
+    execution_id: Mapped[str] = mapped_column(Text, index=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(Text)
