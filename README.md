@@ -34,6 +34,24 @@ SimBoard is organized as a React frontend, a FastAPI backend, and PostgreSQL-bac
 
 For architecture diagrams, API/data-flow detail, and contributor-oriented system context, see [docs/developer/README.md](docs/developer/README.md).
 
+## API
+
+The REST API is served from a dedicated `-api` subdomain, **not** from the
+frontend origin. The route prefix is `/api/v1` (`API_BASE` in
+`backend/app/api/version.py`). The frontend resolves the API origin from the
+`VITE_API_BASE_URL` build variable.
+
+| Environment | API base URL | Notes |
+| --- | --- | --- |
+| Dev | `https://simboard-dev-api.e3sm.org/api/v1` | Frontend: `https://simboard-dev.e3sm.org/` |
+| Prod | `https://simboard-api.e3sm.org/api/v1` | Frontend: `https://simboard.e3sm.org/` |
+
+- OpenAPI schema: `/openapi.json` (e.g. `https://simboard-dev-api.e3sm.org/openapi.json`)
+- Interactive docs (Swagger UI): `/docs`
+
+Requests to `https://simboard-dev.e3sm.org/api/...` (the frontend origin) return
+`404`; use the `-api` subdomain above.
+
 ## Technology At A Glance
 
 - Frontend: React, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS, shadcn/ui
@@ -46,6 +64,7 @@ For architecture diagrams, API/data-flow detail, and contributor-oriented system
 ## Documentation Map
 
 - Hosted docs: <https://simboard.readthedocs.io/>
+- API base URLs and OpenAPI/Swagger endpoints: [API](#api)
 - Local docs preview: `make docs-serve`
 - Contributor guide: [docs/developer/README.md](docs/developer/README.md)
 - Contribution workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
