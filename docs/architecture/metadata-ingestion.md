@@ -6,13 +6,29 @@ Browser/manual uploads are supported separately and are not part of automated HP
 
 ## Terminology
 
-| Term                      | Definition                                                                                                                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Collection                | Site-side scanning, discovery, validation, and packaging work that inspects case directories and their execution subdirectories to determine which case directories contain newly discovered complete executions. |
-| Ingestion                 | SimBoard API and database work that accepts collected metadata, normalizes it, and persists records in PostgreSQL.                                                                                                |
-| Staging directory         | The active `PERF_ARCHIVE_DIR` tree where new performance output from E3SM runs appears before PACE moves it elsewhere.                                                                                            |
-| Archive directory         | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.                                                                                                                          |
-| Submission-qualified case | A parent case directory selected for submission because collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                 |
+### Process terms
+
+| Term       | Definition                                                                                                                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection | Site-side scanning, discovery, validation, and packaging work that inspects case directories and their execution subdirectories to determine which case directories contain newly discovered complete executions. |
+| Ingestion  | SimBoard API and database work that accepts collected metadata, normalizes it, and persists records in PostgreSQL.                                                                                                |
+
+### Filesystem terms
+
+| Term              | Definition                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Staging directory | The active `PERF_ARCHIVE_DIR` tree where new performance output from E3SM runs appears before PACE moves it elsewhere. |
+| Archive directory | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.               |
+
+### Case and execution state terms
+
+| Term                      | Definition                                                                                                                                                                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
+| Incomplete execution      | An execution directory that is missing one or more required metadata files, is missing required metadata in those files, does not provide a non-empty execution ID (LID) in the timing file, or cannot be read during discovery. Incomplete executions are skipped and do not enter case state. |
+| Complete case             | A case directory that contains at least one complete execution. Only complete executions contribute to the case's known execution IDs.                                                                                                                                            |
+| Incomplete case           | A case directory whose discovered execution subdirectories are all incomplete. It produces no collected execution IDs, is not submission-qualified, and does not enter stored state.                                                                                           |
+| Submission-qualified case | A parent case directory selected for submission because collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                                                                               |
 
 ## Performance Directories
 
