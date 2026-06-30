@@ -2,17 +2,17 @@
 
 HPC sites produce performance metadata that site-side automation collects and SimBoard ingests into PostgreSQL. Automated HPC collection reaches SimBoard ingestion through one of two submission workflows depending on whether the source archive is readable from the SimBoard backend environment on NERSC Spin.
 
-Browser/manual uploads are supported separately and are not part of automated HPC dedupe reconstruction.
+Browser/manual uploads are supported separately and are not part of automated HPC state reconstruction from previously submitted execution IDs.
 
 ## Terminology
 
-| Term              | Definition                                                                                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Collection        | Site-side scanning, discovery, validation, and packaging work that inspects case directories and their execution subdirectories to determine which parent case directories have changed and are ready to submit. |
-| Ingestion         | SimBoard API and database work that accepts collected metadata, normalizes it, and persists records in PostgreSQL.                                                                                               |
-| Staging directory | The active `PERF_ARCHIVE_DIR` tree where new performance output appears before PACE moves it elsewhere.                                                                                                          |
-| Archive directory | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.                                                                                                                         |
-| Changed case      | A parent case directory selected for submission because one or more files or execution subdirectories under it changed.                                                                                          |
+| Term                      | Definition                                                                                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection                | Site-side scanning, discovery, validation, and packaging work that inspects case directories and their execution subdirectories to determine which case directories contain newly discovered complete executions. |
+| Ingestion                 | SimBoard API and database work that accepts collected metadata, normalizes it, and persists records in PostgreSQL.                                                                                                |
+| Staging directory         | The active `PERF_ARCHIVE_DIR` tree where new performance output from E3SM runs appears before PACE moves it elsewhere.                                                                                            |
+| Archive directory         | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.                                                                                                                          |
+| Submission-qualified case | A parent case directory selected for submission because collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                 |
 
 ## Performance Directories
 
@@ -91,7 +91,7 @@ Example NERSC path:
 
 | Site / Machine     | Collection / submission mode    | Scheduler                      | Staging directory (`PERF_ARCHIVE_DIR`)                | Archive directory (`OLD_PERF_ARCHIVE_DIR`)  |
 | ------------------ | ------------------------------- | ------------------------------ | ----------------------------------------------------- | ------------------------------------------- |
-| NERSC / Perlmutter | Local path submission           | Cron                           | `/global/cfs/projectdirs/e3sm/performance_archive`    | `/global/cfs/cdirs/e3sm/OLD_PERF`           |
+| NERSC / Perlmutter | Local path submission           | Cron                           | `/global/cfs/projectdirs/e3sm/performance_archive`    | `/global/cfs/projectdirs/e3sm/OLD_PERF`     |
 | LCRC / Chrysalis   | Remote automated archive upload | Sandia Jenkins                 | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive` | `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF`  |
 | SNL / Compy        | Remote automated archive upload | Sandia Jenkins                 | `/compyfs/performance_archive`                        | `/compyfs/OLD_PERF`                         |
 | ALCF / Aurora      | Remote automated archive upload | ALCF GitLab job, daily at 7 AM | `/lus/flare/projects/E3SM_Dec/performance_archive`    | `TODO`                                      |
@@ -99,29 +99,31 @@ Example NERSC path:
 
 ## Collection and Submission Modes
 
-Automated HPC collection reaches SimBoard ingestion through two site-side submission modes. Both use database-backed dedupe state, but they submit changed cases through different routes:
+Automated HPC collection reaches SimBoard ingestion through two site-side submission modes. Both use database-backed stored known execution IDs, but they submit submission-qualified cases through different routes:
 
 - `nersc_archive_ingestor.py` for local path submission on NERSC / Perlmutter
 - `hpc_upload_archive_ingestor.py` for remote automated archive upload from LCRC and other DOE sites
 
-| Mode                            | Script / entry point             | Access pattern                                                                        | Route                                | Use when                                        | Examples                          |
-| ------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- | --------------------------------- |
-| Local path submission           | `nersc_archive_ingestor.py`      | Site-side collection submits a mounted case directory path inside `PERF_ARCHIVE_DIR`. | `/api/v1/ingestions/from-path`       | Source archive is readable from NERSC Spin.     | NERSC / Perlmutter                |
-| Remote automated archive upload | `hpc_upload_archive_ingestor.py` | Site job uploads one changed case archive over HTTPS.                                 | `/api/v1/ingestions/from-hpc-upload` | Source archive is not readable from NERSC Spin. | LCRC / Chrysalis; other DOE sites |
-| Browser/manual upload           | N/A                              | User uploads an archive through the browser.                                          | `/api/v1/ingestions/from-upload`     | Manual, test, or ad hoc ingestion is needed.    | User workstation                  |
+| Mode                            | Script / entry point             | Access pattern                                                                                                         | Route                                | Use when                                        | Examples                          |
+| ------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- | --------------------------------- |
+| Local path submission           | `nersc_archive_ingestor.py`      | Site-side collection submits a mounted case directory path inside `PERF_ARCHIVE_DIR` (mounted at `PERF_ARCHIVE_ROOT`). | `/api/v1/ingestions/from-path`       | Source archive is readable from NERSC Spin.     | NERSC / Perlmutter                |
+| Remote automated archive upload | `hpc_upload_archive_ingestor.py` | Site job uploads one submission-qualified case archive over HTTPS.                                                     | `/api/v1/ingestions/from-hpc-upload` | Source archive is not readable from NERSC Spin. | LCRC / Chrysalis; other DOE sites |
+| Browser/manual upload           | N/A                              | User uploads an archive through the browser.                                                                           | `/api/v1/ingestions/from-upload`     | Manual, test, or ad hoc ingestion is needed.    | User workstation                  |
 
-### Automated Dedupe Flow
+### Automated Submission-State Flow
 
-Both automated scripts follow the same dedupe sequence:
+Both automated scripts follow the same submission-state sequence:
 
-1. Scan `PERF_ARCHIVE_DIR` for case directories and metadata.
+1. Scan the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT` in the runner) for case directories and metadata.
 2. Read known execution IDs from `/api/v1/ingestions/state`.
-3. Compare the collection results with database-backed state.
-4. Submit changed cases with the full discovered `processed_execution_ids` set.
-5. SimBoard stores the submitted dedupe state on ingestion audit rows.
-6. Future runs reconstruct dedupe state from PostgreSQL.
+3. Compare discovered complete execution IDs with database-backed state.
+4. Submit each case that contains at least one newly discovered execution ID, along with the full discovered `processed_execution_ids` set.
+5. SimBoard stores the submitted known execution IDs on ingestion audit rows.
+6. Future runs reconstruct the known execution IDs from PostgreSQL.
 
-Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable dedupe key for that uploaded case.
+Collection atomicity is `(case_path, execution_id)`. Updating files inside an already recorded execution directory does not make that execution eligible again, and incomplete executions do not become case state.
+
+Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable case identifier for that uploaded case.
 
 ```mermaid
 flowchart TD
@@ -132,9 +134,9 @@ flowchart TD
     SCAN["Scan staging filesystem\nPERF_ARCHIVE_DIR"]
     STATE_REQ["Read known execution IDs\nGET /api/v1/ingestions/state"]
     COMPARE["Compare collection results\nwith database-backed state"]
-    CHANGED["Changed case directories"]
+    CHANGED["Submission-qualified\ncase directories"]
 
-    NERSC_PAYLOAD["Changed case directory path\n+ processed_execution_ids"]
+    NERSC_PAYLOAD["Submission-qualified case path\n+ processed_execution_ids"]
     HPC_PAYLOAD["One case archive\n+ case_path\n+ processed_execution_ids"]
   end
 
@@ -143,7 +145,7 @@ flowchart TD
     PATH["POST /api/v1/ingestions/from-path"]
     UPLOAD["POST /api/v1/ingestions/from-hpc-upload"]
     NORMALIZE["Normalize and validate"]
-    AUDIT["Store ingestion audit row\nwith dedupe state"]
+    AUDIT["Store ingestion audit row\nwith known execution IDs"]
     DB[("PostgreSQL")]
   end
 

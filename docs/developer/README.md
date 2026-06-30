@@ -59,11 +59,11 @@ same origin (see [Local Environment Setup](#local-environment-setup)).
 
 ## Metadata Ingestion
 
-In these docs, collection means site-side scanning and discovery of changed case directories, while ingestion means SimBoard API and database uptake of that collected metadata.
+In these docs, collection means site-side scanning and discovery of submission-qualified case directories, while ingestion means SimBoard API and database uptake of that collected metadata.
 
-SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed dedupe state during collection and submit changed case directories through ingestion API routes.
+SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed stored known execution IDs during collection and submit submission-qualified case directories through ingestion API routes.
 
-See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for terminology, ingestion modes, dedupe flow, runner configuration, site mapping, and PACE reference scripts.
+See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for terminology, ingestion modes, submission-state flow, runner configuration, site mapping, and PACE reference scripts.
 
 ## Local Environment Setup
 

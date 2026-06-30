@@ -232,11 +232,11 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | privileged               | `false`                         |
 | capabilities             | add `DAC_OVERRIDE`, drop `ALL`  |
 
-### Workload 3: NERSC Archive Ingestion CronJob (`nersc-archive-ingestor`)
+### Workload 3: NERSC Archive Collection CronJob (`nersc-archive-ingestor`)
 
 Use a Rancher-managed `CronJob` to run incremental collection every 15 minutes.
 
-In this runbook, the CronJob performs site-side collection from `PERF_ARCHIVE_ROOT` and submits changed case directories to SimBoard, where backend ingestion occurs.
+In this runbook, the CronJob performs site-side collection from `PERF_ARCHIVE_ROOT` and submits submission-qualified case directories to SimBoard, where backend ingestion occurs.
 
 Prerequisites for this section:
 
@@ -316,7 +316,7 @@ Key table for step 3 (`simboard-ingestion-env`):
 5. **Validate once with dry run**
    - Set `DRY_RUN=true` in `simboard-ingestion-env`.
    - Trigger a one-off job from the CronJob.
-   - Confirm logs include `scan_completed` and changed-case discovery during collection.
+   - Confirm logs include `scan_completed` and submission-qualified case discovery during collection.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
 6. **Verify steady-state behavior**

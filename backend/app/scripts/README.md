@@ -134,7 +134,7 @@ Configuration surface (via env vars):
 ## HPC Upload Archive Ingestor
 
 The HPC upload archive ingestor uses the same scan, state, dry-run, retry, and
-per-case dedupe flow as the NERSC path ingestor, but packages each changed case
+per-case submission-state flow as the NERSC path ingestor, but packages each submission-qualified case
 directory into a temporary single-case `.tar.gz` archive and calls
 `/api/v1/ingestions/from-hpc-upload`.
 
@@ -144,7 +144,7 @@ SimBoard backend environment.
 One-case-per-request rule:
 
 - Each upload request contains exactly one case directory.
-- `case_path` is sent alongside the archive and becomes the stable dedupe key in
+- `case_path` is sent alongside the archive and becomes the stable case identifier in
   the ingestion audit table.
 - Browser/manual uploads still use `/api/v1/ingestions/from-upload`; this runner
   does not call that endpoint.
