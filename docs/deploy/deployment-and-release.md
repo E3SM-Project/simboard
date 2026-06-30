@@ -21,7 +21,7 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 
 ## Overview
 
-SimBoard uses **GitHub Actions** to automatically build and publish container images to the **NERSC container registry** (`registry.nersc.gov/e3sm/simboard/`).
+SimBoard uses **GitHub Actions** to automatically build and publish container images to the **GitHub Container Registry** (`ghcr.io/e3sm-project/simboard/`).
 
 **Key Features:**
 
@@ -35,7 +35,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 
 ## Quick Links
 
-- **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
+- **Container Registry:** <https://github.com/orgs/E3SM-Project/packages>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/home>
 - **GitHub Actions:** <https://github.com/E3SM-Project/simboard/actions>
 - **NERSC Spin Runbook (Rancher UI):** [docs/deploy/nersc-spin-runbook.md](../deploy/nersc-spin-runbook.md)
@@ -74,7 +74,7 @@ Dev workflows build and push images tagged with `:dev` and `:sha-<commit>` whene
 
 **Tags:** `:dev`, `:sha-<commit>`
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/backend`
+**Registry:** `ghcr.io/e3sm-project/simboard/backend`
 
 #### Frontend Dev Workflow
 
@@ -86,7 +86,7 @@ Dev workflows build and push images tagged with `:dev` and `:sha-<commit>` whene
 
 - `VITE_API_BASE_URL`: `https://simboard-dev-api.e3sm.org` (default)
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/frontend`
+**Registry:** `ghcr.io/e3sm-project/simboard/frontend`
 
 ### Release Builds (component-scoped tags)
 
@@ -98,7 +98,7 @@ Release workflows are triggered by component-scoped Git tags created through Git
 
 **Tags:** `:X.Y.Z`, `:sha-<commit>`, `:latest`
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/backend`
+**Registry:** `ghcr.io/e3sm-project/simboard/backend`
 
 #### Frontend Prod Workflow
 
@@ -110,7 +110,7 @@ Release workflows are triggered by component-scoped Git tags created through Git
 
 - `VITE_API_BASE_URL`: `https://simboard-api.e3sm.org` (default, override in manual dispatch)
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/frontend`
+**Registry:** `ghcr.io/e3sm-project/simboard/frontend`
 
 ### Build Flow Summary
 
@@ -121,27 +121,19 @@ Release builds: component tag    → :X.Y.Z, :sha-<short>, :latest
 
 ## GitHub Secrets Setup
 
-**Required secrets:** Configure in [repository settings](https://github.com/E3SM-Project/simboard/settings/secrets/actions)
-
-1. **NERSC_REGISTRY_USERNAME**
-   - Your NERSC username
-   - Used for `docker login registry.nersc.gov`
-
-2. **NERSC_REGISTRY_PASSWORD**
-   - Your NERSC password or access token
-   - Used for `docker login registry.nersc.gov`
+No registry secrets are required. Authentication to `ghcr.io` is handled automatically via the built-in `GITHUB_TOKEN` with `packages: write` permission granted in each workflow.
 
 **Test locally:**
 
 ```bash
-docker login registry.nersc.gov
-# Use the same credentials
+docker login ghcr.io
+# Use your GitHub username and a personal access token with read:packages scope
 ```
 
 **Security:**
 
-- Use service account tokens when available
-- Rotate credentials on a schedule that matches current NERSC and project policy
+- The `GITHUB_TOKEN` used in CI has scoped permissions and is automatically rotated per job run.
+- For local pulls, create a personal access token with `read:packages` scope.
 - Never commit credentials to source code
 
 ## Image Tagging Strategy
@@ -166,8 +158,8 @@ docker login registry.nersc.gov
 
 | Git Tag           | Component | Docker Image Tag                                  |
 | ----------------- | --------- | ------------------------------------------------- |
-| `backend-vX.Y.Z`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`  |
-| `frontend-vX.Y.Z` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z` |
+| `backend-vX.Y.Z`  | Backend   | `ghcr.io/e3sm-project/simboard/backend:X.Y.Z`  |
+| `frontend-vX.Y.Z` | Frontend  | `ghcr.io/e3sm-project/simboard/frontend:X.Y.Z` |
 
 ## Development Deployment
 
@@ -186,12 +178,12 @@ When creating or editing a workload in Rancher, set these values:
 
 **Dev backend:**
 
-- **Image:** `registry.nersc.gov/e3sm/simboard/backend:dev`
+- **Image:** `ghcr.io/e3sm-project/simboard/backend:dev`
 - **Pull Policy:** Always
 
 **Dev frontend:**
 
-- **Image:** `registry.nersc.gov/e3sm/simboard/frontend:dev`
+- **Image:** `ghcr.io/e3sm-project/simboard/frontend:dev`
 - **Pull Policy:** Always
 
 ## Production Release Process
@@ -252,8 +244,8 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 1. Navigate to **Workloads → Deployments** in the prod namespace
 2. Click the target deployment → **⋮ → Edit Config**
 3. Update the **Image** field to the new versioned image, e.g.:
-   - Backend: `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
-   - Frontend: `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
+   - Backend: `ghcr.io/e3sm-project/simboard/backend:X.Y.Z`
+   - Frontend: `ghcr.io/e3sm-project/simboard/frontend:X.Y.Z`
 4. Set **Pull Policy** to `IfNotPresent`
 5. Click **Save** — Rancher will roll out the new version
 
@@ -337,8 +329,8 @@ Version-tagged images are **immutable** — once published, a version tag (for e
 2. Navigate to **Workloads → Deployments** in the prod namespace
 3. Click the deployment to roll back → **⋮ → Edit Config**
 4. Change the **Image** tag to the previous known-good version, e.g.:
-   - `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
-   - `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
+   - `ghcr.io/e3sm-project/simboard/backend:X.Y.Z`
+   - `ghcr.io/e3sm-project/simboard/frontend:X.Y.Z`
 5. Click **Save** to trigger the rollout
 
 Alternatively, use the built-in Rancher rollback:
@@ -357,10 +349,11 @@ Alternatively, use the built-in Rancher rollback:
 
 For testing or emergency builds, you can manually build and push images using Docker Buildx. This is not recommended for regular use, as it bypasses CI checks and versioning conventions.
 
-First login to the NERSC registry:
+First login to the GitHub Container Registry:
 
 ```bash
-docker login registry.nersc.gov
+docker login ghcr.io
+# Use your GitHub username and a personal access token with write:packages scope
 ```
 
 ### Backend
@@ -370,7 +363,7 @@ cd backend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg ENV=production \
-  -t registry.nersc.gov/e3sm/simboard/backend:dev-manual \
+  -t ghcr.io/e3sm-project/simboard/backend:dev-manual \
   --push \
   .
 
@@ -384,7 +377,7 @@ cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:dev-manual \
+  -t ghcr.io/e3sm-project/simboard/frontend:dev-manual \
   --push \
   .
 ```
@@ -395,7 +388,7 @@ cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
   --build-arg VITE_API_BASE_URL=https://simboard-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:prod-manual \
+  -t ghcr.io/e3sm-project/simboard/frontend:prod-manual \
   --push \
   .
 ```
@@ -408,9 +401,9 @@ docker buildx build \
 
 **Solutions:**
 
-1. Verify GitHub Secrets are configured
-2. Test credentials: `docker login registry.nersc.gov`
-3. Check NERSC account has push permissions to `e3sm/simboard/` namespace
+1. Ensure the workflow has `packages: write` permission
+2. Test credentials: `docker login ghcr.io` using a personal access token with `write:packages` scope
+3. Check the `E3SM-Project` organization allows Actions to publish packages
 
 ### Build Failures
 
@@ -474,7 +467,7 @@ docker buildx build \
 
 ## Additional Resources
 
-- [NERSC Container Registry Docs](https://docs.nersc.gov/development/containers/registry/)
+- [GitHub Container Registry Docs](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [NERSC Spin Docs](https://docs.nersc.gov/services/spin/)
 - [GitHub Actions Docs](https://docs.github.com/en/actions)
 - [Docker Buildx Docs](https://docs.docker.com/buildx/working-with-buildx/)

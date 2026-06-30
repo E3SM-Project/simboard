@@ -2,30 +2,26 @@
 
 Audience: maintainers operating CI/CD and release image builds.
 
-SimBoard uses GitHub Actions to build and publish frontend and backend container images to the NERSC container registry.
+SimBoard uses GitHub Actions to build and publish frontend and backend container images to the GitHub Container Registry.
 
 ## Registry
 
 ```text
-registry.nersc.gov/e3sm/simboard/backend
-registry.nersc.gov/e3sm/simboard/frontend
+ghcr.io/e3sm-project/simboard/backend
+ghcr.io/e3sm-project/simboard/frontend
 ```
 
-A NERSC E3SM project robot account is provided to SimBoard administrators for automated registry access.
+Authentication uses the built-in `GITHUB_TOKEN` — no additional secrets are required for registry access.
 
 ## GitHub Secrets
 
-Configure these secrets in repository Actions settings:
-
-| Secret                    | Purpose                                                  |
-| ------------------------- | -------------------------------------------------------- |
-| `NERSC_REGISTRY_USERNAME` | Username for `docker login registry.nersc.gov`.          |
-| `NERSC_REGISTRY_PASSWORD` | Password or token for `docker login registry.nersc.gov`. |
+No registry secrets are required. Authentication to `ghcr.io` is handled automatically via the built-in `GITHUB_TOKEN` with `packages: write` permission granted in each workflow.
 
 Test locally:
 
 ```bash
-docker login registry.nersc.gov
+docker login ghcr.io
+# Use your GitHub username and a personal access token with `write:packages` scope
 ```
 
 ## Workflows
@@ -50,10 +46,10 @@ Dev builds do not modify production images. Release builds do not modify the `:d
 
 ## Image Tagging
 
-| Git tag           | Component | Image                                             |
-| ----------------- | --------- | ------------------------------------------------- |
-| `backend-vX.Y.Z`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`  |
-| `frontend-vX.Y.Z` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z` |
+| Git tag           | Component | Image                                               |
+| ----------------- | --------- | --------------------------------------------------- |
+| `backend-vX.Y.Z`  | Backend   | `ghcr.io/e3sm-project/simboard/backend:X.Y.Z`       |
+| `frontend-vX.Y.Z` | Frontend  | `ghcr.io/e3sm-project/simboard/frontend:X.Y.Z`      |
 
 Use full semantic versions in production for reproducibility. Use `:sha-<commit>` tags for debugging or precise rollback.
 
@@ -70,18 +66,17 @@ Trigger a manual dev build:
 Verify images:
 
 ```bash
-docker login registry.nersc.gov
-docker pull registry.nersc.gov/e3sm/simboard/backend:dev
-docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
+docker login ghcr.io
+docker pull ghcr.io/e3sm-project/simboard/backend:dev
+docker pull ghcr.io/e3sm-project/simboard/frontend:dev
 ```
 
 ## Troubleshooting
 
 ### Authentication failure
 
-- Verify GitHub Actions secrets are configured.
-- Test the same credentials with `docker login registry.nersc.gov`.
-- Confirm the account has push permissions for the `e3sm/simboard` registry namespace.
+- Ensure the workflow has `packages: write` permission (already set in all build workflows).
+- For local pulls, use a GitHub personal access token with `read:packages` scope.
 
 ### Workflow not triggering
 
@@ -100,4 +95,4 @@ See [Deployment and Release Guide](../deploy/deployment-and-release.md).
 - [Deployment and Release Guide](../deploy/deployment-and-release.md)
 - [NERSC Spin Runbook](../deploy/nersc-spin-runbook.md)
 - [GitHub Actions](https://github.com/E3SM-Project/simboard/actions)
-- [NERSC Registry](https://registry.nersc.gov/harbor/projects)
+- [GitHub Container Registry](https://ghcr.io)

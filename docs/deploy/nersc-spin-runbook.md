@@ -180,7 +180,7 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | Rancher field         | Value                                                  |
 | --------------------- | ------------------------------------------------------ |
 | Container Name        | `backend`, Standard Container                          |
-| Container Image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
+| Container Image       | `ghcr.io/e3sm-project/simboard/backend:<tag>`       |
 | Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Environment Variables | Type: Secret, Secret: `simboard-backend-env`           |
 
@@ -217,7 +217,7 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | --------------------- | ---------------------------------------------------------------------------------- |
 | Container type        | Init container                                                                     |
 | Name                  | `migrate`                                                                          |
-| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                   |
+| Container image       | `ghcr.io/e3sm-project/simboard/backend:<tag>`                                   |
 | Command               | `/app/migrate.sh`                                                                  |
 | Args                  | leave empty                                                                        |
 | Environment Variables | Type: Secret, Secret: `simboard-backend-env`                                       |
@@ -374,7 +374,7 @@ Key table for step 3 (`simboard-ingestion-env`):
 | Rancher field         | Value                                                  |
 | --------------------- | ------------------------------------------------------ |
 | Container Name        | `nersc-archive-ingestor`                               |
-| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
+| Container image       | `ghcr.io/e3sm-project/simboard/backend:<tag>`       |
 | Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Image pull secret     | `registry-nersc`                                       |
 | Command               | `python`                                               |
@@ -446,7 +446,7 @@ Workloads -> Deployments -> Create (top-right)
 
 | Rancher field   | Value                                                  |
 | --------------- | ------------------------------------------------------ |
-| Container image | `registry.nersc.gov/e3sm/simboard/frontend:<tag>`      |
+| Container image | `ghcr.io/e3sm-project/simboard/frontend:<tag>`      |
 | Pull policy     | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Port            | `80/TCP`                                               |
 
