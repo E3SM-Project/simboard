@@ -5,12 +5,12 @@ detail, see [backend/README.md](../backend/README.md) and [frontend/README.md](.
 
 ## System Overview
 
-SimBoard is a web application for cataloging, browsing, comparing, and analyzing E3SM simulation metadata. The frontend, backend, and PostgreSQL database are hosted on NERSC Spin. Automated ingestion jobs running on HPC sites collect E3SM `performance_archive` metadata and submit it to SimBoard.
+SimBoard is a web application for cataloging, browsing, comparing, and analyzing E3SM simulation metadata. The frontend, backend, and PostgreSQL database are hosted on NERSC Spin. Automated collection jobs running on HPC sites scan E3SM staging performance directories and submit changed case metadata to SimBoard for ingestion.
 
 ```mermaid
 flowchart LR
   user[Browser User]
-  ingest([Automated Ingestion])
+   ingest([Automated Collection])
 
   subgraph mono[SimBoard — hosted on NERSC Spin]
     direction LR
@@ -30,13 +30,13 @@ flowchart LR
   be --> pace
 ```
 
-| Component           | Role                                                                                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend            | Provides browse, detail, compare, authentication, and upload views. Calls the backend over HTTPS through `frontend/src/api/api.ts` with credentials enabled for cookie auth. |
-| Backend             | Parses ingested archives, validates metadata, persists normalized records including per-run `CASE_HASH` grouping metadata, and exposes `/api/v1` endpoints.                   |
-| PostgreSQL          | Stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.                                                                                 |
-| Automated ingestion | Runs on supported HPC sites, scans E3SM `performance_archive` locations, and submits changed metadata to SimBoard.                                                           |
-| External services   | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |
+| Component            | Role                                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend             | Provides browse, detail, compare, authentication, and upload views. Calls the backend over HTTPS through `frontend/src/api/api.ts` with credentials enabled for cookie auth. |
+| Backend              | Parses ingested archives, validates metadata, persists normalized records including per-run `CASE_HASH` grouping metadata, and exposes `/api/v1` endpoints.                  |
+| PostgreSQL           | Stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.                                                                                 |
+| Automated collection | Runs on supported HPC sites, scans E3SM staging performance directories, and submits changed case metadata to SimBoard ingestion routes.                                     |
+| External services    | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |
 
 ### Deployed API Base URLs
 
@@ -45,10 +45,10 @@ frontend origin. The route prefix is `/api/v1` (`API_BASE` in
 `backend/app/api/version.py`); the frontend resolves the origin from the
 `VITE_API_BASE_URL` build variable (`frontend/src/api/api.ts`).
 
-| Environment | Frontend                          | API base URL                                  |
-| ----------- | --------------------------------- | --------------------------------------------- |
-| Dev         | `https://simboard-dev.e3sm.org/`  | `https://simboard-dev-api.e3sm.org/api/v1`    |
-| Prod        | `https://simboard.e3sm.org/`      | `https://simboard-api.e3sm.org/api/v1`        |
+| Environment | Frontend                         | API base URL                               |
+| ----------- | -------------------------------- | ------------------------------------------ |
+| Dev         | `https://simboard-dev.e3sm.org/` | `https://simboard-dev-api.e3sm.org/api/v1` |
+| Prod        | `https://simboard.e3sm.org/`     | `https://simboard-api.e3sm.org/api/v1`     |
 
 - OpenAPI schema: `/openapi.json`
 - Interactive docs (Swagger UI): `/docs`
@@ -59,9 +59,11 @@ same origin (see [Local Environment Setup](#local-environment-setup)).
 
 ## Metadata Ingestion
 
-SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed dedupe state and submit changed `performance_archive` cases through ingestion API routes.
+In these docs, collection means site-side scanning and discovery of submission-qualified case directories, while ingestion means SimBoard API and database uptake of that collected metadata.
 
-See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for ingestion modes, dedupe flow, runner configuration, site mapping, and PACE reference scripts.
+SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed stored known execution IDs during collection and submit submission-qualified case directories through ingestion API routes.
+
+See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for terminology, ingestion modes, submission-state flow, runner configuration, site mapping, and PACE reference scripts.
 
 ## Local Environment Setup
 
