@@ -1,5 +1,6 @@
 """Tests for the NERSC archive ingestion runner script."""
 
+import gzip
 import json
 import logging
 import runpy
@@ -12,9 +13,12 @@ from typing import Any
 import pytest
 
 from app.api.version import API_BASE
+from app.features.ingestion.parsers import parser as parser_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.nersc_archive_ingestor import (
+    CaseDiscoveryResult,
     CaseScanResult,
+    ExecutionDiscoveryResult,
     IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
@@ -67,9 +71,21 @@ def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
             raise FileNotFoundError("missing required files")
         return {}
 
-    grouped = _discover_case_executions(archive_root, metadata_locator=fake_locator)
+    discovery_results = _discover_case_executions(
+        archive_root,
+        metadata_locator=fake_locator,
+    )
 
-    assert list(grouped.values()) == [["100.1-1"]]
+    assert [result.case_path for result in discovery_results] == [
+        str(case_dir.resolve())
+    ]
+    assert [
+        (result.execution_id, result.state)
+        for result in discovery_results[0].execution_results
+    ] == [
+        ("100.1-1", "complete_execution"),
+        ("101.1-1", "incomplete_execution"),
+    ]
 
 
 def test_discover_case_executions_skips_unreadable_execution_dirs(
@@ -90,51 +106,47 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
             raise PermissionError("permission denied")
         return {}
 
-    grouped = _discover_case_executions(
+    discovery_results = _discover_case_executions(
         archive_root,
         metadata_locator=fake_locator,
         stats=stats,
     )
 
-    assert list(grouped.values()) == [["100.1-1"]]
+    assert [result.case_path for result in discovery_results] == [
+        str(case_dir.resolve())
+    ]
+    assert [
+        (result.execution_id, result.state)
+        for result in discovery_results[0].execution_results
+    ] == [
+        ("100.1-1", "complete_execution"),
+        ("101.1-1", "invalid_execution"),
+    ]
     assert stats["execution_dirs_scanned"] == 2
     assert stats["execution_dirs_accepted"] == 1
     assert stats["skipped_incomplete"] == 0
     assert stats["skipped_invalid"] == 1
 
 
-def test_discover_case_executions_logs_suppressed_skips(
+def test_discover_case_executions_preserves_all_rejected_results(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     archive_root = tmp_path / "archive"
     for index in range(ingestor_module.MAX_SKIP_DETAIL_LOGS + 2):
         (archive_root / "case_a" / f"{100 + index}.1-1").mkdir(parents=True)
 
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-
-    grouped = _discover_case_executions(
+    discovery_results = _discover_case_executions(
         archive_root,
         metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
     )
 
-    assert grouped == {}
-    suppression = [
-        fields
-        for event, fields in logged_events
-        if event == "execution_skip_logs_suppressed"
-    ]
-    assert suppression == [
-        {
-            "suppressed_count": 2,
-            "detail_log_limit": ingestor_module.MAX_SKIP_DETAIL_LOGS,
-        }
-    ]
+    assert len(discovery_results) == 1
+    assert len(discovery_results[0].execution_results) == (
+        ingestor_module.MAX_SKIP_DETAIL_LOGS + 2
+    )
+    assert {result.state for result in discovery_results[0].execution_results} == {
+        "incomplete_execution"
+    }
 
 
 def test_build_ingestion_candidates_is_idempotent() -> None:
@@ -269,12 +281,32 @@ def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) ->
 
 
 def test_build_case_scan_results_skips_empty_execution_lists() -> None:
-    grouped = {
-        "/performance_archive/case_a": [],
-        "/performance_archive/case_b": ["200.1-1"],
-    }
+    discovery_results = [
+        CaseDiscoveryResult(
+            case_path="/performance_archive/case_a",
+            execution_results=[
+                ExecutionDiscoveryResult(
+                    execution_id="100.1-1",
+                    state="incomplete_execution",
+                    validation_errors=[],
+                    missing_optional_metadata=[],
+                )
+            ],
+        ),
+        CaseDiscoveryResult(
+            case_path="/performance_archive/case_b",
+            execution_results=[
+                ExecutionDiscoveryResult(
+                    execution_id="200.1-1",
+                    state="complete_execution",
+                    validation_errors=[],
+                    missing_optional_metadata=[],
+                )
+            ],
+        ),
+    ]
 
-    results = _build_case_scan_results(grouped)
+    results = _build_case_scan_results(discovery_results)
 
     assert [result.case_path for result in results] == ["/performance_archive/case_b"]
 
@@ -477,12 +509,38 @@ def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
 
 
 def test_build_case_scan_results_is_deterministic() -> None:
-    grouped = {
-        "/performance_archive/case_b": ["200.1-1"],
-        "/performance_archive/case_a": ["100.1-1", "101.1-1"],
-    }
+    discovery_results = [
+        CaseDiscoveryResult(
+            case_path="/performance_archive/case_b",
+            execution_results=[
+                ExecutionDiscoveryResult(
+                    execution_id="200.1-1",
+                    state="complete_execution",
+                    validation_errors=[],
+                    missing_optional_metadata=[],
+                )
+            ],
+        ),
+        CaseDiscoveryResult(
+            case_path="/performance_archive/case_a",
+            execution_results=[
+                ExecutionDiscoveryResult(
+                    execution_id="101.1-1",
+                    state="complete_execution",
+                    validation_errors=[],
+                    missing_optional_metadata=[],
+                ),
+                ExecutionDiscoveryResult(
+                    execution_id="100.1-1",
+                    state="complete_execution",
+                    validation_errors=[],
+                    missing_optional_metadata=[],
+                ),
+            ],
+        ),
+    ]
 
-    results = _build_case_scan_results(grouped)
+    results = _build_case_scan_results(discovery_results)
 
     assert [result.case_path for result in results] == [
         "/performance_archive/case_a",
@@ -675,6 +733,396 @@ def test_dry_run_candidate_suppression_event_emitted_once(
         suppression_events[0]["detail_log_limit"]
         == ingestor_module.MAX_DRY_RUN_CANDIDATE_LOGS
     )
+
+
+def test_run_ingestor_logs_collection_state_and_decisions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_a = archive_root / "case_a"
+    case_b = archive_root / "case_b"
+    (case_a / "100.1-1").mkdir(parents=True)
+    (case_a / "101.1-1").mkdir(parents=True)
+    (case_b / "200.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: {
+            "version": 1,
+            "cases": {
+                str(case_a.resolve()): {
+                    "processed_execution_ids": ["100.1-1"],
+                    "fingerprint": "fp-a",
+                }
+            },
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    def fake_locator(execution_dir: str) -> dict[str, object]:
+        if execution_dir.endswith("101.1-1"):
+            raise ingestor_module.IncompleteArchiveError(
+                [
+                    {
+                        "code": "missing_required_file",
+                        "file_spec": "CaseStatus..*.gz",
+                        "location": "archive root",
+                        "message": "missing status",
+                    }
+                ]
+            )
+        return {}
+
+    exit_code = _run_ingestor(config, metadata_locator=fake_locator)
+
+    assert exit_code == 0
+    assert (
+        "collection_state_loaded",
+        {
+            "machine_name": "perlmutter",
+            "known_case_count": 1,
+            "known_execution_count": 1,
+        },
+    ) in logged_events
+
+    execution_decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "collection_execution_decision"
+    ]
+    assert execution_decisions == [
+        {
+            "case_path": str(case_a.resolve()),
+            "decision": "rejected",
+            "execution_id": "100.1-1",
+            "reason": "already_known_execution",
+        },
+        {
+            "case_path": str(case_a.resolve()),
+            "decision": "rejected",
+            "execution_id": "101.1-1",
+            "reason": "incomplete_execution",
+            "validation_errors": [
+                {
+                    "code": "missing_required_file",
+                    "file_spec": "CaseStatus..*.gz",
+                    "location": "archive root",
+                    "message": "missing status",
+                }
+            ],
+        },
+        {
+            "case_path": str(case_b.resolve()),
+            "decision": "accepted",
+            "execution_id": "200.1-1",
+            "reason": "new_complete_execution",
+        },
+    ]
+
+    case_decisions = [
+        fields for event, fields in logged_events if event == "collection_case_decision"
+    ]
+    assert case_decisions == [
+        {
+            "case_decision": "not_submission_qualified",
+            "case_path": str(case_a.resolve()),
+            "case_state": "complete_case",
+            "complete_execution_count": 1,
+            "known_execution_count": 1,
+            "new_execution_count": 0,
+            "rejected_execution_count": 1,
+        },
+        {
+            "case_decision": "submission_qualified",
+            "case_path": str(case_b.resolve()),
+            "case_state": "complete_case",
+            "complete_execution_count": 1,
+            "known_execution_count": 0,
+            "new_execution_count": 1,
+            "rejected_execution_count": 0,
+        },
+    ]
+
+
+def test_run_ingestor_logs_all_rejected_execution_decisions_without_suppression(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    total_executions = ingestor_module.MAX_SKIP_DETAIL_LOGS + 2
+    for index in range(total_executions):
+        (archive_root / "case_a" / f"{100 + index}.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
+    )
+
+    assert exit_code == 0
+    execution_decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "collection_execution_decision"
+    ]
+    assert len(execution_decisions) == total_executions
+    assert all(
+        fields["reason"] == "incomplete_execution" for fields in execution_decisions
+    )
+
+
+def test_run_ingestor_preserves_multi_error_validation_payload(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    def fake_locator(_execution_dir: str) -> dict[str, object]:
+        raise ingestor_module.ArchiveValidationError(
+            [
+                {
+                    "code": "multiple_matching_files",
+                    "file_spec": "e3sm_timing..*..*",
+                    "location": "archive root",
+                    "message": "duplicate timing files",
+                },
+                {
+                    "code": "missing_required_file",
+                    "file_spec": "CaseStatus..*.gz",
+                    "location": "archive root",
+                    "message": "missing status",
+                },
+            ]
+        )
+
+    exit_code = _run_ingestor(config, metadata_locator=fake_locator)
+
+    assert exit_code == 0
+    execution_decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "collection_execution_decision"
+    ]
+    assert execution_decisions == [
+        {
+            "case_path": str((archive_root / "case_a").resolve()),
+            "decision": "rejected",
+            "execution_id": "100.1-1",
+            "reason": "invalid_execution",
+            "validation_errors": [
+                {
+                    "code": "multiple_matching_files",
+                    "file_spec": "e3sm_timing..*..*",
+                    "location": "archive root",
+                    "message": "duplicate timing files",
+                },
+                {
+                    "code": "missing_required_file",
+                    "file_spec": "CaseStatus..*.gz",
+                    "location": "archive root",
+                    "message": "missing status",
+                },
+            ],
+        }
+    ]
+
+
+def test_run_ingestor_does_not_log_new_complete_execution_for_blank_timing_lid(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    execution_dir = archive_root / "case_a" / "100.1-1"
+    execution_dir.mkdir(parents=True)
+
+    version = "001"
+    with gzip.open(execution_dir / f"CaseStatus.{version}.gz", "wt") as file_handle:
+        file_handle.write("case.run success")
+    with gzip.open(execution_dir / f"GIT_DESCRIBE.{version}.gz", "wt") as file_handle:
+        file_handle.write("describe")
+    (execution_dir / f"e3sm_timing.{version}.txt").write_text("timing")
+
+    casedocs_dir = execution_dir / "CaseDocs"
+    casedocs_dir.mkdir()
+    for filename in (
+        f"README.case.{version}.gz",
+        f"env_case.xml.{version}.gz",
+        f"env_build.xml.{version}.gz",
+        f"env_run.xml.{version}.xml",
+    ):
+        (casedocs_dir / filename).write_text("stub")
+
+    parser_defaults = {
+        "case_docs_env_case": {"case_name": "case_a", "machine": "pm"},
+        "case_docs_env_build": {"compiler": "gnu"},
+        "case_docs_env_run": {"simulation_start_date": "2025-01-01"},
+        "readme_case": {},
+        "case_status": {"status": "completed"},
+        "e3sm_timing": {"execution_id": "   "},
+        "git_describe": {},
+        "git_config": {},
+        "git_status": {},
+    }
+    for key, value in parser_defaults.items():
+        monkeypatch.setitem(
+            parser_module.FILE_SPECS[key],
+            "parser",
+            lambda _path, parsed=value: parsed,
+        )
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config)
+
+    assert exit_code == 0
+    execution_decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "collection_execution_decision"
+    ]
+    assert execution_decisions == [
+        {
+            "case_path": str((archive_root / "case_a").resolve()),
+            "decision": "rejected",
+            "execution_id": "100.1-1",
+            "reason": "incomplete_execution",
+            "validation_errors": [
+                {
+                    "code": "missing_required_value",
+                    "file_spec": "e3sm_timing..*..*",
+                    "location": "archive root",
+                    "message": (
+                        "Required timing-file LID missing for execution directory "
+                        f"'{execution_dir}'"
+                    ),
+                }
+            ],
+        }
+    ]
+
+
+def test_run_ingestor_marks_only_selected_cases_submission_qualified_when_capped(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    for case_name, execution_id in (("case_a", "100.1-1"), ("case_b", "200.1-1")):
+        (archive_root / case_name / execution_id).mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 0
+    case_decisions = [
+        fields for event, fields in logged_events if event == "collection_case_decision"
+    ]
+    assert case_decisions == [
+        {
+            "case_decision": "submission_qualified",
+            "case_path": str((archive_root / "case_a").resolve()),
+            "case_state": "complete_case",
+            "complete_execution_count": 1,
+            "known_execution_count": 0,
+            "new_execution_count": 1,
+            "rejected_execution_count": 0,
+        },
+        {
+            "case_decision": "not_submission_qualified",
+            "case_path": str((archive_root / "case_b").resolve()),
+            "case_state": "complete_case",
+            "complete_execution_count": 1,
+            "known_execution_count": 0,
+            "new_execution_count": 1,
+            "rejected_execution_count": 0,
+        },
+    ]
 
 
 def test_completion_events_include_summary_counters(
@@ -1308,6 +1756,20 @@ def test_render_log_value_formats_values() -> None:
     assert _render_log_value("plain-value") == "plain-value"
     assert _render_log_value("value with space") == '"value with space"'
     assert _render_log_value({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
+
+
+def test_log_event_omits_inner_timestamp(monkeypatch) -> None:
+    messages: list[str] = []
+
+    monkeypatch.setattr(
+        ingestor_module.logger,
+        "info",
+        lambda message: messages.append(message),
+    )
+
+    ingestor_module._log_event("example", {"value": "x"})
+
+    assert messages == ["event=example value=x"]
 
 
 def test_log_execution_skip_detail_suppresses_after_limit(monkeypatch) -> None:

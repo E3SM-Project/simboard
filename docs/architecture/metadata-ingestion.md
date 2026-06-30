@@ -32,6 +32,14 @@ Case-level state is derived from execution-level state.
 | Incomplete case           | A case directory whose discovered execution subdirectories are all incomplete. It produces no collected execution IDs, is not submission-qualified, and does not enter stored state.                                                                                           |
 | Submission-qualified case | A parent case directory selected for submission because collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                                                                               |
 
+Collection logging uses these terms directly. Primary collection decision logs emit:
+
+- `event=collection_execution_decision` with `case_path`, `execution_id`, `decision`, and `reason`
+- `event=collection_case_decision` with `case_path`, `case_state`, `case_decision`, and execution-count fields
+- `event=collection_state_loaded` with `known_case_count` and `known_execution_count`
+
+`reason=new_complete_execution` maps to a newly discovered complete execution, `reason=already_known_execution` maps to a complete execution already present in stored known execution IDs, and `reason=incomplete_execution` / `reason=invalid_execution` map to rejected execution directories. Rejected execution logs also include `validation_errors`, a JSON array of `{code, file_spec, location, message}` objects for post-analysis.
+
 ## Performance Directories
 
 There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_DIR`) and archive (`OLD_PERF_ARCHIVE_DIR`).

@@ -19,17 +19,19 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.nersc_archive_ingestor import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
     _build_config_from_env,
     _build_state_endpoint_url,
+    _collection_metadata_locator,
     _fetch_ingestion_state,
     _handle_dry_run,
     _handle_ingest_run,
     _is_transient_status,
+    _known_case_count,
+    _known_execution_count,
     _log_event,
     _log_startup_configuration,
     _normalized_api_base_url,
@@ -67,7 +69,7 @@ def main() -> int:
 
 def _run_ingestor(
     config: IngestorConfig,
-    metadata_locator: Callable[[str], object] = _locate_metadata_files,
+    metadata_locator: Callable[[str], object] = _collection_metadata_locator,
     sleep_fn: Callable[[float], None] = time.sleep,
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> int:
@@ -112,17 +114,28 @@ def _run_ingestor(
         )
         return 1
 
-    scan_results, candidates, discovery_stats, state = _scan_archive(
-        config,
-        state,
-        metadata_locator=metadata_locator,
+    _log_event(
+        "collection_state_loaded",
+        {
+            "machine_name": config.machine_name,
+            "known_case_count": _known_case_count(state),
+            "known_execution_count": _known_execution_count(state),
+        },
+    )
+
+    discovery_results, _scan_results, candidates, discovery_stats, state = (
+        _scan_archive(
+            config,
+            state,
+            metadata_locator=metadata_locator,
+        )
     )
 
     _log_event(
         "scan_completed",
         {
             "archive_root": str(config.archive_root),
-            "discovered_cases": len(scan_results),
+            "discovered_cases": len(discovery_results),
             "candidate_cases": len(candidates),
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
@@ -133,14 +146,14 @@ def _run_ingestor(
 
     if config.dry_run:
         return _handle_dry_run(
+            discovery_results,
             candidates,
-            scan_results,
             discovery_stats,
         )
 
     return _handle_ingest_run(
+        discovery_results,
         candidates,
-        scan_results,
         config,
         endpoint_url,
         state,

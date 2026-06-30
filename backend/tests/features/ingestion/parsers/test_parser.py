@@ -531,6 +531,47 @@ class TestMainParser:
         assert len(result) > 0
         assert skipped == 0
 
+    def test_inspect_metadata_files_collects_optional_without_warning(
+        self, tmp_path: Path
+    ) -> None:
+        execution_dir = tmp_path / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
+
+        with patch(
+            "app.features.ingestion.parsers.parser.logger.warning"
+        ) as mock_warning:
+            files, missing_optional = parser._inspect_metadata_files(
+                str(execution_dir),
+                log_optional_missing=False,
+            )
+
+        assert files["git_config"] is None
+        assert files["git_status"] is None
+        assert missing_optional == [
+            {
+                "code": "missing_optional_file",
+                "execution_dir": str(execution_dir),
+                "file_spec": "GIT_CONFIG..*.gz",
+                "location": "archive root",
+                "message": (
+                    f"Missing optional 'GIT_CONFIG..*.gz' in archive root for "
+                    f"'{execution_dir}'."
+                ),
+            },
+            {
+                "code": "missing_optional_file",
+                "execution_dir": str(execution_dir),
+                "file_spec": "GIT_STATUS..*.gz",
+                "location": "archive root",
+                "message": (
+                    f"Missing optional 'GIT_STATUS..*.gz' in archive root for "
+                    f"'{execution_dir}'."
+                ),
+            },
+        ]
+        mock_warning.assert_not_called()
+
     def test_missing_env_run_skips_incomplete_run(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
         execution_dir = archive_base / "1.0-0"

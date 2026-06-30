@@ -47,6 +47,7 @@ from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.simulation.enums import SimulationStatus
 
 SimulationFiles = dict[str, str | None]
+ValidationErrorDetail = dict[str, str]
 
 logger = _setup_custom_logger(__name__)
 
@@ -383,12 +384,16 @@ def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
     return grouped_matches
 
 
-def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
-    """Locate required and optional files in the execution directory."""
+def _inspect_metadata_files(
+    exp_dir: str,
+    *,
+    log_optional_missing: bool = True,
+) -> tuple[SimulationFiles, list[ValidationErrorDetail]]:
+    """Locate metadata files and collect optional-file details."""
     files: SimulationFiles = {key: None for key in FILE_SPECS}
-    invalid_archive_errors: list[dict[str, str]] = []
-    missing_required_errors: list[dict[str, str]] = []
-    missing_optional: list[str] = []
+    invalid_archive_errors: list[ValidationErrorDetail] = []
+    missing_required_errors: list[ValidationErrorDetail] = []
+    missing_optional: list[ValidationErrorDetail] = []
     casedocs_dirs = _find_casedocs_dirs(exp_dir)
 
     for key, spec in FILE_SPECS.items():
@@ -428,7 +433,18 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
             )
             continue
 
-        missing_optional.append(key)
+        missing_optional.append(
+            {
+                "code": "missing_optional_file",
+                "execution_dir": exp_dir,
+                "file_spec": spec["display_pattern"],
+                "location": _location_label(spec["location"]),
+                "message": (
+                    f"Missing optional '{spec['display_pattern']}' in "
+                    f"{_location_label(spec['location'])} for '{exp_dir}'."
+                ),
+            }
+        )
 
     if invalid_archive_errors:
         raise ArchiveValidationError(invalid_archive_errors + missing_required_errors)
@@ -436,12 +452,31 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
     if missing_required_errors:
         raise IncompleteArchiveError(missing_required_errors)
 
-    if missing_optional:
+    if missing_optional and log_optional_missing:
         logger.warning(
             "Optional files missing in execution directory "
-            f"'{exp_dir}': {', '.join(missing_optional)}"
+            f"'{exp_dir}': {', '.join(error['file_spec'] for error in missing_optional)}"
         )
 
+    return files, missing_optional
+
+
+def _parse_execution_metadata(
+    exec_dir: str,
+    *,
+    log_optional_missing: bool = True,
+) -> tuple[ParsedSimulation, list[ValidationErrorDetail]]:
+    """Run collection/parser validation for one execution directory."""
+    files, missing_optional = _inspect_metadata_files(
+        exec_dir,
+        log_optional_missing=log_optional_missing,
+    )
+    return _parse_all_files(exec_dir, files), missing_optional
+
+
+def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
+    """Locate required and optional files in the execution directory."""
+    files, _missing_optional = _inspect_metadata_files(exp_dir)
     return files
 
 

@@ -333,6 +333,57 @@ def test_run_ingestor_dry_run_does_not_upload(
     assert post_calls == 0
 
 
+def test_run_ingestor_logs_collection_state_loaded(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: {
+            "version": 1,
+            "cases": {
+                str((archive_root / "case_a").resolve()): {
+                    "processed_execution_ids": ["100.1-1"],
+                    "fingerprint": "fp-a",
+                }
+            },
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 0
+    assert (
+        "collection_state_loaded",
+        {
+            "machine_name": "perlmutter",
+            "known_case_count": 1,
+            "known_execution_count": 1,
+        },
+    ) in logged_events
+
+
 def test_run_ingestor_missing_archive_root_returns_failure(
     monkeypatch, tmp_path: Path
 ) -> None:
