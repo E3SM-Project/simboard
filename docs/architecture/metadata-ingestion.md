@@ -22,6 +22,8 @@ Browser/manual uploads are supported separately and are not part of automated HP
 
 ### Case and execution state terms
 
+Case-level state is derived from execution-level state.
+
 | Term                      | Definition                                                                                                                                                                                                                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
