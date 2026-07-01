@@ -333,6 +333,53 @@ def test_run_ingestor_dry_run_does_not_upload(
     assert post_calls == 0
 
 
+def test_run_ingestor_scan_completed_logs_outcome_counters(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+    )
+
+    scan_completed = [
+        fields for event, fields in logged_events if event == "scan_completed"
+    ][0]
+
+    assert exit_code == 0
+    assert scan_completed["accepted_execution_ids"] == 1
+    assert scan_completed["rejected_existing_execution_ids"] == 0
+    assert scan_completed["rejected_incomplete_execution_ids"] == 0
+    assert scan_completed["rejected_invalid_execution_ids"] == 0
+    assert scan_completed["deferred_execution_ids"] == 0
+
+
 def test_run_ingestor_missing_archive_root_returns_failure(
     monkeypatch, tmp_path: Path
 ) -> None:

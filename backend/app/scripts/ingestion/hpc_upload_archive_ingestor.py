@@ -1,9 +1,11 @@
-"""Scan archives and upload changed cases to SimBoard as single-case archives.
+"""Scan archives and upload cases to SimBoard as single-case archives.
 
 This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
-of sending a filesystem path it packages each changed case directory into a
-temporary ``.tar.gz`` archive and uploads it to the dedicated
+of sending a filesystem path it packages each submission-qualified case
+into a temporary ``.tar.gz`` archive and uploads it to the dedicated
 ``/api/v1/ingestions/from-hpc-upload`` endpoint.
+
+More information can be found in ``nersc_archive_ingestor.py``.
 """
 
 from __future__ import annotations
@@ -112,22 +114,35 @@ def _run_ingestor(
         )
         return 1
 
-    scan_results, candidates, discovery_stats, state = _scan_archive(
-        config,
-        state,
-        metadata_locator=metadata_locator,
-    )
+    (
+        scan_results,
+        candidates,
+        submission_qualified_case_count,
+        discovery_stats,
+    ) = _scan_archive(config, state, metadata_locator=metadata_locator)
 
     _log_event(
         "scan_completed",
         {
             "archive_root": str(config.archive_root),
             "discovered_cases": len(scan_results),
-            "candidate_cases": len(candidates),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+            "rejected_existing_execution_ids": discovery_stats[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": discovery_stats[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": discovery_stats[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
 
@@ -135,7 +150,9 @@ def _run_ingestor(
         return _handle_dry_run(
             candidates,
             scan_results,
+            submission_qualified_case_count,
             discovery_stats,
+            archive_root=config.archive_root,
         )
 
     return _handle_ingest_run(
@@ -144,6 +161,7 @@ def _run_ingestor(
         config,
         endpoint_url,
         state,
+        submission_qualified_case_count,
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,

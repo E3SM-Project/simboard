@@ -437,7 +437,7 @@ def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
         raise IncompleteArchiveError(missing_required_errors)
 
     if missing_optional:
-        logger.warning(
+        logger.debug(
             "Optional files missing in execution directory "
             f"'{exp_dir}': {', '.join(missing_optional)}"
         )
