@@ -14,35 +14,40 @@ Each run executes four phases:
 
 Runner terms used heavily in this module and its logs:
 
-  - submission-qualified case / ``submission_qualified_cases``: case count with
-    at least one newly discovered complete execution ID before applying any
-    ``MAX_CASES_PER_RUN`` cap
-  - selected submission case / ``selected_submission_cases``:
-    submission-qualified case count selected for the current run after applying
-    any ``MAX_CASES_PER_RUN`` cap
-  - ``execution_dirs_scanned``: execution directory count whose names matched
-    the execution pattern and were sent through discovery validation
-  - ``execution_dirs_accepted``: scanned execution directory count that passed
-    validation and were retained as valid discovered executions
-  - ``skipped_incomplete``: execution directory count rejected during discovery
-    because required metadata files or fields were missing or incomplete
-  - ``skipped_invalid``: execution directory count rejected during discovery
-    because metadata was invalid or the directory could not be read
-  - ``accepted_execution_ids``: newly discovered valid execution ID count
-    selected for the current run
-  - ``rejected_existing_execution_ids``: valid discovered execution ID count
-    already present in stored processed state
-  - ``rejected_incomplete_execution_ids``: execution ID count rejected during
-    discovery as incomplete because required metadata files or fields were
-    missing or incomplete
-  - ``rejected_invalid_execution_ids``: execution ID count rejected during
-    discovery as invalid or unreadable because metadata was invalid or the
-    directory could not be read
-  - deferred execution / ``deferred_execution_ids``: newly discovered valid
-    execution ID count not selected for the current run because per-run case
-    capping stopped earlier selection
-  - ``processed_execution_ids``: execution ID count already recorded in stored
-    processed state for one case
+    - submission-qualified case / ``submission_qualified_cases``:
+        case count with at least one newly discovered complete execution ID before
+        applying any ``MAX_CASES_PER_RUN`` cap
+    - selected submission case / ``selected_submission_cases``:
+        submission-qualified case count selected for the current run after applying
+        any ``MAX_CASES_PER_RUN`` cap
+    - ``execution_dirs_scanned``:
+        execution directory count whose names matched the execution pattern and
+        were sent through discovery validation
+    - ``execution_dirs_accepted``:
+        scanned execution directory count that passed validation and were retained
+        as valid discovered executions
+    - ``skipped_incomplete``:
+        execution directory count rejected during discovery because required
+        metadata files or fields were missing or incomplete
+    - ``skipped_invalid``:
+        execution directory count rejected during discovery because metadata was
+        invalid or the directory could not be read
+    - ``accepted_execution_ids``:
+        newly discovered valid execution ID count selected for the current run
+    - ``rejected_existing_execution_ids``:
+        valid discovered execution ID count already present in stored processed
+        state
+    - ``rejected_incomplete_execution_ids``:
+        execution ID count rejected during discovery as incomplete because required
+        metadata files or fields were missing or incomplete
+    - ``rejected_invalid_execution_ids``:
+        execution ID count rejected during discovery as invalid or unreadable
+        because metadata was invalid or the directory could not be read
+    - deferred execution / ``deferred_execution_ids``:
+        newly discovered valid execution ID count not selected for the current run
+        because per-run case capping stopped earlier selection
+    - ``processed_execution_ids``:
+        execution ID count already recorded in stored processed state for one case
 
 Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """

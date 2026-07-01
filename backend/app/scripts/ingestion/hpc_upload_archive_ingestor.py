@@ -1,9 +1,11 @@
 """Scan archives and upload cases to SimBoard as single-case archives.
 
 This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
-of sending a filesystem path it packages each case directory with new executions
+of sending a filesystem path it packages each submission-qualified case
 into a temporary ``.tar.gz`` archive and uploads it to the dedicated
 ``/api/v1/ingestions/from-hpc-upload`` endpoint.
+
+More information can be found in ``nersc_archive_ingestor.py``.
 """
 
 from __future__ import annotations
