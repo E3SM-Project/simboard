@@ -132,6 +132,17 @@ def _run_ingestor(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+            "rejected_existing_execution_ids": discovery_stats[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": discovery_stats[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": discovery_stats[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
 

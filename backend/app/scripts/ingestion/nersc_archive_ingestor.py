@@ -216,6 +216,17 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     ),
     "case_ingestion_failed": ("case_path", "attempts", "status_code", "error"),
 }
+# Temporary test defaults (do not override explicitly provided env vars).
+os.environ.setdefault("SIMBOARD_API_BASE_URL", "https://simboard-dev-api.e3sm.org")
+os.environ.setdefault(
+    "SIMBOARD_API_TOKEN", "sbk_hRXKr7hTMZFWl7EOS1TunVUT3ucfmsipdk1Nn33Gnow"
+)
+os.environ.setdefault(
+    "PERF_ARCHIVE_ROOT", "/global/cfs/projectdirs/e3sm/performance_archive/wlin"
+)
+os.environ.setdefault("MACHINE_NAME", DEFAULT_MACHINE_NAME)
+os.environ.setdefault("DRY_RUN", "true")
+os.environ.setdefault("MAX_CASES_PER_RUN", "10")
 
 
 @dataclass(frozen=True)
