@@ -79,17 +79,36 @@ from app.features.ingestion.parsers.parser import (
 logger = _setup_custom_logger(__name__)
 logger.setLevel(logging.INFO)
 
+# The execution directory name pattern (example: 55387330.260706-012656)
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
+# Transient HTTP status codes that may be retried with backoff.
 TRANSIENT_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+# The state version number used to detect incompatible state changes. Increment
+# this number whenever the state format changes in a way that is not backward
+# compatible.
 STATE_VERSION = 1
-
+# Default base URL for SimBoard API when SIMBOARD_API_BASE_URL is not set.
+# This is the internal service name used in the NERSC Spin Kubernetes cluster
+# for the backend service.
 DEFAULT_API_BASE_URL = "http://backend:8000"
+# Default root path of the mounted performance archive when PERF_ARCHIVE_ROOT is not set.
 DEFAULT_ARCHIVE_ROOT = "/performance_archive"
+# Default machine name used for state persistence when MACHINE_NAME is not set.
 DEFAULT_MACHINE_NAME = "perlmutter"
+# Default maximum number of attempts for each ingestion request.
 DEFAULT_MAX_ATTEMPTS = 3
+# Default timeout in seconds for each ingestion request. This is a conservative
+# value that should be sufficient for most ingestion requests, but can be
+# overridden by the REQUEST_TIMEOUT_SECONDS environment variable.
 DEFAULT_TIMEOUT_SECONDS = 60
+# In dry-run mode, limit the number of candidate logs emitted to avoid excessive
+# log volume.
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
+# Log archive scan progress every N directories visited to avoid excessive log
+# volume.
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
+# The order for event fields in structured logs. This is used to ensure
+# consistent field ordering in structured logs for easier parsing and analysis.
 EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "run_started": ("mode", "archive_root"),
     "run_finished": ("mode", "exit_code", "duration_seconds"),
