@@ -522,14 +522,50 @@ class TestMainParser:
         extract_dir = tmp_path / "extracted"
         extract_dir.mkdir()
 
-        with self._mock_all_parsers(
-            parse_git_config="https://github.com/test/repo",
-            parse_git_status="main",
+        with (
+            self._mock_all_parsers(
+                parse_git_config="https://github.com/test/repo",
+                parse_git_status="main",
+            ),
+            patch("app.features.ingestion.parsers.parser.logger.debug") as mock_debug,
         ):
             result, skipped = parser.main_parser(archive_path, extract_dir)
 
         assert len(result) > 0
         assert skipped == 0
+        mock_debug.assert_not_called()
+
+    def test_missing_optional_files_log_debug(self, tmp_path: Path) -> None:
+        archive_base = tmp_path / "archive_extract"
+        execution_dir = archive_base / "1.0-0"
+        execution_dir.mkdir(parents=True)
+        self._create_execution_metadata_files(execution_dir, "001.001")
+
+        archive_path = tmp_path / "missing_optional.zip"
+        self._create_zip_archive(archive_base, archive_path)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with (
+            self._mock_all_parsers(
+                parse_e3sm_timing={
+                    "execution_id": "1.0-0",
+                    "run_start_date": "2025-12-18T20:09:33",
+                    "run_end_date": "2025-12-18T20:54:58",
+                }
+            ),
+            patch("app.features.ingestion.parsers.parser.logger.debug") as mock_debug,
+            patch(
+                "app.features.ingestion.parsers.parser.logger.warning"
+            ) as mock_warning,
+        ):
+            result, skipped = parser.main_parser(archive_path, extract_dir)
+
+        assert len(result) > 0
+        assert skipped == 0
+        mock_debug.assert_called_once()
+        mock_warning.assert_not_called()
 
     def test_missing_env_run_skips_incomplete_run(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"
