@@ -10,7 +10,7 @@ These scripts are used for administrative and database-related tasks and are not
 
 Scripts are organized by domain:
 
-```
+```text
 scripts/
 ├── ingestion/
 │   └── nersc_archive_ingestor.py
@@ -127,7 +127,7 @@ Configuration surface (via env vars):
 - `SIMBOARD_API_TOKEN` (`--api-token`)
 - `SCAN_MODE` (`staging` or `archive`, default `staging`)
 - `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive` for `SCAN_MODE=staging`)
-- `OLD_PERF_ARCHIVE_ROOT` (default `/old_performance_archive` for `SCAN_MODE=archive`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
 - `DRY_RUN` (`--dry-run`)
 - `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
@@ -138,7 +138,7 @@ Configuration surface (via env vars):
 
 Archive notes:
 
-- Archive scans do not require a `COMPLETED/` directory to be correct.
+- Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores other known status directories.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 
@@ -172,7 +172,7 @@ Configuration surface (via env vars):
 - `SIMBOARD_API_TOKEN`
 - `SCAN_MODE` (`staging` or `archive`, default `staging`)
 - `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
-- `OLD_PERF_ARCHIVE_ROOT` (default `/old_performance_archive` for `SCAN_MODE=archive`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN`
 - `MAX_CASES_PER_RUN`

@@ -470,6 +470,70 @@ def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_st
     assert candidates[0].new_execution_ids == ["101.1-1"]
 
 
+def test_build_ingestion_candidates_does_not_strip_live_queue_state_dirs() -> None:
+    scan_results = [
+        CaseScanResult(
+            case_path=(
+                "/archive/2026-05/performance_archive_2026_05_22_08_01_32/"
+                "PENDING/user_a/case_a"
+            ),
+            execution_ids=["100.1-1", "101.1-1"],
+            fingerprint="fp-1",
+        )
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="archive",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path.endswith("/PENDING/user_a/case_a")
+    assert candidates[0].new_execution_ids == ["100.1-1", "101.1-1"]
+
+
+def test_build_ingestion_candidates_does_not_strip_non_completed_archive_status_dir() -> (
+    None
+):
+    scan_results = [
+        CaseScanResult(
+            case_path=(
+                "/archive/2026-05/performance_archive_2026_05_22_08_01_32/"
+                "STOPPED/user_a/case_a"
+            ),
+            execution_ids=["100.1-1", "101.1-1"],
+            fingerprint="fp-1",
+        )
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="archive",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path.endswith("/STOPPED/user_a/case_a")
+    assert candidates[0].new_execution_ids == ["100.1-1", "101.1-1"]
+
+
 def test_build_ingestion_candidates_keeps_distinct_users_without_snapshot_dir() -> None:
     scan_results = [
         CaseScanResult(
@@ -603,6 +667,69 @@ def test_discover_case_executions_filters_archive_year_range_under_non_year_root
 
     assert stats["execution_dirs_scanned"] == 1
     assert list(grouped.keys()) == [str(included_case.parent.resolve())]
+    assert list(grouped.values()) == [["100.1-1"]]
+
+
+def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    completed_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "COMPLETED"
+        / "user_a"
+        / "case_a"
+        / "100.1-1"
+    )
+    stopped_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "STOPPED"
+        / "user_a"
+        / "case_a"
+        / "200.1-1"
+    )
+    pending_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "PENDING"
+        / "user_a"
+        / "case_a"
+        / "300.1-1"
+    )
+    completed_case.mkdir(parents=True)
+    stopped_case.mkdir(parents=True)
+    pending_case.mkdir(parents=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=None,
+        archive_year_end=None,
+    )
+    stats = ingestor_module._new_discovery_stats()
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: {},
+        stats=stats,
+        walk_dir_filter=_build_walk_dir_filter(config),
+        scan_mode="archive",
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert list(grouped.keys()) == [str(completed_case.parent.resolve())]
     assert list(grouped.values()) == [["100.1-1"]]
 
 

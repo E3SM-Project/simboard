@@ -52,6 +52,7 @@ def main() -> int:
         "run_started",
         {
             "mode": "dry-run" if config.dry_run else "ingest",
+            "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
         },
     )
@@ -60,6 +61,7 @@ def main() -> int:
         "run_finished",
         {
             "mode": "dry-run" if config.dry_run else "ingest",
+            "scan_mode": config.scan_mode,
             "exit_code": exit_code,
             "duration_seconds": round(time.monotonic() - start_time, 3),
         },
@@ -124,6 +126,7 @@ def _run_ingestor(
     _log_event(
         "scan_completed",
         {
+            "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
             "discovered_cases": len(scan_results),
             "submission_qualified_cases": submission_qualified_case_count,

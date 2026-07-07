@@ -3,7 +3,7 @@
 This script is intended for scheduled execution (for example, a CronJob)
 against a bind-mounted performance archive. Runtime configuration is read
 from environment variables (for example ``SIMBOARD_API_BASE_URL``,
-``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
+``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
 Each run executes four phases:
 
@@ -92,11 +92,12 @@ STATE_VERSION = 1
 # This is the internal service name used in the NERSC Spin Kubernetes cluster
 # for the backend service.
 DEFAULT_API_BASE_URL = "http://backend:8000"
-# Default root path of the mounted performance archive when PERF_ARCHIVE_ROOT is not set.
-DEFAULT_ARCHIVE_ROOT = "/performance_archive"
+# Default root path of the mounted performance staging directory when
+# PERF_ARCHIVE_ROOT is not set.
+DEFAULT_PERF_ARCHIVE_ROOT = "/performance_archive"
 # Default root path of the mounted long-term archive when
 # OLD_PERF_ARCHIVE_ROOT is not set.
-DEFAULT_OLD_ARCHIVE_ROOT = "/old_performance_archive"
+DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
 # Default machine name used for state persistence when MACHINE_NAME is not set.
 DEFAULT_MACHINE_NAME = "perlmutter"
 # Default maximum number of attempts for each ingestion request.
@@ -111,17 +112,23 @@ MAX_DRY_RUN_CANDIDATE_LOGS = 20
 # Log archive scan progress every N directories visited to avoid excessive log
 # volume.
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
+
 # Supported scan modes and archive-layout helpers used for archive backfills.
+# "staging" mode scans PERF_ARCHIVE_ROOT and "archive" mode scans OLD_PERF_ARCHIVE_ROOT.
 ARCHIVE_SCAN_MODES = {"staging", "archive"}
+# The archive year sub-directory name pattern (example: 2023-06)
 ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
+# The archive snapshot directory name pattern (example: performance_archive_2023_06_15_12_30_00)
 ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
     r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
 )
-ARCHIVE_STATUS_DIR_NAMES = frozenset(
+# Archived Slurm state directory names used by snapshot layouts that bucket
+# case trees by status. When these buckets are present, ingestion should only
+# scan COMPLETED cases and ignore the rest.
+ARCHIVE_COMPLETED_STATUS_DIR_NAME = "COMPLETED"
+ARCHIVE_LEGACY_STATUS_DIR_NAMES = frozenset(
     {
-        "COMPLETED",
         "DONE",
-        "FAILED",
         "PENDING",
         "QUEUED",
         "RUNNING",
@@ -130,11 +137,29 @@ ARCHIVE_STATUS_DIR_NAMES = frozenset(
         "SUCCESS",
     }
 )
-KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
+ARCHIVE_STATUS_DIR_NAMES = frozenset(
     {
-        Path(DEFAULT_ARCHIVE_ROOT).name,
-        Path(DEFAULT_OLD_ARCHIVE_ROOT).name,
+        "BOOT_FAIL",
+        "CANCELLED",
+        "COMPLETED",
+        "CONFIGURING",
+        "COMPLETING",
+        "DEADLINE",
+        "FAILED",
+        "NODE_FAIL",
+        "OUT_OF_MEMORY",
+        "PREEMPTED",
+        "STOPPED",
+        "SUSPENDED",
+        "TIMEOUT",
     }
+)
+ARCHIVE_RECOGNIZED_STATUS_DIR_NAMES = frozenset(
+    ARCHIVE_STATUS_DIR_NAMES | ARCHIVE_LEGACY_STATUS_DIR_NAMES
+)
+ARCHIVE_STATUS_DIR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
+    {Path(DEFAULT_PERF_ARCHIVE_ROOT).name, Path(DEFAULT_OLD_PERF_ARCHIVE_ROOT).name}
 )
 # The order for event fields in structured logs. This is used to ensure
 # consistent field ordering in structured logs for easier parsing and analysis.
@@ -446,6 +471,7 @@ def main() -> int:
             "duration_seconds": round(time.monotonic() - start_time, 3),
         },
     )
+
     return exit_code
 
 
@@ -464,18 +490,23 @@ def _build_config_from_env() -> IngestorConfig:
     """
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
+
     scan_mode = os.getenv("SCAN_MODE", "staging").strip().lower()
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
-    staging_root = Path(os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_ARCHIVE_ROOT)).resolve()
+    staging_root = Path(
+        os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_PERF_ARCHIVE_ROOT)
+    ).resolve()
     configured_archive_root = Path(
-        os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_ARCHIVE_ROOT)
+        os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_PERF_ARCHIVE_ROOT)
     ).resolve()
     archive_root = configured_archive_root if scan_mode == "archive" else staging_root
+
     machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=False)
     max_cases_per_run = _parse_optional_int(os.getenv("MAX_CASES_PER_RUN"))
+
     if max_cases_per_run is not None and max_cases_per_run <= 0:
         raise ValueError("MAX_CASES_PER_RUN must be greater than 0 when provided")
 
@@ -491,12 +522,14 @@ def _build_config_from_env() -> IngestorConfig:
 
     archive_year_start = _parse_optional_int(os.getenv("ARCHIVE_YEAR_START"))
     archive_year_end = _parse_optional_int(os.getenv("ARCHIVE_YEAR_END"))
+
     if scan_mode != "archive" and (
         archive_year_start is not None or archive_year_end is not None
     ):
         raise ValueError(
             "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require SCAN_MODE=archive"
         )
+
     if (
         archive_year_start is not None
         and archive_year_end is not None
@@ -820,9 +853,11 @@ def _discover_case_executions(
 
     for dirpath, dirnames, _ in os.walk(archive_root):
         directories_visited += 1
+
         if walk_dir_filter is not None:
             walk_dir_filter(dirpath, dirnames)
         case_dir = Path(dirpath)
+
         for dirname in dirnames:
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
                 continue
@@ -1258,16 +1293,18 @@ def _build_walk_dir_filter(
     config: IngestorConfig,
 ) -> Callable[[str, list[str]], None] | None:
     """Return optional top-level directory pruning hook."""
-    if (
-        config.scan_mode != "archive"
-        or config.archive_year_start is None
-        and config.archive_year_end is None
-    ):
+    if config.scan_mode != "archive":
         return None
 
     archive_root_str = str(config.archive_root)
 
     def _filter(dirpath: str, dirnames: list[str]) -> None:
+        if _is_archive_snapshot_dir(Path(dirpath).name):
+            _prune_archive_snapshot_dirnames(dirnames)
+
+        if config.archive_year_start is None and config.archive_year_end is None:
+            return
+
         if dirpath != archive_root_str:
             return
 
@@ -1283,6 +1320,48 @@ def _build_walk_dir_filter(
         ]
 
     return _filter
+
+
+def _prune_archive_snapshot_dirnames(dirnames: list[str]) -> None:
+    """Drop non-completed status buckets from snapshot-root walks."""
+    if not _snapshot_uses_status_buckets(dirnames):
+        return
+
+    dirnames[:] = [
+        dirname
+        for dirname in dirnames
+        if dirname == ARCHIVE_COMPLETED_STATUS_DIR_NAME
+        or not _looks_like_archive_status_dir_name(dirname)
+    ]
+
+
+def _snapshot_uses_status_buckets(dirnames: list[str]) -> bool:
+    """Return whether a snapshot root is bucketed by execution status."""
+    if ARCHIVE_COMPLETED_STATUS_DIR_NAME not in dirnames:
+        return False
+
+    sibling_dirnames = [
+        dirname for dirname in dirnames if dirname != ARCHIVE_COMPLETED_STATUS_DIR_NAME
+    ]
+    if not sibling_dirnames:
+        return False
+
+    if any(
+        dirname in ARCHIVE_RECOGNIZED_STATUS_DIR_NAMES for dirname in sibling_dirnames
+    ):
+        return True
+
+    status_like_dirnames = [
+        dirname
+        for dirname in sibling_dirnames
+        if _looks_like_archive_status_dir_name(dirname)
+    ]
+    return len(status_like_dirnames) == len(sibling_dirnames)
+
+
+def _looks_like_archive_status_dir_name(dirname: str) -> bool:
+    """Return whether a snapshot child resembles a status bucket name."""
+    return bool(ARCHIVE_STATUS_DIR_NAME_PATTERN.fullmatch(dirname))
 
 
 def _archive_case_path_matches_year_range(
@@ -1396,7 +1475,7 @@ def _archive_case_identity_parts(case_path: Path) -> tuple[str, ...]:
         logical_parts = list(path_parts[year_index + 1 :])
         if logical_parts and _is_archive_snapshot_dir(logical_parts[0]):
             logical_parts = logical_parts[1:]
-        if logical_parts and logical_parts[0] in ARCHIVE_STATUS_DIR_NAMES:
+        if logical_parts and logical_parts[0] == ARCHIVE_COMPLETED_STATUS_DIR_NAME:
             logical_parts = logical_parts[1:]
         if logical_parts:
             return tuple(logical_parts)

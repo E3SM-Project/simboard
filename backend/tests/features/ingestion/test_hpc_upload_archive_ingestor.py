@@ -421,6 +421,7 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="staging",
     )
 
     exit_code = _run_ingestor(
@@ -620,6 +621,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="staging",
     )
     logged_events: list[tuple[str, dict[str, object]]] = []
 
