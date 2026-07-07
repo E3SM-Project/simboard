@@ -63,10 +63,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable, Literal, TypedDict, cast
 
 from app.api.version import API_BASE
 from app.core.logger import _setup_custom_logger
@@ -93,6 +94,9 @@ STATE_VERSION = 1
 DEFAULT_API_BASE_URL = "http://backend:8000"
 # Default root path of the mounted performance archive when PERF_ARCHIVE_ROOT is not set.
 DEFAULT_ARCHIVE_ROOT = "/performance_archive"
+# Default root path of the mounted long-term archive when
+# OLD_PERF_ARCHIVE_ROOT is not set.
+DEFAULT_OLD_ARCHIVE_ROOT = "/old_performance_archive"
 # Default machine name used for state persistence when MACHINE_NAME is not set.
 DEFAULT_MACHINE_NAME = "perlmutter"
 # Default maximum number of attempts for each ingestion request.
@@ -107,13 +111,39 @@ MAX_DRY_RUN_CANDIDATE_LOGS = 20
 # Log archive scan progress every N directories visited to avoid excessive log
 # volume.
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
+# Supported scan modes and archive-layout helpers used for archive backfills.
+ARCHIVE_SCAN_MODES = {"staging", "archive"}
+ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
+ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
+    r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
+)
+ARCHIVE_STATUS_DIR_NAMES = frozenset(
+    {
+        "COMPLETED",
+        "DONE",
+        "FAILED",
+        "PENDING",
+        "QUEUED",
+        "RUNNING",
+        "SUBMITTED",
+        "SUCCEEDED",
+        "SUCCESS",
+    }
+)
+KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
+    {
+        Path(DEFAULT_ARCHIVE_ROOT).name,
+        Path(DEFAULT_OLD_ARCHIVE_ROOT).name,
+    }
+)
 # The order for event fields in structured logs. This is used to ensure
 # consistent field ordering in structured logs for easier parsing and analysis.
 EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
-    "run_started": ("mode", "archive_root"),
-    "run_finished": ("mode", "exit_code", "duration_seconds"),
-    "archive_scan_started": ("archive_root",),
+    "run_started": ("mode", "scan_mode", "archive_root"),
+    "run_finished": ("mode", "scan_mode", "exit_code", "duration_seconds"),
+    "archive_scan_started": ("scan_mode", "archive_root"),
     "archive_scan_progress": (
+        "scan_mode",
         "archive_root",
         "directories_visited",
         "discovered_cases",
@@ -122,6 +152,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "duration_seconds",
     ),
     "archive_scan_completed": (
+        "scan_mode",
         "archive_root",
         "directories_visited",
         "discovered_cases",
@@ -159,6 +190,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "deferred",
     ),
     "scan_completed": (
+        "scan_mode",
         "archive_root",
         "discovered_cases",
         "submission_qualified_cases",
@@ -179,7 +211,12 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "endpoint_url",
         "state_endpoint_url",
     ),
-    "startup_configuration_paths": ("archive_root",),
+    "startup_configuration_paths": (
+        "scan_mode",
+        "archive_root",
+        "archive_year_start",
+        "archive_year_end",
+    ),
     "startup_configuration_runtime": (
         "machine_name",
         "dry_run",
@@ -276,6 +313,12 @@ class IngestorConfig:
     max_attempts: int
     # Timeout in seconds for each ingestion request.
     request_timeout_seconds: int
+    # Whether this run scans the staging or archive root.
+    scan_mode: Literal["staging", "archive"] = "staging"
+    # Optional archive-year lower bound for archive backfills.
+    archive_year_start: int | None = None
+    # Optional archive-year upper bound for archive backfills.
+    archive_year_end: int | None = None
 
 
 class IngestionRequestError(Exception):
@@ -290,6 +333,10 @@ class IngestionRequestError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.transient = transient
+
+
+class UnsupportedArchiveLayoutError(ValueError):
+    """Archive layout cannot support requested filtered scan semantics."""
 
 
 class DiscoveryStats(TypedDict):
@@ -385,6 +432,7 @@ def main() -> int:
         "run_started",
         {
             "mode": "dry-run" if config.dry_run else "ingest",
+            "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
         },
     )
@@ -393,6 +441,7 @@ def main() -> int:
         "run_finished",
         {
             "mode": "dry-run" if config.dry_run else "ingest",
+            "scan_mode": config.scan_mode,
             "exit_code": exit_code,
             "duration_seconds": round(time.monotonic() - start_time, 3),
         },
@@ -415,7 +464,15 @@ def _build_config_from_env() -> IngestorConfig:
     """
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
-    archive_root = Path(os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_ARCHIVE_ROOT)).resolve()
+    scan_mode = os.getenv("SCAN_MODE", "staging").strip().lower()
+    if scan_mode not in ARCHIVE_SCAN_MODES:
+        raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
+
+    staging_root = Path(os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_ARCHIVE_ROOT)).resolve()
+    configured_archive_root = Path(
+        os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_ARCHIVE_ROOT)
+    ).resolve()
+    archive_root = configured_archive_root if scan_mode == "archive" else staging_root
     machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=False)
     max_cases_per_run = _parse_optional_int(os.getenv("MAX_CASES_PER_RUN"))
@@ -432,15 +489,35 @@ def _build_config_from_env() -> IngestorConfig:
     if timeout_seconds <= 0:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
+    archive_year_start = _parse_optional_int(os.getenv("ARCHIVE_YEAR_START"))
+    archive_year_end = _parse_optional_int(os.getenv("ARCHIVE_YEAR_END"))
+    if scan_mode != "archive" and (
+        archive_year_start is not None or archive_year_end is not None
+    ):
+        raise ValueError(
+            "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require SCAN_MODE=archive"
+        )
+    if (
+        archive_year_start is not None
+        and archive_year_end is not None
+        and archive_year_start > archive_year_end
+    ):
+        raise ValueError(
+            "ARCHIVE_YEAR_START must be less than or equal to ARCHIVE_YEAR_END"
+        )
+
     return IngestorConfig(
         api_base_url=api_base_url,
         api_token=api_token,
         archive_root=archive_root,
         machine_name=machine_name,
+        scan_mode=cast(Literal["staging", "archive"], scan_mode),
         dry_run=dry_run,
         max_cases_per_run=max_cases_per_run,
         max_attempts=max_attempts,
         request_timeout_seconds=timeout_seconds,
+        archive_year_start=archive_year_start,
+        archive_year_end=archive_year_end,
     )
 
 
@@ -548,13 +625,18 @@ def _run_ingestor(
         )
         return 1
 
-    (scan_results, candidates, submission_qualified_case_count, discovery_stats) = (
-        _scan_archive(config, state, metadata_locator=metadata_locator)
-    )
+    try:
+        (scan_results, candidates, submission_qualified_case_count, discovery_stats) = (
+            _scan_archive(config, state, metadata_locator=metadata_locator)
+        )
+    except ValueError as exc:
+        _log_event("configuration_error", {"error": str(exc)})
+        return 1
 
     _log_event(
         "scan_completed",
         {
+            "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
             "discovered_cases": len(scan_results),
             "submission_qualified_cases": submission_qualified_case_count,
@@ -652,12 +734,23 @@ def _scan_archive(
     """
     case_collection_data: dict[str, CaseCollectionLogData] = {}
     discovery_stats = _new_discovery_stats()
+    case_path_filter = _build_case_path_filter(config)
+    walk_dir_filter = _build_walk_dir_filter(config)
     grouped_executions = _discover_case_executions(
-        config.archive_root, metadata_locator, discovery_stats, case_collection_data
+        config.archive_root,
+        metadata_locator,
+        discovery_stats,
+        case_collection_data,
+        case_path_filter=case_path_filter,
+        walk_dir_filter=walk_dir_filter,
+        scan_mode=config.scan_mode,
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
-        scan_results, state, max_cases_per_run=None
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode=config.scan_mode,
     )
     candidates = (
         all_candidates
@@ -670,6 +763,7 @@ def _scan_archive(
         candidates,
         discovery_stats,
         archive_root=config.archive_root,
+        scan_mode=config.scan_mode,
     )
 
     return (
@@ -685,6 +779,10 @@ def _discover_case_executions(
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
     stats: DiscoveryStats | None = None,
     case_collection_data: dict[str, CaseCollectionLogData] | None = None,
+    *,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    walk_dir_filter: Callable[[str, list[str]], None] | None = None,
+    scan_mode: str = "staging",
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -715,13 +813,20 @@ def _discover_case_executions(
     directories_visited = 0
     archive_root_str = str(archive_root)
 
-    _log_event("archive_scan_started", {"archive_root": archive_root_str})
+    _log_event(
+        "archive_scan_started",
+        {"scan_mode": scan_mode, "archive_root": archive_root_str},
+    )
 
     for dirpath, dirnames, _ in os.walk(archive_root):
         directories_visited += 1
+        if walk_dir_filter is not None:
+            walk_dir_filter(dirpath, dirnames)
         case_dir = Path(dirpath)
         for dirname in dirnames:
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
+                continue
+            if case_path_filter is not None and not case_path_filter(case_dir):
                 continue
 
             _collect_case_execution(
@@ -741,6 +846,7 @@ def _discover_case_executions(
                 grouped=grouped,
                 stats=effective_stats,
                 started_at=scan_started_at,
+                scan_mode=scan_mode,
             )
 
     _log_archive_scan_progress(
@@ -750,6 +856,7 @@ def _discover_case_executions(
         grouped=grouped,
         stats=effective_stats,
         started_at=scan_started_at,
+        scan_mode=scan_mode,
     )
 
     return {case_path: sorted(exec_ids) for case_path, exec_ids in grouped.items()}
@@ -763,11 +870,13 @@ def _log_archive_scan_progress(
     grouped: dict[str, set[str]],
     stats: DiscoveryStats | None,
     started_at: float,
+    scan_mode: str,
 ) -> None:
     """Emit a structured archive-scan progress or completion log."""
     _log_event(
         event,
         {
+            "scan_mode": scan_mode,
             "archive_root": archive_root,
             "directories_visited": directories_visited,
             "discovered_cases": len(grouped),
@@ -922,12 +1031,10 @@ def _log_execution_collection_outcomes(
     discovery_stats: DiscoveryStats,
     *,
     archive_root: Path,
+    scan_mode: str = "staging",
 ) -> None:
     """Emit one contiguous decision block for each discovered case."""
-    case_state = state.get("cases", {})
-    if not isinstance(case_state, dict):
-        case_state = {}
-
+    processed_ids_by_key = _build_processed_ids_by_key(state, scan_mode=scan_mode)
     selected_new_ids_by_case = {
         candidate.case_path: set(candidate.new_execution_ids)
         for candidate in candidates
@@ -936,11 +1043,7 @@ def _log_execution_collection_outcomes(
     for case_path in sorted(case_collection_data):
         log_data = case_collection_data[case_path]
         case_label = _case_log_label(case_path, archive_root)
-        current_case_state = case_state.get(case_path, {})
-        if not isinstance(current_case_state, dict):
-            current_case_state = {}
-
-        processed_ids = _case_state_processed_ids(current_case_state)
+        processed_ids = processed_ids_by_key[_case_identity_key(case_path, scan_mode)]
         valid_execution_ids = sorted(log_data.valid_execution_ids)
         new_ids = set(valid_execution_ids) - processed_ids
         selected_new_ids = selected_new_ids_by_case.get(case_path, set())
@@ -1023,6 +1126,7 @@ def _log_execution_collection_outcomes(
                 "deferred": len(deferred_ids),
             },
         )
+        processed_ids.update(valid_execution_ids)
 
 
 def _log_execution_collection_decision(
@@ -1131,10 +1235,228 @@ def _build_case_scan_results(
     return results
 
 
+def _build_case_path_filter(
+    config: IngestorConfig,
+) -> Callable[[Path], bool] | None:
+    """Return optional case-path filter for archive backfills."""
+    if (
+        config.scan_mode != "archive"
+        or config.archive_year_start is None
+        and config.archive_year_end is None
+    ):
+        return None
+
+    return lambda case_path: _archive_case_path_matches_year_range(
+        case_path,
+        archive_root=config.archive_root,
+        year_start=config.archive_year_start,
+        year_end=config.archive_year_end,
+    )
+
+
+def _build_walk_dir_filter(
+    config: IngestorConfig,
+) -> Callable[[str, list[str]], None] | None:
+    """Return optional top-level directory pruning hook."""
+    if (
+        config.scan_mode != "archive"
+        or config.archive_year_start is None
+        and config.archive_year_end is None
+    ):
+        return None
+
+    archive_root_str = str(config.archive_root)
+
+    def _filter(dirpath: str, dirnames: list[str]) -> None:
+        if dirpath != archive_root_str:
+            return
+
+        dirnames[:] = [
+            dirname
+            for dirname in dirnames
+            if _archive_dir_year(dirname) is None
+            or _archive_dir_year_in_range(
+                dirname,
+                year_start=config.archive_year_start,
+                year_end=config.archive_year_end,
+            )
+        ]
+
+    return _filter
+
+
+def _archive_case_path_matches_year_range(
+    case_path: Path,
+    *,
+    archive_root: Path,
+    year_start: int | None,
+    year_end: int | None,
+) -> bool:
+    """Return whether an archive case path belongs to selected years."""
+    if year_start is None and year_end is None:
+        return True
+
+    try:
+        relative_parts = case_path.resolve().relative_to(archive_root.resolve()).parts
+    except ValueError:
+        return False
+
+    year = _archive_parts_year(relative_parts)
+    if year is None:
+        raise UnsupportedArchiveLayoutError(
+            "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
+            f"include a YYYY-MM directory under {archive_root}: {case_path}"
+        )
+
+    if year_start is not None and year < year_start:
+        return False
+    if year_end is not None and year > year_end:
+        return False
+
+    return True
+
+
+def _archive_parts_year_in_range(
+    relative_parts: tuple[str, ...],
+    *,
+    year_start: int | None,
+    year_end: int | None,
+) -> bool:
+    """Return whether any archive-relative path component falls within year bounds."""
+    year = _archive_parts_year(relative_parts)
+    if year is None:
+        return False
+
+    if year_start is not None and year < year_start:
+        return False
+    if year_end is not None and year > year_end:
+        return False
+
+    return True
+
+
+def _archive_parts_year(relative_parts: tuple[str, ...]) -> int | None:
+    """Return year from first YYYY-MM archive path component."""
+    for part in relative_parts:
+        year = _archive_dir_year(part)
+        if year is not None:
+            return year
+
+    return None
+
+
+def _archive_dir_year(dirname: str) -> int | None:
+    """Return year for a YYYY-MM archive bucket name."""
+    match = ARCHIVE_YEAR_DIR_PATTERN.fullmatch(dirname)
+    if match is None:
+        return None
+
+    return int(match.group("year"))
+
+
+def _archive_dir_year_in_range(
+    dirname: str,
+    *,
+    year_start: int | None,
+    year_end: int | None,
+) -> bool:
+    """Return whether a top-level archive dirname falls within year bounds."""
+    year = _archive_dir_year(dirname)
+    if year is None:
+        return False
+
+    if year_start is not None and year < year_start:
+        return False
+    if year_end is not None and year > year_end:
+        return False
+
+    return True
+
+
+def _case_identity_key(case_path: str, scan_mode: str) -> str:
+    """Return dedupe key for a discovered case path."""
+    if scan_mode != "archive":
+        return case_path
+
+    case_parts = _archive_case_identity_parts(Path(case_path))
+    if case_parts:
+        return "/".join(case_parts)
+
+    return case_path
+
+
+def _archive_case_identity_parts(case_path: Path) -> tuple[str, ...]:
+    """Return logical case tail used to dedupe archive snapshots."""
+    path_parts = _path_parts_without_anchor(case_path)
+    if not path_parts:
+        return ()
+
+    year_index = _archive_year_part_index(path_parts)
+    if year_index is not None:
+        logical_parts = list(path_parts[year_index + 1 :])
+        if logical_parts and _is_archive_snapshot_dir(logical_parts[0]):
+            logical_parts = logical_parts[1:]
+        if logical_parts and logical_parts[0] in ARCHIVE_STATUS_DIR_NAMES:
+            logical_parts = logical_parts[1:]
+        if logical_parts:
+            return tuple(logical_parts)
+
+    if path_parts[0] in KNOWN_ARCHIVE_ROOT_BASENAMES and len(path_parts) > 1:
+        return tuple(path_parts[1:])
+
+    if len(path_parts) >= 2:
+        return tuple(path_parts[-2:])
+
+    return tuple(path_parts)
+
+
+def _path_parts_without_anchor(path: Path) -> tuple[str, ...]:
+    """Return path parts without filesystem anchor."""
+    return tuple(part for part in path.parts if part != path.anchor)
+
+
+def _archive_year_part_index(path_parts: tuple[str, ...]) -> int | None:
+    """Return index of first YYYY-MM archive bucket in path parts."""
+    for index, part in enumerate(path_parts):
+        if _archive_dir_year(part) is not None:
+            return index
+
+    return None
+
+
+def _is_archive_snapshot_dir(dirname: str) -> bool:
+    """Return whether dirname is archive-only snapshot bucket."""
+    return ARCHIVE_SNAPSHOT_DIR_PATTERN.fullmatch(dirname) is not None
+
+
+def _build_processed_ids_by_key(
+    state: dict[str, Any],
+    *,
+    scan_mode: str,
+) -> defaultdict[str, set[str]]:
+    """Aggregate processed execution IDs under raw-path or archive identity keys."""
+    case_state = state.get("cases", {})
+    if not isinstance(case_state, dict):
+        case_state = {}
+
+    processed_ids_by_key: defaultdict[str, set[str]] = defaultdict(set)
+    for case_path, current_case_state in case_state.items():
+        if not isinstance(case_path, str) or not isinstance(current_case_state, dict):
+            continue
+
+        processed_ids_by_key[_case_identity_key(case_path, scan_mode)].update(
+            _case_state_processed_ids(current_case_state)
+        )
+
+    return processed_ids_by_key
+
+
 def _build_ingestion_candidates(
     scan_results: list[CaseScanResult],
     state: dict[str, Any],
     max_cases_per_run: int | None,
+    *,
+    scan_mode: str = "staging",
 ) -> list[IngestionCandidate]:
     """Select cases that contain newly observed execution IDs.
 
@@ -1152,22 +1474,17 @@ def _build_ingestion_candidates(
     list[IngestionCandidate]
         Ingestion candidates ordered by case path.
     """
-    case_state = state.get("cases", {})
-    if not isinstance(case_state, dict):
-        case_state = {}
-
     candidates: list[IngestionCandidate] = []
+    processed_ids_by_key = _build_processed_ids_by_key(state, scan_mode=scan_mode)
 
     for scan in sorted(scan_results, key=lambda item: item.case_path):
-        current_case_state = case_state.get(scan.case_path, {})
-
-        if not isinstance(current_case_state, dict):
-            current_case_state = {}
-
-        processed_ids = _case_state_processed_ids(current_case_state)
+        processed_ids = processed_ids_by_key[
+            _case_identity_key(scan.case_path, scan_mode)
+        ]
         new_ids = sorted(set(scan.execution_ids) - processed_ids)
 
         if not new_ids:
+            processed_ids.update(scan.execution_ids)
             continue
 
         candidates.append(
@@ -1178,6 +1495,7 @@ def _build_ingestion_candidates(
                 fingerprint=scan.fingerprint,
             )
         )
+        processed_ids.update(scan.execution_ids)
 
         if max_cases_per_run is not None and len(candidates) >= max_cases_per_run:
             break
@@ -1958,7 +2276,12 @@ def _log_startup_configuration(
     )
     _log_event(
         "startup_configuration_paths",
-        {"archive_root": str(config.archive_root)},
+        {
+            "scan_mode": config.scan_mode,
+            "archive_root": str(config.archive_root),
+            "archive_year_start": config.archive_year_start,
+            "archive_year_end": config.archive_year_end,
+        },
     )
     _log_event(
         "startup_configuration_runtime",

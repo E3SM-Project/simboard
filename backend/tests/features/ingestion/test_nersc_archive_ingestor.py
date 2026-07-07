@@ -23,10 +23,12 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    _build_case_path_filter,
     _build_case_scan_results,
     _build_config_from_env,
     _build_ingestion_candidates,
     _build_state_endpoint_url,
+    _build_walk_dir_filter,
     _case_state_processed_ids,
     _discover_case_executions,
     _fetch_ingestion_state,
@@ -132,7 +134,7 @@ def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
     assert grouped == {}
     assert logged_events[0] == (
         "archive_scan_started",
-        {"archive_root": str(archive_root)},
+        {"scan_mode": "staging", "archive_root": str(archive_root)},
     )
     assert logged_events[1][0] == "archive_scan_completed"
     assert logged_events[1][1]["archive_root"] == str(archive_root)
@@ -177,18 +179,21 @@ def test_discover_case_executions_logs_scan_progress(
         fields for event, fields in logged_events if event == "archive_scan_completed"
     ]
 
-    assert start_events == [{"archive_root": archive_root_path}]
+    assert start_events == [{"scan_mode": "staging", "archive_root": archive_root_path}]
     assert len(progress_events) == 3
+    assert progress_events[0]["scan_mode"] == "staging"
     assert progress_events[0]["archive_root"] == archive_root_path
     assert progress_events[0]["directories_visited"] == 2
     assert progress_events[0]["discovered_cases"] == 1
     assert progress_events[0]["execution_dirs_scanned"] == 1
     assert progress_events[0]["execution_dirs_accepted"] == 1
+    assert progress_events[1]["scan_mode"] == "staging"
     assert progress_events[1]["archive_root"] == archive_root_path
     assert progress_events[1]["directories_visited"] == 4
     assert progress_events[1]["discovered_cases"] == 2
     assert progress_events[1]["execution_dirs_scanned"] == 2
     assert progress_events[1]["execution_dirs_accepted"] == 2
+    assert progress_events[2]["scan_mode"] == "staging"
     assert progress_events[2]["archive_root"] == archive_root_path
     assert progress_events[2]["directories_visited"] == 6
     assert progress_events[2]["discovered_cases"] == 3
@@ -196,6 +201,7 @@ def test_discover_case_executions_logs_scan_progress(
     assert progress_events[2]["execution_dirs_accepted"] == 3
 
     assert len(completed_events) == 1
+    assert completed_events[0]["scan_mode"] == "staging"
     assert completed_events[0]["archive_root"] == archive_root_path
     assert completed_events[0]["directories_visited"] == 7
     assert completed_events[0]["discovered_cases"] == 3
@@ -377,6 +383,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     for payload in (scan_completed, dry_run_completed):
         assert payload["submission_qualified_cases"] == 2
         assert payload["selected_submission_cases"] == 1
+    assert scan_completed["scan_mode"] == "staging"
 
 
 def test_build_ingestion_candidates_is_idempotent() -> None:
@@ -421,6 +428,216 @@ def test_build_ingestion_candidates_is_idempotent() -> None:
     )
     assert len(third_candidates) == 1
     assert third_candidates[0].new_execution_ids == ["101.1-1"]
+
+
+def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state() -> (
+    None
+):
+    scan_results = [
+        CaseScanResult(
+            case_path=(
+                "/archive/2026-05/performance_archive_2026_05_22_08_01_32/"
+                "COMPLETED/user_a/case_a"
+            ),
+            execution_ids=["100.1-1"],
+            fingerprint="fp-1",
+        ),
+        CaseScanResult(
+            case_path=(
+                "/archive/2026-06/performance_archive_2026_06_01_08_01_32/user_a/case_a"
+            ),
+            execution_ids=["100.1-1", "101.1-1"],
+            fingerprint="fp-2",
+        ),
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="archive",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path.endswith("/user_a/case_a")
+    assert candidates[0].new_execution_ids == ["101.1-1"]
+
+
+def test_build_ingestion_candidates_keeps_distinct_users_without_snapshot_dir() -> None:
+    scan_results = [
+        CaseScanResult(
+            case_path="/archive/2026-05/user_a/case_a",
+            execution_ids=["100.1-1"],
+            fingerprint="fp-1",
+        ),
+        CaseScanResult(
+            case_path="/archive/2026-06/user_b/case_a",
+            execution_ids=["100.1-1"],
+            fingerprint="fp-2",
+        ),
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="archive",
+    )
+
+    assert [candidate.case_path for candidate in candidates] == [
+        "/archive/2026-06/user_b/case_a"
+    ]
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+
+
+def test_discover_case_executions_filters_archive_year_range(tmp_path: Path) -> None:
+    archive_root = tmp_path / "old_perf"
+    included_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "user_a"
+        / "case_a"
+        / "100.1-1"
+    )
+    excluded_case = (
+        archive_root
+        / "2024-12"
+        / "performance_archive_2024_12_31_00_00_00"
+        / "user_b"
+        / "case_b"
+        / "200.1-1"
+    )
+    included_case.mkdir(parents=True)
+    excluded_case.mkdir(parents=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
+    stats = ingestor_module._new_discovery_stats()
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: {},
+        stats=stats,
+        case_path_filter=_build_case_path_filter(config),
+        walk_dir_filter=_build_walk_dir_filter(config),
+        scan_mode="archive",
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert list(grouped.keys()) == [str(included_case.parent.resolve())]
+    assert list(grouped.values()) == [["100.1-1"]]
+
+
+def test_discover_case_executions_filters_archive_year_range_under_non_year_root(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    included_case = (
+        archive_root
+        / "OLD"
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "case_a"
+        / "100.1-1"
+    )
+    excluded_case = (
+        archive_root
+        / "OLD"
+        / "2024-12"
+        / "performance_archive_2024_12_31_00_00_00"
+        / "case_b"
+        / "200.1-1"
+    )
+    included_case.mkdir(parents=True)
+    excluded_case.mkdir(parents=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
+    stats = ingestor_module._new_discovery_stats()
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: {},
+        stats=stats,
+        case_path_filter=_build_case_path_filter(config),
+        walk_dir_filter=_build_walk_dir_filter(config),
+        scan_mode="archive",
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert list(grouped.keys()) == [str(included_case.parent.resolve())]
+    assert list(grouped.values()) == [["100.1-1"]]
+
+
+def test_discover_case_executions_rejects_year_filter_for_unsupported_layout(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    unsupported_case = archive_root / "OLD" / "user_a" / "case_a" / "100.1-1"
+    unsupported_case.mkdir(parents=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths",
+    ):
+        _discover_case_executions(
+            archive_root,
+            metadata_locator=lambda *_: {},
+            case_path_filter=_build_case_path_filter(config),
+            walk_dir_filter=_build_walk_dir_filter(config),
+            scan_mode="archive",
+        )
 
 
 def test_build_ingestion_candidates_handles_non_dict_case_state_and_limit() -> None:
@@ -912,6 +1129,45 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
+def test_run_ingestor_returns_config_error_for_unsupported_archive_year_layout(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    (archive_root / "OLD" / "user_a" / "case_a" / "100.1-1").mkdir(parents=True)
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "configuration_error" for event, _ in logged_events)
+    assert not any(event == "scan_completed" for event, _ in logged_events)
+
+
 def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
     tmp_path: Path,
     monkeypatch,
@@ -1146,6 +1402,26 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
     assert config.max_cases_per_run == 5
     assert config.max_attempts == 4
     assert config.request_timeout_seconds == 90
+    assert config.scan_mode == "staging"
+    assert config.archive_year_start is None
+    assert config.archive_year_end is None
+
+
+def test_build_config_from_env_parses_archive_mode_and_year_range(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("SCAN_MODE", "archive")
+    monkeypatch.setenv("OLD_PERF_ARCHIVE_ROOT", str(tmp_path / "old"))
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2023")
+    monkeypatch.setenv("ARCHIVE_YEAR_END", "2025")
+
+    config = _build_config_from_env()
+
+    assert config.scan_mode == "archive"
+    assert config.archive_root == (tmp_path / "old").resolve()
+    assert config.archive_year_start == 2023
+    assert config.archive_year_end == 2025
 
 
 @pytest.mark.parametrize(
@@ -1158,6 +1434,11 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
             "0",
             "REQUEST_TIMEOUT_SECONDS must be greater than 0",
         ),
+        (
+            "ARCHIVE_YEAR_START",
+            "2025",
+            "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require SCAN_MODE=archive",
+        ),
     ],
 )
 def test_build_config_from_env_rejects_invalid_positive_values(
@@ -1167,8 +1448,24 @@ def test_build_config_from_env_rejects_invalid_positive_values(
     message: str,
 ) -> None:
     monkeypatch.setenv(env_name, env_value)
+    if env_name == "ARCHIVE_YEAR_START":
+        monkeypatch.delenv("SCAN_MODE", raising=False)
 
     with pytest.raises(ValueError, match=message):
+        _build_config_from_env()
+
+
+def test_build_config_from_env_rejects_archive_year_range_inverted(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SCAN_MODE", "archive")
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2026")
+    monkeypatch.setenv("ARCHIVE_YEAR_END", "2025")
+
+    with pytest.raises(
+        ValueError,
+        match="ARCHIVE_YEAR_START must be less than or equal to ARCHIVE_YEAR_END",
+    ):
         _build_config_from_env()
 
 
@@ -1219,6 +1516,8 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
     assert exit_code == 0
     assert logged_events[0][0] == "run_started"
     assert logged_events[-1][0] == "run_finished"
+    assert logged_events[0][1]["scan_mode"] == "staging"
+    assert logged_events[-1][1]["scan_mode"] == "staging"
 
 
 def test_module_main_guard_exits_via_system_exit_on_configuration_error(
@@ -1997,7 +2296,12 @@ def test_log_startup_configuration_emits_structured_block(
         ),
         (
             "startup_configuration_paths",
-            {"archive_root": str(tmp_path)},
+            {
+                "scan_mode": "staging",
+                "archive_root": str(tmp_path),
+                "archive_year_start": None,
+                "archive_year_end": None,
+            },
         ),
         (
             "startup_configuration_runtime",

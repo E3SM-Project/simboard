@@ -60,7 +60,8 @@ There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_
 
 > **Info**
 >
-> Current SimBoard automation only scans `PERF_ARCHIVE_DIR` via `PERF_ARCHIVE_ROOT`. Archive directories are listed here for site context and PACE workflow reference for future extension.
+> SimBoard automation can scan either `PERF_ARCHIVE_DIR` or
+> `OLD_PERF_ARCHIVE_DIR` depending on runner configuration.
 
 ### 1. Staging directory (`PERF_ARCHIVE_DIR`)
 
@@ -178,14 +179,19 @@ Automated HPC collection reaches SimBoard ingestion through two site-side submis
 
 Both automated scripts follow the same submission-state sequence:
 
-1. Scan the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT` in the runner) for case directories and metadata.
+1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
 2. Read known execution IDs from `/api/v1/ingestions/state`.
 3. Compare discovered complete execution IDs with database-backed state.
 4. Submit each case that contains at least one newly discovered execution ID, along with the full discovered `processed_execution_ids` set.
 5. SimBoard stores the submitted known execution IDs on ingestion audit rows.
 6. Future runs reconstruct the known execution IDs from PostgreSQL.
 
-Collection atomicity is `(case_path, execution_id)`. Updating files inside an already recorded execution directory does not make that execution eligible again, and incomplete executions do not become case state.
+Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
+scans additionally deduplicate by stable logical case identity plus
+`execution_id` so timestamped snapshot parents do not cause repeated archive
+ingestion across `OLD_PERF_ARCHIVE_DIR` snapshots. Updating files inside an
+already recorded execution directory does not make that execution eligible
+again, and incomplete executions do not become case state.
 
 Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable case identifier for that uploaded case.
 
@@ -238,7 +244,9 @@ All automated ingestion requests require a bearer API token. Both site-side runn
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
+- `SCAN_MODE`
 - `PERF_ARCHIVE_ROOT`
+- `OLD_PERF_ARCHIVE_ROOT`
 - `MACHINE_NAME`
 - `DRY_RUN`
 
@@ -247,6 +255,12 @@ They also support these tuning options:
 - `MAX_CASES_PER_RUN`
 - `MAX_ATTEMPTS`
 - `REQUEST_TIMEOUT_SECONDS`
+- `ARCHIVE_YEAR_START`
+- `ARCHIVE_YEAR_END`
+
+`SCAN_MODE` selects whether a runner scans staging or archive roots. Year-range
+filters apply only to archive mode and are intended for targeted backfills, not
+for normal staging collection.
 
 `MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
 operation when runners should submit every submission-qualified case they find.

@@ -106,7 +106,8 @@ If operational complexity increases, these scripts may later be consolidated int
 
 The NERSC archive ingestor scans a bind-mounted performance archive directory,
 detects new parseable execution directories, and calls the SimBoard
-`/api/v1/ingestions/from-path` API for changed cases.
+`/api/v1/ingestions/from-path` API for changed cases. It can scan either the
+staging root or the archive root.
 
 Default archive mount path:
 
@@ -124,12 +125,22 @@ Configuration surface (via env vars):
 
 - `SIMBOARD_API_BASE_URL` (`--api-base-url`)
 - `SIMBOARD_API_TOKEN` (`--api-token`)
-- `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive`)
+- `SCAN_MODE` (`staging` or `archive`, default `staging`)
+- `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive` for `SCAN_MODE=staging`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/old_performance_archive` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
 - `DRY_RUN` (`--dry-run`)
 - `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
 - `MAX_ATTEMPTS` (`--max-attempts`)
 - `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)
+- `ARCHIVE_YEAR_START` (optional, archive mode only)
+- `ARCHIVE_YEAR_END` (optional, archive mode only)
+
+Archive notes:
+
+- Archive scans do not require a `COMPLETED/` directory to be correct.
+- Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
+- `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 
 ## HPC Upload Archive Ingestor
 
@@ -159,9 +170,13 @@ Configuration surface (via env vars):
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
-- `PERF_ARCHIVE_ROOT` (default `/performance_archive`)
+- `SCAN_MODE` (`staging` or `archive`, default `staging`)
+- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/old_performance_archive` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN`
 - `MAX_CASES_PER_RUN`
 - `MAX_ATTEMPTS`
 - `REQUEST_TIMEOUT_SECONDS`
+- `ARCHIVE_YEAR_START` (optional, archive mode only)
+- `ARCHIVE_YEAR_END` (optional, archive mode only)
