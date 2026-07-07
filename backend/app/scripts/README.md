@@ -138,7 +138,7 @@ Configuration surface (via env vars):
 
 Archive notes:
 
-- Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores other known status directories.
+- Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 

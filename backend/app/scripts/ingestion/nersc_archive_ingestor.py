@@ -126,38 +126,6 @@ ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
 # case trees by status. When these buckets are present, ingestion should only
 # scan COMPLETED cases and ignore the rest.
 ARCHIVE_COMPLETED_STATUS_DIR_NAME = "COMPLETED"
-ARCHIVE_LEGACY_STATUS_DIR_NAMES = frozenset(
-    {
-        "DONE",
-        "PENDING",
-        "QUEUED",
-        "RUNNING",
-        "SUBMITTED",
-        "SUCCEEDED",
-        "SUCCESS",
-    }
-)
-ARCHIVE_STATUS_DIR_NAMES = frozenset(
-    {
-        "BOOT_FAIL",
-        "CANCELLED",
-        "COMPLETED",
-        "CONFIGURING",
-        "COMPLETING",
-        "DEADLINE",
-        "FAILED",
-        "NODE_FAIL",
-        "OUT_OF_MEMORY",
-        "PREEMPTED",
-        "STOPPED",
-        "SUSPENDED",
-        "TIMEOUT",
-    }
-)
-ARCHIVE_RECOGNIZED_STATUS_DIR_NAMES = frozenset(
-    ARCHIVE_STATUS_DIR_NAMES | ARCHIVE_LEGACY_STATUS_DIR_NAMES
-)
-ARCHIVE_STATUS_DIR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
     {Path(DEFAULT_PERF_ARCHIVE_ROOT).name, Path(DEFAULT_OLD_PERF_ARCHIVE_ROOT).name}
 )
@@ -1328,10 +1296,7 @@ def _prune_archive_snapshot_dirnames(dirnames: list[str]) -> None:
         return
 
     dirnames[:] = [
-        dirname
-        for dirname in dirnames
-        if dirname == ARCHIVE_COMPLETED_STATUS_DIR_NAME
-        or not _looks_like_archive_status_dir_name(dirname)
+        dirname for dirname in dirnames if dirname == ARCHIVE_COMPLETED_STATUS_DIR_NAME
     ]
 
 
@@ -1340,28 +1305,7 @@ def _snapshot_uses_status_buckets(dirnames: list[str]) -> bool:
     if ARCHIVE_COMPLETED_STATUS_DIR_NAME not in dirnames:
         return False
 
-    sibling_dirnames = [
-        dirname for dirname in dirnames if dirname != ARCHIVE_COMPLETED_STATUS_DIR_NAME
-    ]
-    if not sibling_dirnames:
-        return False
-
-    if any(
-        dirname in ARCHIVE_RECOGNIZED_STATUS_DIR_NAMES for dirname in sibling_dirnames
-    ):
-        return True
-
-    status_like_dirnames = [
-        dirname
-        for dirname in sibling_dirnames
-        if _looks_like_archive_status_dir_name(dirname)
-    ]
-    return len(status_like_dirnames) == len(sibling_dirnames)
-
-
-def _looks_like_archive_status_dir_name(dirname: str) -> bool:
-    """Return whether a snapshot child resembles a status bucket name."""
-    return bool(ARCHIVE_STATUS_DIR_NAME_PATTERN.fullmatch(dirname))
+    return any(dirname != ARCHIVE_COMPLETED_STATUS_DIR_NAME for dirname in dirnames)
 
 
 def _archive_case_path_matches_year_range(
