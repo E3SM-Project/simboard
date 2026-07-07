@@ -41,7 +41,7 @@ Example:
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
-python -m app.scripts.ingestion.nersc_archive_ingestor --dry-run
+python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
 
 Do not execute scripts directly by file path:
@@ -116,23 +116,23 @@ Default archive mount path:
 Example:
 
 ```bash
-uv run python -m app.scripts.ingestion.nersc_archive_ingestor \
-  --api-base-url http://backend:8000 \
-  --machine-name perlmutter
+SIMBOARD_API_BASE_URL=http://backend:8000 \
+MACHINE_NAME=perlmutter \
+uv run python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
 
 Configuration surface (via env vars):
 
-- `SIMBOARD_API_BASE_URL` (`--api-base-url`)
-- `SIMBOARD_API_TOKEN` (`--api-token`)
+- `SIMBOARD_API_BASE_URL`
+- `SIMBOARD_API_TOKEN`
 - `SCAN_MODE` (`staging` or `archive`, default `staging`)
-- `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive` for `SCAN_MODE=staging`)
+- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
-- `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
-- `DRY_RUN` (`--dry-run`)
-- `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
-- `MAX_ATTEMPTS` (`--max-attempts`)
-- `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)
+- `MACHINE_NAME` (default `perlmutter`)
+- `DRY_RUN`
+- `MAX_CASES_PER_RUN`
+- `MAX_ATTEMPTS`
+- `REQUEST_TIMEOUT_SECONDS`
 - `ARCHIVE_YEAR_START` (optional, archive mode only)
 - `ARCHIVE_YEAR_END` (optional, archive mode only)
 

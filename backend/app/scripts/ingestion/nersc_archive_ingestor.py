@@ -630,7 +630,7 @@ def _run_ingestor(
         (scan_results, candidates, submission_qualified_case_count, discovery_stats) = (
             _scan_archive(config, state, metadata_locator=metadata_locator)
         )
-    except ValueError as exc:
+    except UnsupportedArchiveLayoutError as exc:
         _log_event("configuration_error", {"error": str(exc)})
         return 1
 

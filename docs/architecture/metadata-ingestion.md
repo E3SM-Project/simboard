@@ -98,13 +98,13 @@ Structure:
 ```bash
 year-month/
   performance_archive_<timestamp>/
-    status/ # Note, status only appears on machines that support it, such as on NERSC and ALCF.
+    [STATUS_BUCKET/] # Optional, for example COMPLETED/ on machines with status bucketing such as NERSC and ALCF.
       user/
         case/
           execution/
 ```
 
-Example NERSC path for "COMPLETED"` status cases:
+Example NERSC path for `COMPLETED` status cases:
 
 ```bash
 /global/cfs/projectdirs/e3sm/OLD_PERF/2026-05/performance_archive_2026_05_22_08_01_32/COMPLETED

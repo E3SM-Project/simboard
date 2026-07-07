@@ -1295,6 +1295,41 @@ def test_run_ingestor_returns_config_error_for_unsupported_archive_year_layout(
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
+def test_run_ingestor_propagates_unexpected_scan_value_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_scan_archive",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("boom")),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    with pytest.raises(ValueError, match="boom"):
+        _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert not any(event == "configuration_error" for event, _ in logged_events)
+
+
 def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
     tmp_path: Path,
     monkeypatch,
