@@ -28,9 +28,9 @@ Case-level state is derived from execution-level state.
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
 | Incomplete execution      | An execution directory that is missing one or more required metadata files, is missing required metadata in those files, does not provide a non-empty execution ID (LID) in the timing file, or cannot be read during discovery. Incomplete executions are skipped and do not enter case state.                                                                                     |
-| Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                                |
+| Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
-| Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                              |
+| Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
 
 ### Runner counter and log field terms
@@ -40,19 +40,19 @@ related execution-decision reporting. Where a field is just the emitted count
 form of a human term defined below, this section maps the exact field name to
 that canonical term instead of repeating the full concept definition.
 
-| Term                                | Definition                                                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `submission_qualified_cases`        | Count form of “Submission-qualified case.”                                                                                                                                       |
-| `selected_submission_cases`         | Count form of “Selected submission case.”                                                                                                                                        |
-| `execution_dirs_scanned`            | Count of execution directories whose names matched the execution pattern and were checked during discovery validation.                                                           |
-| `execution_dirs_accepted`           | Count of scanned execution directories that passed discovery validation and were retained as valid discovered executions.                                                        |
-| `skipped_incomplete`                | Count of execution directories rejected during discovery because required metadata files or fields were missing or incomplete.                                                   |
-| `skipped_invalid`                   | Count of execution directories rejected during discovery because metadata was invalid or the directory could not be read.                                                        |
-| `accepted_execution_ids`            | Count of newly discovered valid execution IDs selected for the current run.                                                                                                      |
-| `rejected_existing_execution_ids`   | Count of valid discovered execution IDs already present in stored `processed_execution_ids` state.                                                                               |
-| `rejected_incomplete_execution_ids` | Count of execution IDs rejected during discovery because required metadata files or fields were missing or incomplete.                                                           |
-| `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata was invalid or the directory could not be read.                                                                |
-| `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection.                                     |
+| Term                                | Definition                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `submission_qualified_cases`        | Count form of “Submission-qualified case.”                                                                                                  |
+| `selected_submission_cases`         | Count form of “Selected submission case.”                                                                                                   |
+| `execution_dirs_scanned`            | Count of execution directories whose names matched the execution pattern and were checked during discovery validation.                      |
+| `execution_dirs_accepted`           | Count of scanned execution directories that passed discovery validation and were retained as valid discovered executions.                   |
+| `skipped_incomplete`                | Count of execution directories rejected during discovery because required metadata files or fields were missing or incomplete.              |
+| `skipped_invalid`                   | Count of execution directories rejected during discovery because metadata was invalid or the directory could not be read.                   |
+| `accepted_execution_ids`            | Count of newly discovered valid execution IDs selected for the current run.                                                                 |
+| `rejected_existing_execution_ids`   | Count of valid discovered execution IDs already present in stored `processed_execution_ids` state.                                          |
+| `rejected_incomplete_execution_ids` | Count of execution IDs rejected during discovery because required metadata files or fields were missing or incomplete.                      |
+| `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata was invalid or the directory could not be read.                           |
+| `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection. |
 
 ## Performance Directories
 
@@ -96,34 +96,58 @@ Structure:
 
 ```bash
 year-month/
-  machine-day/
-    user/
-      case/
-        execution/
+  performance_archive_<timestamp>/
+    status/ # Note, status only appears on machines that support it, such as on NERSC and ALCF.
+      user/
+        case/
+          execution/
 ```
 
-Example NERSC path:
+Example NERSC path for "COMPLETED"` status cases:
 
 ```bash
-/global/cfs/projectdirs/e3sm/OLD_PERF
-├── 2020-06
-│   ├── performance_archive_cori_e3sm_2020_06_03
-│   │   ├── e3sm_perf_archive_cori_2020_06_03_out.txt
-│   │   └── large-files-removed.txt
-│   ├── performance_archive_cori_e3sm_2020_06_04
-│   │   ├── ambradl
-│   │   ├── bbye
-│   │   ├── bogensch
-│   │   ├── e3sm_perf_archive_cori_2020_06_04_out.txt
-│   │   ├── jinyun
-│   │   ├── large-files-removed.txt
-│   │   ├── ndk
-│   │   ├── pace-wadeburgess-2020-06-04-08:27:26.log
-│   │   ├── sprice
-│   │   ├── terai
-│   │   ├── whannah
-│   │   ├── wlin
-│   │   └── ...
+/global/cfs/projectdirs/e3sm/OLD_PERF/2026-05/performance_archive_2026_05_22_08_01_32/COMPLETED
+.
+├── azamat
+│   └── SMS.ne30pg2_EC30to60E2r2.WCYCLXX2010.pm-gpu_gnugpu.a1
+│       └── 42473005.250904-163426
+├── bogensch
+│   ├── scream_dpxx_DYCOMSrf01.3dturb.001a
+│   │   └── 53269661.260521-154752
+│   ├── scream_dpxx_DYCOMSrf01.3dturb.100m.001a
+│   │   └── 53270491.260521-162926
+│   ├── scream_dpxx_DYCOMSrf01.3dturb.100m.cntl
+│   │   └── 53271053.260521-170115
+│   └── scream_dpxx_GATEIDEAL.horiz_diff.200m.010a.cntl
+│       └── 53253881.260522-001001
+├── feng809
+│   └── SSP245_ZATM_BGC_ne30pg2_f09_oEC60to30v3_2026051915
+│       ├── 53193441.260521-011112
+│       └── 53246396.260521-161023
+├── jayesh
+│   ├── test_ne30pg2_r05_IcoswISC30E3r5.WCYCL1850_hdf5c_lossy_mt8_norestarts
+│   │   └── 53247504.260521-132759
+│   └── test_ne30pg2_r05_IcoswISC30E3r5.WCYCL1850_hdf5c_lossy_nomt_norestarts
+│       └── 53245397.260521-082234
+├── meng
+│   ├── f2010-eamxx-mam4xx_ne30pg2_ne30pg2_gnugpu.mamxx_srf_emis
+│   │   └── 53250710.260522-000618
+│   └── f2010-eamxx-mam4xx_ne30pg2_ne30pg2_gnugpu.master
+│       └── 53250675.260522-000505
+├── sprice
+│   ├── 20260305.BGWCYCL2010.ne30pg2_r05_IcoswISC30E3r5_gis4to40.pm-cpu.testConfigNewSMBandIC
+│   │   ├── 53243007.260521-065833
+│   │   └── 53248389.260522-014341
+│   └── 20260320.WCYCL2010NS.ne30pg2_r05_IcoswISC30E3r5.pm-cpu.baseline
+│       ├── 53240397.260521-065833
+│       └── 53247565.260521-233111
+├── whannah
+│   └── E3SM.2026-impflx-debug-00.GPU.F2010-SCREAMv1.ne256pg2_ne256pg2.NN_128.iflx_0.gust_0
+│       ├── 53244020.260521-104056
+│       └── 53254801.260522-022602
+└── yuying
+    └── ne30pg2_ne30pg2.F20TR-SCREAMv1.260501.cosp_test
+        └── 53262495.260521-133430
 ...
 ```
 
