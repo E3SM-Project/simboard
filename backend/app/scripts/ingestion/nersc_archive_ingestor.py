@@ -737,6 +737,9 @@ def _scan_archive(
     """
     case_collection_data: dict[str, CaseCollectionLogData] = {}
     discovery_stats = _new_discovery_stats()
+    staging_root_basename = config.archive_root.name or Path(
+        DEFAULT_PERF_ARCHIVE_ROOT
+    ).name
     case_path_filter = _build_case_path_filter(config)
     walk_dir_filter = _build_walk_dir_filter(config)
     grouped_executions = _discover_case_executions(
@@ -754,6 +757,7 @@ def _scan_archive(
         state,
         max_cases_per_run=None,
         scan_mode=config.scan_mode,
+        staging_root_basename=staging_root_basename,
     )
     candidates = (
         all_candidates
@@ -767,6 +771,7 @@ def _scan_archive(
         discovery_stats,
         archive_root=config.archive_root,
         scan_mode=config.scan_mode,
+        staging_root_basename=staging_root_basename,
     )
 
     return (
@@ -1043,9 +1048,14 @@ def _log_execution_collection_outcomes(
     *,
     archive_root: Path,
     scan_mode: str = "staging",
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
 ) -> None:
     """Emit one contiguous decision block for each discovered case."""
-    processed_ids_by_key = _build_processed_ids_by_key(state, scan_mode=scan_mode)
+    processed_ids_by_key = _build_processed_ids_by_key(
+        state,
+        scan_mode=scan_mode,
+        staging_root_basename=staging_root_basename,
+    )
     selected_new_ids_by_case = {
         candidate.case_path: set(candidate.new_execution_ids)
         for candidate in candidates
@@ -1054,7 +1064,13 @@ def _log_execution_collection_outcomes(
     for case_path in sorted(case_collection_data):
         log_data = case_collection_data[case_path]
         case_label = _case_log_label(case_path, archive_root)
-        processed_ids = processed_ids_by_key[_case_identity_key(case_path, scan_mode)]
+        processed_ids = processed_ids_by_key[
+            _case_identity_key(
+                case_path,
+                scan_mode,
+                staging_root_basename=staging_root_basename,
+            )
+        ]
         valid_execution_ids = sorted(log_data.valid_execution_ids)
         new_ids = set(valid_execution_ids) - processed_ids
         selected_new_ids = selected_new_ids_by_case.get(case_path, set())
@@ -1453,9 +1469,20 @@ def _archive_dir_year_in_range(
     return True
 
 
-def _case_identity_key(case_path: str, scan_mode: str) -> str:
+def _case_identity_key(
+    case_path: str,
+    scan_mode: str,
+    *,
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+) -> str:
     """Return dedupe key for a discovered case path."""
     if scan_mode != "archive":
+        case_parts = _staging_case_identity_parts(
+            Path(case_path), staging_root_basename=staging_root_basename
+        )
+        if case_parts:
+            return "/".join(case_parts)
+
         return case_path
 
     case_parts = _archive_case_identity_parts(Path(case_path))
@@ -1490,6 +1517,28 @@ def _archive_case_identity_parts(case_path: Path) -> tuple[str, ...]:
     return tuple(path_parts)
 
 
+def _staging_case_identity_parts(
+    case_path: Path,
+    *,
+    staging_root_basename: str,
+) -> tuple[str, ...]:
+    """Return logical case tail used to dedupe staging paths across mounts."""
+    path_parts = _path_parts_without_anchor(case_path)
+    if not path_parts:
+        return ()
+
+    try:
+        root_index = path_parts.index(staging_root_basename)
+    except ValueError:
+        return ()
+
+    logical_parts = path_parts[root_index + 1 :]
+    if not logical_parts:
+        return ()
+
+    return tuple(logical_parts)
+
+
 def _path_parts_without_anchor(path: Path) -> tuple[str, ...]:
     """Return path parts without filesystem anchor."""
     return tuple(part for part in path.parts if part != path.anchor)
@@ -1513,8 +1562,9 @@ def _build_processed_ids_by_key(
     state: dict[str, Any],
     *,
     scan_mode: str,
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
 ) -> defaultdict[str, set[str]]:
-    """Aggregate processed execution IDs under raw-path or archive identity keys."""
+    """Aggregate processed execution IDs under normalized case identity keys."""
     case_state = state.get("cases", {})
     if not isinstance(case_state, dict):
         case_state = {}
@@ -1524,9 +1574,13 @@ def _build_processed_ids_by_key(
         if not isinstance(case_path, str) or not isinstance(current_case_state, dict):
             continue
 
-        processed_ids_by_key[_case_identity_key(case_path, scan_mode)].update(
-            _case_state_processed_ids(current_case_state)
-        )
+        processed_ids_by_key[
+            _case_identity_key(
+                case_path,
+                scan_mode,
+                staging_root_basename=staging_root_basename,
+            )
+        ].update(_case_state_processed_ids(current_case_state))
 
     return processed_ids_by_key
 
@@ -1537,6 +1591,7 @@ def _build_ingestion_candidates(
     max_cases_per_run: int | None,
     *,
     scan_mode: str = "staging",
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
 ) -> list[IngestionCandidate]:
     """Select cases that contain newly observed execution IDs.
 
@@ -1555,11 +1610,19 @@ def _build_ingestion_candidates(
         Ingestion candidates ordered by case path.
     """
     candidates: list[IngestionCandidate] = []
-    processed_ids_by_key = _build_processed_ids_by_key(state, scan_mode=scan_mode)
+    processed_ids_by_key = _build_processed_ids_by_key(
+        state,
+        scan_mode=scan_mode,
+        staging_root_basename=staging_root_basename,
+    )
 
     for scan in sorted(scan_results, key=lambda item: item.case_path):
         processed_ids = processed_ids_by_key[
-            _case_identity_key(scan.case_path, scan_mode)
+            _case_identity_key(
+                scan.case_path,
+                scan_mode,
+                staging_root_basename=staging_root_basename,
+            )
         ]
         new_ids = sorted(set(scan.execution_ids) - processed_ids)
 

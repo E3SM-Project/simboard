@@ -434,6 +434,93 @@ def test_build_ingestion_candidates_is_idempotent() -> None:
     assert third_candidates[0].new_execution_ids == ["101.1-1"]
 
 
+def test_build_ingestion_candidates_dedupes_staging_mount_and_host_paths() -> None:
+    scan_results = [
+        CaseScanResult(
+            case_path="/global/cfs/cdirs/e3sm/performance_archive/user_a/case_a",
+            execution_ids=["100.1-1", "101.1-1"],
+            fingerprint="fp-1",
+        )
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="staging",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path == (
+        "/global/cfs/cdirs/e3sm/performance_archive/user_a/case_a"
+    )
+    assert candidates[0].new_execution_ids == ["101.1-1"]
+
+
+def test_build_ingestion_candidates_dedupes_staging_host_and_mount_paths() -> None:
+    scan_results = [
+        CaseScanResult(
+            case_path="/performance_archive/user_a/case_a",
+            execution_ids=["100.1-1", "101.1-1"],
+            fingerprint="fp-1",
+        )
+    ]
+    state = {
+        "cases": {
+            "/global/cfs/cdirs/e3sm/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="staging",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path == "/performance_archive/user_a/case_a"
+    assert candidates[0].new_execution_ids == ["101.1-1"]
+
+
+def test_build_ingestion_candidates_keeps_raw_staging_paths_without_root_basename() -> (
+    None
+):
+    scan_results = [
+        CaseScanResult(
+            case_path="/tmp/local_archive/user_a/case_a",
+            execution_ids=["100.1-1"],
+            fingerprint="fp-1",
+        )
+    ]
+    state = {
+        "cases": {
+            "/performance_archive/user_a/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            }
+        }
+    }
+
+    candidates = _build_ingestion_candidates(
+        scan_results,
+        state,
+        max_cases_per_run=None,
+        scan_mode="staging",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+
+
 def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state() -> (
     None
 ):
@@ -1207,6 +1294,67 @@ def test_run_ingestor_submits_only_new_execution_ids_for_mixed_state(
         "100.1-1",
         "101.1-1",
     ]
+
+
+def test_run_ingestor_submits_only_new_ids_when_state_uses_mount_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    (case_dir / "101.1-1").mkdir(parents=True)
+
+    captured_processed_execution_ids: list[list[str]] = []
+    remote_state = {
+        "cases": {
+            "/performance_archive/case_a": {
+                "processed_execution_ids": ["100.1-1"],
+            },
+        }
+    }
+
+    def fake_post_request(
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        *,
+        processed_execution_ids: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse:
+        captured_processed_execution_ids.append(processed_execution_ids)
+        return {
+            "status_code": 201,
+            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+        }
+
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: remote_state,
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token-123",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert exit_code == 0
+    assert captured_processed_execution_ids == [["101.1-1"]]
 
 
 def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
