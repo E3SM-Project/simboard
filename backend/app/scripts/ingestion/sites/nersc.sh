@@ -4,9 +4,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(cd -- "${SCRIPT_DIR}/../../../../" && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-${BACKEND_DIR}/.venv/bin/python}"
 
-if [[ ! -f "${BACKEND_DIR}/.venv/bin/activate" ]]; then
-  echo "Expected uv environment at ${BACKEND_DIR}/.venv/bin/activate" >&2
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
   echo "Run 'make install' from the repository root to create it." >&2
   exit 1
 fi
@@ -15,7 +16,7 @@ fi
 
 export SIMBOARD_API_BASE_URL="${SIMBOARD_API_BASE_URL:-https://simboard-dev-api.e3sm.org}"
 export MACHINE_NAME="${MACHINE_NAME:-perlmutter}"
-export SCAN_MODE="${SCAN_MODE:-staging}"
+export SCAN_MODE="${SCAN_MODE:-archive}"
 export DRY_RUN="${DRY_RUN:-true}"
 export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/performance_archive}"
 export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/OLD_PERF}"
@@ -25,7 +26,5 @@ if [[ "${SCAN_MODE}" != "staging" && "${SCAN_MODE}" != "archive" ]]; then
   exit 1
 fi
 
-source "${BACKEND_DIR}/.venv/bin/activate"
-
 cd "${BACKEND_DIR}"
-exec python -m app.scripts.ingestion.nersc_archive_ingestor "$@"
+exec "${PYTHON_BIN}" -m app.scripts.ingestion.nersc_archive_ingestor "$@"
