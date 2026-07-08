@@ -13,7 +13,9 @@ Scripts are organized by domain:
 ```text
 scripts/
 ├── ingestion/
-│   └── nersc_archive_ingestor.py
+│   ├── nersc_archive_ingestor.py
+│   └── sites/
+│       └── nersc.sh
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
@@ -135,6 +137,11 @@ Configuration surface (via env vars):
 - `REQUEST_TIMEOUT_SECONDS`
 - `ARCHIVE_YEAR_START` (optional, archive mode only)
 - `ARCHIVE_YEAR_END` (optional, archive mode only)
+
+Helper wrapper:
+
+- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=archive`, defaults to `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
+- Override `SCAN_MODE`, `DRY_RUN`, or any other supported env var in the caller or cron entry when you need a different schedule or behavior.
 
 Archive notes:
 
