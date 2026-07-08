@@ -138,6 +138,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "archive_scan_progress": (
         "scan_mode",
         "archive_root",
+        "current_dir",
         "directories_visited",
         "discovered_cases",
         "execution_dirs_scanned",
@@ -147,6 +148,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "archive_scan_completed": (
         "scan_mode",
         "archive_root",
+        "current_dir",
         "directories_visited",
         "discovered_cases",
         "execution_dirs_scanned",
@@ -813,6 +815,7 @@ def _discover_case_executions(
     scan_started_at = time.monotonic()
     directories_visited = 0
     archive_root_str = str(archive_root)
+    current_dir = archive_root_str
 
     _log_event(
         "archive_scan_started",
@@ -821,6 +824,7 @@ def _discover_case_executions(
 
     for dirpath, dirnames, _ in os.walk(archive_root):
         directories_visited += 1
+        current_dir = dirpath
 
         if walk_dir_filter is not None:
             walk_dir_filter(dirpath, dirnames)
@@ -845,6 +849,7 @@ def _discover_case_executions(
             _log_archive_scan_progress(
                 event="archive_scan_progress",
                 archive_root=archive_root_str,
+                current_dir=dirpath,
                 directories_visited=directories_visited,
                 grouped=grouped,
                 stats=effective_stats,
@@ -855,6 +860,7 @@ def _discover_case_executions(
     _log_archive_scan_progress(
         event="archive_scan_completed",
         archive_root=archive_root_str,
+        current_dir=current_dir,
         directories_visited=directories_visited,
         grouped=grouped,
         stats=effective_stats,
@@ -869,6 +875,7 @@ def _log_archive_scan_progress(
     *,
     event: str,
     archive_root: str,
+    current_dir: str,
     directories_visited: int,
     grouped: dict[str, set[str]],
     stats: DiscoveryStats | None,
@@ -881,6 +888,7 @@ def _log_archive_scan_progress(
         {
             "scan_mode": scan_mode,
             "archive_root": archive_root,
+            "current_dir": current_dir,
             "directories_visited": directories_visited,
             "discovered_cases": len(grouped),
             "execution_dirs_scanned": (
@@ -1264,23 +1272,72 @@ def _build_walk_dir_filter(
     if config.scan_mode != "archive":
         return None
 
-    archive_root_str = str(config.archive_root)
+    archive_root = config.archive_root.resolve()
 
     def _filter(dirpath: str, dirnames: list[str]) -> None:
-        if _is_archive_snapshot_dir(Path(dirpath).name):
+        current_path = Path(dirpath).resolve()
+
+        if current_path == archive_root:
+            try:
+                root_dirnames = [
+                    child.name
+                    for child in current_path.iterdir()
+                    if child.is_dir() and not child.is_symlink()
+                ]
+            except OSError as exc:
+                raise UnsupportedArchiveLayoutError(
+                    f"Unable to read archive root {archive_root}: "
+                    f"{exc.__class__.__name__}: {exc}"
+                ) from exc
+            year_dirnames = [
+                dirname for dirname in root_dirnames if _archive_dir_year(dirname) is not None
+            ]
+
+            if (
+                (config.archive_year_start is not None or config.archive_year_end is not None)
+                and root_dirnames
+                and not year_dirnames
+            ):
+                raise UnsupportedArchiveLayoutError(
+                    "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
+                    f"include a YYYY-MM directory under {archive_root}"
+                )
+
+            if config.archive_year_start is None and config.archive_year_end is None:
+                selected_dirnames = year_dirnames
+            else:
+                selected_dirnames = [
+                    dirname
+                    for dirname in year_dirnames
+                    if _archive_dir_year_in_range(
+                        dirname,
+                        year_start=config.archive_year_start,
+                        year_end=config.archive_year_end,
+                    )
+                ]
+            dirnames[:] = [dirname for dirname in dirnames if dirname in selected_dirnames]
+            return
+
+        if _is_archive_snapshot_dir(current_path.name):
             _prune_archive_snapshot_dirnames(dirnames)
 
         if config.archive_year_start is None and config.archive_year_end is None:
             return
 
-        if dirpath != archive_root_str:
+        try:
+            relative_parts = (
+                Path(dirpath).resolve().relative_to(config.archive_root.resolve()).parts
+            )
+        except ValueError:
+            return
+
+        if _archive_parts_year(relative_parts) is not None:
             return
 
         dirnames[:] = [
             dirname
             for dirname in dirnames
-            if _archive_dir_year(dirname) is None
-            or _archive_dir_year_in_range(
+            if _archive_dir_year_in_range(
                 dirname,
                 year_start=config.archive_year_start,
                 year_end=config.archive_year_end,

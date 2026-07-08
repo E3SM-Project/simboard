@@ -183,18 +183,21 @@ def test_discover_case_executions_logs_scan_progress(
     assert len(progress_events) == 3
     assert progress_events[0]["scan_mode"] == "staging"
     assert progress_events[0]["archive_root"] == archive_root_path
+    assert progress_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[0]["directories_visited"] == 2
     assert progress_events[0]["discovered_cases"] == 1
     assert progress_events[0]["execution_dirs_scanned"] == 1
     assert progress_events[0]["execution_dirs_accepted"] == 1
     assert progress_events[1]["scan_mode"] == "staging"
     assert progress_events[1]["archive_root"] == archive_root_path
+    assert progress_events[1]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[1]["directories_visited"] == 4
     assert progress_events[1]["discovered_cases"] == 2
     assert progress_events[1]["execution_dirs_scanned"] == 2
     assert progress_events[1]["execution_dirs_accepted"] == 2
     assert progress_events[2]["scan_mode"] == "staging"
     assert progress_events[2]["archive_root"] == archive_root_path
+    assert progress_events[2]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[2]["directories_visited"] == 6
     assert progress_events[2]["discovered_cases"] == 3
     assert progress_events[2]["execution_dirs_scanned"] == 3
@@ -203,6 +206,7 @@ def test_discover_case_executions_logs_scan_progress(
     assert len(completed_events) == 1
     assert completed_events[0]["scan_mode"] == "staging"
     assert completed_events[0]["archive_root"] == archive_root_path
+    assert completed_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert completed_events[0]["directories_visited"] == 7
     assert completed_events[0]["discovered_cases"] == 3
     assert completed_events[0]["execution_dirs_scanned"] == 3
@@ -618,7 +622,7 @@ def test_discover_case_executions_filters_archive_year_range(tmp_path: Path) -> 
     assert list(grouped.values()) == [["100.1-1"]]
 
 
-def test_discover_case_executions_filters_archive_year_range_under_non_year_root(
+def test_discover_case_executions_rejects_archive_year_range_under_non_year_root(
     tmp_path: Path,
 ) -> None:
     archive_root = tmp_path / "old_perf"
@@ -654,6 +658,43 @@ def test_discover_case_executions_filters_archive_year_range_under_non_year_root
         archive_year_start=2025,
         archive_year_end=2025,
     )
+
+    with pytest.raises(
+        ValueError,
+        match="ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths",
+    ):
+        _discover_case_executions(
+            archive_root,
+            metadata_locator=lambda *_: {},
+            case_path_filter=_build_case_path_filter(config),
+            walk_dir_filter=_build_walk_dir_filter(config),
+            scan_mode="archive",
+        )
+
+
+def test_discover_case_executions_ignores_root_symlink_for_year_filter(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    target_dir = tmp_path / "linked_perf"
+    (target_dir / "case_a" / "100.1-1").mkdir(parents=True)
+    archive_root.mkdir()
+    (archive_root / "README.txt").write_text("marker\n")
+    (archive_root / "linked").symlink_to(target_dir, target_is_directory=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
     stats = ingestor_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
@@ -665,9 +706,8 @@ def test_discover_case_executions_filters_archive_year_range_under_non_year_root
         scan_mode="archive",
     )
 
-    assert stats["execution_dirs_scanned"] == 1
-    assert list(grouped.keys()) == [str(included_case.parent.resolve())]
-    assert list(grouped.values()) == [["100.1-1"]]
+    assert grouped == {}
+    assert stats["execution_dirs_scanned"] == 0
 
 
 def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
@@ -733,12 +773,79 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     assert list(grouped.values()) == [["100.1-1"]]
 
 
-def test_discover_case_executions_rejects_year_filter_for_unsupported_layout(
+def test_discover_case_executions_ignores_non_year_root_dirs_without_year_filter(
     tmp_path: Path,
 ) -> None:
     archive_root = tmp_path / "old_perf"
-    unsupported_case = archive_root / "OLD" / "user_a" / "case_a" / "100.1-1"
+    supported_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "user_a"
+        / "case_a"
+        / "100.1-1"
+    )
+    unsupported_case = (
+        archive_root
+        / "OLDER_ARCHIVES"
+        / "performance_archive_cori_edison_acme_2019_08_13"
+        / "user_b"
+        / "case_b"
+        / "200.1-1"
+    )
+    supported_case.mkdir(parents=True)
     unsupported_case.mkdir(parents=True)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=None,
+        archive_year_end=None,
+    )
+    stats = ingestor_module._new_discovery_stats()
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: {},
+        stats=stats,
+        walk_dir_filter=_build_walk_dir_filter(config),
+        scan_mode="archive",
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert list(grouped.keys()) == [str(supported_case.parent.resolve())]
+    assert list(grouped.values()) == [["100.1-1"]]
+
+
+def test_discover_case_executions_skips_unsupported_layout_when_year_filtered(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    unsupported_case = (
+        archive_root
+        / "OLDER_ARCHIVES"
+        / "performance_archive_cori_edison_acme_2019_08_13"
+        / "user_a"
+        / "case_a"
+        / "100.1-1"
+    )
+    supported_case = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "user_b"
+        / "case_b"
+        / "200.1-1"
+    )
+    unsupported_case.mkdir(parents=True)
+    supported_case.mkdir(parents=True)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -753,18 +860,20 @@ def test_discover_case_executions_rejects_year_filter_for_unsupported_layout(
         archive_year_start=2025,
         archive_year_end=2025,
     )
+    stats = ingestor_module._new_discovery_stats()
 
-    with pytest.raises(
-        ValueError,
-        match="ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths",
-    ):
-        _discover_case_executions(
-            archive_root,
-            metadata_locator=lambda *_: {},
-            case_path_filter=_build_case_path_filter(config),
-            walk_dir_filter=_build_walk_dir_filter(config),
-            scan_mode="archive",
-        )
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: {},
+        stats=stats,
+        case_path_filter=_build_case_path_filter(config),
+        walk_dir_filter=_build_walk_dir_filter(config),
+        scan_mode="archive",
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert list(grouped.keys()) == [str(supported_case.parent.resolve())]
+    assert list(grouped.values()) == [["200.1-1"]]
 
 
 def test_build_ingestion_candidates_handles_non_dict_case_state_and_limit() -> None:
@@ -1369,6 +1478,52 @@ def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
     assert exit_code == 1
     assert post_calls == 0
     assert any(event == "archive_root_missing" for event, _ in logged_events)
+
+
+def test_run_ingestor_unreadable_archive_root_returns_config_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+    original_iterdir = Path.iterdir
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    def fake_iterdir(self: Path):
+        if self.resolve() == archive_root.resolve():
+            raise PermissionError("permission denied")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start=2025,
+        archive_year_end=2025,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "configuration_error" for event, _ in logged_events)
+    assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
 def test_dry_run_candidate_suppression_event_emitted_once(
