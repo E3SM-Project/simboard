@@ -13,9 +13,9 @@ fi
 
 : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set before running this script.}"
 
-export SIMBOARD_API_BASE_URL="${SIMBOARD_API_BASE_URL:-http://backend:8000}"
+export SIMBOARD_API_BASE_URL="${SIMBOARD_API_BASE_URL:-https://simboard-dev-api.e3sm.org}"
 export MACHINE_NAME="${MACHINE_NAME:-perlmutter}"
-export SCAN_MODE="${SCAN_MODE:-archive}"
+export SCAN_MODE="${SCAN_MODE:-staging}"
 export DRY_RUN="${DRY_RUN:-true}"
 export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/performance_archive}"
 export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/OLD_PERF}"
