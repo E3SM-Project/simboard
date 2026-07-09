@@ -12,44 +12,9 @@ Each run executes four phases:
   3. Submit one ingestion request per changed case with retry/backoff.
   4. Rely on DB writes from successful ingestions for future idempotent runs.
 
-Runner terms used heavily in this module and its logs:
-
-    - submission-qualified case / ``submission_qualified_cases``:
-        case count with at least one newly discovered complete execution ID before
-        applying any ``MAX_CASES_PER_RUN`` cap
-    - selected submission case / ``selected_submission_cases``:
-        submission-qualified case count selected for the current run after applying
-        any ``MAX_CASES_PER_RUN`` cap
-    - ``execution_dirs_scanned``:
-        execution directory count whose names matched the execution pattern and
-        were sent through discovery validation
-    - ``execution_dirs_accepted``:
-        scanned execution directory count that passed validation and were retained
-        as valid discovered executions
-    - ``skipped_incomplete``:
-        execution directory count rejected during discovery because required
-        metadata files or fields were missing or incomplete
-    - ``skipped_invalid``:
-        execution directory count rejected during discovery because metadata was
-        invalid or the directory could not be read
-    - ``accepted_execution_ids``:
-        newly discovered valid execution ID count selected for the current run
-    - ``rejected_existing_execution_ids``:
-        valid discovered execution ID count already present in stored processed
-        state
-    - ``rejected_incomplete_execution_ids``:
-        execution ID count rejected during discovery as incomplete because required
-        metadata files or fields were missing or incomplete
-    - ``rejected_invalid_execution_ids``:
-        execution ID count rejected during discovery as invalid or unreadable
-        because metadata was invalid or the directory could not be read
-    - deferred execution / ``deferred_execution_ids``:
-        newly discovered valid execution ID count not selected for the current run
-        because per-run case capping stopped earlier selection
-    - ``processed_execution_ids``:
-        execution ID count already recorded in stored processed state for one case
-
-Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
+Structured log metric definitions for this runner live in
+``docs/architecture/metadata-ingestion.md``. This module emits those field names
+verbatim in discovery, selection, and run-summary events.
 """
 
 from __future__ import annotations
@@ -81,59 +46,33 @@ from app.features.ingestion.parsers.parser import (
 logger = _setup_custom_logger(__name__)
 logger.setLevel(logging.INFO)
 
-# The execution directory name pattern (example: 55387330.260706-012656)
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
-# Transient HTTP status codes that may be retried with backoff.
 TRANSIENT_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-# The state version number used to detect incompatible state changes. Increment
-# this number whenever the state format changes in a way that is not backward
-# compatible.
+# Increment only for backward-incompatible persisted state changes.
 STATE_VERSION = 1
-# Default base URL for SimBoard API when SIMBOARD_API_BASE_URL is not set.
-# This is the internal service name used in the NERSC Spin Kubernetes cluster
-# for the backend service.
+# NERSC Spin backend service DNS name.
 DEFAULT_API_BASE_URL = "http://backend:8000"
-# Default root path of the mounted performance staging directory when
-# PERF_ARCHIVE_ROOT is not set.
 DEFAULT_PERF_ARCHIVE_ROOT = "/performance_archive"
-# Default root path of the mounted long-term archive when
-# OLD_PERF_ARCHIVE_ROOT is not set.
 DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
-# Default machine name used for state persistence when MACHINE_NAME is not set.
 DEFAULT_MACHINE_NAME = "perlmutter"
-# Default maximum number of attempts for each ingestion request.
 DEFAULT_MAX_ATTEMPTS = 3
-# Default timeout in seconds for each ingestion request. This is a conservative
-# value that should be sufficient for most ingestion requests, but can be
-# overridden by the REQUEST_TIMEOUT_SECONDS environment variable.
 DEFAULT_TIMEOUT_SECONDS = 60
-# In dry-run mode, limit the number of candidate logs emitted to avoid excessive
-# log volume.
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
-# Log archive scan progress every N directories visited to avoid excessive log
-# volume.
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 
-# Supported scan modes and archive-layout helpers used for archive backfills.
-# "staging" mode scans PERF_ARCHIVE_ROOT and "archive" mode scans OLD_PERF_ARCHIVE_ROOT.
+# Archive scan-mode and layout helpers.
 ARCHIVE_SCAN_MODES = {"staging", "archive"}
-# The archive year sub-directory name pattern (example: 2023-06)
 ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
-# Archive filter env vars accept either YYYY or YYYY-MM values.
 ARCHIVE_FILTER_VALUE_PATTERN = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2}))?$")
-# The archive snapshot directory name pattern (example: performance_archive_2023_06_15_12_30_00)
 ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
     r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
 )
-# Archived Slurm state directory names used by snapshot layouts that bucket
-# case trees by status. When these buckets are present, ingestion should only
-# scan COMPLETED cases and ignore the rest.
+# When snapshot layouts use status buckets, scan only COMPLETED cases.
 ARCHIVE_COMPLETED_STATUS_DIR_NAME = "COMPLETED"
 KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
     {Path(DEFAULT_PERF_ARCHIVE_ROOT).name, Path(DEFAULT_OLD_PERF_ARCHIVE_ROOT).name}
 )
-# The order for event fields in structured logs. This is used to ensure
-# consistent field ordering in structured logs for easier parsing and analysis.
+# Preserve stable field ordering in structured logs.
 EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "run_started": ("mode", "scan_mode", "archive_root"),
     "run_finished": ("mode", "scan_mode", "exit_code", "duration_seconds"),
