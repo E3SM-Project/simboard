@@ -182,7 +182,7 @@ Both automated scripts follow the same submission-state sequence:
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
 2. Read known execution IDs from `/api/v1/ingestions/state`.
 3. Compare discovered complete execution IDs with database-backed state.
-4. Submit each case that contains at least one newly discovered execution ID, along with the full discovered `processed_execution_ids` set.
+4. Submit each case that contains at least one newly discovered execution ID, sending those newly discovered execution IDs as the `processed_execution_ids` payload.
 5. SimBoard stores the submitted known execution IDs on ingestion audit rows.
 6. Future runs reconstruct the known execution IDs from PostgreSQL.
 

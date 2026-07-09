@@ -485,7 +485,7 @@ def _build_config_from_env() -> IngestorConfig:
     archive_root = configured_archive_root if scan_mode == "archive" else staging_root
 
     machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
-    dry_run = _parse_bool(os.getenv("DRY_RUN"), default=False)
+    dry_run = _parse_bool(os.getenv("DRY_RUN"), default=True)
     max_cases_per_run = _parse_optional_int(os.getenv("MAX_CASES_PER_RUN"))
 
     if max_cases_per_run is not None and max_cases_per_run <= 0:

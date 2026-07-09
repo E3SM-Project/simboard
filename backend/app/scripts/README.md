@@ -134,7 +134,7 @@ Configuration surface (via env vars):
 - `DRY_RUN` (default `true`)
 - `MAX_CASES_PER_RUN` (optional, default not set)
 - `MAX_ATTEMPTS` (optional, default not set)
-- `REQUEST_TIMEOUT_SECONDS` (optional, default 3)
+- `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
 - `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 - `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 
