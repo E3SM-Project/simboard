@@ -145,6 +145,7 @@ Helper wrapper:
 
 Archive notes:
 
+- Archive mode traverses only top-level `YYYY-MM` directories under `OLD_PERF_ARCHIVE_ROOT`. Other top-level directories are ignored.
 - Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
@@ -188,3 +189,6 @@ Configuration surface (via env vars):
 - `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
 - `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 - `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+
+Archive mode uses same `YYYY-MM` top-level bucket requirement described above
+for path-based ingestion.

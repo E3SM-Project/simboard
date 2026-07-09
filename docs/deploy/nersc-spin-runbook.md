@@ -341,6 +341,10 @@ Key table for `nersc-archive-ingestor-env`:
 | `ARCHIVE_YEAR_START`    | No, scoped backfills only | `2025` or `2025-01`                                        | `nersc-archive-ingestor` |
 | `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
 
+`OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
+`YYYY-MM` buckets. `nersc-archive-ingestor` ignores other top-level directories
+under that mount.
+
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
    - Configure secret-backed environment variables from `nersc-staging-ingestor-env`.

@@ -93,16 +93,19 @@ Example NERSC path:
 
 Long-term filesystem location managed by PACE, referred to as `OLD_PERF_ARCHIVE_DIR`. PACE moves staging output into this directory once per day.
 
-Structure:
+Supported structure under configured archive root:
 
 ```bash
-year-month/
+YYYY-MM/
   performance_archive_<timestamp>/
     [STATUS_BUCKET/] # Optional, for example COMPLETED/ on machines with status bucketing such as NERSC and ALCF.
       user/
         case/
           execution/
 ```
+
+Archive runners currently traverse only top-level `YYYY-MM` directories under
+`OLD_PERF_ARCHIVE_DIR`. Other top-level directories are ignored.
 
 Example NERSC path for `COMPLETED` status cases:
 
@@ -258,9 +261,10 @@ They also support these tuning options:
 - `ARCHIVE_YEAR_START`
 - `ARCHIVE_YEAR_END`
 
-`SCAN_MODE` selects whether a runner scans staging or archive roots. Year-range
-filters apply only to archive mode and are intended for targeted backfills, not
-for normal staging collection.
+`SCAN_MODE` selects whether a runner scans staging or archive roots. In archive
+mode, runners traverse only top-level `YYYY-MM` buckets under the configured
+archive root. Year-range filters apply only to archive mode and are intended
+for targeted backfills, not for normal staging collection.
 
 `MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
 operation when runners should submit every submission-qualified case they find.
