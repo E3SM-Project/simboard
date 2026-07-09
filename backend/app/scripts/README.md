@@ -131,12 +131,12 @@ Configuration surface (via env vars):
 - `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
-- `DRY_RUN`
-- `MAX_CASES_PER_RUN`
-- `MAX_ATTEMPTS`
-- `REQUEST_TIMEOUT_SECONDS`
-- `ARCHIVE_YEAR_START` (optional, archive mode only)
-- `ARCHIVE_YEAR_END` (optional, archive mode only)
+- `DRY_RUN` (default `true`)
+- `MAX_CASES_PER_RUN` (optional, default not set)
+- `MAX_ATTEMPTS` (optional, default not set)
+- `REQUEST_TIMEOUT_SECONDS` (optional, default 3)
+- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 
 Helper wrapper:
 
@@ -148,6 +148,7 @@ Archive notes:
 - Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
+- `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
 
 ## HPC Upload Archive Ingestor
 
@@ -181,9 +182,9 @@ Configuration surface (via env vars):
 - `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
-- `DRY_RUN`
-- `MAX_CASES_PER_RUN`
-- `MAX_ATTEMPTS`
-- `REQUEST_TIMEOUT_SECONDS`
-- `ARCHIVE_YEAR_START` (optional, archive mode only)
-- `ARCHIVE_YEAR_END` (optional, archive mode only)
+- `DRY_RUN` (default `true`)
+- `MAX_CASES_PER_RUN` (optional, default not set)
+- `MAX_ATTEMPTS` (optional, default not set)
+- `REQUEST_TIMEOUT_SECONDS` (optional, default 3)
+- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)

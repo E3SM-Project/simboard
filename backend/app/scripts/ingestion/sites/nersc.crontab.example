@@ -22,5 +22,5 @@ OLD_PERF_ARCHIVE_ROOT=/global/cfs/projectdirs/e3sm/OLD_PERF
 0 * * * * cd ${REPO_DIR} && SCAN_MODE=staging ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.staging.log 2>&1
 
 # Archive scan: run daily at 03:15 UTC. Add ARCHIVE_YEAR_START / ARCHIVE_YEAR_END
-# here only when you want a scoped archive backfill.
-15 3 * * * cd ${REPO_DIR} && SCAN_MODE=archive ARCHIVE_YEAR_START=2025 ARCHIVE_YEAR_END=2026 ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.log 2>&1
+# here only when you want a scoped archive backfill. Values may use YYYY or YYYY-MM.
+15 3 * * * cd ${REPO_DIR} && SCAN_MODE=archive ARCHIVE_YEAR_START=2025-01 ARCHIVE_YEAR_END=2025-03 ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.log 2>&1

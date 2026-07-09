@@ -663,16 +663,16 @@ def test_discover_case_executions_filters_archive_year_range(tmp_path: Path) -> 
     archive_root = tmp_path / "old_perf"
     included_case = (
         archive_root
-        / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / "2025-02"
+        / "performance_archive_2025_02_01_00_00_00"
         / "user_a"
         / "case_a"
         / "100.1-1"
     )
     excluded_case = (
         archive_root
-        / "2024-12"
-        / "performance_archive_2024_12_31_00_00_00"
+        / "2025-01"
+        / "performance_archive_2025_01_31_00_00_00"
         / "user_b"
         / "case_b"
         / "200.1-1"
@@ -690,8 +690,8 @@ def test_discover_case_executions_filters_archive_year_range(tmp_path: Path) -> 
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-02",
+        archive_year_end="2025-02",
     )
     stats = ingestor_module._new_discovery_stats()
 
@@ -742,8 +742,8 @@ def test_discover_case_executions_rejects_archive_year_range_under_non_year_root
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-01",
+        archive_year_end="2025-01",
     )
 
     with pytest.raises(
@@ -779,8 +779,8 @@ def test_discover_case_executions_ignores_root_symlink_for_year_filter(
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-01",
+        archive_year_end="2025-01",
     )
     stats = ingestor_module._new_discovery_stats()
 
@@ -944,8 +944,8 @@ def test_discover_case_executions_skips_unsupported_layout_when_year_filtered(
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-01",
+        archive_year_end="2025-01",
     )
     stats = ingestor_module._new_discovery_stats()
 
@@ -1541,8 +1541,8 @@ def test_run_ingestor_returns_config_error_for_unsupported_archive_year_layout(
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-01",
+        archive_year_end="2025-01",
     )
 
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
@@ -1663,8 +1663,8 @@ def test_run_ingestor_unreadable_archive_root_returns_config_error(
         max_attempts=1,
         request_timeout_seconds=30,
         scan_mode="archive",
-        archive_year_start=2025,
-        archive_year_end=2025,
+        archive_year_start="2025-01",
+        archive_year_end="2025-01",
     )
 
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
@@ -1885,8 +1885,25 @@ def test_build_config_from_env_parses_archive_mode_and_year_range(
 
     assert config.scan_mode == "archive"
     assert config.archive_root == (tmp_path / "old").resolve()
-    assert config.archive_year_start == 2023
-    assert config.archive_year_end == 2025
+    assert config.archive_year_start == "2023-01"
+    assert config.archive_year_end == "2025-12"
+
+
+def test_build_config_from_env_parses_archive_mode_and_month_range(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("SCAN_MODE", "archive")
+    monkeypatch.setenv("OLD_PERF_ARCHIVE_ROOT", str(tmp_path / "old"))
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2023-06")
+    monkeypatch.setenv("ARCHIVE_YEAR_END", "2025-02")
+
+    config = _build_config_from_env()
+
+    assert config.scan_mode == "archive"
+    assert config.archive_root == (tmp_path / "old").resolve()
+    assert config.archive_year_start == "2023-06"
+    assert config.archive_year_end == "2025-02"
 
 
 @pytest.mark.parametrize(
@@ -1924,13 +1941,41 @@ def test_build_config_from_env_rejects_archive_year_range_inverted(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SCAN_MODE", "archive")
-    monkeypatch.setenv("ARCHIVE_YEAR_START", "2026")
-    monkeypatch.setenv("ARCHIVE_YEAR_END", "2025")
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2026-02")
+    monkeypatch.setenv("ARCHIVE_YEAR_END", "2025-12")
 
     with pytest.raises(
         ValueError,
         match="ARCHIVE_YEAR_START must be less than or equal to ARCHIVE_YEAR_END",
     ):
+        _build_config_from_env()
+
+
+@pytest.mark.parametrize(
+    ("env_name", "env_value", "message"),
+    [
+        (
+            "ARCHIVE_YEAR_START",
+            "2025-13",
+            "ARCHIVE_YEAR_START month must be between 01 and 12",
+        ),
+        (
+            "ARCHIVE_YEAR_END",
+            "2025-6",
+            "ARCHIVE_YEAR_END must use YYYY or YYYY-MM format",
+        ),
+    ],
+)
+def test_build_config_from_env_rejects_invalid_archive_bound_formats(
+    monkeypatch,
+    env_name: str,
+    env_value: str,
+    message: str,
+) -> None:
+    monkeypatch.setenv("SCAN_MODE", "archive")
+    monkeypatch.setenv(env_name, env_value)
+
+    with pytest.raises(ValueError, match=message):
         _build_config_from_env()
 
 

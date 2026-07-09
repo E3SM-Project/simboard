@@ -118,6 +118,10 @@ DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 ARCHIVE_SCAN_MODES = {"staging", "archive"}
 # The archive year sub-directory name pattern (example: 2023-06)
 ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
+# Archive filter env vars accept either YYYY or YYYY-MM values.
+ARCHIVE_FILTER_VALUE_PATTERN = re.compile(
+    r"^(?P<year>\d{4})(?:-(?P<month>\d{2}))?$"
+)
 # The archive snapshot directory name pattern (example: performance_archive_2023_06_15_12_30_00)
 ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
     r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
@@ -310,10 +314,10 @@ class IngestorConfig:
     request_timeout_seconds: int
     # Whether this run scans the staging or archive root.
     scan_mode: Literal["staging", "archive"] = "staging"
-    # Optional archive-year lower bound for archive backfills.
-    archive_year_start: int | None = None
-    # Optional archive-year upper bound for archive backfills.
-    archive_year_end: int | None = None
+    # Optional archive lower bound normalized to a YYYY-MM archive bucket.
+    archive_year_start: str | None = None
+    # Optional archive upper bound normalized to a YYYY-MM archive bucket.
+    archive_year_end: str | None = None
 
 
 class IngestionRequestError(Exception):
@@ -456,7 +460,7 @@ def _build_config_from_env() -> IngestorConfig:
     Raises
     ------
     ValueError
-        Raised when numeric options are invalid.
+        Raised when numeric options or archive range bounds are invalid.
     """
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
@@ -490,8 +494,16 @@ def _build_config_from_env() -> IngestorConfig:
     if timeout_seconds <= 0:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
-    archive_year_start = _parse_optional_int(os.getenv("ARCHIVE_YEAR_START"))
-    archive_year_end = _parse_optional_int(os.getenv("ARCHIVE_YEAR_END"))
+    archive_year_start = _parse_optional_archive_bound(
+        os.getenv("ARCHIVE_YEAR_START"),
+        env_name="ARCHIVE_YEAR_START",
+        is_end_bound=False,
+    )
+    archive_year_end = _parse_optional_archive_bound(
+        os.getenv("ARCHIVE_YEAR_END"),
+        env_name="ARCHIVE_YEAR_END",
+        is_end_bound=True,
+    )
 
     if scan_mode != "archive" and (
         archive_year_start is not None or archive_year_end is not None
@@ -569,6 +581,36 @@ def _parse_optional_int(value: str | None) -> int | None:
 
     parsed = int(value)
     return parsed
+
+
+def _parse_optional_archive_bound(
+    value: str | None,
+    *,
+    env_name: str,
+    is_end_bound: bool,
+) -> str | None:
+    """Parse an optional archive range bound into normalized YYYY-MM format."""
+    if value is None:
+        return None
+
+    normalized = value.strip()
+    if normalized == "":
+        return None
+
+    match = ARCHIVE_FILTER_VALUE_PATTERN.fullmatch(normalized)
+    if match is None:
+        raise ValueError(f"{env_name} must use YYYY or YYYY-MM format")
+
+    year = match.group("year")
+    month = match.group("month")
+    if month is None:
+        return f"{year}-12" if is_end_bound else f"{year}-01"
+
+    month_value = int(month)
+    if month_value < 1 or month_value > 12:
+        raise ValueError(f"{env_name} month must be between 01 and 12")
+
+    return f"{year}-{month}"
 
 
 def _run_ingestor(
@@ -1273,11 +1315,11 @@ def _build_case_path_filter(
     ):
         return None
 
-    return lambda case_path: _archive_case_path_matches_year_range(
+    return lambda case_path: _archive_case_path_matches_range(
         case_path,
         archive_root=config.archive_root,
-        year_start=config.archive_year_start,
-        year_end=config.archive_year_end,
+        archive_start=config.archive_year_start,
+        archive_end=config.archive_year_end,
     )
 
 
@@ -1305,14 +1347,16 @@ def _build_walk_dir_filter(
                     f"Unable to read archive root {archive_root}: "
                     f"{exc.__class__.__name__}: {exc}"
                 ) from exc
-            year_dirnames = [
-                dirname for dirname in root_dirnames if _archive_dir_year(dirname) is not None
+            archive_dirnames = [
+                dirname
+                for dirname in root_dirnames
+                if _archive_dir_bucket(dirname) is not None
             ]
 
             if (
                 (config.archive_year_start is not None or config.archive_year_end is not None)
                 and root_dirnames
-                and not year_dirnames
+                and not archive_dirnames
             ):
                 raise UnsupportedArchiveLayoutError(
                     "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
@@ -1320,15 +1364,15 @@ def _build_walk_dir_filter(
                 )
 
             if config.archive_year_start is None and config.archive_year_end is None:
-                selected_dirnames = year_dirnames
+                selected_dirnames = archive_dirnames
             else:
                 selected_dirnames = [
                     dirname
-                    for dirname in year_dirnames
-                    if _archive_dir_year_in_range(
+                    for dirname in archive_dirnames
+                    if _archive_dir_in_range(
                         dirname,
-                        year_start=config.archive_year_start,
-                        year_end=config.archive_year_end,
+                        archive_start=config.archive_year_start,
+                        archive_end=config.archive_year_end,
                     )
                 ]
             dirnames[:] = [dirname for dirname in dirnames if dirname in selected_dirnames]
@@ -1347,16 +1391,16 @@ def _build_walk_dir_filter(
         except ValueError:
             return
 
-        if _archive_parts_year(relative_parts) is not None:
+        if _archive_parts_bucket(relative_parts) is not None:
             return
 
         dirnames[:] = [
             dirname
             for dirname in dirnames
-            if _archive_dir_year_in_range(
+            if _archive_dir_in_range(
                 dirname,
-                year_start=config.archive_year_start,
-                year_end=config.archive_year_end,
+                archive_start=config.archive_year_start,
+                archive_end=config.archive_year_end,
             )
         ]
 
@@ -1381,15 +1425,15 @@ def _snapshot_uses_status_buckets(dirnames: list[str]) -> bool:
     return any(dirname != ARCHIVE_COMPLETED_STATUS_DIR_NAME for dirname in dirnames)
 
 
-def _archive_case_path_matches_year_range(
+def _archive_case_path_matches_range(
     case_path: Path,
     *,
     archive_root: Path,
-    year_start: int | None,
-    year_end: int | None,
+    archive_start: str | None,
+    archive_end: str | None,
 ) -> bool:
-    """Return whether an archive case path belongs to selected years."""
-    if year_start is None and year_end is None:
+    """Return whether an archive case path belongs to selected archive buckets."""
+    if archive_start is None and archive_end is None:
         return True
 
     try:
@@ -1397,73 +1441,58 @@ def _archive_case_path_matches_year_range(
     except ValueError:
         return False
 
-    year = _archive_parts_year(relative_parts)
-    if year is None:
+    archive_bucket = _archive_parts_bucket(relative_parts)
+    if archive_bucket is None:
         raise UnsupportedArchiveLayoutError(
             "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
             f"include a YYYY-MM directory under {archive_root}: {case_path}"
         )
 
-    if year_start is not None and year < year_start:
+    if archive_start is not None and archive_bucket < archive_start:
         return False
-    if year_end is not None and year > year_end:
-        return False
-
-    return True
-
-
-def _archive_parts_year_in_range(
-    relative_parts: tuple[str, ...],
-    *,
-    year_start: int | None,
-    year_end: int | None,
-) -> bool:
-    """Return whether any archive-relative path component falls within year bounds."""
-    year = _archive_parts_year(relative_parts)
-    if year is None:
-        return False
-
-    if year_start is not None and year < year_start:
-        return False
-    if year_end is not None and year > year_end:
+    if archive_end is not None and archive_bucket > archive_end:
         return False
 
     return True
 
 
-def _archive_parts_year(relative_parts: tuple[str, ...]) -> int | None:
-    """Return year from first YYYY-MM archive path component."""
+def _archive_parts_bucket(relative_parts: tuple[str, ...]) -> str | None:
+    """Return first normalized YYYY-MM archive bucket from relative path parts."""
     for part in relative_parts:
-        year = _archive_dir_year(part)
-        if year is not None:
-            return year
+        archive_bucket = _archive_dir_bucket(part)
+        if archive_bucket is not None:
+            return archive_bucket
 
     return None
 
 
-def _archive_dir_year(dirname: str) -> int | None:
-    """Return year for a YYYY-MM archive bucket name."""
+def _archive_dir_bucket(dirname: str) -> str | None:
+    """Return normalized YYYY-MM archive bucket for a valid archive dirname."""
     match = ARCHIVE_YEAR_DIR_PATTERN.fullmatch(dirname)
     if match is None:
         return None
 
-    return int(match.group("year"))
+    month = int(match.group("month"))
+    if month < 1 or month > 12:
+        return None
+
+    return f"{match.group('year')}-{match.group('month')}"
 
 
-def _archive_dir_year_in_range(
+def _archive_dir_in_range(
     dirname: str,
     *,
-    year_start: int | None,
-    year_end: int | None,
+    archive_start: str | None,
+    archive_end: str | None,
 ) -> bool:
-    """Return whether a top-level archive dirname falls within year bounds."""
-    year = _archive_dir_year(dirname)
-    if year is None:
+    """Return whether a top-level archive dirname falls within archive bounds."""
+    archive_bucket = _archive_dir_bucket(dirname)
+    if archive_bucket is None:
         return False
 
-    if year_start is not None and year < year_start:
+    if archive_start is not None and archive_bucket < archive_start:
         return False
-    if year_end is not None and year > year_end:
+    if archive_end is not None and archive_bucket > archive_end:
         return False
 
     return True
@@ -1547,7 +1576,7 @@ def _path_parts_without_anchor(path: Path) -> tuple[str, ...]:
 def _archive_year_part_index(path_parts: tuple[str, ...]) -> int | None:
     """Return index of first YYYY-MM archive bucket in path parts."""
     for index, part in enumerate(path_parts):
-        if _archive_dir_year(part) is not None:
+        if _archive_dir_bucket(part) is not None:
             return index
 
     return None
