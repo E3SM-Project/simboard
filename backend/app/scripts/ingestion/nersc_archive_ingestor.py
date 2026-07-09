@@ -66,6 +66,7 @@ import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Literal, TypedDict, cast
 
@@ -119,9 +120,7 @@ ARCHIVE_SCAN_MODES = {"staging", "archive"}
 # The archive year sub-directory name pattern (example: 2023-06)
 ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
 # Archive filter env vars accept either YYYY or YYYY-MM values.
-ARCHIVE_FILTER_VALUE_PATTERN = re.compile(
-    r"^(?P<year>\d{4})(?:-(?P<month>\d{2}))?$"
-)
+ARCHIVE_FILTER_VALUE_PATTERN = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2}))?$")
 # The archive snapshot directory name pattern (example: performance_archive_2023_06_15_12_30_00)
 ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
     r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
@@ -273,6 +272,10 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
 }
 
 
+# Runtime Models and Errors
+# -------------------------
+
+
 @dataclass(frozen=True)
 class CaseScanResult:
     """Discovered execution IDs for one case directory."""
@@ -410,6 +413,10 @@ class CaseCollectionLogData:
     execution_count_total: int = 0
     valid_execution_ids: set[str] = field(default_factory=set)
     rejected_decisions: list[ExecutionCollectionDecision] = field(default_factory=list)
+
+
+# Entrypoint and Configuration
+# ----------------------------
 
 
 def main() -> int:
@@ -613,6 +620,10 @@ def _parse_optional_archive_bound(
     return f"{year}-{month}"
 
 
+# Runner Orchestration
+# --------------------
+
+
 def _run_ingestor(
     config: IngestorConfig,
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
@@ -747,6 +758,10 @@ def _build_state_endpoint_url(config: IngestorConfig) -> str:
     return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/state"
 
 
+# Archive Discovery
+# -----------------
+
+
 def _scan_archive(
     config: IngestorConfig,
     state: dict[str, Any],
@@ -779,9 +794,9 @@ def _scan_archive(
     """
     case_collection_data: dict[str, CaseCollectionLogData] = {}
     discovery_stats = _new_discovery_stats()
-    staging_root_basename = config.archive_root.name or Path(
-        DEFAULT_PERF_ARCHIVE_ROOT
-    ).name
+    staging_root_basename = (
+        config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
+    )
     case_path_filter = _build_case_path_filter(config)
     walk_dir_filter = _build_walk_dir_filter(config)
     grouped_executions = _discover_case_executions(
@@ -1271,6 +1286,10 @@ def _compact_structured_parser_errors(
     return metadata
 
 
+# Archive Path Filters and Layout
+# -------------------------------
+
+
 def _build_case_scan_results(
     grouped_executions: dict[str, list[str]],
 ) -> list[CaseScanResult]:
@@ -1330,81 +1349,160 @@ def _build_walk_dir_filter(
     if config.scan_mode != "archive":
         return None
 
-    archive_root = config.archive_root.resolve()
+    return partial(
+        _filter_archive_walk_dirnames,
+        archive_root=config.archive_root.resolve(),
+        archive_start=config.archive_year_start,
+        archive_end=config.archive_year_end,
+        archive_year_filter_enabled=_archive_year_filter_enabled(
+            config.archive_year_start,
+            config.archive_year_end,
+        ),
+    )
 
-    def _filter(dirpath: str, dirnames: list[str]) -> None:
-        current_path = Path(dirpath).resolve()
 
-        if current_path == archive_root:
-            try:
-                root_dirnames = [
-                    child.name
-                    for child in current_path.iterdir()
-                    if child.is_dir() and not child.is_symlink()
-                ]
-            except OSError as exc:
-                raise UnsupportedArchiveLayoutError(
-                    f"Unable to read archive root {archive_root}: "
-                    f"{exc.__class__.__name__}: {exc}"
-                ) from exc
-            archive_dirnames = [
-                dirname
-                for dirname in root_dirnames
-                if _archive_dir_bucket(dirname) is not None
-            ]
+def _filter_archive_walk_dirnames(
+    dirpath: str,
+    dirnames: list[str],
+    *,
+    archive_root: Path,
+    archive_start: str | None,
+    archive_end: str | None,
+    archive_year_filter_enabled: bool,
+) -> None:
+    """Prune walked directories for supported archive layouts and ranges."""
+    current_path = Path(dirpath).resolve()
 
-            if (
-                (config.archive_year_start is not None or config.archive_year_end is not None)
-                and root_dirnames
-                and not archive_dirnames
-            ):
-                raise UnsupportedArchiveLayoutError(
-                    "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
-                    f"include a YYYY-MM directory under {archive_root}"
-                )
+    if current_path == archive_root:
+        _prune_archive_root_dirnames(
+            dirnames,
+            archive_root=archive_root,
+            archive_start=archive_start,
+            archive_end=archive_end,
+        )
+        return
 
-            if config.archive_year_start is None and config.archive_year_end is None:
-                selected_dirnames = archive_dirnames
-            else:
-                selected_dirnames = [
-                    dirname
-                    for dirname in archive_dirnames
-                    if _archive_dir_in_range(
-                        dirname,
-                        archive_start=config.archive_year_start,
-                        archive_end=config.archive_year_end,
-                    )
-                ]
-            dirnames[:] = [dirname for dirname in dirnames if dirname in selected_dirnames]
-            return
+    if _is_archive_snapshot_dir(current_path.name):
+        _prune_archive_snapshot_dirnames(dirnames)
 
-        if _is_archive_snapshot_dir(current_path.name):
-            _prune_archive_snapshot_dirnames(dirnames)
+    if not archive_year_filter_enabled:
+        return
 
-        if config.archive_year_start is None and config.archive_year_end is None:
-            return
+    relative_parts = _archive_relative_parts(current_path, archive_root)
+    if relative_parts is None or _archive_parts_bucket(relative_parts) is not None:
+        return
 
-        try:
-            relative_parts = (
-                Path(dirpath).resolve().relative_to(config.archive_root.resolve()).parts
-            )
-        except ValueError:
-            return
+    _prune_dirnames_to_archive_range(
+        dirnames,
+        archive_start=archive_start,
+        archive_end=archive_end,
+    )
 
-        if _archive_parts_bucket(relative_parts) is not None:
-            return
 
-        dirnames[:] = [
+def _archive_year_filter_enabled(
+    archive_start: str | None,
+    archive_end: str | None,
+) -> bool:
+    """Return whether archive-year pruning is enabled."""
+    return archive_start is not None or archive_end is not None
+
+
+def _prune_archive_root_dirnames(
+    dirnames: list[str],
+    *,
+    archive_root: Path,
+    archive_start: str | None,
+    archive_end: str | None,
+) -> None:
+    """Restrict archive-root walk to supported archive year buckets."""
+    root_dirnames = _read_archive_root_dirnames(archive_root)
+    archive_dirnames = [
+        dirname for dirname in root_dirnames if _archive_dir_bucket(dirname) is not None
+    ]
+    _validate_archive_root_layout(
+        archive_root,
+        root_dirnames=root_dirnames,
+        archive_dirnames=archive_dirnames,
+        archive_start=archive_start,
+        archive_end=archive_end,
+    )
+
+    selected_dirnames = archive_dirnames
+    if _archive_year_filter_enabled(archive_start, archive_end):
+        selected_dirnames = [
             dirname
-            for dirname in dirnames
+            for dirname in archive_dirnames
             if _archive_dir_in_range(
                 dirname,
-                archive_start=config.archive_year_start,
-                archive_end=config.archive_year_end,
+                archive_start=archive_start,
+                archive_end=archive_end,
             )
         ]
 
-    return _filter
+    dirnames[:] = [dirname for dirname in dirnames if dirname in selected_dirnames]
+
+
+def _read_archive_root_dirnames(archive_root: Path) -> list[str]:
+    """Return non-symlink directory names directly under archive root."""
+    try:
+        return [
+            child.name
+            for child in archive_root.iterdir()
+            if child.is_dir() and not child.is_symlink()
+        ]
+    except OSError as exc:
+        raise UnsupportedArchiveLayoutError(
+            f"Unable to read archive root {archive_root}: "
+            f"{exc.__class__.__name__}: {exc}"
+        ) from exc
+
+
+def _validate_archive_root_layout(
+    archive_root: Path,
+    *,
+    root_dirnames: list[str],
+    archive_dirnames: list[str],
+    archive_start: str | None,
+    archive_end: str | None,
+) -> None:
+    """Validate that year-filtered archive walks start at YYYY-MM bucket root."""
+    if not _archive_year_filter_enabled(archive_start, archive_end):
+        return
+
+    if root_dirnames and not archive_dirnames:
+        raise UnsupportedArchiveLayoutError(
+            "ARCHIVE_YEAR_START and ARCHIVE_YEAR_END require archive paths to "
+            f"include a YYYY-MM directory under {archive_root}"
+        )
+
+
+def _archive_relative_parts(
+    current_path: Path,
+    archive_root: Path,
+) -> tuple[str, ...] | None:
+    """Return path parts relative to archive root when inside that root."""
+    try:
+        return current_path.relative_to(archive_root).parts
+    except ValueError:
+        return None
+
+
+def _prune_dirnames_to_archive_range(
+    dirnames: list[str],
+    *,
+    archive_start: str | None,
+    archive_end: str | None,
+) -> None:
+    """Keep only child dirs that fall within configured archive range."""
+    dirnames[:] = [
+        dirname
+        for dirname in dirnames
+        if _archive_dir_in_range(
+            dirname,
+            archive_start=archive_start,
+            archive_end=archive_end,
+        )
+    ]
 
 
 def _prune_archive_snapshot_dirnames(dirnames: list[str]) -> None:
@@ -1496,6 +1594,10 @@ def _archive_dir_in_range(
         return False
 
     return True
+
+
+# Case Identity and Candidate Selection
+# -------------------------------------
 
 
 def _case_identity_key(
@@ -1673,6 +1775,10 @@ def _build_ingestion_candidates(
             break
 
     return candidates
+
+
+# Run Completion and Summaries
+# ----------------------------
 
 
 def _handle_dry_run(
@@ -1993,6 +2099,10 @@ def _log_run_summary(
     )
 
 
+# HTTP Requests and Remote State
+# ------------------------------
+
+
 def _ingest_case_with_retries(
     candidate: IngestionCandidate,
     endpoint_url: str,
@@ -2255,6 +2365,10 @@ def _normalize_remote_state(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# State, Fingerprints, and Shared Helpers
+# ---------------------------------------
+
+
 def _is_transient_status(status_code: int | None) -> bool:
     """Return whether an HTTP status code is retriable.
 
@@ -2351,6 +2465,10 @@ def _case_state_processed_ids(case_state: dict[str, Any]) -> set[str]:
         return set()
 
     return {value for value in raw_ids if isinstance(value, str)}
+
+
+# General Utilities and Logging
+# -----------------------------
 
 
 def _new_discovery_stats() -> DiscoveryStats:
