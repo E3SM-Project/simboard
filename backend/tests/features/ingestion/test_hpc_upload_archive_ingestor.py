@@ -292,6 +292,67 @@ def test_run_ingestor_uploads_once_then_second_run_is_noop(
     assert str(case_dir.resolve()) in remote_state["cases"]
 
 
+def test_run_ingestor_archive_mode_dedupes_statusless_snapshot_overlap_by_case_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    first_case = (
+        archive_root / "2026-05" / "performance_archive_2026_05_22_08_01_32" / "case_a"
+    )
+    second_case = (
+        archive_root / "2026-06" / "performance_archive_2026_06_01_08_01_32" / "case_a"
+    )
+    (first_case / "100.1-1").mkdir(parents=True)
+    (second_case / "100.1-1").mkdir(parents=True)
+    (second_case / "101.1-1").mkdir(parents=True)
+
+    captured_processed_execution_ids: list[list[str]] = []
+
+    def fake_post_request(
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        *,
+        processed_execution_ids: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse:
+        captured_processed_execution_ids.append(processed_execution_ids)
+        return {
+            "status_code": 201,
+            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+        }
+
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert exit_code == 0
+    assert captured_processed_execution_ids == [["100.1-1"], ["101.1-1"]]
+
+
 def test_run_ingestor_dry_run_does_not_upload(
     tmp_path: Path,
     monkeypatch,
@@ -360,6 +421,7 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="staging",
     )
 
     exit_code = _run_ingestor(
@@ -378,6 +440,7 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
     assert scan_completed["rejected_incomplete_execution_ids"] == 0
     assert scan_completed["rejected_invalid_execution_ids"] == 0
     assert scan_completed["deferred_execution_ids"] == 0
+    assert scan_completed["scan_mode"] == "staging"
 
 
 def test_run_ingestor_missing_archive_root_returns_failure(
@@ -558,6 +621,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="staging",
     )
     logged_events: list[tuple[str, dict[str, object]]] = []
 
@@ -580,6 +644,8 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
     assert exit_code == 0
     assert logged_events[0][0] == "run_started"
     assert logged_events[-1][0] == "run_finished"
+    assert logged_events[0][1]["scan_mode"] == "staging"
+    assert logged_events[-1][1]["scan_mode"] == "staging"
 
 
 def test_module_main_guard_exits_via_system_exit_on_configuration_error(

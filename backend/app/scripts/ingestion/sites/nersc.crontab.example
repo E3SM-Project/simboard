@@ -1,0 +1,26 @@
+# Example crontab entries for the NERSC ingestion wrapper.
+# Install with something like:
+#   crontab backend/app/scripts/ingestion/sites/nersc.crontab.example
+#
+# Update REPO_DIR and SIMBOARD_API_TOKEN before use. For better secret hygiene,
+# source the token from a protected env file instead of storing it directly in
+# your crontab.
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+CRON_TZ=UTC
+
+REPO_DIR=/path/to/simboard
+SIMBOARD_API_TOKEN=replace-me
+SIMBOARD_API_BASE_URL=https://simboard-dev-api.e3sm.org
+MACHINE_NAME=perlmutter
+DRY_RUN=true
+PERF_ARCHIVE_ROOT=/global/cfs/projectdirs/e3sm/performance_archive
+OLD_PERF_ARCHIVE_ROOT=/global/cfs/projectdirs/e3sm/OLD_PERF
+
+# Staging scan: run every hour.
+0 * * * * cd ${REPO_DIR} && SCAN_MODE=staging ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.staging.log 2>&1
+
+# Archive scan: run daily at 03:15 UTC. Add ARCHIVE_YEAR_START / ARCHIVE_YEAR_END
+# here only when you want a scoped archive backfill. Values may use YYYY or YYYY-MM.
+15 3 * * * cd ${REPO_DIR} && SCAN_MODE=archive ARCHIVE_YEAR_START=2025-01 ARCHIVE_YEAR_END=2025-03 ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.log 2>&1

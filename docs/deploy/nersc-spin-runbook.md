@@ -15,7 +15,7 @@ No workload manifests are versioned under `deploy/spin/`.
 ## Prerequisites (Create First)
 
 Create these resources before configuring workloads in Rancher.
-Create `simboard-ingestion-env` later in **Workload 3 setup**, after generating the ingestion service-account token.
+Create `nersc-staging-ingestor-env` and `nersc-archive-ingestor-env` later in **Workload 3 setup**, after generating the ingestion service-account token.
 
 | Secret                 | Type                | Required | Example/Allowed Value       | Used By                                           |
 | ---------------------- | ------------------- | -------- | --------------------------- | ------------------------------------------------- |
@@ -169,7 +169,16 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | Rancher field                | Value                                        |
 | ---------------------------- | -------------------------------------------- |
 | Volume type                  | `Bind-Mount`                                 |
-| Volume name                  | `performance-archive`                        |
+| Volume name                  | `staging`                                    |
+| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive` |
+| The Path on the Node must be | `An existing directory`                      |
+
+`Storage`:
+
+| Rancher field                | Value                                        |
+| ---------------------------- | -------------------------------------------- |
+| Volume type                  | `Bind-Mount`                                 |
+| Volume name                  | `archive`                                    |
 | Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive` |
 | The Path on the Node must be | `An existing directory`                      |
 
@@ -205,9 +214,15 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 | Rancher field | Value                  |
 | ------------- | ---------------------- |
-| Volume        | `performance-archive`  |
+| Volume        | `staging`              |
 | Mount path    | `/performance_archive` |
 | Read only     | `true` (recommended)   |
+
+| Rancher field | Value                |
+| ------------- | -------------------- |
+| Volume        | `archive`            |
+| Mount path    | `/OLD_PERF`          |
+| Read only     | `true` (recommended) |
 
 #### 3. Container tab (`migrate`, init container)
 
@@ -232,11 +247,14 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 | privileged               | `false`                         |
 | capabilities             | add `DAC_OVERRIDE`, drop `ALL`  |
 
-### Workload 3: NERSC Archive Collection CronJob (`nersc-archive-ingestor`)
+### Workload 3: NERSC Archive Collection CronJobs
 
-Use a Rancher-managed `CronJob` to run incremental collection every 15 minutes.
+Use two Rancher-managed `CronJob` workloads:
 
-In this runbook, the CronJob performs site-side collection from `PERF_ARCHIVE_ROOT` and submits submission-qualified case directories to SimBoard, where backend ingestion occurs.
+- `nersc-staging-ingestor` for incremental staging collection every 15 minutes
+- `nersc-archive-ingestor` for archive collection daily at `0 12 * * *`
+
+In this runbook, both CronJobs perform site-side collection and submit submission-qualified case directories to SimBoard, where backend ingestion occurs. The staging job scans `PERF_ARCHIVE_ROOT`. The archive job scans `OLD_PERF_ARCHIVE_ROOT`.
 
 Prerequisites for this section:
 
@@ -260,7 +278,7 @@ Prerequisites for this section:
    - Use this admin account in step 2 for service-account provisioning.
 
 2. **Provision ingestion service-account token**
-   - Service accounts are required when non-interactive systems (for example, this CronJob) authenticate to the SimBoard API.
+   - Service accounts are required when non-interactive systems (for example, these CronJobs) authenticate to the SimBoard API.
    - Run this in the same backend pod shell opened in step 1 (no `kubectl` required).
    - Execute:
 
@@ -276,7 +294,7 @@ Prerequisites for this section:
    - Enter admin password when prompted.
    - Copy the generated token immediately; it is shown once.
    - Store and rotate the token per your org policy.
-   - Use this token as `SIMBOARD_API_TOKEN` in `simboard-ingestion-env` (step 3).
+   - Use this token as `SIMBOARD_API_TOKEN` in both ingestion secrets from step 3.
 
    Optional: quick token validation call
 
@@ -292,46 +310,71 @@ Prerequisites for this section:
          }'
    ```
 
-3. **Create/update secret `simboard-ingestion-env`**
+3. **Create/update secrets `nersc-staging-ingestor-env` and `nersc-archive-ingestor-env`**
    - In Rancher, open target namespace -> **Storage** -> **Secrets** -> **Create**.
-   - Name: `simboard-ingestion-env`
+   - Create one secret named `nersc-staging-ingestor-env`.
+   - Create a second secret named `nersc-archive-ingestor-env`.
    - Secret type: `Opaque`
-   - Populate keys from the table below.
+   - Populate them as follows.
 
-Key table for step 3 (`simboard-ingestion-env`):
+Key table for `nersc-staging-ingestor-env`:
 
 | Key                     | Required | Example/Allowed Value                                      | Used By                  |
 | ----------------------- | -------- | ---------------------------------------------------------- | ------------------------ |
-| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 2) | `nersc-archive-ingestor` |
-| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-archive-ingestor` |
-| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-archive-ingestor` |
-| `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-archive-ingestor` |
-| `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-archive-ingestor` |
+| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 2) | `nersc-staging-ingestor` |
+| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-staging-ingestor` |
+| `SCAN_MODE`             | Yes      | `staging`                                                  | `nersc-staging-ingestor` |
+| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-staging-ingestor` |
+| `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-staging-ingestor` |
+| `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-staging-ingestor` |
 
-4. **Create/update CronJob `nersc-archive-ingestor`**
-   - Use the values in the **Configuration Reference** section below.
-   - Configure secret-backed environment variables from `simboard-ingestion-env`.
-   - Configure only the performance-archive bind mount shown in the tables below.
+Key table for `nersc-archive-ingestor-env`:
 
-5. **Validate once with dry run**
-   - Set `DRY_RUN=true` in `simboard-ingestion-env`.
-   - Trigger a one-off job from the CronJob.
+| Key                     | Required                  | Example/Allowed Value                                      | Used By                  |
+| ----------------------- | ------------------------- | ---------------------------------------------------------- | ------------------------ |
+| `SIMBOARD_API_TOKEN`    | Yes                       | service-account bearer token (from Setup Procedure step 2) | `nersc-archive-ingestor` |
+| `SIMBOARD_API_BASE_URL` | Yes                       | `http://backend:8000`                                      | `nersc-archive-ingestor` |
+| `SCAN_MODE`             | Yes                       | `archive`                                                  | `nersc-archive-ingestor` |
+| `OLD_PERF_ARCHIVE_ROOT` | Yes                       | `/OLD_PERF`                                                | `nersc-archive-ingestor` |
+| `MACHINE_NAME`          | Yes                       | `perlmutter`                                               | `nersc-archive-ingestor` |
+| `DRY_RUN`               | No                        | `true` or `false`                                          | `nersc-archive-ingestor` |
+| `ARCHIVE_YEAR_START`    | No, scoped backfills only | `2025` or `2025-01`                                        | `nersc-archive-ingestor` |
+| `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
+
+`OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
+`YYYY-MM` buckets. `nersc-archive-ingestor` ignores other top-level directories
+under that mount.
+
+4. **Create/update CronJob `nersc-staging-ingestor`**
+   - Use the **Staging CronJob** section below.
+   - Configure secret-backed environment variables from `nersc-staging-ingestor-env`.
+   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/nersc.sh`; that wrapper is for host-side NERSC cron usage and defaults to host filesystem paths and API values that do not match this Spin workload.
+
+5. **Create/update CronJob `nersc-archive-ingestor`**
+   - Use the **Archive CronJob** section below.
+   - Configure secret-backed environment variables from `nersc-archive-ingestor-env`.
+   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/nersc.sh`; that wrapper is for host-side NERSC cron usage and defaults to host filesystem paths and API values that do not match this Spin workload.
+
+6. **Validate both jobs once with dry run**
+   - Set `DRY_RUN=true` in both ingestion secrets.
+   - Trigger a one-off job from each CronJob.
    - Confirm logs include `scan_completed` and submission-qualified case discovery during collection.
-   - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
+   - Remove `DRY_RUN` (or set `DRY_RUN=false`) in each secret after validation.
 
-6. **Verify steady-state behavior**
-   - Confirm the CronJob runs every 15 minutes.
+7. **Verify steady-state behavior**
+   - Confirm `nersc-staging-ingestor` runs every 15 minutes.
+   - Confirm `nersc-archive-ingestor` runs daily at `0 12 * * *`.
    - Confirm unchanged cases are not re-ingested.
-   - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
+   - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events for both jobs.
 
-#### Configuration Reference
+#### Staging CronJob (`nersc-staging-ingestor`)
 
 `Top-level configuration`:
 
 | Rancher field | Value                    |
 | ------------- | ------------------------ |
 | Namespace     | `simboard`               |
-| Name          | `nersc-archive-ingestor` |
+| Name          | `nersc-staging-ingestor` |
 | Schedule      | `*/15 * * * *`           |
 
 ##### 1. CronJob tab
@@ -363,23 +406,23 @@ Key table for step 3 (`simboard-ingestion-env`):
 | Rancher field                | Value                                        |
 | ---------------------------- | -------------------------------------------- |
 | Volume type                  | `Bind-Mount`                                 |
-| Volume name                  | `performance-archive`                        |
+| Volume name                  | `staging`                                    |
 | Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive` |
 | The Path on the Node must be | `An existing directory`                      |
 
-##### 3. Container tab (`nersc-archive-ingestor`)
+##### 3. Container tab
 
 `General`:
 
 | Rancher field         | Value                                                  |
 | --------------------- | ------------------------------------------------------ |
-| Container Name        | `nersc-archive-ingestor`                               |
+| Container Name        | `nersc-staging-ingestor`                               |
 | Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
 | Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Image pull secret     | `registry-nersc`                                       |
 | Command               | `python`                                               |
 | Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor`      |
-| Environment Variables | Type: Secret, Secret: `simboard-ingestion-env`         |
+| Environment Variables | Type: Secret, Secret: `nersc-staging-ingestor-env`     |
 
 `Security Context`:
 
@@ -394,13 +437,87 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 | Rancher field      | Value                  |
 | ------------------ | ---------------------- |
-| Archive volume     | `performance-archive`  |
+| Archive volume     | `staging`              |
 | Archive mount path | `/performance_archive` |
 | Archive read only  | `true` (recommended)   |
 
+#### Archive CronJob (`nersc-archive-ingestor`)
+
+`Top-level configuration`:
+
+| Rancher field | Value                    |
+| ------------- | ------------------------ |
+| Namespace     | `simboard`               |
+| Name          | `nersc-archive-ingestor` |
+| Schedule      | `0 12 * * *`             |
+
+##### 1. CronJob tab
+
+`Scaling and Upgrade Policy`:
+
+| Rancher field                 | Value                                          |
+| ----------------------------- | ---------------------------------------------- |
+| Concurrency policy            | `Skip next run if current run hasn't finished` |
+| Successful jobs history limit | `3`                                            |
+| Failed jobs history limit     | `3`                                            |
+
+##### 2. Pod tab
+
+`Security Context`:
+
+| Rancher field        | Value   |
+| -------------------- | ------- |
+| Pod Filesystem Group | `62756` |
+
+`Pod`:
+
+| Rancher field  | Value       |
+| -------------- | ----------- |
+| Restart policy | `OnFailure` |
+
+`Storage`:
+
+| Rancher field                | Value                                   |
+| ---------------------------- | --------------------------------------- |
+| Volume type                  | `Bind-Mount`                            |
+| Volume name                  | `archive`                               |
+| Path on node                 | `/global/cfs/projectdirs/e3sm/OLD_PERF` |
+| The Path on the Node must be | `An existing directory`                 |
+
+##### 3. Container tab
+
+`General`:
+
+| Rancher field         | Value                                                  |
+| --------------------- | ------------------------------------------------------ |
+| Container Name        | `nersc-archive-ingestor`                               |
+| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
+| Image pull secret     | `registry-nersc`                                       |
+| Command               | `python`                                               |
+| Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor`      |
+| Environment Variables | Type: Secret, Secret: `nersc-archive-ingestor-env`     |
+
+`Security Context`:
+
+| Rancher field            | Value                                                  |
+| ------------------------ | ------------------------------------------------------ |
+| Run as User              | Required: set to a numeric NERSC UID for this workload |
+| allowPrivilegeEscalation | `false`                                                |
+| privileged               | `false`                                                |
+| capabilities             | drop `ALL`                                             |
+
+`Storage`:
+
+| Rancher field      | Value                |
+| ------------------ | -------------------- |
+| Archive volume     | `archive`            |
+| Archive mount path | `/OLD_PERF`          |
+| Archive read only  | `true` (recommended) |
+
 Notes:
 
-- Manage ingestion configuration via one Opaque secret (`simboard-ingestion-env`) and expose it as secret-backed environment variables.
+- Manage ingestion configuration via two Opaque secrets (`nersc-staging-ingestor-env` and `nersc-archive-ingestor-env`) and expose them as secret-backed environment variables.
 - Use backend service DNS (`http://backend:8000`) for in-cluster API calls.
 - Non-zero CronJob exits indicate at least one case ingestion failure in that run.
 
@@ -410,12 +527,12 @@ Canonical values for all workloads that mount the E3SM performance archive:
 These values should already be set in the instructions above, but are repeated here for
 clarity and to highlight security context requirements.
 
-| Field                   | Value                                        |
-| ----------------------- | -------------------------------------------- |
-| Path on node            | `/global/cfs/cdirs/e3sm/performance_archive` |
-| Volume name             | `performance-archive`                        |
-| In-container mount path | `/performance_archive`                       |
-| Read only               | `true` (recommended for archive mounts)      |
+| Field                   | Staging value                                | Archive value                           |
+| ----------------------- | -------------------------------------------- | --------------------------------------- |
+| Path on node            | `/global/cfs/cdirs/e3sm/performance_archive` | `/global/cfs/projectdirs/e3sm/OLD_PERF` |
+| Volume name             | `staging`                                    | `archive`                               |
+| In-container mount path | `/performance_archive`                       | `/OLD_PERF`                             |
+| Read only               | `true` (recommended)                         | `true` (recommended)                    |
 
 Security context requirements for NERSC global file system (NGF/CFS) mounts:
 
@@ -520,8 +637,8 @@ Service Discovery -> Ingresses -> Create
 4. Watch backend pod init container logs (`migrate`) in Rancher to confirm migration success.
 5. Verify backend deployment health and pod status under **Workloads → Pods**.
 6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
-7. Create/confirm an admin account (Rancher pod shell), then provision ingestion service-account token and create/update secret `simboard-ingestion-env`.
-8. Create/update CronJob `nersc-archive-ingestor`, run a one-off dry run (`DRY_RUN=true`), then set `DRY_RUN=false`.
+7. Create/confirm an admin account (Rancher pod shell), then provision ingestion service-account token and create/update secrets `nersc-staging-ingestor-env` and `nersc-archive-ingestor-env`.
+8. Create/update CronJobs `nersc-staging-ingestor` and `nersc-archive-ingestor`, run one-off dry runs (`DRY_RUN=true`) for both, then set `DRY_RUN=false`.
 9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling

@@ -10,10 +10,12 @@ These scripts are used for administrative and database-related tasks and are not
 
 Scripts are organized by domain:
 
-```
+```text
 scripts/
 ├── ingestion/
-│   └── nersc_archive_ingestor.py
+│   ├── nersc_archive_ingestor.py
+│   └── sites/
+│       └── nersc.sh
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
@@ -41,7 +43,7 @@ Example:
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
-python -m app.scripts.ingestion.nersc_archive_ingestor --dry-run
+python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
 
 Do not execute scripts directly by file path:
@@ -106,7 +108,8 @@ If operational complexity increases, these scripts may later be consolidated int
 
 The NERSC archive ingestor scans a bind-mounted performance archive directory,
 detects new parseable execution directories, and calls the SimBoard
-`/api/v1/ingestions/from-path` API for changed cases.
+`/api/v1/ingestions/from-path` API for changed cases. It can scan either the
+staging root or the archive root.
 
 Default archive mount path:
 
@@ -115,21 +118,38 @@ Default archive mount path:
 Example:
 
 ```bash
-uv run python -m app.scripts.ingestion.nersc_archive_ingestor \
-  --api-base-url http://backend:8000 \
-  --machine-name perlmutter
+SIMBOARD_API_BASE_URL=http://backend:8000 \
+MACHINE_NAME=perlmutter \
+uv run python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
 
 Configuration surface (via env vars):
 
-- `SIMBOARD_API_BASE_URL` (`--api-base-url`)
-- `SIMBOARD_API_TOKEN` (`--api-token`)
-- `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive`)
-- `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
-- `DRY_RUN` (`--dry-run`)
-- `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
-- `MAX_ATTEMPTS` (`--max-attempts`)
-- `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)
+- `SIMBOARD_API_BASE_URL`
+- `SIMBOARD_API_TOKEN`
+- `SCAN_MODE` (`staging` or `archive`, default `staging`)
+- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
+- `MACHINE_NAME` (default `perlmutter`)
+- `DRY_RUN` (default `true`)
+- `MAX_CASES_PER_RUN` (optional, default not set)
+- `MAX_ATTEMPTS` (optional, default not set)
+- `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
+- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+
+Helper wrapper:
+
+- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=archive`, defaults to `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
+- Override `SCAN_MODE`, `DRY_RUN`, or any other supported env var in the caller or cron entry when you need a different schedule or behavior.
+
+Archive notes:
+
+- Archive mode traverses only top-level `YYYY-MM` directories under `OLD_PERF_ARCHIVE_ROOT`. Other top-level directories are ignored.
+- Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
+- Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
+- `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
+- `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
 
 ## HPC Upload Archive Ingestor
 
@@ -159,9 +179,16 @@ Configuration surface (via env vars):
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
-- `PERF_ARCHIVE_ROOT` (default `/performance_archive`)
+- `SCAN_MODE` (`staging` or `archive`, default `staging`)
+- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
+- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
-- `DRY_RUN`
-- `MAX_CASES_PER_RUN`
-- `MAX_ATTEMPTS`
-- `REQUEST_TIMEOUT_SECONDS`
+- `DRY_RUN` (default `true`)
+- `MAX_CASES_PER_RUN` (optional, default not set)
+- `MAX_ATTEMPTS` (optional, default not set)
+- `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
+- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+
+Archive mode uses same `YYYY-MM` top-level bucket requirement described above
+for path-based ingestion.
