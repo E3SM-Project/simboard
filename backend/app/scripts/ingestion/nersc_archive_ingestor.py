@@ -85,6 +85,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "discovered_cases",
         "execution_dirs_scanned",
         "execution_dirs_accepted",
+        "rejected_existing_execution_ids",
         "duration_seconds",
     ),
     "archive_scan_completed": (
@@ -95,6 +96,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "discovered_cases",
         "execution_dirs_scanned",
         "execution_dirs_accepted",
+        "rejected_existing_execution_ids",
         "duration_seconds",
     ),
     "case_collection_begin": (
@@ -738,6 +740,11 @@ def _scan_archive(
     )
     case_path_filter = _build_case_path_filter(config)
     walk_dir_filter = _build_walk_dir_filter(config)
+    processed_ids_by_key = _build_processed_ids_by_key(
+        state,
+        scan_mode=config.scan_mode,
+        staging_root_basename=staging_root_basename,
+    )
     grouped_executions = _discover_case_executions(
         config.archive_root,
         metadata_locator,
@@ -746,6 +753,8 @@ def _scan_archive(
         case_path_filter=case_path_filter,
         walk_dir_filter=walk_dir_filter,
         scan_mode=config.scan_mode,
+        processed_ids_by_key=processed_ids_by_key,
+        staging_root_basename=staging_root_basename,
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
@@ -787,6 +796,8 @@ def _discover_case_executions(
     case_path_filter: Callable[[Path], bool] | None = None,
     walk_dir_filter: Callable[[str, list[str]], None] | None = None,
     scan_mode: str = "staging",
+    processed_ids_by_key: defaultdict[str, set[str]] | None = None,
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -844,6 +855,9 @@ def _discover_case_executions(
                 metadata_locator=metadata_locator,
                 stats=effective_stats,
                 case_collection_data=case_collection_data,
+                processed_ids_by_key=processed_ids_by_key,
+                scan_mode=scan_mode,
+                staging_root_basename=staging_root_basename,
             )
 
         if directories_visited % DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES == 0:
@@ -898,6 +912,9 @@ def _log_archive_scan_progress(
             "execution_dirs_accepted": (
                 0 if stats is None else stats["execution_dirs_accepted"]
             ),
+            "rejected_existing_execution_ids": (
+                0 if stats is None else stats["rejected_existing_execution_ids"]
+            ),
             "duration_seconds": round(time.monotonic() - started_at, 3),
         },
     )
@@ -927,15 +944,43 @@ def _collect_case_execution(
     metadata_locator: Callable[[str], object],
     stats: DiscoveryStats | None,
     case_collection_data: dict[str, CaseCollectionLogData] | None,
+    processed_ids_by_key: defaultdict[str, set[str]] | None,
+    scan_mode: str,
+    staging_root_basename: str,
 ) -> None:
     """Validate and record one discovered execution directory."""
-    if stats is not None:
-        stats["execution_dirs_scanned"] += 1
-
     case_path = str(case_dir.resolve())
     log_data = _get_case_collection_log_data(case_path, case_collection_data)
     if log_data is not None:
         log_data.execution_count_total += 1
+
+    case_identity_key = _case_identity_key(
+        case_path,
+        scan_mode,
+        staging_root_basename=staging_root_basename,
+    )
+    known_processed_ids = (
+        set()
+        if processed_ids_by_key is None
+        else processed_ids_by_key[case_identity_key]
+    )
+    if execution_id in known_processed_ids:
+        if stats is not None:
+            stats["rejected_existing_execution_ids"] += 1
+        if log_data is not None:
+            log_data.rejected_decisions.append(
+                ExecutionCollectionDecision(
+                    case_path=case_path,
+                    execution_id=execution_id,
+                    decision="rejected",
+                    reason="already_processed",
+                )
+            )
+
+        return
+
+    if stats is not None:
+        stats["execution_dirs_scanned"] += 1
 
     rejection_decision = _validate_execution_dir(
         case_dir,
@@ -1068,9 +1113,16 @@ def _log_execution_collection_outcomes(
             )
         ]
         valid_execution_ids = sorted(log_data.valid_execution_ids)
+        existing_rejected_ids = {
+            decision.execution_id
+            for decision in log_data.rejected_decisions
+            if decision.reason == "already_processed"
+        }
         new_ids = set(valid_execution_ids) - processed_ids
         selected_new_ids = selected_new_ids_by_case.get(case_path, set())
-        existing_ids = sorted(set(valid_execution_ids) & processed_ids)
+        existing_ids = sorted(
+            existing_rejected_ids | (set(valid_execution_ids) & processed_ids)
+        )
         deferred_ids = sorted(new_ids - selected_new_ids)
         rejected_incomplete = sum(
             1
@@ -1103,6 +1155,9 @@ def _log_execution_collection_outcomes(
         }
 
         for execution_id in valid_execution_ids:
+            if execution_id in existing_rejected_ids:
+                continue
+
             if execution_id in processed_ids:
                 discovery_stats["rejected_existing_execution_ids"] += 1
                 decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
@@ -2357,9 +2412,21 @@ def _record_successful_case(
         cases = {}
         state["cases"] = cases
 
+    existing_case_state = cases.get(candidate.case_path, {})
+    existing_execution_ids = (
+        _case_state_processed_ids(existing_case_state)
+        if isinstance(existing_case_state, dict)
+        else set()
+    )
+    merged_execution_ids = sorted(existing_execution_ids | set(candidate.execution_ids))
+    fingerprint = (
+        candidate.fingerprint
+        if merged_execution_ids == candidate.execution_ids
+        else _compute_case_fingerprint(merged_execution_ids)
+    )
     cases[candidate.case_path] = {
-        "fingerprint": candidate.fingerprint,
-        "processed_execution_ids": candidate.execution_ids,
+        "fingerprint": fingerprint,
+        "processed_execution_ids": merged_execution_ids,
         "last_ingested_at": _utc_now_iso(),
     }
 
