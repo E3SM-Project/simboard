@@ -743,9 +743,11 @@ def _scan_archive(
         metadata_locator,
         discovery_stats,
         case_collection_data,
+        state=state,
         case_path_filter=case_path_filter,
         walk_dir_filter=walk_dir_filter,
         scan_mode=config.scan_mode,
+        staging_root_basename=staging_root_basename,
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
@@ -784,9 +786,11 @@ def _discover_case_executions(
     stats: DiscoveryStats | None = None,
     case_collection_data: dict[str, CaseCollectionLogData] | None = None,
     *,
+    state: dict[str, Any] | None = None,
     case_path_filter: Callable[[Path], bool] | None = None,
     walk_dir_filter: Callable[[str, list[str]], None] | None = None,
     scan_mode: str = "staging",
+    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -794,6 +798,9 @@ def _discover_case_executions(
     ----------
     archive_root : Path
         Root path of the mounted performance archive.
+    state : dict[str, Any] | None, optional
+        Persisted runner state used to skip previously processed executions
+        before metadata validation.
     metadata_locator : Callable[[str], object], optional
         Callable used to validate that an execution directory contains
         the required metadata files.
@@ -815,12 +822,19 @@ def _discover_case_executions(
     _initialize_discovery_stats(effective_stats)
     scan_started_at = time.monotonic()
     directories_visited = 0
+    previous_ingestions = 0
     archive_root_str = str(archive_root)
     current_dir = archive_root_str
 
     _log_event(
         "archive_scan_started",
         {"scan_mode": scan_mode, "archive_root": archive_root_str},
+    )
+
+    processed_ids_by_key = _build_processed_ids_by_key(
+        {} if state is None else state,
+        scan_mode=scan_mode,
+        staging_root_basename=staging_root_basename,
     )
 
     for dirpath, dirnames, _ in os.walk(archive_root):
@@ -835,6 +849,23 @@ def _discover_case_executions(
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
                 continue
             if case_path_filter is not None and not case_path_filter(case_dir):
+                continue
+
+            case_key = _case_identity_key(
+                str(case_dir.resolve()),
+                scan_mode,
+                staging_root_basename=staging_root_basename,
+            )
+            if dirname in processed_ids_by_key[case_key]:
+                previous_ingestions += 1
+                case_path = str(case_dir.resolve())
+                grouped.setdefault(case_path, set()).add(dirname)
+                log_data = _get_case_collection_log_data(
+                    case_path, case_collection_data
+                )
+                if log_data is not None:
+                    log_data.execution_count_total += 1
+                    log_data.valid_execution_ids.add(dirname)
                 continue
 
             _collect_case_execution(
@@ -852,6 +883,7 @@ def _discover_case_executions(
                 archive_root=archive_root_str,
                 current_dir=dirpath,
                 directories_visited=directories_visited,
+                previous_ingestions=previous_ingestions,
                 grouped=grouped,
                 stats=effective_stats,
                 started_at=scan_started_at,
@@ -863,6 +895,7 @@ def _discover_case_executions(
         archive_root=archive_root_str,
         current_dir=current_dir,
         directories_visited=directories_visited,
+        previous_ingestions=previous_ingestions,
         grouped=grouped,
         stats=effective_stats,
         started_at=scan_started_at,
@@ -878,6 +911,7 @@ def _log_archive_scan_progress(
     archive_root: str,
     current_dir: str,
     directories_visited: int,
+    previous_ingestions: int,
     grouped: dict[str, set[str]],
     stats: DiscoveryStats | None,
     started_at: float,
@@ -891,6 +925,7 @@ def _log_archive_scan_progress(
             "archive_root": archive_root,
             "current_dir": current_dir,
             "directories_visited": directories_visited,
+            "previous_ingestions": previous_ingestions,
             "discovered_cases": len(grouped),
             "execution_dirs_scanned": (
                 0 if stats is None else stats["execution_dirs_scanned"]

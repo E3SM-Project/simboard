@@ -77,6 +77,46 @@ def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
     assert list(grouped.values()) == [["100.1-1"]]
 
 
+def test_discover_case_executions_skips_processed_ids_before_validation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    (case_dir / "101.1-1").mkdir(parents=True)
+    validated_execution_ids: list[str] = []
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_locator(execution_dir: str) -> dict[str, str]:
+        validated_execution_ids.append(Path(execution_dir).name)
+        return {}
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=fake_locator,
+        state={
+            "cases": {
+                "/performance_archive/case_a": {
+                    "processed_execution_ids": ["100.1-1"],
+                }
+            }
+        },
+        staging_root_basename="performance_archive",
+    )
+
+    assert grouped == {str(case_dir.resolve()): ["100.1-1", "101.1-1"]}
+    assert validated_execution_ids == ["101.1-1"]
+    completed = next(
+        fields for event, fields in logged_events if event == "archive_scan_completed"
+    )
+    assert completed["previous_ingestions"] == 1
+
+
 def test_discover_case_executions_skips_unreadable_execution_dirs(
     tmp_path: Path,
 ) -> None:
