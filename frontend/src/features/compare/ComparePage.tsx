@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -459,6 +459,30 @@ export const ComparePage = ({
     }
   };
 
+  const handleInternalLinkClick = (
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string | undefined,
+  ) => {
+    if (!href) {
+      event.preventDefault();
+      return;
+    }
+
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    navigate(href);
+  };
+
   const renderCompareValue = (
     sectionKey: string,
     row: CompareMetricRow,
@@ -467,16 +491,17 @@ export const ComparePage = ({
   ) => {
     if (sectionKey === 'configuration' && row.label === 'Case Name') {
       const caseId = getSimProp(selectedSimulationIds[colIdx], 'caseId', '');
+      const caseHref = caseId ? `/cases/${caseId}` : undefined;
       const textValue = value === null || value === undefined || value === '' ? '—' : String(value);
 
-      if (caseId) {
+      if (caseHref) {
         return (
+          <a
+            href={caseHref}
+            className="text-blue-700 transition hover:underline"
+            title={`Go to case details for ${textValue}`}
             onClick={(event) => {
-              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-                return;
-              }
-              event.preventDefault();
-              navigate(`/cases/${caseId}`);
+              handleInternalLinkClick(event, caseHref);
             }}
           >
             <TableCellText value={textValue} lines={2} fullValueMode="tooltip" />
@@ -778,37 +803,54 @@ export const ComparePage = ({
                       </span>
                       {/* Sim name clickable */}
                       <div className="min-w-0 pr-12 text-left">
-                        <a
-                          href={`/simulations/${selectedSimulationIds[colIdx]}`}
-                          className="block max-w-full truncate font-mono text-sm font-semibold text-blue-700 transition hover:underline"
-                          tabIndex={0}
-                          title={`Go to details for ${headers[colIdx]}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate(`/simulations/${selectedSimulationIds[colIdx]}`);
-                          }}
-                        >
-                          {headers[colIdx]}
-                        </a>
-                        <a
-                          href={`/cases/${getSimProp(selectedSimulationIds[colIdx], 'caseId', '')}`}
-                          className="mt-1 block text-xs text-muted-foreground transition hover:text-blue-700 hover:underline"
-                          title={`Go to case details for ${String(getSimProp(selectedSimulationIds[colIdx], 'caseName', ''))}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const caseId = getSimProp(selectedSimulationIds[colIdx], 'caseId', '');
-                            if (caseId) {
-                              navigate(`/cases/${caseId}`);
-                            }
-                          }}
-                        >
-                          <TableCellText
-                            value={String(getSimProp(selectedSimulationIds[colIdx], 'caseName', ''))}
-                            lines={2}
-                            className="mt-1 text-xs"
-                            fullValueMode="tooltip"
-                          />
-                        </a>
+                        {(() => {
+                          const simulationHref = `/simulations/${selectedSimulationIds[colIdx]}`;
+                          const caseId = getSimProp(selectedSimulationIds[colIdx], 'caseId', '');
+                          const caseHref = caseId ? `/cases/${caseId}` : undefined;
+                          const caseName = String(
+                            getSimProp(selectedSimulationIds[colIdx], 'caseName', ''),
+                          );
+
+                          return (
+                            <>
+                              <a
+                                href={simulationHref}
+                                className="block max-w-full truncate font-mono text-sm font-semibold text-blue-700 transition hover:underline"
+                                tabIndex={0}
+                                title={`Go to details for ${headers[colIdx]}`}
+                                onClick={(event) => {
+                                  handleInternalLinkClick(event, simulationHref);
+                                }}
+                              >
+                                {headers[colIdx]}
+                              </a>
+                              {caseHref ? (
+                                <a
+                                  href={caseHref}
+                                  className="mt-1 block text-xs text-muted-foreground transition hover:text-blue-700 hover:underline"
+                                  title={`Go to case details for ${caseName}`}
+                                  onClick={(event) => {
+                                    handleInternalLinkClick(event, caseHref);
+                                  }}
+                                >
+                                  <TableCellText
+                                    value={caseName}
+                                    lines={2}
+                                    className="mt-1 text-xs"
+                                    fullValueMode="tooltip"
+                                  />
+                                </a>
+                              ) : (
+                                <TableCellText
+                                  value={caseName}
+                                  lines={2}
+                                  className="mt-1 text-xs text-muted-foreground"
+                                  fullValueMode="tooltip"
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     <button
