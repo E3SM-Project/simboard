@@ -471,11 +471,10 @@ export const ComparePage = ({
 
       if (caseId) {
         return (
-          <a
-            href={`/cases/${caseId}`}
-            className="block text-blue-700 transition hover:underline"
-            title={`Go to case details for ${textValue}`}
             onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                return;
+              }
               event.preventDefault();
               navigate(`/cases/${caseId}`);
             }}
