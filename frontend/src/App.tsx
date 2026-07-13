@@ -9,6 +9,14 @@ import { AppRoutes } from '@/routes/routes';
 
 import { Toaster } from './components/ui/toaster';
 
+const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
+  if (!Array.isArray(ids)) {
+    return [];
+  }
+
+  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
+};
+
 const App = () => {
   // -------------------- Constants --------------------
   const LOCAL_STORAGE_KEY = 'selectedSimulationIds';
@@ -23,11 +31,36 @@ const App = () => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     return stored ? JSON.parse(stored) : [];
   });
+  const [selectedCaseSimulationIdsByCase, setSelectedCaseSimulationIdsByCase] = useState<
+    Record<string, string[]>
+  >({});
 
   const selectedSimulations = useMemo(
     () => (simulations ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
     [simulations, selectedSimulationIds],
   );
+
+  const setSelectedCaseSimulationIdsForCase = (caseId: string, ids: string[]) => {
+    const nextIds = normalizeSelectedSimulationIds(ids);
+
+    setSelectedCaseSimulationIdsByCase((current) => {
+      if (nextIds.length === 0) {
+        if (!(caseId in current)) {
+          return current;
+        }
+
+        const nextState = { ...current };
+        delete nextState[caseId];
+        return nextState;
+      }
+
+      return {
+        ...current,
+        [caseId]: nextIds,
+      };
+    });
+  };
+
   // -------------------- Effects --------------------
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectedSimulationIds));
@@ -41,6 +74,8 @@ const App = () => {
         <AppRoutes
           simulations={simulations}
           machines={machines}
+          selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+          setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}
           selectedSimulations={selectedSimulations}

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 interface CompareToolbarProps {
+  backLabel?: string;
   canCompareDifferences: boolean;
   changedSectionCount: number;
   diffsEnabled: boolean;
@@ -19,6 +20,7 @@ interface CompareToolbarProps {
 }
 
 const CompareToolbar = ({
+  backLabel = 'Back to Browse',
   canCompareDifferences,
   changedSectionCount,
   diffsEnabled,
@@ -40,8 +42,8 @@ const CompareToolbar = ({
             Comparing {simulationCount} simulation{simulationCount === 1 ? '' : 's'}
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Sticky controls keep summary, diff filters, and primary actions visible while reviewing
-            execution metadata.
+            Sticky controls keep cross-case compare actions, summary, and diff filters visible
+            while reviewing execution metadata.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
@@ -59,7 +61,7 @@ const CompareToolbar = ({
         <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[24rem]">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={onBackToBrowse}>
-              Back to Browse
+              {backLabel}
             </Button>
             {(summaryExpanded || summaryHighlightCount > 0) && (
               <Button variant="outline" onClick={onSummaryToggle}>

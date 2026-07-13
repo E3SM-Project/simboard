@@ -44,7 +44,7 @@ export const SimulationResultCards = ({
       <div className="py-4">
         <BrowseToolbar
           simulations={simulations}
-          buttonText="Compare"
+          buttonText="Open Cross-Case Compare"
           onCompareButtonClick={handleCompareButtonClick}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}

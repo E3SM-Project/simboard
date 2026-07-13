@@ -4,6 +4,7 @@ import type { SimulationOut } from '@/types/index';
 interface SelectedSimulationsBreadcrumbProps {
   simulations: SimulationOut[];
   buttonText: string;
+  helperText?: string;
   onCompareButtonClick: () => void;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
@@ -15,6 +16,7 @@ const MAX_SELECTION = 5;
 export const BrowseToolbar = ({
   simulations,
   buttonText,
+  helperText = 'Select runs across cases, then open cross-case compare.',
   onCompareButtonClick,
   selectedSimulationIds,
   setSelectedSimulationIds,
@@ -53,6 +55,8 @@ export const BrowseToolbar = ({
           </Button>
         )}
       </div>
+
+      <p className="mt-2 text-sm text-slate-500">{helperText}</p>
 
       {selectedSimulationIds.length > 0 && (
         <div className="mt-3 flex min-w-0 flex-wrap items-start gap-2">

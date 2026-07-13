@@ -136,8 +136,8 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 
 interface CaseDetailsPageProps {
   simulations: SimulationOut[];
-  selectedSimulationIds: string[];
-  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedCaseSimulationIdsByCase: Record<string, string[]>;
+  setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
 }
 
 interface GroupSimulation {
@@ -151,6 +151,10 @@ type CaseSaveError = {
   message: string;
   validationDetails: ValidationDetail[];
 };
+
+interface CaseDetailsLocationState {
+  from?: string;
+}
 
 const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
@@ -192,6 +196,14 @@ const getGroupRunDateWindow = (simulations: GroupSimulation[]) => {
 };
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
+
+const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
+  if (!Array.isArray(ids)) {
+    return [];
+  }
+
+  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
+};
 
 const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
   'description',
@@ -322,8 +334,8 @@ const mergeRowFieldErrors = (
 
 export const CaseDetailsPage = ({
   simulations: allSimulations,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
+  selectedCaseSimulationIdsByCase,
+  setSelectedCaseSimulationIdsForCase,
 }: CaseDetailsPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -343,7 +355,7 @@ export const CaseDetailsPage = ({
   const [serverLinkRowErrors, setServerLinkRowErrors] = useState<ResourceRowFieldErrors[]>([]);
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const currentPath = `${location.pathname}${location.search}`;
-  const state = location.state as { from?: string } | null;
+  const state = location.state as CaseDetailsLocationState | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
   const caseSimulations = useMemo(() => caseRecord?.simulations ?? [], [caseRecord?.simulations]);
   const simulationDetailsById = useMemo(
@@ -437,9 +449,17 @@ export const CaseDetailsPage = ({
     () => new Set(filteredFlatSimulations.map(({ summary }) => summary.id)),
     [filteredFlatSimulations],
   );
-  const selectedCurrentCaseSimulationIds = caseSimulations
-    .map((simulation) => simulation.id)
-    .filter((simulationId) => selectedSimulationIds.includes(simulationId));
+  const caseSimulationIdSet = useMemo(
+    () => new Set(caseSimulations.map((simulation) => simulation.id)),
+    [caseSimulations],
+  );
+  const rawCaseSelectedSimulationIds = id
+    ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[id] ?? [])
+    : [];
+  const caseSelectedSimulationIds = rawCaseSelectedSimulationIds.filter((simulationId) =>
+    caseSimulationIdSet.has(simulationId),
+  );
+  const selectedCurrentCaseSimulationIds = caseSelectedSimulationIds;
   const hiddenSelectedCount = selectedCurrentCaseSimulationIds.filter(
     (simulationId) => !visibleSimulationIds.has(simulationId),
   ).length;
@@ -673,7 +693,8 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
-  const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+  const caseSelectedSimulationCount = caseSelectedSimulationIds.length;
+  const isCompareButtonDisabled = caseSelectedSimulationCount < 2;
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
@@ -708,16 +729,23 @@ export const CaseDetailsPage = ({
         )}`;
 
   const toggleSimulationSelection = (simulationId: string) => {
-    if (selectedSimulationIds.includes(simulationId)) {
-      setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== simulationId));
+    if (caseSelectedSimulationIds.includes(simulationId)) {
+      if (id) {
+        setSelectedCaseSimulationIdsForCase(
+          id,
+          caseSelectedSimulationIds.filter((selectedId) => selectedId !== simulationId),
+        );
+      }
       return;
     }
 
-    if (selectedSimulationIds.length >= MAX_SELECTION) {
+    if (caseSelectedSimulationCount >= MAX_SELECTION) {
       return;
     }
 
-    setSelectedSimulationIds([...selectedSimulationIds, simulationId]);
+    if (id) {
+      setSelectedCaseSimulationIdsForCase(id, [...caseSelectedSimulationIds, simulationId]);
+    }
   };
 
   const toggleGroupExpansion = (groupKey: string, open: boolean) => {
@@ -1080,27 +1108,31 @@ export const CaseDetailsPage = ({
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-                          Selected{' '}
+                          Selected case runs{' '}
                           <span className="font-semibold text-slate-950">
-                            {selectedSimulationIds.length}
+                            {caseSelectedSimulationCount}
                           </span>{' '}
                           / {MAX_SELECTION}
                         </div>
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => navigate('/compare')}
+                          onClick={() => navigate(`/cases/${caseRecord.id}/compare`)}
                           disabled={isCompareButtonDisabled}
                         >
-                          Compare Selected
+                          Compare Case Runs
                         </Button>
-                        {selectedSimulationIds.length > 0 ? (
+                        {caseSelectedSimulationCount > 0 ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             className="text-slate-600 hover:text-slate-900"
-                            onClick={() => setSelectedSimulationIds([])}
+                            onClick={() => {
+                              if (id) {
+                                setSelectedCaseSimulationIdsForCase(id, []);
+                              }
+                            }}
                           >
                             Deselect all
                           </Button>
@@ -1206,10 +1238,10 @@ export const CaseDetailsPage = ({
                             <TableRow key={summary.id}>
                               <TableCell className="align-top">
                                 <Checkbox
-                                  checked={selectedSimulationIds.includes(summary.id)}
+                                  checked={caseSelectedSimulationIds.includes(summary.id)}
                                   disabled={
-                                    !selectedSimulationIds.includes(summary.id) &&
-                                    selectedSimulationIds.length >= MAX_SELECTION
+                                    !caseSelectedSimulationIds.includes(summary.id) &&
+                                    caseSelectedSimulationCount >= MAX_SELECTION
                                   }
                                   onCheckedChange={() => toggleSimulationSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
@@ -1424,14 +1456,14 @@ export const CaseDetailsPage = ({
                                                   <TableRow key={summary.id}>
                                                     <TableCell className="align-top">
                                                       <Checkbox
-                                                        checked={selectedSimulationIds.includes(
+                                                        checked={caseSelectedSimulationIds.includes(
                                                           summary.id,
                                                         )}
                                                         disabled={
-                                                          !selectedSimulationIds.includes(
+                                                          !caseSelectedSimulationIds.includes(
                                                             summary.id,
                                                           ) &&
-                                                          selectedSimulationIds.length >=
+                                                          caseSelectedSimulationCount >=
                                                             MAX_SELECTION
                                                         }
                                                         onCheckedChange={() =>

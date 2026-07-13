@@ -496,7 +496,7 @@ export const BrowsePage = ({
                   <p className="max-w-4xl text-[15px] leading-7 text-slate-600 sm:text-base">
                     Explore and filter individual runs using the panel on the left. This is the
                     advanced execution-level workspace for drilling into details and setting up
-                    compare.
+                    cross-case compare across runs.
                   </p>
                 </div>
                 <div className="xl:min-w-[360px]">

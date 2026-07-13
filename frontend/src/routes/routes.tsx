@@ -14,6 +14,8 @@ import type { SimulationOut } from '@/types/simulation';
 interface RoutesProps {
   simulations: SimulationOut[];
   machines: Machine[];
+  selectedCaseSimulationIdsByCase: Record<string, string[]>;
+  setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];

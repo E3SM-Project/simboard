@@ -1,5 +1,13 @@
 import { ChevronRight, EyeOff, GripVertical, X } from 'lucide-react';
-import { type DragEvent, Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
+import {
+  type DragEvent,
+  Fragment,
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -12,10 +20,21 @@ import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 interface ComparePageProps {
-  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];
+}
+
+interface CompareWorkspaceProps extends ComparePageProps {
+  backLabel?: string;
+  contextNotice?: ReactNode;
+  description?: string;
+  emptyStateActionHref?: string;
+  emptyStateActionLabel?: string;
+  emptyStateMessage?: string;
+  hiddenStorageKey?: string;
+  onBack: () => void;
+  title?: string;
 }
 
 interface CompareMetricRow {
@@ -41,21 +60,27 @@ interface CompareSummaryCard {
   uniqueValueCount: number;
 }
 
-export const ComparePage = ({
+export const CompareWorkspace = ({
+  backLabel = 'Back to Browse',
+  contextNotice,
+  description = 'Compare selected runs side by side across cases. Drag columns to reorder, hide or remove simulations, and expand sections for detailed metrics.',
+  emptyStateActionHref = '/browse',
+  emptyStateActionLabel = 'Go to Browse Page',
+  emptyStateMessage = 'No simulations selected for comparison.',
+  hiddenStorageKey = 'compare_hidden_cols',
+  onBack,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
-}: ComparePageProps) => {
+  title = 'Cross-Case Compare',
+}: CompareWorkspaceProps) => {
   const LABEL_COLUMN_WIDTH = 260;
   const VALUE_COLUMN_WIDTH = 320;
 
   // -------------------- Router --------------------
   const navigate = useNavigate();
-  const handleButtonClick = () => navigate('/browse');
 
   // -------------------- Global State --------------------
-  const HIDDEN_KEY = 'compare_hidden_cols';
-
   // -------------------- Local State --------------------
   const [order, setOrder] = useState(selectedSimulationIds.map((_, i) => i));
 
@@ -67,7 +92,7 @@ export const ComparePage = ({
 
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [hidden, setHidden] = useState<string[]>(() => {
-    const stored = localStorage.getItem(HIDDEN_KEY);
+    const stored = localStorage.getItem(hiddenStorageKey);
     try {
       const parsed = stored ? JSON.parse(stored) : [];
       return Array.isArray(parsed) ? parsed : [];
@@ -376,8 +401,8 @@ export const ComparePage = ({
   }, [selectedSimulationIds]);
 
   useEffect(() => {
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
-  }, [hidden]);
+    localStorage.setItem(hiddenStorageKey, JSON.stringify(hidden));
+  }, [hidden, hiddenStorageKey]);
 
   useEffect(() => {
     setHeaders(
@@ -557,12 +582,12 @@ export const ComparePage = ({
   if (selectedSimulationIds.length === 0) {
     return (
       <div className="max-w-screen-2xl mx-auto p-8 text-center text-gray-600">
-        <p className="text-lg mb-4">No simulations selected for comparison.</p>
+        <p className="text-lg mb-4">{emptyStateMessage}</p>
         <a
-          href="/browse"
+          href={emptyStateActionHref}
           className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
         >
-          Go to Browse Page
+          {emptyStateActionLabel}
         </a>
       </div>
     );
@@ -572,14 +597,14 @@ export const ComparePage = ({
     <div className="w-full bg-white">
       <div className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6">
         <header className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Compare Simulations</h1>
-          <p className="text-gray-600">
-            Compare multiple simulations side by side. Drag columns to reorder, hide or remove
-            simulations, and expand sections for detailed metrics.
-          </p>
+          <h1 className="mb-2 text-3xl font-bold">{title}</h1>
+          <p className="text-gray-600">{description}</p>
         </header>
 
+        {contextNotice}
+
         <CompareToolbar
+          backLabel={backLabel}
           canCompareDifferences={canCompareDifferences}
           changedSectionCount={changedSectionCount}
           diffsEnabled={diffsEnabled}
@@ -588,7 +613,7 @@ export const ComparePage = ({
           onDiffToggle={setDiffsEnabled}
           onSummaryToggle={() => setSummaryExpanded((prev) => !prev)}
           simulationCount={selectedSimulationIds.length}
-          onBackToBrowse={handleButtonClick}
+          onBackToBrowse={onBack}
           summaryExpanded={summaryExpanded}
           summaryHighlightCount={summaryCards.length}
           totalChangedRows={totalChangedRows}
@@ -988,5 +1013,23 @@ export const ComparePage = ({
         </div>
       </div>
     </div>
+  );
+};
+
+export const ComparePage = ({
+  selectedSimulationIds,
+  setSelectedSimulationIds,
+  selectedSimulations,
+}: ComparePageProps) => {
+  const navigate = useNavigate();
+
+  return (
+    <CompareWorkspace
+      key="global-compare"
+      selectedSimulationIds={selectedSimulationIds}
+      setSelectedSimulationIds={setSelectedSimulationIds}
+      selectedSimulations={selectedSimulations}
+      onBack={() => navigate('/browse')}
+    />
   );
 };

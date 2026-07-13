@@ -20,7 +20,11 @@ const navItems = [
   { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
   { label: 'Cases', href: '/cases', description: 'Primary case-centric discovery and detail pages' },
   { label: 'Runs', href: '/browse', description: 'Advanced execution-level discovery workspace' },
-  { label: 'Compare', href: '/compare', description: 'Side-by-side view of selected runs' },
+  {
+    label: 'Cross-Case Compare',
+    href: '/compare',
+    description: 'Side-by-side comparison for runs selected across cases from the Runs workspace',
+  },
   { label: 'Upload', href: '/upload', description: 'Add a new simulation to the catalog' },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];

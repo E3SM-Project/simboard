@@ -4,14 +4,12 @@ import { ComparePage } from '@/features/compare/ComparePage';
 import type { SimulationOut } from '@/types';
 
 interface CompareRoutesProps {
-  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];
 }
 
 export const compareRoutes = ({
-  simulations,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
@@ -20,7 +18,6 @@ export const compareRoutes = ({
     path: '/compare',
     element: (
       <ComparePage
-        simulations={simulations}
         selectedSimulationIds={selectedSimulationIds}
         setSelectedSimulationIds={setSelectedSimulationIds}
         selectedSimulations={selectedSimulations}
