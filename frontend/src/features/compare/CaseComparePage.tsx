@@ -8,6 +8,7 @@ import { useCase } from '@/features/simulations/hooks/useCase';
 import type { SimulationOut } from '@/types';
 
 interface CaseComparePageProps {
+  onClose?: () => void;
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
   setSelectedSimulationIds: (ids: string[]) => void;
@@ -25,6 +26,7 @@ const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
 };
 
 export const CaseComparePage = ({
+  onClose,
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
   setSelectedSimulationIds,
@@ -56,7 +58,7 @@ export const CaseComparePage = ({
     rawCaseSelectedSimulationIds.length - caseSelectedSimulationIds.length;
 
   useEffect(() => {
-    if (!caseId) {
+    if (!caseId || loading || !caseRecord) {
       return;
     }
 
@@ -70,8 +72,10 @@ export const CaseComparePage = ({
       setSelectedCaseSimulationIdsForCase(caseId, caseSelectedSimulationIds);
     }
   }, [
+    caseRecord,
     caseId,
     caseSelectedSimulationIds,
+    loading,
     rawCaseSelectedSimulationIds,
     setSelectedCaseSimulationIdsForCase,
   ]);
@@ -89,7 +93,14 @@ export const CaseComparePage = ({
   const openGlobalCompare = (ids: string[]) => {
     const nextIds = normalizeSelectedSimulationIds(ids);
     setSelectedSimulationIds(nextIds);
-    navigate('/compare');
+    navigate('/compare', {
+      state: {
+        selectedSimulationIds: nextIds,
+        selectedSimulations: renderableSelectedSimulations.filter((simulation) =>
+          nextIds.includes(simulation.id),
+        ),
+      },
+    });
   };
 
   const handleCaseSelectionChange = (ids: string[]) => {
@@ -100,32 +111,32 @@ export const CaseComparePage = ({
 
   if (!caseId) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Case compare route is missing a case id.</div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+        Case compare route is missing case id.
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Loading case compare…</div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+        Loading case compare…
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-red-600">Error: {error}</div>
+      <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center text-red-700">
+        Error: {error}
       </div>
     );
   }
 
   if (!caseRecord) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Case not found</div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+        Case not found
       </div>
     );
   }
@@ -143,26 +154,27 @@ export const CaseComparePage = ({
     }
 
     return (
-      <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center px-6 py-10">
-        <div className="w-full rounded-2xl border border-amber-200 bg-amber-50/80 p-6 shadow-sm">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-slate-950">Case Compare Needs More Runs</h1>
-              <p className="mt-2 text-sm text-slate-700">{message}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button asChild variant="outline">
-                  <Link to={caseDetailsHref}>Back to Case</Link>
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold text-slate-950">Case Compare Needs More Runs</h1>
+            <p className="mt-2 text-sm text-slate-700">{message}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {onClose ? (
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Hide Compare
                 </Button>
-                {canOpenGlobalCompare ? (
-                  <Button
-                    type="button"
-                    onClick={() => openGlobalCompare(globalCompareCandidateIds)}
-                  >
-                    Open in Global Compare
-                  </Button>
-                ) : null}
-              </div>
+              ) : (
+                <Button asChild variant="outline">
+                  <Link to={caseDetailsHref}>Back to Simulations</Link>
+                </Button>
+              )}
+              {canOpenGlobalCompare ? (
+                <Button type="button" onClick={() => openGlobalCompare(globalCompareCandidateIds)}>
+                  Open in Cross-Case Compare
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -194,7 +206,7 @@ export const CaseComparePage = ({
               variant="outline"
               onClick={() => openGlobalCompare(globalCompareCandidateIds)}
             >
-              Open in Global Compare
+              Open in Cross-Case Compare
             </Button>
           ) : null}
         </div>
@@ -204,18 +216,19 @@ export const CaseComparePage = ({
   return (
     <CompareWorkspace
       key={`case-compare:${caseId}`}
-      backLabel="Back to Case"
       contextNotice={contextNotice}
-      description="Compare selected runs from this case only. Use global compare for cross-case analysis."
+      description="Review selected executions from this case side by side."
+      embedded
       emptyStateActionHref={caseDetailsHref}
-      emptyStateActionLabel="Back to Case"
-      emptyStateMessage="No case runs selected for comparison."
+      emptyStateActionLabel="Hide Compare"
+      emptyStateMessage="No case executions selected for comparison."
       hiddenStorageKey={`case_compare_hidden_cols:${caseId}`}
-      onBack={() => navigate(caseDetailsHref)}
+      labelColumnWidth={320}
       selectedSimulationIds={renderableSelectedSimulationIds}
       selectedSimulations={renderableSelectedSimulations}
       setSelectedSimulationIds={handleCaseSelectionChange}
-      title={`Compare Case Runs: ${caseRecord.name}`}
+      showHeader={false}
+      title={`Compare Case Executions: ${caseRecord.name}`}
     />
   );
 };

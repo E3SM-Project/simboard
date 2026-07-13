@@ -70,7 +70,7 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <NavBar selectedSimulationIds={selectedSimulationIds} />
+        <NavBar />
         <AppRoutes
           simulations={simulations}
           machines={machines}

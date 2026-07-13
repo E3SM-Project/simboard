@@ -16,6 +16,7 @@ interface CompareToolbarProps {
   onSummaryToggle: () => void;
   summaryExpanded: boolean;
   summaryHighlightCount: number;
+  toolbarDescription?: string;
   totalChangedRows: number;
 }
 
@@ -32,19 +33,19 @@ const CompareToolbar = ({
   simulationCount,
   summaryExpanded,
   summaryHighlightCount,
+  toolbarDescription,
   totalChangedRows,
 }: CompareToolbarProps) => {
   return (
-    <section className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+    <section className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+          <h2 className="mt-1 text-xl font-semibold text-slate-950">
             Comparing {simulationCount} simulation{simulationCount === 1 ? '' : 's'}
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Sticky controls keep cross-case compare actions, summary, and diff filters visible
-            while reviewing execution metadata.
-          </p>
+          {toolbarDescription ? (
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">{toolbarDescription}</p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
               {changedSectionCount} changed section{changedSectionCount === 1 ? '' : 's'}
@@ -60,9 +61,7 @@ const CompareToolbar = ({
 
         <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[24rem]">
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onBackToBrowse}>
-              {backLabel}
-            </Button>
+            {onBackToBrowse ? <Button variant="outline" onClick={onBackToBrowse}>{backLabel}</Button> : null}
             {(summaryExpanded || summaryHighlightCount > 0) && (
               <Button variant="outline" onClick={onSummaryToggle}>
                 <ChevronRight

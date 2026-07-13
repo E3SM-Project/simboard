@@ -20,20 +20,11 @@ const navItems = [
   { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
   { label: 'Cases', href: '/cases', description: 'Primary case-centric discovery and detail pages' },
   { label: 'Runs', href: '/browse', description: 'Advanced execution-level discovery workspace' },
-  {
-    label: 'Cross-Case Compare',
-    href: '/compare',
-    description: 'Side-by-side comparison for runs selected across cases from the Runs workspace',
-  },
   { label: 'Upload', href: '/upload', description: 'Add a new simulation to the catalog' },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];
 
-interface NavBarProps {
-  selectedSimulationIds: string[];
-}
-
-export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
+export const NavBar = () => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -66,7 +57,6 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
 
         <nav className="hidden md:flex gap-3 ml-6">
           {navItems.map((item) => {
-            const isCompare = item.label === 'Compare';
             const isActive =
               item.href === '/'
                 ? location.pathname === item.href
@@ -84,12 +74,6 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
                       )}
                     >
                       {item.label}
-
-                      {isCompare && selectedSimulationIds.length > 0 && (
-                        <span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {selectedSimulationIds.length}
-                        </span>
-                      )}
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent className="bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-xs">
@@ -104,7 +88,6 @@ export const NavBar = ({ selectedSimulationIds }: NavBarProps) => {
         <div className="flex items-center gap-3" ref={dropdownRef}>
           <MobileMenu
             navItems={navItems}
-            selectedSimulationIds={selectedSimulationIds}
             isAuthenticated={isAuthenticated}
             user={user}
             loginWithGithub={loginWithGithub}

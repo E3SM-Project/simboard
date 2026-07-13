@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
@@ -20,20 +20,34 @@ import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 interface ComparePageProps {
+  selectedCaseSimulationIdsByCase: Record<string, string[]>;
   selectedSimulationIds: string[];
+  simulations: SimulationOut[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];
 }
 
-interface CompareWorkspaceProps extends ComparePageProps {
+interface CompareLocationState {
+  selectedSimulationIds?: string[];
+  selectedSimulations?: SimulationOut[];
+}
+
+interface CompareWorkspaceProps {
+  selectedSimulationIds: string[];
+  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedSimulations: SimulationOut[];
   backLabel?: string;
   contextNotice?: ReactNode;
   description?: string;
+  embedded?: boolean;
   emptyStateActionHref?: string;
   emptyStateActionLabel?: string;
   emptyStateMessage?: string;
   hiddenStorageKey?: string;
-  onBack: () => void;
+  labelColumnWidth?: number;
+  onBack?: () => void;
+  showHeader?: boolean;
+  toolbarDescription?: string;
   title?: string;
 }
 
@@ -60,21 +74,33 @@ interface CompareSummaryCard {
   uniqueValueCount: number;
 }
 
+const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
+  if (!Array.isArray(ids)) {
+    return [];
+  }
+
+  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
+};
+
 export const CompareWorkspace = ({
   backLabel = 'Back to Browse',
   contextNotice,
-  description = 'Compare selected runs side by side across cases. Drag columns to reorder, hide or remove simulations, and expand sections for detailed metrics.',
+  description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove simulations, and expand sections for detailed metrics.',
+  embedded = false,
   emptyStateActionHref = '/browse',
   emptyStateActionLabel = 'Go to Browse Page',
-  emptyStateMessage = 'No simulations selected for comparison.',
+  emptyStateMessage = 'No executions selected for comparison.',
   hiddenStorageKey = 'compare_hidden_cols',
+  labelColumnWidth,
   onBack,
+  showHeader = true,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
+  toolbarDescription,
   title = 'Cross-Case Compare',
 }: CompareWorkspaceProps) => {
-  const LABEL_COLUMN_WIDTH = 260;
+  const LABEL_COLUMN_WIDTH = labelColumnWidth ?? 260;
   const VALUE_COLUMN_WIDTH = 320;
 
   // -------------------- Router --------------------
@@ -146,22 +172,6 @@ export const CompareWorkspace = ({
       if (!sim) return fallback;
 
       return getArtifactsByKind(sim.artifacts, sim.groupedArtifacts, kind);
-    });
-
-    return { label, values, diffable };
-  };
-
-  const makeGroupedLinkMetricRow = (
-    label: string,
-    kind: string,
-    fallback: unknown[] = [],
-    diffable = true,
-  ): CompareMetricRow => {
-    const values = selectedSimulationIds.map((id) => {
-      const sim = selectedSimulations.find((s) => s.id === id);
-      if (!sim) return fallback;
-
-      return sim.groupedLinks[kind] ?? fallback;
     });
 
     return { label, values, diffable };
@@ -317,17 +327,12 @@ export const CompareWorkspace = ({
       makeMetricRow('Git Commit Hash', 'gitCommitHash', ''),
       makeMetricRow('HPC Username', 'hpcUsername', ''),
     ],
-    keyFeatures: [makeMetricRow('Key Features', 'keyFeatures', '', 'default', false)],
-    knownIssues: [makeMetricRow('Known Issues', 'knownIssues', '', 'default', false)],
     locations: [
       makeArtifactMetricRow('Output Paths', 'output'),
       makeArtifactMetricRow('Archive Paths', 'archive'),
       makeArtifactMetricRow('Run Script Paths', 'run_script'),
       makeArtifactMetricRow('Post-processing Scripts', 'postprocessing_script'),
     ],
-    diagnostics: [makeGroupedLinkMetricRow('Diagnostic Links', 'diagnostic', [], false)],
-    performance: [makeGroupedLinkMetricRow('PACE Links', 'performance', [], false)],
-    notes: [makeMetricRow('Notes', 'notesMarkdown', '', 'default', false)],
   };
 
   const defaultExpanded = ['configuration', 'modelSetup', 'timeline'];
@@ -594,12 +599,14 @@ export const CompareWorkspace = ({
   }
 
   return (
-    <div className="w-full bg-white">
-      <div className="mx-auto max-w-[1800px] px-4 py-8 sm:px-6">
-        <header className="mb-6">
-          <h1 className="mb-2 text-3xl font-bold">{title}</h1>
-          <p className="text-gray-600">{description}</p>
-        </header>
+    <div className={embedded ? 'w-full' : 'w-full bg-white'}>
+      <div className={embedded ? 'w-full' : 'mx-auto max-w-[1800px] px-4 py-8 sm:px-6'}>
+        {showHeader ? (
+          <header className="mb-6">
+            <h1 className="mb-2 text-3xl font-bold">{title}</h1>
+            <p className="text-gray-600">{description}</p>
+          </header>
+        ) : null}
 
         {contextNotice}
 
@@ -616,6 +623,12 @@ export const CompareWorkspace = ({
           onBackToBrowse={onBack}
           summaryExpanded={summaryExpanded}
           summaryHighlightCount={summaryCards.length}
+          toolbarDescription={
+            toolbarDescription ??
+            (embedded
+              ? undefined
+              : 'Sticky controls keep cross-case compare actions, summary, and diff filters visible while reviewing execution metadata.')
+          }
           totalChangedRows={totalChangedRows}
         />
 
@@ -752,9 +765,9 @@ export const CompareWorkspace = ({
         {/* Table */}
         <div className="max-h-[calc(100vh-12rem)] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-w-max" style={{ minWidth: tableMinWidth }}>
-            <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-100/95 backdrop-blur">
+            <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-100">
               <div
-                className="sticky left-0 z-30 shrink-0 border-r border-slate-200 bg-slate-100/95 px-4 py-3 text-xs font-semibold uppercase text-slate-600 shadow-sm"
+                className="sticky left-0 z-30 shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 text-xs font-semibold uppercase text-slate-600 shadow-sm"
                 style={{ width: LABEL_COLUMN_WIDTH }}
               >
                 <div className="flex h-full items-center justify-between gap-3">
@@ -777,7 +790,7 @@ export const CompareWorkspace = ({
                 return (
                   <div
                     key={column.simulationId}
-                    className={`group relative shrink-0 border-r border-slate-200 bg-slate-100/95 px-4 py-3 transition ${
+                    className={`group relative shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 transition ${
                       isDropTarget ? 'ring-2 ring-blue-400 ring-inset' : ''
                     }`}
                     draggable
@@ -867,7 +880,7 @@ export const CompareWorkspace = ({
 
               {visibleColumns.length === 0 && (
                 <div
-                  className="shrink-0 border-r border-slate-200 bg-slate-100/95 px-4 py-3 text-sm text-slate-500"
+                  className="shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500"
                   style={{ width: visibleValueWidth }}
                 >
                   Unhide a simulation to restore compare columns.
@@ -884,7 +897,7 @@ export const CompareWorkspace = ({
                   <button
                     className={`flex w-full border-b border-slate-200 text-left transition focus:outline-none ${
                       expandedSections[section.key]
-                        ? 'bg-blue-50/70 text-slate-900'
+                        ? 'bg-slate-100 text-slate-900'
                         : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
                     }`}
                     onClick={() => toggleSection(section.key)}
@@ -895,7 +908,7 @@ export const CompareWorkspace = ({
                   >
                     <span
                       className={`sticky left-0 z-10 flex shrink-0 items-start gap-3 border-r border-slate-200 px-4 py-3 shadow-sm ${
-                        expandedSections[section.key] ? 'bg-blue-50' : 'bg-slate-50'
+                        expandedSections[section.key] ? 'bg-slate-100' : 'bg-slate-50'
                       }`}
                       style={{ width: LABEL_COLUMN_WIDTH }}
                     >
@@ -945,7 +958,7 @@ export const CompareWorkspace = ({
                   {expandedSections[section.key] && (
                     <div id={`section-${section.key}`}>
                       {rowsToRender.length === 0 ? (
-                        <div className="flex border-b border-slate-200 bg-slate-50/80">
+                        <div className="flex border-b border-slate-200 bg-slate-50">
                           <div
                             className="sticky left-0 z-10 shrink-0 border-r border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm"
                             style={{ width: LABEL_COLUMN_WIDTH }}
@@ -968,12 +981,12 @@ export const CompareWorkspace = ({
                             <div
                               key={row.label}
                               className={`flex border-b border-slate-200 ${
-                                isDiff ? 'bg-blue-50/70' : 'bg-white'
+                                isDiff ? 'bg-amber-50' : 'bg-white'
                               }`}
                             >
                               <div
                                 className={`sticky left-0 z-10 shrink-0 border-r border-slate-200 bg-white px-4 py-3 text-sm font-medium shadow-sm ${
-                                  isDiff ? 'border-l-2 border-blue-300 bg-blue-50/40' : ''
+                                  isDiff ? 'border-l-2 border-amber-300' : ''
                                 }`}
                                 style={{ width: LABEL_COLUMN_WIDTH }}
                               >
@@ -1017,18 +1030,63 @@ export const CompareWorkspace = ({
 };
 
 export const ComparePage = ({
+  selectedCaseSimulationIdsByCase,
   selectedSimulationIds,
+  simulations,
   setSelectedSimulationIds,
   selectedSimulations,
 }: ComparePageProps) => {
+  const location = useLocation();
   const navigate = useNavigate();
+  const locationState = location.state as CompareLocationState | null;
+  const routedSelectedSimulationIds = normalizeSelectedSimulationIds(
+    locationState?.selectedSimulationIds,
+  );
+  const routedSelectedSimulations = Array.isArray(locationState?.selectedSimulations)
+    ? locationState.selectedSimulations
+    : [];
+  const shouldUseRoutedSelection =
+    selectedSimulationIds.length < 2 && routedSelectedSimulationIds.length >= 2;
+  const caseSelectionFallbackCandidates = Object.values(selectedCaseSimulationIdsByCase)
+    .map((ids) => normalizeSelectedSimulationIds(ids))
+    .filter((ids) => ids.length >= 2);
+  const caseSelectionFallbackIds =
+    caseSelectionFallbackCandidates.length === 1 ? caseSelectionFallbackCandidates[0] : [];
+  const shouldUseCaseSelectionFallback =
+    !shouldUseRoutedSelection &&
+    selectedSimulationIds.length < 2 &&
+    caseSelectionFallbackIds.length >= 2;
+  const effectiveSelectedSimulationIds = shouldUseRoutedSelection
+    ? routedSelectedSimulationIds
+    : shouldUseCaseSelectionFallback
+      ? caseSelectionFallbackIds
+      : selectedSimulationIds;
+  const effectiveSelectedSimulations =
+    shouldUseRoutedSelection && routedSelectedSimulations.length >= 2
+      ? routedSelectedSimulations
+      : shouldUseCaseSelectionFallback
+        ? simulations.filter((simulation) => effectiveSelectedSimulationIds.includes(simulation.id))
+        : selectedSimulations;
+
+  useEffect(() => {
+    if (!shouldUseRoutedSelection && !shouldUseCaseSelectionFallback) {
+      return;
+    }
+
+    setSelectedSimulationIds(effectiveSelectedSimulationIds);
+  }, [
+    effectiveSelectedSimulationIds,
+    setSelectedSimulationIds,
+    shouldUseCaseSelectionFallback,
+    shouldUseRoutedSelection,
+  ]);
 
   return (
     <CompareWorkspace
       key="global-compare"
-      selectedSimulationIds={selectedSimulationIds}
+      selectedSimulationIds={effectiveSelectedSimulationIds}
       setSelectedSimulationIds={setSelectedSimulationIds}
-      selectedSimulations={selectedSimulations}
+      selectedSimulations={effectiveSelectedSimulations}
       onBack={() => navigate('/browse')}
     />
   );

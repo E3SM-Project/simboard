@@ -30,20 +30,18 @@ export const simulationsRoutes = ({
     path: '/cases/:id',
     element: (
       <CaseDetailsPage
+        renderCompareSection={({ onClose }) => (
+          <CaseComparePage
+            onClose={onClose}
+            simulations={simulations}
+            selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+            setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
+            setSelectedSimulationIds={setSelectedSimulationIds}
+          />
+        )}
         simulations={simulations}
         selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
         setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
-      />
-    ),
-  },
-  {
-    path: '/cases/:id/compare',
-    element: (
-      <CaseComparePage
-        simulations={simulations}
-        selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
-        setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
-        setSelectedSimulationIds={setSelectedSimulationIds}
       />
     ),
   },
