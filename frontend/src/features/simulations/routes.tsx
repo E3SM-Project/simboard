@@ -1,6 +1,6 @@
+import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
-import { CaseComparePage } from '@/features/compare/CaseComparePage';
 import { CaseDetailsPage } from '@/features/simulations/CaseDetailsPage';
 import { CasesPage } from '@/features/simulations/CasesPage';
 import { SimulationDetailsPage } from '@/features/simulations/SimulationDetailsPage';
@@ -8,6 +8,7 @@ import { SimulationsPage } from '@/features/simulations/SimulationsPage';
 import type { SimulationOut } from '@/types';
 
 interface SimulationRoutesProps {
+  renderCaseCompareSection?: (options: { onClose: () => void }) => ReactNode;
   simulations: SimulationOut[];
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
@@ -16,6 +17,7 @@ interface SimulationRoutesProps {
 }
 
 export const simulationsRoutes = ({
+  renderCaseCompareSection,
   simulations,
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
@@ -30,15 +32,7 @@ export const simulationsRoutes = ({
     path: '/cases/:id',
     element: (
       <CaseDetailsPage
-        renderCompareSection={({ onClose }) => (
-          <CaseComparePage
-            onClose={onClose}
-            simulations={simulations}
-            selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
-            setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
-            setSelectedSimulationIds={setSelectedSimulationIds}
-          />
-        )}
+        renderCompareSection={renderCaseCompareSection}
         simulations={simulations}
         selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
         setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}

@@ -3,19 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { NavBar } from '@/components/layout/NavBar';
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { useMachines } from '@/features/machines/hooks/useMachines';
 import { useSimulations } from '@/features/simulations/hooks/useSimulations';
+import { CaseCompareRoute } from '@/routes/CaseCompareRoute';
 import { AppRoutes } from '@/routes/routes';
 
 import { Toaster } from './components/ui/toaster';
-
-const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
-  if (!Array.isArray(ids)) {
-    return [];
-  }
-
-  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
-};
 
 const App = () => {
   // -------------------- Constants --------------------
@@ -29,7 +23,7 @@ const App = () => {
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    return stored ? normalizeSelectedSimulationIds(JSON.parse(stored)) : [];
   });
   const [selectedCaseSimulationIdsByCase, setSelectedCaseSimulationIdsByCase] = useState<
     Record<string, string[]>
@@ -74,6 +68,15 @@ const App = () => {
         <AppRoutes
           simulations={simulations}
           machines={machines}
+          renderCaseCompareSection={({ onClose }) => (
+            <CaseCompareRoute
+              onClose={onClose}
+              simulations={simulations}
+              selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+              setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
+              setSelectedSimulationIds={setSelectedSimulationIds}
+            />
+          )}
           selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
           setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
           selectedSimulationIds={selectedSimulationIds}

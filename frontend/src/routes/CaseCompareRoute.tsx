@@ -2,12 +2,13 @@ import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Button } from '@/components/ui/button';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
 import { useCase } from '@/features/simulations/hooks/useCase';
 import type { SimulationOut } from '@/types';
 
-interface CaseComparePageProps {
+interface CaseCompareRouteProps {
   onClose?: () => void;
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
@@ -17,21 +18,13 @@ interface CaseComparePageProps {
 
 const EMPTY_SELECTED_SIMULATION_IDS: string[] = [];
 
-const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
-  if (!Array.isArray(ids)) {
-    return [];
-  }
-
-  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
-};
-
-export const CaseComparePage = ({
+export const CaseCompareRoute = ({
   onClose,
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
   setSelectedSimulationIds,
   simulations,
-}: CaseComparePageProps) => {
+}: CaseCompareRouteProps) => {
   const navigate = useNavigate();
   const { id: caseId } = useParams<{ id: string }>();
 

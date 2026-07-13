@@ -13,6 +13,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -197,14 +198,6 @@ const getGroupRunDateWindow = (simulations: GroupSimulation[]) => {
 };
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
-
-const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
-  if (!Array.isArray(ids)) {
-    return [];
-  }
-
-  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
-};
 
 const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
   'description',

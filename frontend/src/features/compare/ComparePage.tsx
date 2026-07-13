@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
@@ -73,14 +74,6 @@ interface CompareSummaryCard {
   values: string[];
   uniqueValueCount: number;
 }
-
-const normalizeSelectedSimulationIds = (ids: unknown): string[] => {
-  if (!Array.isArray(ids)) {
-    return [];
-  }
-
-  return [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
-};
 
 export const CompareWorkspace = ({
   backLabel = 'Back to Browse',
