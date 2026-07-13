@@ -8,11 +8,12 @@ import {
   Search,
   Share2,
 } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -135,9 +136,10 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 };
 
 interface CaseDetailsPageProps {
+  renderCompareSection?: (options: { onClose: () => void }) => React.ReactNode;
   simulations: SimulationOut[];
-  selectedSimulationIds: string[];
-  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedCaseSimulationIdsByCase: Record<string, string[]>;
+  setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
 }
 
 interface GroupSimulation {
@@ -151,6 +153,10 @@ type CaseSaveError = {
   message: string;
   validationDetails: ValidationDetail[];
 };
+
+interface CaseDetailsLocationState {
+  from?: string;
+}
 
 const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
@@ -321,13 +327,14 @@ const mergeRowFieldErrors = (
 });
 
 export const CaseDetailsPage = ({
+  renderCompareSection,
   simulations: allSimulations,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
+  selectedCaseSimulationIdsByCase,
+  setSelectedCaseSimulationIdsForCase,
 }: CaseDetailsPageProps) => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
+  const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<SimulationViewMode>('flat');
   const [groupFilterMode, setGroupFilterMode] = useState<SimulationSummaryGroupFilter>('all');
@@ -342,8 +349,9 @@ export const CaseDetailsPage = ({
   const [saveError, setSaveError] = useState<CaseSaveError | null>(null);
   const [serverLinkRowErrors, setServerLinkRowErrors] = useState<ResourceRowFieldErrors[]>([]);
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
+  const [isCompareVisible, setIsCompareVisible] = useState(false);
   const currentPath = `${location.pathname}${location.search}`;
-  const state = location.state as { from?: string } | null;
+  const state = location.state as CaseDetailsLocationState | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
   const caseSimulations = useMemo(() => caseRecord?.simulations ?? [], [caseRecord?.simulations]);
   const simulationDetailsById = useMemo(
@@ -437,9 +445,20 @@ export const CaseDetailsPage = ({
     () => new Set(filteredFlatSimulations.map(({ summary }) => summary.id)),
     [filteredFlatSimulations],
   );
-  const selectedCurrentCaseSimulationIds = caseSimulations
-    .map((simulation) => simulation.id)
-    .filter((simulationId) => selectedSimulationIds.includes(simulationId));
+  const caseSimulationIdSet = useMemo(
+    () => new Set(caseSimulations.map((simulation) => simulation.id)),
+    [caseSimulations],
+  );
+  const rawCaseSelectedSimulationIds = id
+    ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[id] ?? [])
+    : [];
+  const caseSelectedSimulationIds = rawCaseSelectedSimulationIds.filter((simulationId) =>
+    caseSimulationIdSet.has(simulationId),
+  );
+  const caseSelectedSimulationCount = caseSelectedSimulationIds.length;
+  const canShowCompare = caseSelectedSimulationCount >= 2;
+  const shouldRenderCompare = canShowCompare && isCompareVisible;
+  const selectedCurrentCaseSimulationIds = caseSelectedSimulationIds;
   const hiddenSelectedCount = selectedCurrentCaseSimulationIds.filter(
     (simulationId) => !visibleSimulationIds.has(simulationId),
   ).length;
@@ -526,6 +545,23 @@ export const CaseDetailsPage = ({
     const visibleGroupKeys = new Set(filteredSimulationGroups.map((group) => group.key));
     setExpandedGroupKeys((currentKeys) => currentKeys.filter((key) => visibleGroupKeys.has(key)));
   }, [filteredSimulationGroups]);
+
+  useEffect(() => {
+    if (!shouldRenderCompare) {
+      return;
+    }
+
+    compareSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, [shouldRenderCompare]);
+
+  useEffect(() => {
+    if (!canShowCompare && isCompareVisible) {
+      setIsCompareVisible(false);
+    }
+  }, [canShowCompare, isCompareVisible]);
 
   const handleShareCase = async () => {
     if (!id) return;
@@ -668,12 +704,13 @@ export const CaseDetailsPage = ({
       ? 'Fix highlighted resource rows before saving.'
       : null;
   const hasUnsavedChanges =
-    formState != null && Object.keys(buildUpdatePayload(caseRecord, formState, linkRows)).length > 0;
+    formState != null &&
+    Object.keys(buildUpdatePayload(caseRecord, formState, linkRows)).length > 0;
   const machineSummary = summarizeValues(caseRecord.machineNames);
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
-  const isCompareButtonDisabled = selectedSimulationIds.length < 2;
+  const isCompareButtonDisabled = caseSelectedSimulationCount < 2;
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
@@ -688,8 +725,8 @@ export const CaseDetailsPage = ({
             caseHashGroupCount === 1 ? 'group' : 'groups'
           }`;
   const simulationsIntro = allRunsMissingCaseHash
-    ? 'Every run in this case is missing a Case Hash, so grouped view shows one fallback group.'
-    : 'Grouped view clusters runs by Case Hash. Different hashes under one case name usually mean the case was recreated or cloned, and missing-hash runs stay in a fallback group.';
+    ? 'Every execution in this case is missing a Case Hash, so grouped view shows one fallback group.'
+    : 'Grouped view clusters executions by Case Hash. Different hashes under one case name usually mean the case was recreated or cloned, and missing-hash executions stay in a fallback group.';
   const showingFallbackOnlyGroup =
     viewMode === 'grouped' &&
     filteredSimulationGroups.length === 1 &&
@@ -708,16 +745,23 @@ export const CaseDetailsPage = ({
         )}`;
 
   const toggleSimulationSelection = (simulationId: string) => {
-    if (selectedSimulationIds.includes(simulationId)) {
-      setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== simulationId));
+    if (caseSelectedSimulationIds.includes(simulationId)) {
+      if (id) {
+        setSelectedCaseSimulationIdsForCase(
+          id,
+          caseSelectedSimulationIds.filter((selectedId) => selectedId !== simulationId),
+        );
+      }
       return;
     }
 
-    if (selectedSimulationIds.length >= MAX_SELECTION) {
+    if (caseSelectedSimulationCount >= MAX_SELECTION) {
       return;
     }
 
-    setSelectedSimulationIds([...selectedSimulationIds, simulationId]);
+    if (id) {
+      setSelectedCaseSimulationIdsForCase(id, [...caseSelectedSimulationIds, simulationId]);
+    }
   };
 
   const toggleGroupExpansion = (groupKey: string, open: boolean) => {
@@ -1080,27 +1124,51 @@ export const CaseDetailsPage = ({
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-                          Selected{' '}
+                          Selected case runs{' '}
                           <span className="font-semibold text-slate-950">
-                            {selectedSimulationIds.length}
+                            {caseSelectedSimulationCount}
                           </span>{' '}
                           / {MAX_SELECTION}
                         </div>
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => navigate('/compare')}
+                          onClick={() => {
+                            if (shouldRenderCompare) {
+                              compareSectionRef.current?.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start',
+                              });
+                              return;
+                            }
+
+                            setIsCompareVisible(true);
+                          }}
                           disabled={isCompareButtonDisabled}
                         >
-                          Compare Selected
+                          {shouldRenderCompare ? 'Jump to Compare' : 'Compare Case Runs'}
                         </Button>
-                        {selectedSimulationIds.length > 0 ? (
+                        {shouldRenderCompare ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsCompareVisible(false)}
+                          >
+                            Hide Compare
+                          </Button>
+                        ) : null}
+                        {caseSelectedSimulationCount > 0 ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             className="text-slate-600 hover:text-slate-900"
-                            onClick={() => setSelectedSimulationIds([])}
+                            onClick={() => {
+                              if (id) {
+                                setSelectedCaseSimulationIdsForCase(id, []);
+                              }
+                            }}
                           >
                             Deselect all
                           </Button>
@@ -1206,10 +1274,10 @@ export const CaseDetailsPage = ({
                             <TableRow key={summary.id}>
                               <TableCell className="align-top">
                                 <Checkbox
-                                  checked={selectedSimulationIds.includes(summary.id)}
+                                  checked={caseSelectedSimulationIds.includes(summary.id)}
                                   disabled={
-                                    !selectedSimulationIds.includes(summary.id) &&
-                                    selectedSimulationIds.length >= MAX_SELECTION
+                                    !caseSelectedSimulationIds.includes(summary.id) &&
+                                    caseSelectedSimulationCount >= MAX_SELECTION
                                   }
                                   onCheckedChange={() => toggleSimulationSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
@@ -1424,14 +1492,14 @@ export const CaseDetailsPage = ({
                                                   <TableRow key={summary.id}>
                                                     <TableCell className="align-top">
                                                       <Checkbox
-                                                        checked={selectedSimulationIds.includes(
+                                                        checked={caseSelectedSimulationIds.includes(
                                                           summary.id,
                                                         )}
                                                         disabled={
-                                                          !selectedSimulationIds.includes(
+                                                          !caseSelectedSimulationIds.includes(
                                                             summary.id,
                                                           ) &&
-                                                          selectedSimulationIds.length >=
+                                                          caseSelectedSimulationCount >=
                                                             MAX_SELECTION
                                                         }
                                                         onCheckedChange={() =>
@@ -1502,6 +1570,37 @@ export const CaseDetailsPage = ({
               </div>
             </div>
           </div>
+
+          {shouldRenderCompare && renderCompareSection ? (
+            <div
+              ref={compareSectionRef}
+              className="scroll-mt-24 border-t border-slate-200 bg-slate-50/30 px-5 py-5"
+            >
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    Selected Executions Comparison
+                  </h3>
+                  <p className="max-w-3xl text-sm text-slate-600">
+                    Review selected executions side by side within this case. Adjust the selection
+                    above to update this comparison.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCompareVisible(false)}
+                >
+                  Hide Compare
+                </Button>
+              </div>
+
+              {renderCompareSection({
+                onClose: () => setIsCompareVisible(false),
+              })}
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

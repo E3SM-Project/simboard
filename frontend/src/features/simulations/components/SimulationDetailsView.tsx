@@ -1,4 +1,12 @@
-import { AlertTriangle, ArrowLeft, ChevronDown, CircleHelp, Plus, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowUpRight,
+  ChevronDown,
+  CircleHelp,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -865,7 +873,13 @@ export const SimulationDetailsView = ({
             </Link>
           </Button>
           <h1 className="text-2xl font-bold">{simulation.executionId}</h1>
-          <p className="text-sm text-muted-foreground">{simulation.caseName}</p>
+          <Link
+            to={`/cases/${simulation.caseId}`}
+            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
+          >
+            <span>Case: {simulation.caseName}</span>
+            <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>Type:</span>
             <SimulationTypeBadge simulationType={simulation.simulationType} />
