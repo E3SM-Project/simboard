@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useRoutes } from 'react-router-dom';
 
 import { AuthCallback } from '@/auth/AuthCallback';
@@ -14,6 +15,9 @@ import type { SimulationOut } from '@/types/simulation';
 interface RoutesProps {
   simulations: SimulationOut[];
   machines: Machine[];
+  renderCaseCompareSection?: (options: { onClose: () => void }) => ReactNode;
+  selectedCaseSimulationIdsByCase: Record<string, string[]>;
+  setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: SimulationOut[];

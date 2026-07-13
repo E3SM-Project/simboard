@@ -3,8 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { NavBar } from '@/components/layout/NavBar';
+import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { useMachines } from '@/features/machines/hooks/useMachines';
 import { useSimulations } from '@/features/simulations/hooks/useSimulations';
+import { CaseCompareRoute } from '@/routes/CaseCompareRoute';
 import { AppRoutes } from '@/routes/routes';
 
 import { Toaster } from './components/ui/toaster';
@@ -21,13 +23,38 @@ const App = () => {
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    return stored ? normalizeSelectedSimulationIds(JSON.parse(stored)) : [];
   });
+  const [selectedCaseSimulationIdsByCase, setSelectedCaseSimulationIdsByCase] = useState<
+    Record<string, string[]>
+  >({});
 
   const selectedSimulations = useMemo(
     () => (simulations ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
     [simulations, selectedSimulationIds],
   );
+
+  const setSelectedCaseSimulationIdsForCase = (caseId: string, ids: string[]) => {
+    const nextIds = normalizeSelectedSimulationIds(ids);
+
+    setSelectedCaseSimulationIdsByCase((current) => {
+      if (nextIds.length === 0) {
+        if (!(caseId in current)) {
+          return current;
+        }
+
+        const nextState = { ...current };
+        delete nextState[caseId];
+        return nextState;
+      }
+
+      return {
+        ...current,
+        [caseId]: nextIds,
+      };
+    });
+  };
+
   // -------------------- Effects --------------------
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectedSimulationIds));
@@ -37,10 +64,21 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <NavBar selectedSimulationIds={selectedSimulationIds} />
+        <NavBar />
         <AppRoutes
           simulations={simulations}
           machines={machines}
+          renderCaseCompareSection={({ onClose }) => (
+            <CaseCompareRoute
+              onClose={onClose}
+              simulations={simulations}
+              selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+              setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
+              setSelectedSimulationIds={setSelectedSimulationIds}
+            />
+          )}
+          selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+          setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}
           selectedSimulations={selectedSimulations}
