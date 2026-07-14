@@ -394,6 +394,23 @@ class TestExecutionDiscoveryResultsEndpoint:
 
         assert response.status_code == 403
 
+    def test_blank_machine_name_is_rejected(self, client) -> None:
+        response = client.post(
+            f"{API_BASE}/ingestions/discovery-results",
+            json={
+                "machine_name": "   ",
+                "results": [
+                    {
+                        "case_identity": "case-a",
+                        "execution_id": "100.1-1",
+                        "outcome": "accepted",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 422
+
     @pytest.mark.parametrize("field", ["case_identity", "execution_id"])
     def test_blank_identifiers_are_rejected(
         self, client, db: Session, field: str
