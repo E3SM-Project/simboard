@@ -7,10 +7,16 @@ import urllib.error
 import urllib.request
 from email.message import Message
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from app.features.ingestion.parsers.parser import (
+    ArchiveValidationError,
+    IncompleteArchiveError,
+)
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
+from app.scripts.ingestion import nersc_archive_ingestor as nersc_ingestor_module
 from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     IngestionRequestError,
     IngestionRequestResponse,
@@ -21,6 +27,15 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _run_ingestor,
 )
 from app.scripts.ingestion.nersc_archive_ingestor import _fresh_state
+
+
+@pytest.fixture(autouse=True)
+def _stub_discovery_result_persistence(monkeypatch) -> None:
+    monkeypatch.setattr(
+        nersc_ingestor_module,
+        "_post_discovery_results_request",
+        lambda *args, **kwargs: {"status_code": 201, "body": {}},
+    )
 
 
 class _FakeHttpResponse:
@@ -360,11 +375,17 @@ def test_run_ingestor_dry_run_does_not_upload(
     archive_root = tmp_path / "archive"
     (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
     post_calls = 0
+    discovery_post_calls = 0
 
     def fake_post_request(*args, **kwargs):
         nonlocal post_calls
         post_calls += 1
         return {"status_code": 201, "body": {"created_count": 1}}
+
+    def fake_discovery_post(*args, **kwargs):
+        nonlocal discovery_post_calls
+        discovery_post_calls += 1
+        return {"status_code": 201, "body": {}}
 
     monkeypatch.setattr(
         upload_ingestor_module,
@@ -388,10 +409,12 @@ def test_run_ingestor_dry_run_does_not_upload(
         metadata_locator=lambda *_: {},
         sleep_fn=lambda *_: None,
         post_request_fn=fake_post_request,
+        discovery_post_request_fn=fake_discovery_post,
     )
 
     assert exit_code == 0
     assert post_calls == 0
+    assert discovery_post_calls == 0
 
 
 def test_run_ingestor_scan_completed_logs_outcome_counters(
@@ -661,3 +684,168 @@ def test_module_main_guard_exits_via_system_exit_on_configuration_error(
         runpy.run_path(str(script_path), run_name="__main__")
 
     assert exc_info.value.code == 1
+
+
+def test_hpc_persists_accepted_deferred_execution_before_upload_limit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    (archive_root / "case_b" / "200.1-1").mkdir(parents=True)
+    persisted: list[nersc_ingestor_module.ExecutionDiscoveryResult] = []
+    uploads: list[str] = []
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    def upload(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        uploads.append(args[2])
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            post_request_fn=upload,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert sorted((result.execution_id, result.outcome) for result in persisted) == [
+        ("100.1-1", "accepted"),
+        ("200.1-1", "accepted"),
+    ]
+    assert len(uploads) == 1
+
+
+def test_hpc_rejected_only_case_persists_typed_result_but_not_transient_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    (case_dir / "101.1-1").mkdir(parents=True)
+    (case_dir / "102.1-1").mkdir(parents=True)
+    persisted: list[nersc_ingestor_module.ExecutionDiscoveryResult] = []
+    uploads: list[str] = []
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+    monkeypatch.setattr(
+        nersc_ingestor_module,
+        "_log_event",
+        lambda event, fields=None: logged_events.append((event, fields or {})),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_log_event",
+        lambda event, fields=None: logged_events.append((event, fields or {})),
+    )
+
+    def locator(path: str) -> object:
+        if path.endswith("100.1-1"):
+            raise IncompleteArchiveError([])
+        if path.endswith("101.1-1"):
+            raise ArchiveValidationError([])
+        raise PermissionError("temporary")
+
+    def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    def record_upload(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        uploads.append(args[2])
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=locator,
+            post_request_fn=record_upload,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert sorted((result.execution_id, result.outcome) for result in persisted) == [
+        ("100.1-1", "rejected_incomplete"),
+        ("101.1-1", "rejected_invalid"),
+    ]
+    assert uploads == []
+    scan_fields = next(
+        fields for event, fields in logged_events if event == "scan_completed"
+    )
+    assert scan_fields["skipped_transient"] == 1
+    assert scan_fields["transient_execution_ids"] == 1
+
+
+def test_hpc_discovery_persistence_failure_prevents_upload(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    uploads: list[str] = []
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    def fail_persistence(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        raise IngestionRequestError("unavailable", status_code=503, transient=False)
+
+    def upload(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        uploads.append(args[2])
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            post_request_fn=upload,
+            discovery_post_request_fn=fail_persistence,
+        )
+        == 1
+    )
+    assert uploads == []

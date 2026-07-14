@@ -15,3 +15,11 @@ class IngestionSourceType(StrEnum):
     HPC_PATH = "hpc_path"
     HPC_UPLOAD = "hpc_upload"
     BROWSER_UPLOAD = "browser_upload"
+
+
+class ExecutionDiscoveryOutcome(StrEnum):
+    """Immutable outcome of validating one discovered execution."""
+
+    ACCEPTED = "accepted"
+    REJECTED_INCOMPLETE = "rejected_incomplete"
+    REJECTED_INVALID = "rejected_invalid"

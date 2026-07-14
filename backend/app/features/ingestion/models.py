@@ -6,14 +6,26 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.models.base import Base
-from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.enums import (
+    ExecutionDiscoveryOutcome,
+    IngestionSourceType,
+    IngestionStatus,
+)
 
 if TYPE_CHECKING:
     from app.features.simulation.models import Simulation
@@ -78,3 +90,46 @@ class Ingestion(Base):
 
     def __repr__(self) -> str:
         return f"<Ingestion id={self.id} source_type={self.source_type!r} status={self.status!r}>"
+
+
+class ExecutionDiscoveryResult(Base):
+    """Immutable validation result for one machine/case/execution identity."""
+
+    __tablename__ = "execution_discovery_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "machine_id",
+            "case_identity",
+            "execution_id",
+            name="uq_execution_discovery_result_identity",
+        ),
+        Index(
+            "ix_execution_discovery_results_lookup",
+            "machine_id",
+            "case_identity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    machine_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("machines.id"), nullable=False
+    )
+    case_identity: Mapped[str] = mapped_column(Text, nullable=False)
+    execution_id: Mapped[str] = mapped_column(Text, nullable=False)
+    outcome: Mapped[ExecutionDiscoveryOutcome] = mapped_column(
+        SAEnum(
+            ExecutionDiscoveryOutcome,
+            name="execution_discovery_outcome_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )

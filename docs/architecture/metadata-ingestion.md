@@ -27,11 +27,12 @@ Case-level state is derived from execution-level state.
 | Term                      | Definition                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
-| Incomplete execution      | An execution directory that is missing one or more required metadata files, is missing required metadata in those files, does not provide a non-empty execution ID (LID) in the timing file, or cannot be read during discovery. Incomplete executions are skipped and do not enter case state.                                                                                     |
+| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. This immutable content result is distinct from a transient filesystem access failure.                                                                                                                                                                                         |
 | Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
 | Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
+| Discovery result          | Immutable validation outcome keyed by machine, normalized case identity, and execution ID. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`.                                                                                                                                                                                                             |
 
 ### Runner counter and log field terms
 
@@ -47,11 +48,13 @@ that canonical term instead of repeating the full concept definition.
 | `execution_dirs_scanned`            | Count of execution directories whose names matched the execution pattern and were checked during discovery validation.                      |
 | `execution_dirs_accepted`           | Count of scanned execution directories that passed discovery validation and were retained as valid discovered executions.                   |
 | `skipped_incomplete`                | Count of execution directories rejected during discovery because required metadata files or fields were missing or incomplete.              |
-| `skipped_invalid`                   | Count of execution directories rejected during discovery because metadata was invalid or the directory could not be read.                   |
+| `skipped_invalid`                   | Count of execution directories rejected during discovery with typed `ArchiveValidationError`.                                               |
+| `skipped_transient`                 | Count of execution directories skipped because filesystem access raised a transient `OSError`.                                              |
 | `accepted_execution_ids`            | Count of newly discovered valid execution IDs selected for the current run.                                                                 |
 | `rejected_existing_execution_ids`   | Count of valid discovered execution IDs already present in stored `processed_execution_ids` state.                                          |
 | `rejected_incomplete_execution_ids` | Count of execution IDs rejected during discovery because required metadata files or fields were missing or incomplete.                      |
-| `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata was invalid or the directory could not be read.                           |
+| `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata content was invalid.                                                      |
+| `transient_execution_ids`           | Count of execution IDs skipped for transient filesystem access failures; these outcomes are never persisted.                               |
 | `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection. |
 
 ## Performance Directories
@@ -183,18 +186,21 @@ Automated HPC collection reaches SimBoard ingestion through two site-side submis
 Both automated scripts follow the same submission-state sequence:
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
-2. Read known execution IDs from `/api/v1/ingestions/state`.
-3. Compare discovered complete execution IDs with database-backed state.
-4. Submit each case that contains at least one newly discovered execution ID, sending those newly discovered execution IDs as the `processed_execution_ids` payload.
-5. SimBoard stores the submitted known execution IDs on ingestion audit rows.
-6. Future runs reconstruct the known execution IDs from PostgreSQL.
+2. Read processed execution IDs and immutable discovery results from `/api/v1/ingestions/state`.
+3. Skip processed executions. For unprocessed executions, reuse stored discovery results before metadata validation: accepted results remain candidates, while rejected results remain excluded.
+4. Validate executions without stored results. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
+5. Persist all new immutable results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent; a different outcome for an existing identity returns a conflict and rolls back that batch.
+6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`.
+7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
+8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
 
 Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
 scans additionally deduplicate by stable logical case identity plus
 `execution_id` so timestamped snapshot parents do not cause repeated archive
 ingestion across `OLD_PERF_ARCHIVE_DIR` snapshots. Updating files inside an
 already recorded execution directory does not make that execution eligible
-again, and incomplete executions do not become case state.
+again. Dry runs compute and log proposed results but never persist discovery or
+processed state.
 
 Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable case identifier for that uploaded case.
 

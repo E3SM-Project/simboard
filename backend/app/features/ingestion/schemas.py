@@ -2,9 +2,13 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.enums import (
+    ExecutionDiscoveryOutcome,
+    IngestionSourceType,
+    IngestionStatus,
+)
 
 
 class IngestionSimulationSummary(BaseModel):
@@ -111,6 +115,56 @@ class IngestionStateCase(BaseModel):
     ]
 
 
+class ExecutionDiscoveryResultEntry(BaseModel):
+    """One immutable execution discovery result."""
+
+    case_identity: Annotated[str, Field(..., min_length=1)]
+    execution_id: Annotated[str, Field(..., min_length=1)]
+    outcome: ExecutionDiscoveryOutcome
+
+    @field_validator("case_identity", "execution_id")
+    @classmethod
+    def strip_identifier(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Identifier must not be blank")
+        return normalized
+
+
+class ExecutionDiscoveryResultsRequest(BaseModel):
+    """Batch of immutable discovery results for one machine."""
+
+    machine_name: Annotated[str, Field(..., min_length=1)]
+    results: Annotated[list[ExecutionDiscoveryResultEntry], Field(..., min_length=1)]
+
+    @field_validator("machine_name")
+    @classmethod
+    def strip_machine_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Machine name must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def reject_conflicting_results(self) -> "ExecutionDiscoveryResultsRequest":
+        outcomes: dict[tuple[str, str], ExecutionDiscoveryOutcome] = {}
+        for result in self.results:
+            identity = (result.case_identity, result.execution_id)
+            prior = outcomes.setdefault(identity, result.outcome)
+            if prior != result.outcome:
+                raise ValueError(
+                    "Same case identity and execution ID cannot have different outcomes"
+                )
+        return self
+
+
+class ExecutionDiscoveryResultsResponse(BaseModel):
+    """Persistence summary for a discovery-result batch."""
+
+    inserted_count: int
+    existing_count: int
+
+
 class IngestionStateResponse(BaseModel):
     """Database-backed ingestion state for one machine."""
 
@@ -121,6 +175,13 @@ class IngestionStateResponse(BaseModel):
     cases: Annotated[
         dict[str, IngestionStateCase],
         Field(..., description="Case path to processed execution state mapping"),
+    ]
+    discovery_results: Annotated[
+        dict[str, list[ExecutionDiscoveryResultEntry]],
+        Field(
+            default_factory=dict,
+            description="Normalized case identity to immutable discovery results",
+        ),
     ]
 
 

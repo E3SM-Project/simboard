@@ -57,6 +57,12 @@ DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
 DEFAULT_MACHINE_NAME = "perlmutter"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
+DISCOVERY_RESULT_BATCH_SIZE = 500
+DISCOVERY_OUTCOME_PRECEDENCE = {
+    "rejected_incomplete": 0,
+    "rejected_invalid": 1,
+    "accepted": 2,
+}
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 
@@ -85,6 +91,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "discovered_cases",
         "execution_dirs_scanned",
         "execution_dirs_accepted",
+        "skipped_transient",
         "rejected_existing_execution_ids",
         "duration_seconds",
     ),
@@ -96,6 +103,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "discovered_cases",
         "execution_dirs_scanned",
         "execution_dirs_accepted",
+        "skipped_transient",
         "rejected_existing_execution_ids",
         "duration_seconds",
     ),
@@ -109,6 +117,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "execution_count_deferred",
         "execution_count_rejected_incomplete",
         "execution_count_rejected_invalid",
+        "execution_count_transient",
     ),
     "execution_collection_decision": (
         "case",
@@ -126,6 +135,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "rejected_existing",
         "rejected_incomplete",
         "rejected_invalid",
+        "transient",
         "deferred",
     ),
     "scan_completed": (
@@ -138,10 +148,12 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "execution_dirs_accepted",
         "skipped_incomplete",
         "skipped_invalid",
+        "skipped_transient",
         "accepted_execution_ids",
         "rejected_existing_execution_ids",
         "rejected_incomplete_execution_ids",
         "rejected_invalid_execution_ids",
+        "transient_execution_ids",
         "deferred_execution_ids",
     ),
     "dry_run_candidate": ("case", "execution_count", "new_execution_count"),
@@ -173,12 +185,14 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "execution_dirs_accepted",
         "skipped_incomplete",
         "skipped_invalid",
+        "skipped_transient",
     ),
     "dry_run_summary_candidates": (
         "accepted_execution_ids",
         "rejected_existing_execution_ids",
         "rejected_incomplete_execution_ids",
         "rejected_invalid_execution_ids",
+        "transient_execution_ids",
         "deferred_execution_ids",
         "candidate_logs_emitted",
         "candidate_logs_suppressed",
@@ -192,6 +206,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "execution_dirs_accepted",
         "skipped_incomplete",
         "skipped_invalid",
+        "skipped_transient",
     ),
     "run_summary_outcomes": (
         "success_count",
@@ -200,6 +215,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "rejected_existing_execution_ids",
         "rejected_incomplete_execution_ids",
         "rejected_invalid_execution_ids",
+        "transient_execution_ids",
         "deferred_execution_ids",
     ),
     "case_ingested": (
@@ -289,10 +305,12 @@ class DiscoveryStats(TypedDict):
     execution_dirs_accepted: int
     skipped_incomplete: int
     skipped_invalid: int
+    skipped_transient: int
     accepted_execution_ids: int
     rejected_existing_execution_ids: int
     rejected_incomplete_execution_ids: int
     rejected_invalid_execution_ids: int
+    transient_execution_ids: int
     deferred_execution_ids: int
 
 
@@ -344,6 +362,15 @@ class ExecutionCollectionDecision:
             fields["detail"] = self.detail
 
         return fields
+
+
+@dataclass(frozen=True)
+class ExecutionDiscoveryResult:
+    """Immutable validation outcome awaiting API persistence."""
+
+    case_identity: str
+    execution_id: str
+    outcome: Literal["accepted", "rejected_incomplete", "rejected_invalid"]
 
 
 @dataclass
@@ -570,6 +597,7 @@ def _run_ingestor(
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
     sleep_fn: Callable[[float], None] = time.sleep,
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> int:
     """Execute one complete archive scan-and-ingest cycle.
 
@@ -622,12 +650,24 @@ def _run_ingestor(
         )
         return 1
 
+    new_discovery_results: list[ExecutionDiscoveryResult] = []
     try:
         (scan_results, candidates, submission_qualified_case_count, discovery_stats) = (
-            _scan_archive(config, state, metadata_locator=metadata_locator)
+            _scan_archive(
+                config,
+                state,
+                metadata_locator=metadata_locator,
+                discovery_results=new_discovery_results,
+            )
         )
     except UnsupportedArchiveLayoutError as exc:
         _log_event("configuration_error", {"error": str(exc)})
+        return 1
+    except Exception as exc:
+        _log_event(
+            "archive_scan_failed",
+            {"error": f"{exc.__class__.__name__}: {exc}"},
+        )
         return 1
 
     _log_event(
@@ -642,6 +682,7 @@ def _run_ingestor(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "skipped_transient": discovery_stats["skipped_transient"],
             "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
             "rejected_existing_execution_ids": discovery_stats[
                 "rejected_existing_execution_ids"
@@ -652,6 +693,7 @@ def _run_ingestor(
             "rejected_invalid_execution_ids": discovery_stats[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": discovery_stats["transient_execution_ids"],
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
@@ -664,6 +706,19 @@ def _run_ingestor(
             discovery_stats,
             archive_root=config.archive_root,
         )
+
+    discovery_endpoint_url = _build_discovery_results_endpoint_url(config)
+    if not _persist_discovery_results_with_retries(
+        new_discovery_results,
+        discovery_endpoint_url,
+        config.api_token,
+        config.machine_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=discovery_post_request_fn,
+    ):
+        return 1
 
     return _handle_ingest_run(
         candidates,
@@ -699,6 +754,13 @@ def _build_state_endpoint_url(config: IngestorConfig) -> str:
     return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/state"
 
 
+def _build_discovery_results_endpoint_url(config: IngestorConfig) -> str:
+    """Build discovery-result persistence endpoint URL."""
+    return (
+        f"{_normalized_api_base_url(config.api_base_url)}/ingestions/discovery-results"
+    )
+
+
 # Archive Discovery
 # -----------------
 
@@ -707,6 +769,7 @@ def _scan_archive(
     config: IngestorConfig,
     state: dict[str, Any],
     metadata_locator: Callable[[str], object],
+    discovery_results: list[ExecutionDiscoveryResult] | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
@@ -754,6 +817,8 @@ def _scan_archive(
         walk_dir_filter=walk_dir_filter,
         scan_mode=config.scan_mode,
         processed_ids_by_key=processed_ids_by_key,
+        discovery_results=discovery_results,
+        discovery_results_by_key=_build_discovery_results_by_key(state),
         staging_root_basename=staging_root_basename,
     )
     scan_results = _build_case_scan_results(grouped_executions)
@@ -798,6 +863,8 @@ def _discover_case_executions(
     scan_mode: str = "staging",
     processed_ids_by_key: defaultdict[str, set[str]] | None = None,
     staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    discovery_results: list[ExecutionDiscoveryResult] | None = None,
+    discovery_results_by_key: dict[tuple[str, str], str] | None = None,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -858,6 +925,8 @@ def _discover_case_executions(
                 processed_ids_by_key=processed_ids_by_key,
                 scan_mode=scan_mode,
                 staging_root_basename=staging_root_basename,
+                discovery_results=discovery_results,
+                discovery_results_by_key=discovery_results_by_key,
             )
 
         if directories_visited % DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES == 0:
@@ -912,6 +981,7 @@ def _log_archive_scan_progress(
             "execution_dirs_accepted": (
                 0 if stats is None else stats["execution_dirs_accepted"]
             ),
+            "skipped_transient": (0 if stats is None else stats["skipped_transient"]),
             "rejected_existing_execution_ids": (
                 0 if stats is None else stats["rejected_existing_execution_ids"]
             ),
@@ -929,14 +999,16 @@ def _initialize_discovery_stats(stats: DiscoveryStats | None) -> None:
     stats.setdefault("execution_dirs_accepted", 0)
     stats.setdefault("skipped_incomplete", 0)
     stats.setdefault("skipped_invalid", 0)
+    stats.setdefault("skipped_transient", 0)
     stats.setdefault("accepted_execution_ids", 0)
     stats.setdefault("rejected_existing_execution_ids", 0)
     stats.setdefault("rejected_incomplete_execution_ids", 0)
     stats.setdefault("rejected_invalid_execution_ids", 0)
+    stats.setdefault("transient_execution_ids", 0)
     stats.setdefault("deferred_execution_ids", 0)
 
 
-def _collect_case_execution(
+def _collect_case_execution(  # noqa: C901
     grouped: dict[str, set[str]],
     case_dir: Path,
     execution_id: str,
@@ -947,6 +1019,8 @@ def _collect_case_execution(
     processed_ids_by_key: defaultdict[str, set[str]] | None,
     scan_mode: str,
     staging_root_basename: str,
+    discovery_results: list[ExecutionDiscoveryResult] | None = None,
+    discovery_results_by_key: dict[tuple[str, str], str] | None = None,
 ) -> None:
     """Validate and record one discovered execution directory."""
     case_path = str(case_dir.resolve())
@@ -979,6 +1053,41 @@ def _collect_case_execution(
 
         return
 
+    stored_outcome = (
+        None
+        if discovery_results_by_key is None
+        else discovery_results_by_key.get((case_identity_key, execution_id))
+    )
+    if stored_outcome == "accepted":
+        if stats is not None:
+            stats["execution_dirs_accepted"] += 1
+
+        grouped.setdefault(case_path, set()).add(execution_id)
+
+        if log_data is not None:
+            log_data.valid_execution_ids.add(execution_id)
+
+        return
+    if stored_outcome in {"rejected_incomplete", "rejected_invalid"}:
+        reason = "incomplete" if stored_outcome == "rejected_incomplete" else "invalid"
+
+        if stats is not None:
+            stats[f"skipped_{reason}"] += 1  # type: ignore[literal-required]
+            stats[f"rejected_{reason}_execution_ids"] += 1  # type: ignore[literal-required]
+
+        if log_data is not None:
+            log_data.rejected_decisions.append(
+                ExecutionCollectionDecision(
+                    case_path=case_path,
+                    execution_id=execution_id,
+                    decision="rejected",
+                    reason=reason,
+                    detail="stored_discovery_result",
+                )
+            )
+
+        return
+
     if stats is not None:
         stats["execution_dirs_scanned"] += 1
 
@@ -989,6 +1098,21 @@ def _collect_case_execution(
         stats=stats,
     )
     if rejection_decision is not None:
+        if discovery_results is not None and rejection_decision.reason in {
+            "incomplete",
+            "invalid",
+        }:
+            discovery_results.append(
+                ExecutionDiscoveryResult(
+                    case_identity=case_identity_key,
+                    execution_id=execution_id,
+                    outcome=(
+                        "rejected_incomplete"
+                        if rejection_decision.reason == "incomplete"
+                        else "rejected_invalid"
+                    ),
+                )
+            )
         if log_data is not None:
             log_data.rejected_decisions.append(rejection_decision)
 
@@ -996,6 +1120,15 @@ def _collect_case_execution(
 
     if stats is not None:
         stats["execution_dirs_accepted"] += 1
+
+    if discovery_results is not None:
+        discovery_results.append(
+            ExecutionDiscoveryResult(
+                case_identity=case_identity_key,
+                execution_id=execution_id,
+                outcome="accepted",
+            )
+        )
 
     grouped.setdefault(case_path, set()).add(execution_id)
     if log_data is not None:
@@ -1046,7 +1179,7 @@ def _validate_execution_dir(
         metadata_locator(str(execution_dir))
 
         return None
-    except FileNotFoundError as exc:
+    except IncompleteArchiveError as exc:
         if stats is not None:
             stats["skipped_incomplete"] += 1
             stats["rejected_incomplete_execution_ids"] += 1
@@ -1057,7 +1190,7 @@ def _validate_execution_dir(
             reason="incomplete",
             exc=exc,
         )
-    except ValueError as exc:
+    except ArchiveValidationError as exc:
         if stats is not None:
             stats["skipped_invalid"] += 1
             stats["rejected_invalid_execution_ids"] += 1
@@ -1070,13 +1203,13 @@ def _validate_execution_dir(
         )
     except OSError as exc:
         if stats is not None:
-            stats["skipped_invalid"] += 1
-            stats["rejected_invalid_execution_ids"] += 1
+            stats["skipped_transient"] += 1
+            stats["transient_execution_ids"] += 1
 
         return _build_rejected_execution_decision(
             case_path=str(case_dir.resolve()),
             execution_id=execution_id,
-            reason="invalid",
+            reason="transient",
             exc=exc,
         )
 
@@ -1134,6 +1267,11 @@ def _log_execution_collection_outcomes(
             for decision in log_data.rejected_decisions
             if decision.reason == "invalid"
         )
+        transient = sum(
+            1
+            for decision in log_data.rejected_decisions
+            if decision.reason == "transient"
+        )
 
         _log_event(
             "case_collection_begin",
@@ -1143,6 +1281,7 @@ def _log_execution_collection_outcomes(
                 "execution_count_valid": len(valid_execution_ids),
                 "execution_count_rejected_incomplete": rejected_incomplete,
                 "execution_count_rejected_invalid": rejected_invalid,
+                "execution_count_transient": transient,
                 "execution_count_existing": len(existing_ids),
                 "execution_count_new": len(new_ids),
                 "execution_count_selected_new": len(selected_new_ids),
@@ -1201,6 +1340,7 @@ def _log_execution_collection_outcomes(
                 "rejected_existing": len(existing_ids),
                 "rejected_incomplete": rejected_incomplete,
                 "rejected_invalid": rejected_invalid,
+                "transient": transient,
                 "deferred": len(deferred_ids),
             },
         )
@@ -1837,6 +1977,7 @@ def _handle_dry_run(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "skipped_transient": discovery_stats["skipped_transient"],
             "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
             "rejected_existing_execution_ids": discovery_stats[
                 "rejected_existing_execution_ids"
@@ -1847,6 +1988,7 @@ def _handle_dry_run(
             "rejected_invalid_execution_ids": discovery_stats[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": discovery_stats["transient_execution_ids"],
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
@@ -1959,6 +2101,7 @@ def _handle_ingest_run(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "skipped_transient": discovery_stats["skipped_transient"],
             "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
             "rejected_existing_execution_ids": discovery_stats[
                 "rejected_existing_execution_ids"
@@ -1969,6 +2112,7 @@ def _handle_ingest_run(
             "rejected_invalid_execution_ids": discovery_stats[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": discovery_stats["transient_execution_ids"],
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
@@ -1991,6 +2135,7 @@ def _common_summary_fields(discovery_stats: DiscoveryStats) -> dict[str, int]:
         "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
         "skipped_incomplete": discovery_stats["skipped_incomplete"],
         "skipped_invalid": discovery_stats["skipped_invalid"],
+        "skipped_transient": discovery_stats["skipped_transient"],
         "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
         "rejected_existing_execution_ids": discovery_stats[
             "rejected_existing_execution_ids"
@@ -2001,6 +2146,7 @@ def _common_summary_fields(discovery_stats: DiscoveryStats) -> dict[str, int]:
         "rejected_invalid_execution_ids": discovery_stats[
             "rejected_invalid_execution_ids"
         ],
+        "transient_execution_ids": discovery_stats["transient_execution_ids"],
         "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
     }
 
@@ -2027,6 +2173,7 @@ def _log_dry_run_summary(
             "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
             "skipped_incomplete": summary_fields["skipped_incomplete"],
             "skipped_invalid": summary_fields["skipped_invalid"],
+            "skipped_transient": summary_fields["skipped_transient"],
         },
     )
     _log_event(
@@ -2042,6 +2189,7 @@ def _log_dry_run_summary(
             "rejected_invalid_execution_ids": summary_fields[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": summary_fields["transient_execution_ids"],
             "deferred_execution_ids": summary_fields["deferred_execution_ids"],
             "candidate_logs_emitted": candidate_logs_emitted,
             "candidate_logs_suppressed": candidate_logs_suppressed,
@@ -2071,6 +2219,7 @@ def _log_run_summary(
             "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
             "skipped_incomplete": summary_fields["skipped_incomplete"],
             "skipped_invalid": summary_fields["skipped_invalid"],
+            "skipped_transient": summary_fields["skipped_transient"],
         },
     )
     _log_event(
@@ -2088,6 +2237,7 @@ def _log_run_summary(
             "rejected_invalid_execution_ids": summary_fields[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": summary_fields["transient_execution_ids"],
             "deferred_execution_ids": summary_fields["deferred_execution_ids"],
         },
     )
@@ -2095,6 +2245,127 @@ def _log_run_summary(
 
 # HTTP Requests and Remote State
 # ------------------------------
+
+
+def _persist_discovery_results_with_retries(
+    results: list[ExecutionDiscoveryResult],
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    *,
+    max_attempts: int,
+    timeout_seconds: int,
+    sleep_fn: Callable[[float], None],
+    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+) -> bool:
+    """Persist discovery results in bounded batches before any ingestion."""
+    deduplicated_results = _deduplicate_discovery_results(results)
+    if not deduplicated_results:
+        return True
+    if post_request_fn is None:
+        post_request_fn = _post_discovery_results_request
+
+    for offset in range(0, len(deduplicated_results), DISCOVERY_RESULT_BATCH_SIZE):
+        batch = deduplicated_results[offset : offset + DISCOVERY_RESULT_BATCH_SIZE]
+        for attempt in range(1, max_attempts + 1):
+            try:
+                post_request_fn(
+                    endpoint_url,
+                    api_token,
+                    machine_name,
+                    results=batch,
+                    timeout_seconds=timeout_seconds,
+                )
+                break
+            except IngestionRequestError as exc:
+                retrying = exc.transient and attempt < max_attempts
+                _log_event(
+                    "discovery_results_persistence_failed",
+                    {
+                        "attempt": attempt,
+                        "status_code": exc.status_code,
+                        "transient": exc.transient,
+                        "retrying": retrying,
+                        "error": str(exc),
+                    },
+                )
+                if not retrying:
+                    return False
+                sleep_fn(2 ** (attempt - 1))
+
+    return True
+
+
+def _deduplicate_discovery_results(
+    results: list[ExecutionDiscoveryResult],
+) -> list[ExecutionDiscoveryResult]:
+    """Collapse snapshot duplicates using deterministic outcome precedence."""
+    results_by_identity: dict[tuple[str, str], ExecutionDiscoveryResult] = {}
+    for result in results:
+        identity = (result.case_identity, result.execution_id)
+        existing = results_by_identity.get(identity)
+        if (
+            existing is None
+            or DISCOVERY_OUTCOME_PRECEDENCE[result.outcome]
+            > DISCOVERY_OUTCOME_PRECEDENCE[existing.outcome]
+        ):
+            results_by_identity[identity] = result
+
+    return list(results_by_identity.values())
+
+
+def _post_discovery_results_request(
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    *,
+    results: list[ExecutionDiscoveryResult],
+    timeout_seconds: int,
+) -> IngestionRequestResponse:
+    """POST one JSON discovery-result batch."""
+    body = json.dumps(
+        {
+            "machine_name": machine_name,
+            "results": [
+                {
+                    "case_identity": result.case_identity,
+                    "execution_id": result.execution_id,
+                    "outcome": result.outcome,
+                }
+                for result in results
+            ],
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint_url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_body = response.read().decode("utf-8")
+            parsed_body = json.loads(raw_body) if raw_body else {}
+            return {"status_code": response.status, "body": parsed_body}
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        raise IngestionRequestError(
+            f"HTTP {exc.code}: {response_text}",
+            status_code=exc.code,
+            transient=_is_transient_status(exc.code),
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise IngestionRequestError(
+            f"URL error: {exc.reason}", status_code=None, transient=True
+        ) from exc
+    except TimeoutError as exc:
+        raise IngestionRequestError(
+            "Request timed out", status_code=None, transient=True
+        ) from exc
 
 
 def _ingest_case_with_retries(
@@ -2352,9 +2623,31 @@ def _normalize_remote_state(body: dict[str, Any]) -> dict[str, Any]:
             "fingerprint": fingerprint,
         }
 
+    raw_discovery_results = body.get("discovery_results", {})
+    discovery_results: dict[str, list[dict[str, str]]] = {}
+    if isinstance(raw_discovery_results, dict):
+        for case_identity, raw_results in raw_discovery_results.items():
+            if not isinstance(case_identity, str) or not isinstance(raw_results, list):
+                continue
+            normalized_results = [
+                {
+                    "case_identity": case_identity,
+                    "execution_id": result["execution_id"],
+                    "outcome": result["outcome"],
+                }
+                for result in raw_results
+                if isinstance(result, dict)
+                and isinstance(result.get("execution_id"), str)
+                and result.get("outcome")
+                in {"accepted", "rejected_incomplete", "rejected_invalid"}
+            ]
+            if normalized_results:
+                discovery_results[case_identity] = normalized_results
+
     return {
         "version": STATE_VERSION,
         "cases": cases,
+        "discovery_results": discovery_results,
         "updated_at": _utc_now_iso(),
     }
 
@@ -2390,6 +2683,7 @@ def _fresh_state() -> dict[str, Any]:
     return {
         "version": STATE_VERSION,
         "cases": {},
+        "discovery_results": {},
         "updated_at": _utc_now_iso(),
     }
 
@@ -2473,6 +2767,36 @@ def _case_state_processed_ids(case_state: dict[str, Any]) -> set[str]:
     return {value for value in raw_ids if isinstance(value, str)}
 
 
+def _build_discovery_results_by_key(
+    state: dict[str, Any],
+) -> dict[tuple[str, str], str]:
+    """Build immutable-result lookup from normalized remote state."""
+    raw_results = state.get("discovery_results", {})
+    if not isinstance(raw_results, dict):
+        return {}
+
+    lookup: dict[tuple[str, str], str] = {}
+    for case_identity, results in raw_results.items():
+        if not isinstance(case_identity, str) or not isinstance(results, list):
+            continue
+
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+
+            execution_id = result.get("execution_id")
+            outcome = result.get("outcome")
+
+            if isinstance(execution_id, str) and outcome in {
+                "accepted",
+                "rejected_incomplete",
+                "rejected_invalid",
+            }:
+                lookup[(case_identity, execution_id)] = cast(str, outcome)
+
+    return lookup
+
+
 # General Utilities and Logging
 # -----------------------------
 
@@ -2484,10 +2808,12 @@ def _new_discovery_stats() -> DiscoveryStats:
         "execution_dirs_accepted": 0,
         "skipped_incomplete": 0,
         "skipped_invalid": 0,
+        "skipped_transient": 0,
         "accepted_execution_ids": 0,
         "rejected_existing_execution_ids": 0,
         "rejected_incomplete_execution_ids": 0,
         "rejected_invalid_execution_ids": 0,
+        "transient_execution_ids": 0,
         "deferred_execution_ids": 0,
     }
 
