@@ -111,6 +111,8 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
     assert stats["execution_dirs_accepted"] == 1
     assert stats["skipped_incomplete"] == 0
     assert stats["skipped_invalid"] == 0
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
 
 
 def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
@@ -1117,9 +1119,13 @@ def test_validate_execution_dir_treats_plain_file_not_found_as_transient(
     }
     assert stats["skipped_incomplete"] == 0
     assert stats["rejected_incomplete_execution_ids"] == 0
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
 
 
-def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) -> None:
+def test_validate_execution_dir_counts_archive_validation_error_with_stats(
+    tmp_path: Path,
+) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
@@ -2906,6 +2912,64 @@ def test_discovery_persistence_retries_transient_failure() -> None:
     assert ok is True
     assert len(attempts) == 2
     assert sleeps == [1]
+
+
+def test_discovery_persistence_deduplicates_snapshot_outcomes_by_precedence() -> None:
+    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+
+    def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    result = ingestor_module._persist_discovery_results_with_retries(
+        [
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_a",
+                execution_id="100.1-1",
+                outcome="rejected_incomplete",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_a",
+                execution_id="100.1-1",
+                outcome="rejected_invalid",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_a",
+                execution_id="100.1-1",
+                outcome="accepted",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_a",
+                execution_id="100.1-1",
+                outcome="rejected_incomplete",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_b",
+                execution_id="200.1-1",
+                outcome="rejected_invalid",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_b",
+                execution_id="200.1-1",
+                outcome="rejected_incomplete",
+            ),
+        ],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=1,
+        timeout_seconds=30,
+        sleep_fn=lambda _: None,
+        post_request_fn=persist,
+    )
+
+    assert result is True
+    assert [
+        (item.case_identity, item.execution_id, item.outcome) for item in persisted
+    ] == [
+        ("case_a", "100.1-1", "accepted"),
+        ("case_b", "200.1-1", "rejected_invalid"),
+    ]
 
 
 def test_dry_run_never_persists_discovery_results(tmp_path: Path, monkeypatch) -> None:

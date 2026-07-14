@@ -58,6 +58,11 @@ DEFAULT_MACHINE_NAME = "perlmutter"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 DISCOVERY_RESULT_BATCH_SIZE = 500
+DISCOVERY_OUTCOME_PRECEDENCE = {
+    "rejected_incomplete": 0,
+    "rejected_invalid": 1,
+    "accepted": 2,
+}
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 
@@ -2254,13 +2259,14 @@ def _persist_discovery_results_with_retries(
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> bool:
     """Persist discovery results in bounded batches before any ingestion."""
-    if not results:
+    deduplicated_results = _deduplicate_discovery_results(results)
+    if not deduplicated_results:
         return True
     if post_request_fn is None:
         post_request_fn = _post_discovery_results_request
 
-    for offset in range(0, len(results), DISCOVERY_RESULT_BATCH_SIZE):
-        batch = results[offset : offset + DISCOVERY_RESULT_BATCH_SIZE]
+    for offset in range(0, len(deduplicated_results), DISCOVERY_RESULT_BATCH_SIZE):
+        batch = deduplicated_results[offset : offset + DISCOVERY_RESULT_BATCH_SIZE]
         for attempt in range(1, max_attempts + 1):
             try:
                 post_request_fn(
@@ -2288,6 +2294,24 @@ def _persist_discovery_results_with_retries(
                 sleep_fn(2 ** (attempt - 1))
 
     return True
+
+
+def _deduplicate_discovery_results(
+    results: list[ExecutionDiscoveryResult],
+) -> list[ExecutionDiscoveryResult]:
+    """Collapse snapshot duplicates using deterministic outcome precedence."""
+    results_by_identity: dict[tuple[str, str], ExecutionDiscoveryResult] = {}
+    for result in results:
+        identity = (result.case_identity, result.execution_id)
+        existing = results_by_identity.get(identity)
+        if (
+            existing is None
+            or DISCOVERY_OUTCOME_PRECEDENCE[result.outcome]
+            > DISCOVERY_OUTCOME_PRECEDENCE[existing.outcome]
+        ):
+            results_by_identity[identity] = result
+
+    return list(results_by_identity.values())
 
 
 def _post_discovery_results_request(
