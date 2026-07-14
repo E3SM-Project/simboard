@@ -56,6 +56,11 @@ def _stub_remote_state(monkeypatch) -> None:
         "_fetch_ingestion_state",
         lambda *args, **kwargs: _fresh_state(),
     )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_post_discovery_results_request",
+        lambda *args, **kwargs: {"status_code": 201, "body": {}},
+    )
 
 
 def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
@@ -105,7 +110,7 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
     assert stats["execution_dirs_scanned"] == 2
     assert stats["execution_dirs_accepted"] == 1
     assert stats["skipped_incomplete"] == 0
-    assert stats["skipped_invalid"] == 1
+    assert stats["skipped_invalid"] == 0
 
 
 def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
@@ -235,6 +240,7 @@ def test_discover_case_executions_skips_previously_processed_archive_ids(
     new_exec.mkdir(parents=True)
 
     locator_calls: list[str] = []
+    discovery_results: list[ingestor_module.ExecutionDiscoveryResult] = []
     stats = ingestor_module._new_discovery_stats()
     processed_ids_by_key = ingestor_module._build_processed_ids_by_key(
         {
@@ -270,6 +276,7 @@ def test_discover_case_executions_skips_previously_processed_archive_ids(
         ),
         scan_mode="archive",
         processed_ids_by_key=processed_ids_by_key,
+        discovery_results=discovery_results,
     )
 
     assert grouped == {str(case_dir.resolve()): ["101.1-1"]}
@@ -277,6 +284,7 @@ def test_discover_case_executions_skips_previously_processed_archive_ids(
     assert stats["execution_dirs_accepted"] == 1
     assert stats["rejected_existing_execution_ids"] == 1
     assert locator_calls == [str(new_exec)]
+    assert [result.execution_id for result in discovery_results] == ["101.1-1"]
 
 
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
@@ -351,6 +359,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
                 "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
                 "execution_count_rejected_invalid": 0,
+                "execution_count_transient": 0,
                 "execution_count_existing": 1,
                 "execution_count_new": 1,
                 "execution_count_selected_new": 1,
@@ -383,6 +392,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
                 "rejected_existing": 1,
                 "rejected_incomplete": 0,
                 "rejected_invalid": 0,
+                "transient": 0,
                 "deferred": 0,
             },
         ),
@@ -394,6 +404,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
                 "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
                 "execution_count_rejected_invalid": 0,
+                "execution_count_transient": 0,
                 "execution_count_existing": 0,
                 "execution_count_new": 1,
                 "execution_count_selected_new": 0,
@@ -417,6 +428,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
                 "rejected_invalid": 0,
+                "transient": 0,
                 "deferred": 1,
             },
         ),
@@ -1081,7 +1093,9 @@ def test_build_ingestion_candidates_handles_non_dict_cases_root() -> None:
     assert candidates[0].new_execution_ids == ["100.1-1"]
 
 
-def test_validate_execution_dir_counts_incomplete_with_stats(tmp_path: Path) -> None:
+def test_validate_execution_dir_treats_plain_file_not_found_as_transient(
+    tmp_path: Path,
+) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
@@ -1098,11 +1112,11 @@ def test_validate_execution_dir_counts_incomplete_with_stats(tmp_path: Path) -> 
         "case": str(case_dir.resolve()),
         "decision": "rejected",
         "execution_id": "100.1-1",
-        "reason": "incomplete",
+        "reason": "transient",
         "detail": "missing",
     }
-    assert stats["skipped_incomplete"] == 1
-    assert stats["rejected_incomplete_execution_ids"] == 1
+    assert stats["skipped_incomplete"] == 0
+    assert stats["rejected_incomplete_execution_ids"] == 0
 
 
 def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) -> None:
@@ -1110,10 +1124,12 @@ def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) ->
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
 
+    validation_error = ArchiveValidationError([])
+    validation_error.args = ("invalid",)
     decision = _validate_execution_dir(
         case_dir,
         "100.1-1",
-        metadata_locator=lambda *_: (_ for _ in ()).throw(ValueError("invalid")),
+        metadata_locator=lambda *_: (_ for _ in ()).throw(validation_error),
         stats=stats,
     )
 
@@ -1619,7 +1635,7 @@ def test_run_ingestor_returns_config_error_for_unsupported_archive_year_layout(
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
-def test_run_ingestor_propagates_unexpected_scan_value_error(
+def test_run_ingestor_fails_on_unexpected_scan_value_error(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1648,9 +1664,9 @@ def test_run_ingestor_propagates_unexpected_scan_value_error(
         request_timeout_seconds=30,
     )
 
-    with pytest.raises(ValueError, match="boom"):
-        _run_ingestor(config, metadata_locator=lambda *_: {})
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
 
+    assert ("archive_scan_failed", {"error": "ValueError: boom"}) in logged_events
     assert not any(event == "configuration_error" for event, _ in logged_events)
 
 
@@ -2569,6 +2585,407 @@ def test_render_log_value_formats_values() -> None:
     assert _render_log_value({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
 
 
+def test_discovery_results_capture_typed_outcomes_but_not_transient_errors(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_dir = archive_root / "case_a"
+    for execution_id in ("100.1-1", "101.1-1", "102.1-1", "103.1-1"):
+        (case_dir / execution_id).mkdir(parents=True)
+    results: list[ingestor_module.ExecutionDiscoveryResult] = []
+
+    def locator(path: str) -> object:
+        if path.endswith("101.1-1"):
+            raise IncompleteArchiveError([])
+        if path.endswith("102.1-1"):
+            raise ArchiveValidationError([])
+        if path.endswith("103.1-1"):
+            raise PermissionError("temporary")
+        return {}
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=locator,
+        discovery_results=results,
+    )
+
+    assert grouped == {str(case_dir.resolve()): ["100.1-1"]}
+    assert sorted((result.execution_id, result.outcome) for result in results) == [
+        ("100.1-1", "accepted"),
+        ("101.1-1", "rejected_incomplete"),
+        ("102.1-1", "rejected_invalid"),
+    ]
+
+
+def test_stored_accepted_discovery_result_bypasses_validation(tmp_path: Path) -> None:
+    archive_root = tmp_path / "archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: pytest.fail("validation should be bypassed"),
+        discovery_results_by_key={(str(case_dir.resolve()), "100.1-1"): "accepted"},
+    )
+
+    assert grouped == {str(case_dir.resolve()): ["100.1-1"]}
+
+
+def test_discovery_persistence_failure_prevents_ingestion(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+    ingestion_calls: list[object] = []
+
+    def fail_persistence(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        raise IngestionRequestError("unavailable", status_code=503, transient=False)
+
+    def record_ingestion(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        ingestion_calls.append(args)
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        post_request_fn=record_ingestion,
+        discovery_post_request_fn=fail_persistence,
+    )
+
+    assert exit_code == 1
+    assert ingestion_calls == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError("missing temporarily"),
+        PermissionError("permission temporarily denied"),
+        OSError("filesystem temporarily unavailable"),
+    ],
+)
+def test_transient_os_errors_are_counted_but_not_persisted(
+    tmp_path: Path, error: OSError
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    stats = ingestor_module._new_discovery_stats()
+    results: list[ingestor_module.ExecutionDiscoveryResult] = []
+
+    _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: (_ for _ in ()).throw(error),
+        stats=stats,
+        discovery_results=results,
+    )
+
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
+    assert stats["skipped_incomplete"] == 0
+    assert stats["skipped_invalid"] == 0
+    assert results == []
+
+
+def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_a = archive_root / "case_a"
+    case_b = archive_root / "case_b"
+    (case_a / "100.1-1").mkdir(parents=True)
+    (case_b / "200.1-1").mkdir(parents=True)
+    state = _fresh_state()
+    persisted_batches: list[list[ingestor_module.ExecutionDiscoveryResult]] = []
+    ingested_paths: list[str] = []
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: state,
+    )
+
+    def persist_results(
+        *args: Any,
+        results: list[ingestor_module.ExecutionDiscoveryResult],
+        **kwargs: Any,
+    ) -> IngestionRequestResponse:
+        persisted_batches.append(results)
+        return {"status_code": 201, "body": {}}
+
+    def ingest_case(
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        **kwargs: Any,
+    ) -> IngestionRequestResponse:
+        ingested_paths.append(archive_path)
+        return {
+            "status_code": 201,
+            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+        }
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            post_request_fn=ingest_case,
+            discovery_post_request_fn=persist_results,
+        )
+        == 0
+    )
+    first_results = persisted_batches[0]
+    assert {(result.case_identity, result.outcome) for result in first_results} == {
+        ("case_a", "accepted"),
+        ("case_b", "accepted"),
+    }
+    assert len(ingested_paths) == 1
+
+    state["discovery_results"] = {
+        result.case_identity: [
+            {
+                "case_identity": result.case_identity,
+                "execution_id": result.execution_id,
+                "outcome": result.outcome,
+            }
+        ]
+        for result in first_results
+    }
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: pytest.fail(
+                "stored result must bypass validation"
+            ),
+            post_request_fn=ingest_case,
+            discovery_post_request_fn=persist_results,
+        )
+        == 0
+    )
+    assert len(ingested_paths) == 2
+    assert set(ingested_paths) == {str(case_a.resolve()), str(case_b.resolve())}
+    assert len(persisted_batches) == 1
+
+
+def test_stored_rejected_results_bypass_validation_and_candidacy(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    (case_dir / "101.1-1").mkdir(parents=True)
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda *_: pytest.fail(
+            "stored rejection must bypass validation"
+        ),
+        discovery_results_by_key={
+            (str(case_dir.resolve()), "100.1-1"): "rejected_incomplete",
+            (str(case_dir.resolve()), "101.1-1"): "rejected_invalid",
+        },
+    )
+
+    assert grouped == {}
+
+
+def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    rejected_case = archive_root / "case_a"
+    mixed_case = archive_root / "case_b"
+    (rejected_case / "100.1-1").mkdir(parents=True)
+    (mixed_case / "200.1-1").mkdir(parents=True)
+    (mixed_case / "201.1-1").mkdir(parents=True)
+    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+    ingested: list[str] = []
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    def locator(path: str) -> object:
+        if path.endswith("100.1-1"):
+            raise IncompleteArchiveError([])
+        if path.endswith("201.1-1"):
+            raise ArchiveValidationError([])
+        return {}
+
+    def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    def ingest(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        ingested.append(args[2])
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=locator,
+            post_request_fn=ingest,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert sorted((result.execution_id, result.outcome) for result in persisted) == [
+        ("100.1-1", "rejected_incomplete"),
+        ("200.1-1", "accepted"),
+        ("201.1-1", "rejected_invalid"),
+    ]
+    assert ingested == [str(mixed_case.resolve())]
+
+
+def test_discovery_persistence_retries_transient_failure() -> None:
+    attempts: list[int] = []
+    sleeps: list[float] = []
+
+    def persist(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise IngestionRequestError("temporary", status_code=503, transient=True)
+        return {"status_code": 201, "body": {}}
+
+    ok = ingestor_module._persist_discovery_results_with_retries(
+        [
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case_a",
+                execution_id="100.1-1",
+                outcome="accepted",
+            )
+        ],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=2,
+        timeout_seconds=30,
+        sleep_fn=sleeps.append,
+        post_request_fn=persist,
+    )
+
+    assert ok is True
+    assert len(attempts) == 2
+    assert sleeps == [1]
+
+
+def test_dry_run_never_persists_discovery_results(tmp_path: Path, monkeypatch) -> None:
+    archive_root = tmp_path / "performance_archive"
+    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            discovery_post_request_fn=lambda *args, **kwargs: pytest.fail(
+                "dry run must not persist"
+            ),
+        )
+        == 0
+    )
+
+
+def test_failed_ingestion_keeps_accepted_execution_unprocessed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    state = _fresh_state()
+    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: state,
+    )
+
+    def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    def fail_ingestion(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        raise IngestionRequestError("failed", status_code=400, transient=False)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            post_request_fn=fail_ingestion,
+            discovery_post_request_fn=persist,
+        )
+        == 1
+    )
+    assert [(result.execution_id, result.outcome) for result in persisted] == [
+        ("100.1-1", "accepted")
+    ]
+    assert state["cases"] == {}
+
+
 def test_validate_execution_dir_compacts_incomplete_archive_errors(
     tmp_path: Path,
 ) -> None:
@@ -2680,11 +3097,16 @@ def test_run_ingestor_logs_rejected_only_case_block(
         request_timeout_seconds=30,
     )
 
+    incomplete_error = IncompleteArchiveError([])
+    incomplete_error.args = ("missing",)
+    invalid_error = ArchiveValidationError([])
+    invalid_error.args = ("bad metadata",)
+
     def fake_locator(execution_dir: str) -> dict[str, str]:
         if execution_dir.endswith("100.1-1"):
-            raise FileNotFoundError("missing")
+            raise incomplete_error
         if execution_dir.endswith("101.1-1"):
-            raise ValueError("bad metadata")
+            raise invalid_error
         return {}
 
     exit_code = _run_ingestor(config, metadata_locator=fake_locator)
@@ -2710,6 +3132,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
                 "execution_count_valid": 0,
                 "execution_count_rejected_incomplete": 1,
                 "execution_count_rejected_invalid": 1,
+                "execution_count_transient": 0,
                 "execution_count_existing": 0,
                 "execution_count_new": 0,
                 "execution_count_selected_new": 0,
@@ -2744,6 +3167,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
                 "rejected_existing": 0,
                 "rejected_incomplete": 1,
                 "rejected_invalid": 1,
+                "transient": 0,
                 "deferred": 0,
             },
         ),
@@ -2755,6 +3179,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
                 "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
                 "execution_count_rejected_invalid": 0,
+                "execution_count_transient": 0,
                 "execution_count_existing": 0,
                 "execution_count_new": 1,
                 "execution_count_selected_new": 1,
@@ -2778,6 +3203,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
                 "rejected_invalid": 0,
+                "transient": 0,
                 "deferred": 0,
             },
         ),

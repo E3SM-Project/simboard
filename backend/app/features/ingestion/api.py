@@ -8,15 +8,23 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, tuple_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
-from app.features.ingestion.models import Ingestion, IngestionSourceType
+from app.features.ingestion.models import (
+    ExecutionDiscoveryResult,
+    Ingestion,
+    IngestionSourceType,
+)
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.schemas import (
+    ExecutionDiscoveryResultEntry,
+    ExecutionDiscoveryResultsRequest,
+    ExecutionDiscoveryResultsResponse,
     IngestFromHpcUploadRequest,
     IngestFromPathRequest,
     IngestionCreate,
@@ -39,6 +47,80 @@ STATEFUL_INGESTION_SOURCE_TYPES = (
     IngestionSourceType.HPC_PATH,
     IngestionSourceType.HPC_UPLOAD,
 )
+
+
+@router.post(
+    "/discovery-results",
+    response_model=ExecutionDiscoveryResultsResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def persist_execution_discovery_results(
+    payload: ExecutionDiscoveryResultsRequest,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> ExecutionDiscoveryResultsResponse:
+    """Persist immutable discovery results with concurrency-safe idempotency."""
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and service accounts may persist discovery results.",
+        )
+
+    machine = _resolve_request_machine(db, payload.machine_name)
+    unique_results = {
+        (result.case_identity, result.execution_id): result
+        for result in payload.results
+    }
+
+    with transaction(db):
+        statement = (
+            insert(ExecutionDiscoveryResult)
+            .values(
+                [
+                    {
+                        "machine_id": machine.id,
+                        "case_identity": result.case_identity,
+                        "execution_id": result.execution_id,
+                        "outcome": result.outcome,
+                    }
+                    for result in unique_results.values()
+                ]
+            )
+            .on_conflict_do_nothing(constraint="uq_execution_discovery_result_identity")
+            .returning(ExecutionDiscoveryResult.id)
+        )
+        inserted_count = len(db.execute(statement).all())
+
+        stored_rows = (
+            db.query(ExecutionDiscoveryResult)
+            .filter(
+                ExecutionDiscoveryResult.machine_id == machine.id,
+                tuple_(
+                    ExecutionDiscoveryResult.case_identity,
+                    ExecutionDiscoveryResult.execution_id,
+                ).in_(unique_results),
+            )
+            .all()
+        )
+        stored_by_identity = {
+            (row.case_identity, row.execution_id): row for row in stored_rows
+        }
+
+        for identity, requested in unique_results.items():
+            stored = stored_by_identity.get(identity)
+            if stored is None or stored.outcome != requested.outcome:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Discovery result conflicts with immutable stored outcome "
+                        f"for case_identity={identity[0]!r}, execution_id={identity[1]!r}."
+                    ),
+                )
+
+    return ExecutionDiscoveryResultsResponse(
+        inserted_count=inserted_count,
+        existing_count=len(unique_results) - inserted_count,
+    )
 
 
 @router.post(
@@ -461,7 +543,32 @@ def _build_ingestion_state_response(
         )
     }
 
-    return IngestionStateResponse(machine_name=machine_name, cases=cases)
+    discovery_rows = (
+        db.query(ExecutionDiscoveryResult)
+        .filter(ExecutionDiscoveryResult.machine_id == machine_id)
+        .order_by(
+            ExecutionDiscoveryResult.case_identity.asc(),
+            ExecutionDiscoveryResult.execution_id.asc(),
+        )
+        .all()
+    )
+    discovery_results: dict[str, list[ExecutionDiscoveryResultEntry]] = defaultdict(
+        list
+    )
+    for result in discovery_rows:
+        discovery_results[result.case_identity].append(
+            ExecutionDiscoveryResultEntry(
+                case_identity=result.case_identity,
+                execution_id=result.execution_id,
+                outcome=result.outcome,
+            )
+        )
+
+    return IngestionStateResponse(
+        machine_name=machine_name,
+        cases=cases,
+        discovery_results=dict(discovery_results),
+    )
 
 
 def _compute_execution_fingerprint(execution_ids: list[str]) -> str:

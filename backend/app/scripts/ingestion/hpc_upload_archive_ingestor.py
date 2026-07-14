@@ -23,10 +23,12 @@ from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.nersc_archive_ingestor import (
+    ExecutionDiscoveryResult,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
     _build_config_from_env,
+    _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
     _fetch_ingestion_state,
     _handle_dry_run,
@@ -35,6 +37,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _log_event,
     _log_startup_configuration,
     _normalized_api_base_url,
+    _persist_discovery_results_with_retries,
     _scan_archive,
 )
 
@@ -74,6 +77,7 @@ def _run_ingestor(
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
     sleep_fn: Callable[[float], None] = time.sleep,
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     if post_request_fn is None:
@@ -116,12 +120,25 @@ def _run_ingestor(
         )
         return 1
 
-    (
-        scan_results,
-        candidates,
-        submission_qualified_case_count,
-        discovery_stats,
-    ) = _scan_archive(config, state, metadata_locator=metadata_locator)
+    new_discovery_results: list[ExecutionDiscoveryResult] = []
+    try:
+        (
+            scan_results,
+            candidates,
+            submission_qualified_case_count,
+            discovery_stats,
+        ) = _scan_archive(
+            config,
+            state,
+            metadata_locator=metadata_locator,
+            discovery_results=new_discovery_results,
+        )
+    except Exception as exc:
+        _log_event(
+            "archive_scan_failed",
+            {"error": f"{exc.__class__.__name__}: {exc}"},
+        )
+        return 1
 
     _log_event(
         "scan_completed",
@@ -135,6 +152,7 @@ def _run_ingestor(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "skipped_transient": discovery_stats["skipped_transient"],
             "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
             "rejected_existing_execution_ids": discovery_stats[
                 "rejected_existing_execution_ids"
@@ -145,6 +163,7 @@ def _run_ingestor(
             "rejected_invalid_execution_ids": discovery_stats[
                 "rejected_invalid_execution_ids"
             ],
+            "transient_execution_ids": discovery_stats["transient_execution_ids"],
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
@@ -157,6 +176,18 @@ def _run_ingestor(
             discovery_stats,
             archive_root=config.archive_root,
         )
+
+    if not _persist_discovery_results_with_retries(
+        new_discovery_results,
+        _build_discovery_results_endpoint_url(config),
+        config.api_token,
+        config.machine_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=discovery_post_request_fn,
+    ):
+        return 1
 
     return _handle_ingest_run(
         candidates,

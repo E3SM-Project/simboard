@@ -5,14 +5,17 @@ including path-based and upload-based ingestion endpoints.
 """
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
@@ -26,12 +29,21 @@ from app.features.ingestion.api import (
     _validate_upload_file,
     ingest_from_hpc_upload,
     ingest_from_upload,
+    persist_execution_discovery_results,
 )
-from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.enums import (
+    ExecutionDiscoveryOutcome,
+    IngestionSourceType,
+    IngestionStatus,
+)
 from app.features.ingestion.ingest import IngestArchiveResult
-from app.features.ingestion.models import Ingestion
+from app.features.ingestion.models import ExecutionDiscoveryResult, Ingestion
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.ingestion.schemas import (
+    ExecutionDiscoveryResultsRequest,
+    IngestionStateResponse,
+)
 from app.features.machine.models import Machine
 from app.features.simulation.enums import ArtifactKind
 from app.features.simulation.models import Case, Simulation
@@ -92,6 +104,391 @@ def _create_case(
     db.add(case)
     db.flush()
     return case
+
+
+class TestExecutionDiscoveryResultsEndpoint:
+    @staticmethod
+    def _persist_concurrently(
+        bind, payloads: list[ExecutionDiscoveryResultsRequest]
+    ) -> list[str]:
+        user = User(
+            id=uuid.uuid4(),
+            email="concurrency@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.ADMIN,
+        )
+
+        def persist(payload: ExecutionDiscoveryResultsRequest) -> str:
+            session = Session(bind=bind)
+            try:
+                persist_execution_discovery_results(
+                    payload,
+                    db=session,
+                    user=user,
+                )
+                return "success"
+            except HTTPException as exc:
+                return f"http_{exc.status_code}"
+            finally:
+                session.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            return list(executor.map(persist, payloads))
+
+    def test_batch_insert_is_idempotent_and_visible_in_state(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        payload = {
+            "machine_name": machine.name,
+            "results": [
+                {
+                    "case_identity": "campaign/case-a",
+                    "execution_id": "100.1-1",
+                    "outcome": "accepted",
+                },
+                {
+                    "case_identity": "campaign/case-a",
+                    "execution_id": "101.1-1",
+                    "outcome": "rejected_incomplete",
+                },
+            ],
+        }
+
+        first = client.post(f"{API_BASE}/ingestions/discovery-results", json=payload)
+        second = client.post(f"{API_BASE}/ingestions/discovery-results", json=payload)
+
+        assert first.status_code == 201
+        assert first.json() == {"inserted_count": 2, "existing_count": 0}
+        assert second.status_code == 201
+        assert second.json() == {"inserted_count": 0, "existing_count": 2}
+        state = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": machine.name}
+        )
+        assert state.status_code == 200
+        assert (
+            state.json()["discovery_results"]["campaign/case-a"] == payload["results"]
+        )
+
+    def test_idempotency_reread_loads_only_requested_composite_identity(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        machine_name = machine.name
+        case_identity = f"bounded-reread-{uuid.uuid4()}"
+        db.add_all(
+            [
+                ExecutionDiscoveryResult(
+                    machine_id=machine.id,
+                    case_identity=case_identity,
+                    execution_id=execution_id,
+                    outcome=ExecutionDiscoveryOutcome.ACCEPTED,
+                )
+                for execution_id in ("100.1-1", "unrelated.1-1")
+            ]
+        )
+        db.commit()
+        db.expunge_all()
+        loaded_execution_ids: list[str] = []
+
+        def record_load(result: ExecutionDiscoveryResult, _: Any) -> None:
+            loaded_execution_ids.append(result.execution_id)
+
+        event.listen(ExecutionDiscoveryResult, "load", record_load)
+        try:
+            response = client.post(
+                f"{API_BASE}/ingestions/discovery-results",
+                json={
+                    "machine_name": machine_name,
+                    "results": [
+                        {
+                            "case_identity": case_identity,
+                            "execution_id": "100.1-1",
+                            "outcome": "accepted",
+                        }
+                    ],
+                },
+            )
+        finally:
+            event.remove(ExecutionDiscoveryResult, "load", record_load)
+
+        assert response.status_code == 201
+        assert loaded_execution_ids == ["100.1-1"]
+
+    def test_conflicting_stored_outcome_returns_409(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        base: dict[str, Any] = {
+            "machine_name": machine.name,
+            "results": [
+                {
+                    "case_identity": "case-a",
+                    "execution_id": "100.1-1",
+                    "outcome": "accepted",
+                }
+            ],
+        }
+        assert (
+            client.post(
+                f"{API_BASE}/ingestions/discovery-results", json=base
+            ).status_code
+            == 201
+        )
+        base["results"][0]["outcome"] = "rejected_invalid"
+
+        response = client.post(f"{API_BASE}/ingestions/discovery-results", json=base)
+
+        assert response.status_code == 409
+        stored = db.query(ExecutionDiscoveryResult).one()
+        assert stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
+
+    def test_conflicting_batch_rolls_back_new_rows(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        endpoint = f"{API_BASE}/ingestions/discovery-results"
+        existing = {
+            "case_identity": "case-a",
+            "execution_id": "100.1-1",
+            "outcome": "accepted",
+        }
+        assert (
+            client.post(
+                endpoint,
+                json={"machine_name": machine.name, "results": [existing]},
+            ).status_code
+            == 201
+        )
+
+        response = client.post(
+            endpoint,
+            json={
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": "case-a",
+                        "execution_id": "101.1-1",
+                        "outcome": "accepted",
+                    },
+                    {**existing, "outcome": "rejected_invalid"},
+                ],
+            },
+        )
+
+        assert response.status_code == 409
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter(ExecutionDiscoveryResult.execution_id == "101.1-1")
+            .one_or_none()
+            is None
+        )
+
+    def test_concurrent_identical_inserts_both_succeed(self, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        identity = f"concurrent-identical-{uuid.uuid4()}"
+        payload = ExecutionDiscoveryResultsRequest.model_validate(
+            {
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": identity,
+                        "execution_id": "100.1-1",
+                        "outcome": "accepted",
+                    }
+                ],
+            }
+        )
+
+        results = self._persist_concurrently(db.get_bind().engine, [payload, payload])
+
+        assert results == ["success", "success"]
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter(ExecutionDiscoveryResult.case_identity == identity)
+            .count()
+            == 1
+        )
+
+    def test_concurrent_differing_inserts_store_one_and_conflict_one(
+        self, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        identity = f"concurrent-conflict-{uuid.uuid4()}"
+        base = ExecutionDiscoveryResultsRequest.model_validate(
+            {
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": identity,
+                        "execution_id": "100.1-1",
+                        "outcome": "accepted",
+                    }
+                ],
+            }
+        )
+        conflicting = ExecutionDiscoveryResultsRequest.model_validate(
+            {
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": identity,
+                        "execution_id": "100.1-1",
+                        "outcome": "rejected_invalid",
+                    }
+                ],
+            }
+        )
+
+        results = self._persist_concurrently(db.get_bind().engine, [base, conflicting])
+
+        assert sorted(results) == ["http_409", "success"]
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter(ExecutionDiscoveryResult.case_identity == identity)
+            .count()
+            == 1
+        )
+
+    def test_conflicting_batch_input_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ExecutionDiscoveryResultsRequest.model_validate(
+                {
+                    "machine_name": "perlmutter",
+                    "results": [
+                        {
+                            "case_identity": "case-a",
+                            "execution_id": "100.1-1",
+                            "outcome": "accepted",
+                        },
+                        {
+                            "case_identity": "case-a",
+                            "execution_id": "100.1-1",
+                            "outcome": "rejected_invalid",
+                        },
+                    ],
+                }
+            )
+
+    def test_non_admin_is_forbidden(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        response = client.post(
+            f"{API_BASE}/ingestions/discovery-results",
+            json={
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": "case-a",
+                        "execution_id": "100.1-1",
+                        "outcome": "accepted",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("field", ["case_identity", "execution_id"])
+    def test_blank_identifiers_are_rejected(
+        self, client, db: Session, field: str
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        result = {
+            "case_identity": "case-a",
+            "execution_id": "100.1-1",
+            "outcome": "accepted",
+        }
+        result[field] = "   "
+
+        response = client.post(
+            f"{API_BASE}/ingestions/discovery-results",
+            json={"machine_name": machine.name, "results": [result]},
+        )
+
+        assert response.status_code == 422
+
+    def test_machine_and_case_identity_are_isolated(self, client, db: Session) -> None:
+        first_machine = TestGetIngestionStateEndpoint._create_machine(
+            db, f"machine-a-{uuid.uuid4()}"
+        )
+        second_machine = TestGetIngestionStateEndpoint._create_machine(
+            db, f"machine-b-{uuid.uuid4()}"
+        )
+        endpoint = f"{API_BASE}/ingestions/discovery-results"
+
+        for machine, case_identity, outcome in (
+            (first_machine, "case-a", "accepted"),
+            (first_machine, "case-b", "rejected_invalid"),
+            (second_machine, "case-a", "rejected_incomplete"),
+        ):
+            response = client.post(
+                endpoint,
+                json={
+                    "machine_name": machine.name,
+                    "results": [
+                        {
+                            "case_identity": case_identity,
+                            "execution_id": "100.1-1",
+                            "outcome": outcome,
+                        }
+                    ],
+                },
+            )
+            assert response.status_code == 201
+
+        first_state = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": first_machine.name},
+        ).json()["discovery_results"]
+        second_state = client.get(
+            f"{API_BASE}/ingestions/state",
+            params={"machine_name": second_machine.name},
+        ).json()["discovery_results"]
+
+        assert set(first_state) == {"case-a", "case-b"}
+        assert first_state["case-a"][0]["outcome"] == "accepted"
+        assert second_state["case-a"][0]["outcome"] == "rejected_incomplete"
+
+    def test_service_account_is_authorized(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        app.dependency_overrides[current_active_user] = lambda: User(
+            id=uuid.uuid4(),
+            email="service@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.SERVICE_ACCOUNT,
+        )
+
+        response = client.post(
+            f"{API_BASE}/ingestions/discovery-results",
+            json={
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": "case-a",
+                        "execution_id": "100.1-1",
+                        "outcome": "accepted",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 201
+
+    def test_state_response_defaults_missing_discovery_results(self) -> None:
+        state = IngestionStateResponse.model_validate(
+            {"machine_name": "perlmutter", "cases": {}}
+        )
+
+        assert state.discovery_results == {}
 
 
 class TestGetIngestionStateEndpoint:

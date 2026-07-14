@@ -158,6 +158,18 @@ per-case submission-state flow as the NERSC path ingestor, but packages each sub
 directory into a temporary single-case `.tar.gz` archive and calls
 `/api/v1/ingestions/from-hpc-upload`.
 
+Both automated runners persist immutable validation results before ingestion.
+Results are keyed by machine, normalized case identity, and execution ID with
+outcomes `accepted`, `rejected_incomplete`, or `rejected_invalid`. Stored
+results bypass later metadata validation. Discovery `accepted` means validation
+passed; only successful ingestion adds `processed_execution_ids`. Thus accepted
+executions deferred by `MAX_CASES_PER_RUN` or left after failed ingestion remain
+future candidates. Typed archive validation errors are immutable content
+results, while plain filesystem `OSError` failures and request failures remain
+transient and unstored. Persistence is batched, idempotent for exact repeats,
+and stops ingestion on failure or conflicting stored outcomes. Dry runs perform
+no discovery-result or processed-state writes.
+
 Use this runner when the source filesystem is not directly mounted in the
 SimBoard backend environment.
 
