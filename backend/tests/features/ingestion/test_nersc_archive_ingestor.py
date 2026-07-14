@@ -188,6 +188,7 @@ def test_discover_case_executions_logs_scan_progress(
     assert progress_events[0]["discovered_cases"] == 1
     assert progress_events[0]["execution_dirs_scanned"] == 1
     assert progress_events[0]["execution_dirs_accepted"] == 1
+    assert progress_events[0]["rejected_existing_execution_ids"] == 0
     assert progress_events[1]["scan_mode"] == "staging"
     assert progress_events[1]["archive_root"] == archive_root_path
     assert progress_events[1]["current_dir"].startswith(f"{archive_root_path}/case_")
@@ -195,6 +196,7 @@ def test_discover_case_executions_logs_scan_progress(
     assert progress_events[1]["discovered_cases"] == 2
     assert progress_events[1]["execution_dirs_scanned"] == 2
     assert progress_events[1]["execution_dirs_accepted"] == 2
+    assert progress_events[1]["rejected_existing_execution_ids"] == 0
     assert progress_events[2]["scan_mode"] == "staging"
     assert progress_events[2]["archive_root"] == archive_root_path
     assert progress_events[2]["current_dir"].startswith(f"{archive_root_path}/case_")
@@ -202,6 +204,7 @@ def test_discover_case_executions_logs_scan_progress(
     assert progress_events[2]["discovered_cases"] == 3
     assert progress_events[2]["execution_dirs_scanned"] == 3
     assert progress_events[2]["execution_dirs_accepted"] == 3
+    assert progress_events[2]["rejected_existing_execution_ids"] == 0
 
     assert len(completed_events) == 1
     assert completed_events[0]["scan_mode"] == "staging"
@@ -211,6 +214,69 @@ def test_discover_case_executions_logs_scan_progress(
     assert completed_events[0]["discovered_cases"] == 3
     assert completed_events[0]["execution_dirs_scanned"] == 3
     assert completed_events[0]["execution_dirs_accepted"] == 3
+    assert completed_events[0]["rejected_existing_execution_ids"] == 0
+
+
+def test_discover_case_executions_skips_previously_processed_archive_ids(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "old_perf"
+    case_dir = (
+        archive_root
+        / "2025-01"
+        / "performance_archive_2025_01_01_00_00_00"
+        / "COMPLETED"
+        / "user_a"
+        / "case_a"
+    )
+    existing_exec = case_dir / "100.1-1"
+    new_exec = case_dir / "101.1-1"
+    existing_exec.mkdir(parents=True)
+    new_exec.mkdir(parents=True)
+
+    locator_calls: list[str] = []
+    stats = ingestor_module._new_discovery_stats()
+    processed_ids_by_key = ingestor_module._build_processed_ids_by_key(
+        {
+            "cases": {
+                "/performance_archive/user_a/case_a": {
+                    "processed_execution_ids": ["100.1-1"],
+                }
+            }
+        },
+        scan_mode="archive",
+    )
+
+    def fake_locator(execution_dir: str) -> dict[str, str]:
+        locator_calls.append(execution_dir)
+        return {}
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=fake_locator,
+        stats=stats,
+        walk_dir_filter=_build_walk_dir_filter(
+            IngestorConfig(
+                api_base_url="http://backend:8000",
+                api_token="token",
+                archive_root=archive_root,
+                machine_name="perlmutter",
+                dry_run=True,
+                max_cases_per_run=None,
+                max_attempts=1,
+                request_timeout_seconds=30,
+                scan_mode="archive",
+            )
+        ),
+        scan_mode="archive",
+        processed_ids_by_key=processed_ids_by_key,
+    )
+
+    assert grouped == {str(case_dir.resolve()): ["101.1-1"]}
+    assert stats["execution_dirs_scanned"] == 1
+    assert stats["execution_dirs_accepted"] == 1
+    assert stats["rejected_existing_execution_ids"] == 1
+    assert locator_calls == [str(new_exec)]
 
 
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
@@ -282,7 +348,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
             {
                 "case": "case_a",
                 "execution_count_total": 2,
-                "execution_count_valid": 2,
+                "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
                 "execution_count_rejected_invalid": 0,
                 "execution_count_existing": 1,
@@ -387,6 +453,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     for payload in (scan_completed, dry_run_completed):
         assert payload["submission_qualified_cases"] == 2
         assert payload["selected_submission_cases"] == 1
+    assert scan_completed["rejected_existing_execution_ids"] == 1
     assert scan_completed["scan_mode"] == "staging"
 
 
