@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import distinct
+from sqlalchemy import and_, asc, desc, distinct, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -11,17 +11,30 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
 from app.features.machine.utils import resolve_machine_by_name
-from app.features.simulation.enums import ExternalLinkKind
+from app.features.simulation.enums import (
+    ExternalLinkKind,
+    SimulationStatus,
+    SimulationType,
+)
 from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseDetailOut,
+    CaseFilterOptionsOut,
+    CaseListItemOut,
+    CasePageOut,
     CaseSummaryOut,
     CaseUpdate,
+    CatalogOverviewOut,
     DiagnosticsLinkRequest,
+    FilterOptionOut,
     SimulationCreate,
+    SimulationFilterOptionsOut,
+    SimulationListItemOut,
     SimulationOut,
+    SimulationPageOut,
     SimulationSummaryCapabilitiesOut,
     SimulationSummaryOut,
     SimulationUpdate,
@@ -36,37 +49,192 @@ diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
 
 @case_router.get(
     "",
-    response_model=list[CaseSummaryOut],
+    response_model=CasePageOut,
     responses={
         200: {"description": "List all cases."},
         500: {"description": "Internal server error."},
     },
 )
-def list_cases(db: Session = Depends(get_database_session)) -> list[CaseSummaryOut]:
-    """Retrieve all cases with nested simulation summaries.
+def list_cases(  # noqa: C901
+    db: Session = Depends(get_database_session),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None),
+    name: str | None = Query(None),
+    case_group: str | None = Query(None),
+    machine_id: UUID | None = Query(None),
+    hpc_username: str | None = Query(None),
+    execution_id: str | None = Query(None),
+    status_filter: SimulationStatus | None = Query(None, alias="status"),
+    simulation_type: SimulationType | None = Query(None),
+    campaign: str | None = Query(None),
+    initialization_type: str | None = Query(None),
+    compiler: str | None = Query(None),
+    git_tag: str | None = Query(None),
+    created_by: UUID | None = Query(None),
+    sort_by: str = Query(
+        "updated_at",
+        pattern=(
+            "^(updated_at|created_at|name|case_group|machine_name|hpc_username|"
+            "simulation_count)$"
+        ),
+    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+) -> CasePageOut:
+    """Return one lightweight, server-filtered case page."""
+    query = db.query(Case)
+    if search:
+        query = query.filter(Case.name.ilike(f"%{search.strip()}%"))
+    if name:
+        query = query.filter(Case.name == name)
+    if case_group:
+        query = query.filter(Case.case_group == case_group)
+    if machine_id:
+        query = query.filter(Case.machine_id == machine_id)
+    if hpc_username:
+        query = query.filter(Case.hpc_username == hpc_username)
+    simulation_predicates = []
+    if execution_id:
+        simulation_predicates.append(
+            Simulation.execution_id.ilike(f"%{execution_id.strip()}%")
+        )
+    if status_filter:
+        simulation_predicates.append(Simulation.status == status_filter)
+    if simulation_type:
+        simulation_predicates.append(Simulation.simulation_type == simulation_type)
+    for column, value in (
+        (Simulation.campaign, campaign),
+        (Simulation.initialization_type, initialization_type),
+        (Simulation.compiler, compiler),
+        (Simulation.git_tag, git_tag),
+        (Simulation.created_by, created_by),
+    ):
+        if value is not None:
+            simulation_predicates.append(column == value)
+    if simulation_predicates:
+        query = query.filter(Case.simulations.any(and_(*simulation_predicates)))
 
-    Parameters
-    ----------
-    db : Session, optional
-        The database session dependency, by default provided by
-        `Depends(get_database_session)`.
-
-    Returns
-    -------
-    list[CaseSummaryOut]
-        A list of cases, each with nested summaries of their associated
-        simulations.
-    """
-    cases = (
-        db.query(Case)
-        .options(selectinload(Case.machine), selectinload(Case.simulations))
-        .order_by(Case.created_at.desc())
+    total = query.order_by(None).count()
+    simulation_count = (
+        db.query(func.count(Simulation.id))
+        .filter(Simulation.case_id == Case.id)
+        .correlate(Case)
+        .scalar_subquery()
+    )
+    rows_query = query.join(Case.machine).with_entities(
+        Case.id,
+        Case.name,
+        Case.case_group,
+        Case.machine_id,
+        Machine.name.label("machine_name"),
+        Case.hpc_username,
+        simulation_count.label("simulation_count"),
+        Case.created_at,
+        Case.updated_at,
+    )
+    sort_column = {
+        "updated_at": Case.updated_at,
+        "created_at": Case.created_at,
+        "name": Case.name,
+        "case_group": Case.case_group,
+        "machine_name": Machine.name,
+        "hpc_username": Case.hpc_username,
+        "simulation_count": simulation_count,
+    }[sort_by]
+    ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    rows = (
+        rows_query.order_by(ordering, Case.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
+    return CasePageOut(
+        items=[CaseListItemOut(**row._asdict()) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
-    resp = [_case_to_summary_out(c) for c in cases]
 
-    return resp
+@case_router.get("/overview", response_model=CatalogOverviewOut)
+def get_catalog_overview(
+    db: Session = Depends(get_database_session),
+) -> CatalogOverviewOut:
+    """Return fixed-size aggregate data used by homepage."""
+    total_cases = db.query(func.count(Case.id)).scalar() or 0
+    total_simulations = db.query(func.count(Simulation.id)).scalar() or 0
+    latest_submission = db.query(func.max(Simulation.created_at)).scalar()
+    machine_count_rows = (
+        db.query(Case.machine_id, func.count(Simulation.id))
+        .join(Simulation, Simulation.case_id == Case.id)
+        .group_by(Case.machine_id)
+        .all()
+    )
+    machine_counts: dict[UUID, int] = {
+        machine_id: count for machine_id, count in machine_count_rows
+    }
+    simulation_count = (
+        db.query(func.count(Simulation.id))
+        .filter(Simulation.case_id == Case.id)
+        .correlate(Case)
+        .scalar_subquery()
+    )
+    latest_simulation_activity = (
+        db.query(func.max(func.greatest(Simulation.created_at, Simulation.updated_at)))
+        .filter(Simulation.case_id == Case.id)
+        .correlate(Case)
+        .scalar_subquery()
+    )
+    latest_activity = func.greatest(
+        Case.updated_at,
+        func.coalesce(latest_simulation_activity, Case.updated_at),
+    )
+    rows = (
+        db.query(
+            Case.id,
+            Case.name,
+            Case.case_group,
+            Case.machine_id,
+            Machine.name.label("machine_name"),
+            Case.hpc_username,
+            simulation_count.label("simulation_count"),
+            Case.created_at,
+            latest_activity.label("updated_at"),
+        )
+        .join(Machine, Machine.id == Case.machine_id)
+        .order_by(latest_activity.desc(), Case.id.asc())
+        .limit(6)
+        .all()
+    )
+    return CatalogOverviewOut(
+        total_cases=total_cases,
+        total_simulations=total_simulations,
+        latest_submission=latest_submission,
+        machine_counts=machine_counts,
+        recent_cases=[CaseListItemOut(**row._asdict()) for row in rows],
+    )
+
+
+@case_router.get("/filter-options", response_model=CaseFilterOptionsOut)
+def get_case_filter_options(
+    db: Session = Depends(get_database_session),
+) -> CaseFilterOptionsOut:
+    """Return distinct scalar case filter values."""
+    return CaseFilterOptionsOut(
+        names=_distinct_values(db, Case.name),
+        case_groups=_distinct_values(db, Case.case_group),
+        hpc_usernames=_distinct_values(db, Case.hpc_username),
+        machine_ids=_distinct_values(db, Case.machine_id),
+        machines=_machine_filter_options(db),
+        statuses=_distinct_values(db, Simulation.status),
+        simulation_types=_distinct_values(db, Simulation.simulation_type),
+        campaigns=_distinct_values(db, Simulation.campaign),
+        initialization_types=_distinct_values(db, Simulation.initialization_type),
+        compilers=_distinct_values(db, Simulation.compiler),
+        git_tags=_distinct_values(db, Simulation.git_tag),
+        created_by_ids=_distinct_values(db, Simulation.created_by),
+        creators=_creator_filter_options(db),
+    )
 
 
 @case_router.get(
@@ -338,60 +506,196 @@ def link_case_diagnostics(
 
 @simulation_router.get(
     "",
-    response_model=list[SimulationOut],
+    response_model=SimulationPageOut,
     responses={
         200: {"description": "List all simulations."},
         401: {"description": "Unauthorized."},
         500: {"description": "Internal server error."},
     },
 )
-def list_simulations(
+def list_simulations(  # noqa: C901
     db: Session = Depends(get_database_session),
-    case_name: str | None = Query(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None),
+    case_id: UUID | None = Query(None),
+    case_name: list[str] | None = Query(
         None,
         description="Filter simulations by exact case name.",
     ),
-    case_group: str | None = Query(
+    case_group: list[str] | None = Query(
         None,
         description="Filter simulations by exact case group.",
     ),
-):
-    """
-    Retrieve a list of simulations from the database, ordered by creation date
-    in descending order.
-
-    Parameters
-    ----------
-    db : Session, optional
-        The database session dependency, by default obtained via
-        `Depends(get_database_session)`.
-    case_name : str, optional
-        If provided, only simulations whose associated case name matches
-        exactly will be returned.
-    case_group : str, optional
-        If provided, only simulations whose associated case group matches
-        exactly will be returned.
-
-    Returns
-    -------
-    list
-        A list of `Simulation` objects, ordered by their `created_at` timestamp
-        in descending order.
-    """
-    query = db.query(Simulation).options(
-        joinedload(Simulation.case).joinedload(Case.machine),
-        joinedload(Simulation.case).selectinload(Case.links),
-        selectinload(Simulation.artifacts),
-        selectinload(Simulation.links),
+    status_filter: list[SimulationStatus] | None = Query(None, alias="status"),
+    simulation_type: list[SimulationType] | None = Query(None),
+    machine_id: list[UUID] | None = Query(None),
+    hpc_username: list[str] | None = Query(None),
+    campaign: list[str] | None = Query(None),
+    experiment_type: list[str] | None = Query(None),
+    compset: list[str] | None = Query(None),
+    grid_name: list[str] | None = Query(None),
+    grid_resolution: list[str] | None = Query(None),
+    initialization_type: list[str] | None = Query(None),
+    compiler: list[str] | None = Query(None),
+    git_tag: list[str] | None = Query(None),
+    created_by: list[UUID] | None = Query(None),
+    sort_by: str = Query(
+        "created_at",
+        pattern=(
+            "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
+            "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "grid_resolution|compset|grid_name|machine_name)$"
+        ),
+    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+) -> SimulationPageOut:
+    """Return one lightweight, server-filtered simulation page."""
+    query = (
+        db.query(Simulation)
+        .join(Case, Case.id == Simulation.case_id)
+        .join(Machine, Machine.id == Case.machine_id)
     )
 
-    if case_name is not None:
-        query = query.filter(Simulation.case.has(name=case_name))
-    if case_group is not None:
-        query = query.filter(Simulation.case.has(case_group=case_group))
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Simulation.execution_id.ilike(term),
+                Case.name.ilike(term),
+                Simulation.git_branch.ilike(term),
+                Simulation.git_tag.ilike(term),
+                Simulation.git_commit_hash.ilike(term),
+                Simulation.grid_name.ilike(term),
+                Simulation.grid_resolution.ilike(term),
+                Simulation.compset.ilike(term),
+                Simulation.compset_alias.ilike(term),
+                Machine.name.ilike(term),
+            )
+        )
+    if case_id is not None:
+        query = query.filter(Simulation.case_id == case_id)
+    if case_name:
+        query = query.filter(Case.name.in_(case_name))
+    if case_group:
+        query = query.filter(Case.case_group.in_(case_group))
+    if status_filter:
+        query = query.filter(Simulation.status.in_(status_filter))
+    if simulation_type:
+        query = query.filter(Simulation.simulation_type.in_(simulation_type))
+    if machine_id:
+        query = query.filter(Case.machine_id.in_(machine_id))
+    if hpc_username:
+        query = query.filter(Case.hpc_username.in_(hpc_username))
+    for column, values in (
+        (Simulation.campaign, campaign),
+        (Simulation.experiment_type, experiment_type),
+        (Simulation.compset, compset),
+        (Simulation.grid_name, grid_name),
+        (Simulation.grid_resolution, grid_resolution),
+        (Simulation.initialization_type, initialization_type),
+        (Simulation.compiler, compiler),
+        (Simulation.git_tag, git_tag),
+        (Simulation.created_by, created_by),
+    ):
+        if values:
+            query = query.filter(column.in_(values))
 
-    sims = query.order_by(Simulation.created_at.desc()).all()
-    return [_simulation_to_out(s) for s in sims]
+    total = query.order_by(None).count()
+    rows_query = query.with_entities(
+        Simulation.id,
+        Simulation.case_id,
+        Case.name.label("case_name"),
+        Case.case_group,
+        Simulation.execution_id,
+        Simulation.case_hash,
+        Simulation.simulation_type,
+        Simulation.status,
+        Simulation.campaign,
+        Simulation.experiment_type,
+        Simulation.compset,
+        Simulation.compset_alias,
+        Simulation.grid_name,
+        Simulation.grid_resolution,
+        Simulation.initialization_type,
+        Simulation.simulation_start_date,
+        Simulation.simulation_end_date,
+        Simulation.run_start_date,
+        Simulation.run_end_date,
+        Simulation.compiler,
+        Simulation.git_branch,
+        Simulation.git_tag,
+        Simulation.git_commit_hash,
+        Case.machine_id,
+        Machine.name.label("machine_name"),
+        Case.hpc_username,
+        Simulation.created_by,
+        Simulation.last_updated_by,
+        Simulation.created_at,
+        Simulation.updated_at,
+    )
+    sort_column = {
+        "created_at": Simulation.created_at,
+        "updated_at": Simulation.updated_at,
+        "execution_id": Simulation.execution_id,
+        "case_name": Case.name,
+        "case_group": Case.case_group,
+        "case_hash": Simulation.case_hash,
+        "campaign": Simulation.campaign,
+        "experiment_type": Simulation.experiment_type,
+        "simulation_type": Simulation.simulation_type,
+        "status": Simulation.status,
+        "git_branch": Simulation.git_branch,
+        "git_tag": Simulation.git_tag,
+        "git_commit_hash": Simulation.git_commit_hash,
+        "simulation_start_date": Simulation.simulation_start_date,
+        "simulation_end_date": Simulation.simulation_end_date,
+        "run_start_date": Simulation.run_start_date,
+        "grid_resolution": Simulation.grid_resolution,
+        "compset": Simulation.compset,
+        "grid_name": Simulation.grid_name,
+        "machine_name": Machine.name,
+    }[sort_by]
+    ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    rows = (
+        rows_query.order_by(ordering, Simulation.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return SimulationPageOut(
+        items=[SimulationListItemOut(**row._asdict()) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@simulation_router.get("/filter-options", response_model=SimulationFilterOptionsOut)
+def get_simulation_filter_options(
+    db: Session = Depends(get_database_session),
+) -> SimulationFilterOptionsOut:
+    """Return distinct scalar simulation filter values."""
+    return SimulationFilterOptionsOut(
+        case_names=_distinct_values(db, Case.name),
+        case_groups=_distinct_values(db, Case.case_group),
+        machine_ids=_distinct_values(db, Case.machine_id),
+        machines=_machine_filter_options(db),
+        hpc_usernames=_distinct_values(db, Case.hpc_username),
+        campaigns=_distinct_values(db, Simulation.campaign),
+        experiment_types=_distinct_values(db, Simulation.experiment_type),
+        compsets=_distinct_values(db, Simulation.compset),
+        grid_names=_distinct_values(db, Simulation.grid_name),
+        grid_resolutions=_distinct_values(db, Simulation.grid_resolution),
+        simulation_types=_distinct_values(db, Simulation.simulation_type),
+        initialization_types=_distinct_values(db, Simulation.initialization_type),
+        compilers=_distinct_values(db, Simulation.compiler),
+        statuses=_distinct_values(db, Simulation.status),
+        git_tags=_distinct_values(db, Simulation.git_tag),
+        created_by_ids=_distinct_values(db, Simulation.created_by),
+        creators=_creator_filter_options(db),
+    )
 
 
 @simulation_router.patch(
@@ -627,6 +931,43 @@ def _case_to_summary_out(case: Case) -> CaseSummaryOut:
     result = CaseSummaryOut(**_build_case_summary(case))
 
     return result
+
+
+def _distinct_values(db: Session, column) -> list:
+    """Return sorted non-null scalar values for a filter-option column."""
+    return [
+        value
+        for (value,) in db.query(distinct(column))
+        .filter(column.is_not(None))
+        .order_by(column)
+        .all()
+    ]
+
+
+def _machine_filter_options(db: Session) -> list[FilterOptionOut]:
+    """Return machines referenced by catalog cases with display names."""
+    rows = (
+        db.query(Machine.id, Machine.name)
+        .join(Case, Case.machine_id == Machine.id)
+        .distinct()
+        .order_by(Machine.name, Machine.id)
+        .all()
+    )
+    return [
+        FilterOptionOut(value=str(machine_id), label=name) for machine_id, name in rows
+    ]
+
+
+def _creator_filter_options(db: Session) -> list[FilterOptionOut]:
+    """Return simulation creators with stable IDs and email labels."""
+    rows = (
+        db.query(User.id, User.email)
+        .join(Simulation, Simulation.created_by == User.id)
+        .distinct()
+        .order_by(User.email, User.id)
+        .all()
+    )
+    return [FilterOptionOut(value=str(user_id), label=email) for user_id, email in rows]
 
 
 def _case_to_detail_out(case: Case) -> CaseDetailOut:

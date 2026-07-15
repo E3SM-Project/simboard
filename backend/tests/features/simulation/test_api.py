@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
@@ -216,7 +216,11 @@ def _create_simulation_record(
     last_updated_by,
     execution_id: str = "patch-test-exec-1",
     description: str | None = "Original description",
+    created_at: datetime | None = None,
     updated_at: datetime | None = None,
+    campaign: str | None = "campaign-original",
+    compiler: str | None = "gcc",
+    simulation_status: SimulationStatus = SimulationStatus.CREATED,
 ) -> Simulation:
     sim = Simulation(
         case_id=case.id,
@@ -228,11 +232,11 @@ def _create_simulation_record(
         grid_resolution="1.9x2.5",
         initialization_type="startup",
         simulation_type="experimental",
-        status="created",
-        campaign="campaign-original",
+        status=simulation_status,
+        campaign=campaign,
         experiment_type="historical",
         simulation_start_date="2023-01-01T00:00:00Z",
-        compiler="gcc",
+        compiler=compiler,
         key_features="Original features",
         known_issues="Original issues",
         notes_markdown="Original notes",
@@ -243,6 +247,7 @@ def _create_simulation_record(
         created_by=created_by,
         last_updated_by=last_updated_by,
         ingestion_id=ingestion_id,
+        created_at=created_at,
         updated_at=updated_at or datetime.now(timezone.utc) - timedelta(days=1),
     )
     db.add(sim)
@@ -251,11 +256,26 @@ def _create_simulation_record(
     return sim
 
 
+@contextmanager
+def _capture_select_statements():
+    statements: list[str] = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+
 class TestListCases:
     def test_endpoint_returns_empty_list(self, client):
         res = client.get(f"{API_BASE}/cases")
         assert res.status_code == 200
-        assert res.json() == []
+        assert res.json() == {"items": [], "total": 0, "page": 1, "pageSize": 25}
 
     def test_endpoint_returns_cases_with_nested_simulations(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -318,42 +338,262 @@ class TestListCases:
 
         res = client.get(f"{API_BASE}/cases")
         assert res.status_code == 200
-        data = res.json()
+        page = res.json()
+        data = page["items"]
+        assert page["total"] == 1
         assert len(data) == 1
 
         case_data = data[0]
         assert case_data["name"] == "test_case_nested"
-        assert case_data["machineNames"] == [machine.name]
-        assert case_data["hpcUsernames"] == ["test-user"]
+        assert case_data["machineName"] == machine.name
+        assert case_data["hpcUsername"] == "test-user"
+        assert case_data["simulationCount"] == 2
         assert "description" not in case_data
         assert "keyFeatures" not in case_data
         assert "knownIssues" not in case_data
         assert "notesMarkdown" not in case_data
 
-        # Verify nested simulations are SimulationSummaryOut (lightweight)
-        sims = case_data["simulations"]
-        assert len(sims) == 2
+        assert "simulations" not in case_data
+        assert "links" not in case_data
 
-        # Each summary should have only lightweight fields
-        for s in sims:
-            assert "id" in s
-            assert "executionId" in s
-            assert "caseHash" in s
-            assert "status" in s
-            assert "simulationStartDate" in s
-            # Must NOT include heavy fields
-            assert "machine" not in s
-            assert "artifacts" not in s
-            assert "links" not in s
-            assert "groupedArtifacts" not in s
-            assert "groupedLinks" not in s
-            assert "runConfigDeltas" not in s
-            assert "createdByUser" not in s
+    def test_pagination_defaults_limits_totals_and_empty_pages(
+        self, client, db: Session
+    ):
+        for index in range(30):
+            _create_case(db, f"page-case-{index:02d}")
+        db.commit()
 
-        # Verify case hash and summary payload shape
-        exec_ids = {s["executionId"]: s for s in sims}
-        assert exec_ids["case-nested-exec-1"]["caseHash"] == "nested-hash-1"
-        assert exec_ids["case-nested-exec-2"]["caseHash"] == "nested-hash-2"
+        first = client.get(f"{API_BASE}/cases").json()
+        assert first["page"] == 1
+        assert first["pageSize"] == 25
+        assert first["total"] == 30
+        assert len(first["items"]) == 25
+
+        empty = client.get(
+            f"{API_BASE}/cases", params={"page": 4, "page_size": 10}
+        ).json()
+        assert empty == {"items": [], "total": 30, "page": 4, "pageSize": 10}
+        assert (
+            client.get(f"{API_BASE}/cases", params={"page_size": 101}).status_code
+            == 422
+        )
+
+    def test_combined_simulation_filters_must_match_one_simulation(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        split_case = _create_case(db, "split-filter-case")
+        matching_case = _create_case(db, "matching-filter-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for case, execution_id, campaign, compiler in (
+            (split_case, "split-campaign", "campaign-a", "intel"),
+            (split_case, "split-compiler", "campaign-b", "gcc"),
+            (matching_case, "combined-match", "campaign-a", "gcc"),
+        ):
+            _create_simulation_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=execution_id,
+                campaign=campaign,
+                compiler=compiler,
+            )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/cases",
+            params={"campaign": "campaign-a", "compiler": "gcc"},
+        ).json()
+
+        assert data["total"] == 1
+        assert [item["name"] for item in data["items"]] == ["matching-filter-case"]
+
+    def test_list_uses_fixed_two_select_queries(self, client, db: Session):
+        for index in range(3):
+            _create_case(db, f"query-count-case-{index}")
+        db.commit()
+
+        for page_size in (1, 100):
+            with _capture_select_statements() as statements:
+                response = client.get(
+                    f"{API_BASE}/cases",
+                    params={
+                        "page_size": page_size,
+                        "search": "query-count-case",
+                        "sort_by": "machine_name",
+                    },
+                )
+
+            assert response.status_code == 200
+            assert len(statements) == 2
+
+    def test_supported_case_sort_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        first_machine = Machine(
+            name="z-case-sort-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        second_machine = Machine(
+            name="a-case-sort-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add_all([first_machine, second_machine])
+        db.flush()
+        first = _create_case(
+            db,
+            "z-case-sort",
+            machine_id=first_machine.id,
+            hpc_username="z-user",
+        )
+        second = _create_case(
+            db,
+            "a-case-sort",
+            machine_id=second_machine.id,
+            hpc_username="a-user",
+        )
+        first.case_group = "z-group"
+        second.case_group = "a-group"
+        first.created_at = first.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        second.created_at = second.updated_at = datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+        first_ingestion = _create_ingestion(
+            db, first_machine.id, normal_user_sync["id"]
+        )
+        second_ingestion = _create_ingestion(
+            db, second_machine.id, normal_user_sync["id"]
+        )
+        for index in range(2):
+            _create_simulation_record(
+                db,
+                case=first,
+                ingestion_id=first_ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"z-case-sort-{index}",
+            )
+        _create_simulation_record(
+            db,
+            case=second,
+            ingestion_id=second_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="a-case-sort-0",
+        )
+        db.commit()
+
+        for sort_by in (
+            "updated_at",
+            "created_at",
+            "name",
+            "case_group",
+            "machine_name",
+            "hpc_username",
+            "simulation_count",
+        ):
+            data = client.get(
+                f"{API_BASE}/cases",
+                params={"sort_by": sort_by, "sort_order": "asc"},
+            ).json()
+            assert [item["name"] for item in data["items"]] == [
+                "a-case-sort",
+                "z-case-sort",
+            ]
+
+        assert (
+            client.get(f"{API_BASE}/cases", params={"sort_by": "invalid"}).status_code
+            == 422
+        )
+
+    def test_filter_options_include_complete_values_and_display_labels(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "case-option-name")
+        case.case_group = "case-option-group"
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        _create_simulation_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            campaign="case-option-campaign",
+        )
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/filter-options").json()
+
+        assert data["caseGroups"] == ["case-option-group"]
+        assert data["campaigns"] == ["case-option-campaign"]
+        assert data["machines"] == [{"value": str(machine.id), "label": machine.name}]
+        assert data["creators"] == [
+            {
+                "value": str(normal_user_sync["id"]),
+                "label": normal_user_sync["email"],
+            }
+        ]
+
+    def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
+        cases = [_create_case(db, f"overview-{index}") for index in range(7)]
+        for index, case in enumerate(cases):
+            case.updated_at = datetime(2026, 1, index + 1, tzinfo=timezone.utc)
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/overview").json()
+        assert data["totalCases"] == 7
+        assert data["totalSimulations"] == 0
+        assert data["latestSubmission"] is None
+        assert data["machineCounts"] == {}
+        assert [item["name"] for item in data["recentCases"]] == [
+            "overview-6",
+            "overview-5",
+            "overview-4",
+            "overview-3",
+            "overview-2",
+            "overview-1",
+        ]
+
+    def test_overview_orders_by_latest_simulation_activity(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        active_case = _create_case(db, "old-case-with-new-run")
+        inactive_case = _create_case(db, "newer-inactive-case")
+        active_case.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        inactive_case.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        _create_simulation_record(
+            db,
+            case=active_case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="new-activity",
+            created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        )
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/overview").json()
+
+        assert [item["name"] for item in data["recentCases"][:2]] == [
+            "old-case-with-new-run",
+            "newer-inactive-case",
+        ]
+        assert data["recentCases"][0]["updatedAt"] == "2026-03-01T00:00:00Z"
 
 
 class TestListCaseNames:
@@ -1211,7 +1451,341 @@ class TestListSimulations:
     def test_endpoint_returns_empty_list(self, client):
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        assert res.json() == []
+        assert res.json() == {"items": [], "total": 0, "page": 1, "pageSize": 25}
+
+    def test_exact_case_id_filter_and_empty_page(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        first_case = _create_case(db, "exact-case-a")
+        second_case = _create_case(db, "exact-case-b")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for case, execution_id in (
+            (first_case, "exact-a"),
+            (second_case, "exact-b"),
+        ):
+            db.add(
+                Simulation(
+                    case_id=case.id,
+                    execution_id=execution_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/simulations", params={"case_id": str(first_case.id)}
+        ).json()
+        assert data["total"] == 1
+        assert [item["executionId"] for item in data["items"]] == ["exact-a"]
+
+        empty = client.get(
+            f"{API_BASE}/simulations",
+            params={"case_id": str(first_case.id), "page": 2},
+        ).json()
+        assert empty["items"] == []
+        assert empty["total"] == 1
+
+    def test_multi_value_filters_use_or_within_and_between_categories(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "multi-filter-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for execution_id, campaign, simulation_status in (
+            ("campaign-a-created", "campaign-a", SimulationStatus.CREATED),
+            ("campaign-b-running", "campaign-b", SimulationStatus.RUNNING),
+            ("campaign-c-created", "campaign-c", SimulationStatus.CREATED),
+        ):
+            _create_simulation_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=execution_id,
+                campaign=campaign,
+                simulation_status=simulation_status,
+            )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/simulations",
+            params=[
+                ("campaign", "campaign-a"),
+                ("campaign", "campaign-b"),
+                ("status", "created"),
+            ],
+        ).json()
+
+        assert data["total"] == 1
+        assert [item["executionId"] for item in data["items"]] == ["campaign-a-created"]
+
+    def test_list_uses_fixed_two_select_queries(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "simulation-query-count")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for index in range(3):
+            _create_simulation_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"query-count-{index}",
+            )
+        db.commit()
+
+        for page_size in (1, 100):
+            with _capture_select_statements() as statements:
+                response = client.get(
+                    f"{API_BASE}/simulations",
+                    params={
+                        "page_size": page_size,
+                        "search": "simulation-query-count",
+                        "sort_by": "machine_name",
+                    },
+                )
+
+            assert response.status_code == 200
+            assert len(statements) == 2
+
+    def test_search_covers_advertised_simulation_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "unique-search-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        simulation = _create_simulation_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="unique-search-execution",
+        )
+        simulation.git_branch = "unique-search-branch"
+        simulation.git_tag = "unique-search-tag"
+        simulation.git_commit_hash = "unique-search-commit"
+        simulation.grid_name = "unique-search-grid"
+        simulation.grid_resolution = "unique-search-resolution"
+        simulation.compset = "unique-search-compset"
+        simulation.compset_alias = "unique-search-alias"
+        db.commit()
+
+        for term in (
+            "unique-search-case",
+            "unique-search-execution",
+            "unique-search-branch",
+            "unique-search-tag",
+            "unique-search-commit",
+            "unique-search-grid",
+            "unique-search-resolution",
+            "unique-search-compset",
+            "unique-search-alias",
+            machine.name,
+        ):
+            data = client.get(f"{API_BASE}/simulations", params={"search": term}).json()
+            assert data["total"] == 1
+            assert data["items"][0]["id"] == str(simulation.id)
+
+    def test_supported_simulation_sort_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        first_machine = Machine(
+            name="z-simulation-sort-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        second_machine = Machine(
+            name="a-simulation-sort-machine",
+            site="Test Site",
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add_all([first_machine, second_machine])
+        db.flush()
+        first_case = _create_case(
+            db, "z-simulation-sort-case", machine_id=first_machine.id
+        )
+        second_case = _create_case(
+            db, "a-simulation-sort-case", machine_id=second_machine.id
+        )
+        first_case.case_group = "z-group"
+        second_case.case_group = "a-group"
+        first_ingestion = _create_ingestion(
+            db, first_machine.id, normal_user_sync["id"]
+        )
+        second_ingestion = _create_ingestion(
+            db, second_machine.id, normal_user_sync["id"]
+        )
+        first = _create_simulation_record(
+            db,
+            case=first_case,
+            ingestion_id=first_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="z-simulation-sort",
+            campaign="z-campaign",
+            simulation_status=SimulationStatus.RUNNING,
+        )
+        second = _create_simulation_record(
+            db,
+            case=second_case,
+            ingestion_id=second_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="a-simulation-sort",
+            campaign="a-campaign",
+            simulation_status=SimulationStatus.CREATED,
+        )
+        early = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        late = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        for simulation, prefix, timestamp, simulation_type in (
+            (first, "z", late, SimulationType.PRODUCTION),
+            (second, "a", early, SimulationType.EXPERIMENTAL),
+        ):
+            simulation.case_hash = f"{prefix}-hash"
+            simulation.experiment_type = f"{prefix}-experiment"
+            simulation.simulation_type = simulation_type
+            simulation.git_branch = f"{prefix}-branch"
+            simulation.git_tag = f"{prefix}-tag"
+            simulation.git_commit_hash = f"{prefix}-commit"
+            simulation.simulation_start_date = timestamp
+            simulation.simulation_end_date = timestamp
+            simulation.run_start_date = timestamp
+            simulation.grid_resolution = f"{prefix}-resolution"
+            simulation.compset = f"{prefix}-compset"
+            simulation.grid_name = f"{prefix}-grid"
+            simulation.created_at = timestamp
+            simulation.updated_at = timestamp
+        db.commit()
+
+        for sort_by in (
+            "created_at",
+            "updated_at",
+            "execution_id",
+            "case_name",
+            "case_group",
+            "case_hash",
+            "campaign",
+            "experiment_type",
+            "simulation_type",
+            "status",
+            "git_branch",
+            "git_tag",
+            "git_commit_hash",
+            "simulation_start_date",
+            "simulation_end_date",
+            "run_start_date",
+            "grid_resolution",
+            "compset",
+            "grid_name",
+            "machine_name",
+        ):
+            data = client.get(
+                f"{API_BASE}/simulations",
+                params={"sort_by": sort_by, "sort_order": "asc"},
+            ).json()
+            assert [item["executionId"] for item in data["items"]] == [
+                "a-simulation-sort",
+                "z-simulation-sort",
+            ]
+
+        assert (
+            client.get(
+                f"{API_BASE}/simulations", params={"sort_by": "invalid"}
+            ).status_code
+            == 422
+        )
+
+    def test_case_scoped_results_continue_after_one_hundred(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "large-expanded-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for index in range(101):
+            _create_simulation_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"large-case-{index:03d}",
+            )
+        db.commit()
+
+        first = client.get(
+            f"{API_BASE}/simulations",
+            params={"case_id": str(case.id), "page_size": 100},
+        ).json()
+        second = client.get(
+            f"{API_BASE}/simulations",
+            params={"case_id": str(case.id), "page_size": 100, "page": 2},
+        ).json()
+
+        assert first["total"] == 101
+        assert len(first["items"]) == 100
+        assert len(second["items"]) == 1
+
+    def test_filter_options_return_distinct_scalars(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "filter-option-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        db.add(
+            Simulation(
+                case_id=case.id,
+                execution_id="filter-options",
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                simulation_type="experimental",
+                status="created",
+                simulation_start_date="2023-01-01T00:00:00Z",
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.commit()
+
+        data = client.get(f"{API_BASE}/simulations/filter-options").json()
+        assert data["caseNames"] == ["filter-option-case"]
+        assert data["compsets"] == ["AQUAPLANET"]
+        assert data["statuses"] == ["created"]
+        assert data["machines"] == [{"value": str(machine.id), "label": machine.name}]
+        assert data["creators"] == [
+            {
+                "value": str(normal_user_sync["id"]),
+                "label": normal_user_sync["email"],
+            }
+        ]
 
     def test_endpoint_returns_simulations_with_data(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
@@ -1258,14 +1832,21 @@ class TestListSimulations:
 
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
         assert data[0]["caseName"] == "test_case_list"
         assert data[0]["executionId"] == "list-test-exec-1"
-        assert data[0]["summaryCapabilities"] == {
-            "llmAvailable": False,
-            "autoGenerateDeterministicOnLoad": True,
-        }
+        for heavy_field in (
+            "artifacts",
+            "links",
+            "groupedArtifacts",
+            "groupedLinks",
+            "extra",
+            "createdByUser",
+            "lastUpdatedByUser",
+            "summaryCapabilities",
+        ):
+            assert heavy_field not in data[0]
 
     def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
@@ -1314,11 +1895,8 @@ class TestListSimulations:
 
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        data = res.json()
-        assert data[0]["summaryCapabilities"] == {
-            "llmAvailable": False,
-            "autoGenerateDeterministicOnLoad": True,
-        }
+        data = res.json()["items"]
+        assert "summaryCapabilities" not in data[0]
 
     def test_filter_by_case_name(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -1365,19 +1943,19 @@ class TestListSimulations:
         # No filter returns both
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        assert len(res.json()) == 2
+        assert res.json()["total"] == 2
 
         # Filter by case_name=case_alpha returns only one
         res = client.get(f"{API_BASE}/simulations", params={"case_name": "case_alpha"})
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
         assert data[0]["caseName"] == "case_alpha"
 
         # Non-matching filter returns empty
         res = client.get(f"{API_BASE}/simulations", params={"case_name": "nonexistent"})
         assert res.status_code == 200
-        assert len(res.json()) == 0
+        assert res.json()["items"] == []
 
     def test_filter_by_case_group(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -1426,7 +2004,7 @@ class TestListSimulations:
 
         res = client.get(f"{API_BASE}/simulations", params={"case_group": "ensemble_A"})
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
         assert data[0]["caseGroup"] == "ensemble_A"
 
@@ -1508,7 +2086,7 @@ class TestListSimulations:
             f"{API_BASE}/simulations", params={"case_name": "normalized_case"}
         )
         assert res.status_code == 200
-        assert {sim["executionId"] for sim in res.json()} == {
+        assert {sim["executionId"] for sim in res.json()["items"]} == {
             "normalized-exec-1",
             "normalized-exec-2",
         }
@@ -1564,7 +2142,7 @@ class TestListSimulations:
             params={"case_name": "combo_case", "case_group": "combo_group"},
         )
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
         assert data[0]["caseName"] == "combo_case"
         assert data[0]["caseGroup"] == "combo_group"
@@ -1634,27 +2212,10 @@ class TestListSimulations:
 
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
-
-        links_by_url = {link["url"]: link for link in data[0]["links"]}
-        assert set(links_by_url) == {
-            "https://example.com/case-only-diagnostic",
-            "https://example.com/shared-diagnostic",
-        }
-        assert (
-            links_by_url["https://example.com/case-only-diagnostic"]["ownerType"]
-            == "case"
-        )
-        assert (
-            links_by_url["https://example.com/shared-diagnostic"]["label"]
-            == "Simulation shared diagnostic"
-        )
-        assert (
-            links_by_url["https://example.com/shared-diagnostic"]["ownerType"]
-            == "simulation"
-        )
-        assert data[0]["groupedLinks"]["diagnostic"][0]["kind"] == "diagnostic"
+        assert "links" not in data[0]
+        assert "groupedLinks" not in data[0]
 
 
 class TestGetSimulation:
@@ -2543,7 +3104,7 @@ class TestSimulationBrowserIncludesCaseMetadata:
 
         res = client.get(f"{API_BASE}/simulations")
         assert res.status_code == 200
-        data = res.json()
+        data = res.json()["items"]
         assert len(data) == 1
         # Verify case metadata is present on the flat simulation row
         assert data[0]["caseId"] == str(case.id)
