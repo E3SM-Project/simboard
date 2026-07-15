@@ -33,9 +33,9 @@ import {
   formatCaseHashLabel,
   MISSING_CASE_HASH_LABEL,
 } from '@/features/simulations/caseUtils';
-import { useCaseFilterOptions } from '@/features/simulations/hooks/useCaseFilterOptions';
-import { useCases } from '@/features/simulations/hooks/useCases';
-import { useSimulations } from '@/features/simulations/hooks/useSimulations';
+import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
+import { useCases } from '@/lib/catalog/hooks/useCases';
+import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
 import type {
   CaseListItemOut,
@@ -436,7 +436,7 @@ export const CasesPage = () => {
     getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
     manualPagination: true,
-    pageCount: Math.ceil((casePage?.total ?? 0) / pagination.pageSize),
+    pageCount: Math.max(1, Math.ceil((casePage?.total ?? 0) / pagination.pageSize)),
   });
 
   const renderSelectField = ({

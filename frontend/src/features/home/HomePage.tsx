@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { useCatalogOverview } from '@/features/simulations/hooks/useCatalogOverview';
+import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
 import type { Machine } from '@/types/index';
 
 interface HomePageProps {

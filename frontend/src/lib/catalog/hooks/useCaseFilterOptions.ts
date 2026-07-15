@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getCaseFilterOptions } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { getCaseFilterOptions } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useCaseFilterOptions = () =>
   useQuery({

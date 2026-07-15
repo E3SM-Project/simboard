@@ -4,7 +4,6 @@ import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import {
   ArchiveUploadValidationDetail,
   ArchiveUploadValidationError,
@@ -12,6 +11,7 @@ import {
   uploadSimulationArchive,
 } from '@/features/upload/api/api';
 import { toast } from '@/hooks/use-toast';
+import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
 import type { Machine } from '@/types';
 
 interface UploadPageProps {

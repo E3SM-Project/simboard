@@ -11,14 +11,14 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { getSimulationById } from '@/api/catalog';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
-import { getSimulationById } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';

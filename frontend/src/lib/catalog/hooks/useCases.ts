@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { listCases, type PageParams } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { listCases, type PageParams } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useCases = (params: PageParams = {}) => {
   const query = useQuery({

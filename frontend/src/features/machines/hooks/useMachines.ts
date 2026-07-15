@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { listMachines } from '@/features/machines/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useMachines = () => {
   const query = useQuery({

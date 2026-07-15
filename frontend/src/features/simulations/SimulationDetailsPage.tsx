@@ -3,16 +3,16 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
+import { resolvePaceExecution, updateSimulation } from '@/api/catalog';
 import { useAuth } from '@/auth/hooks/useAuth';
-import { resolvePaceExecution, updateSimulation } from '@/features/simulations/api/api';
 import {
   SimulationDetailsView,
   type SimulationSaveError,
 } from '@/features/simulations/components/SimulationDetailsView';
-import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 import { useSimulationSummary } from '@/features/simulations/hooks/useSimulationSummary';
-import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import { toast } from '@/hooks/use-toast';
+import { useSimulation } from '@/lib/catalog/hooks/useSimulation';
+import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
 import type { SimulationOut, SimulationUpdate } from '@/types';
 
 const MAX_COMPARE_SELECTION = 5;

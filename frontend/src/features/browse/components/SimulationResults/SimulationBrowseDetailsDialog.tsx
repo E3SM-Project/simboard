@@ -11,7 +11,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { suppressNextBrowseInteraction } from '@/features/browse/components/SimulationResults/selectionGuard';
-import { useSimulation } from '@/features/simulations/hooks/useSimulation';
+import { useSimulation } from '@/lib/catalog/hooks/useSimulation';
 import { getArtifactsByKind } from '@/types/artifact';
 import type { SimulationListItemOut } from '@/types/index';
 

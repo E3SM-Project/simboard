@@ -3,12 +3,12 @@ import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { getSimulationById } from '@/api/catalog';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Button } from '@/components/ui/button';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
-import { getSimulationById } from '@/features/simulations/api/api';
-import { useCase } from '@/features/simulations/hooks/useCase';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { useCase } from '@/lib/catalog/hooks/useCase';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import type { SimulationOut } from '@/types';
 
 interface CaseCompareRouteProps {

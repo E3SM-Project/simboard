@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 
-import { listSimulations } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { listSimulations } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 const CASE_SIMULATION_PAGE_SIZE = 100;
 

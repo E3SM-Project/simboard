@@ -37,8 +37,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { useSimulationFilterOptions } from '@/features/simulations/hooks/useSimulationFilterOptions';
-import { useSimulations } from '@/features/simulations/hooks/useSimulations';
+import { useSimulationFilterOptions } from '@/lib/catalog/hooks/useSimulationFilterOptions';
+import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
 import type { SimulationListItemOut } from '@/types/index';
 
@@ -319,7 +319,7 @@ export const SimulationsPage = () => {
     manualFiltering: true,
     manualSorting: true,
     manualPagination: true,
-    pageCount: Math.ceil((simulationPage?.total ?? 0) / pagination.pageSize),
+    pageCount: Math.max(1, Math.ceil((simulationPage?.total ?? 0) / pagination.pageSize)),
   });
   const tableWidth =
     40 + table.getVisibleLeafColumns().reduce((sum, column) => sum + column.getSize(), 0);

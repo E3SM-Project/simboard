@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getCatalogOverview } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { getCatalogOverview } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useCatalogOverview = () =>
   useQuery({

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getCaseById } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { getCaseById } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useCase = (id: string) => {
   const query = useQuery({

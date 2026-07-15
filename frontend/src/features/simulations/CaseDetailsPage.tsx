@@ -12,6 +12,7 @@ import {
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
+import { updateCase } from '@/api/catalog';
 import { useAuth } from '@/auth/hooks/useAuth';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
@@ -31,7 +32,6 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { updateCase } from '@/features/simulations/api/api';
 import {
   formatCaseDate,
   formatCaseHashLabel,
@@ -57,10 +57,10 @@ import {
   toEditableLinkRows,
   type ValidationDetail,
 } from '@/features/simulations/externalLinkEditing';
-import { useCase } from '@/features/simulations/hooks/useCase';
-import { useCaseSimulations } from '@/features/simulations/hooks/useCaseSimulations';
-import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import { toast } from '@/hooks/use-toast';
+import { useCase } from '@/lib/catalog/hooks/useCase';
+import { useCaseSimulations } from '@/lib/catalog/hooks/useCaseSimulations';
+import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
 import type {
   CaseDetailOut,
   CaseEditableField,

@@ -22,8 +22,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
-import { useSimulationFilterOptions } from '@/features/simulations/hooks/useSimulationFilterOptions';
-import { useSimulations } from '@/features/simulations/hooks/useSimulations';
+import { useSimulationFilterOptions } from '@/lib/catalog/hooks/useSimulationFilterOptions';
+import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {

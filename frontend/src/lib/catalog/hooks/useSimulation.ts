@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getSimulationById } from '@/features/simulations/api/api';
-import { catalogQueryKeys } from '@/features/simulations/queryKeys';
+import { getSimulationById } from '@/api/catalog';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useSimulation = (id: string, enabled = true) => {
   const query = useQuery({
