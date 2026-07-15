@@ -2,12 +2,10 @@ import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import {
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -35,9 +33,14 @@ import {
   formatCaseHashLabel,
   MISSING_CASE_HASH_LABEL,
 } from '@/features/simulations/caseUtils';
-import { useCases } from '@/features/simulations/hooks/useCases';
+import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
+import { useCases } from '@/lib/catalog/hooks/useCases';
+import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
-import type { CaseSummaryOut, SimulationOut, SimulationSummaryOut } from '@/types';
+import type {
+  CaseListItemOut,
+  SimulationListItemOut,
+} from '@/types';
 
 type ActiveFilterKey =
   | 'caseName'
@@ -50,10 +53,6 @@ type ActiveFilterKey =
   | 'gitTag'
   | 'createdBy'
   | 'caseGroup';
-
-interface CasesPageProps {
-  simulations: SimulationOut[];
-}
 
 interface CaseSimulationFilters {
   hpcUsername: string;
@@ -77,8 +76,6 @@ interface ActiveFilterPill {
   value: string;
 }
 
-type CaseSimulationListItem = SimulationOut | SimulationSummaryOut;
-
 const createEmptySimulationFilters = (): CaseSimulationFilters => ({
   hpcUsername: '',
   machineId: '',
@@ -90,46 +87,92 @@ const createEmptySimulationFilters = (): CaseSimulationFilters => ({
   createdBy: '',
 });
 
-const sortStringValues = (values: string[]) =>
-  values.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-
-const sortCaseSimulations = (caseSimulations: CaseSimulationListItem[]) =>
+const sortCaseSimulations = (caseSimulations: SimulationListItemOut[]) =>
   [...caseSimulations].sort(
     (left, right) =>
       new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime(),
   );
 
-export const CasesPage = ({ simulations }: CasesPageProps) => {
+const CASE_SORT_FIELDS: Record<string, string> = {
+  name: 'name',
+  hpcUsers: 'hpc_username',
+  machines: 'machine_name',
+  simulationCount: 'simulation_count',
+  caseGroup: 'case_group',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+};
+
+export const CasesPage = () => {
   const location = useLocation();
-  const { data: cases, loading, error } = useCases();
   const currentPath = `${location.pathname}${location.search}`;
 
   const [caseNameFilter, setCaseNameFilter] = useState('');
+  const [debouncedCaseName, setDebouncedCaseName] = useState('');
   const [caseGroupFilter, setCaseGroupFilter] = useState('');
   const [simulationFilters, setSimulationFilters] = useState<CaseSimulationFilters>(
     createEmptySimulationFilters,
   );
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [expandedSimulationPage, setExpandedSimulationPage] = useState(1);
+  const { data: simulations, page: expandedSimulationPageData } = useSimulations(
+    {
+      caseId: expandedCaseId ?? undefined,
+      page: expandedSimulationPage,
+      pageSize: 25,
+      hpcUsername: simulationFilters.hpcUsername || undefined,
+      machineId: simulationFilters.machineId || undefined,
+      campaign: simulationFilters.campaign || undefined,
+      simulationType: simulationFilters.simulationType || undefined,
+      initializationType: simulationFilters.initializationType || undefined,
+      compiler: simulationFilters.compiler || undefined,
+      gitTag: simulationFilters.gitTag || undefined,
+      createdBy: simulationFilters.createdBy || undefined,
+    },
+    expandedCaseId != null,
+  );
+  const { data: filterOptions } = useCaseFilterOptions();
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'updatedAt', desc: true },
     { id: 'name', desc: false },
   ]);
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedCaseName(caseNameFilter.trim()), 300);
+    return () => window.clearTimeout(timeout);
+  }, [caseNameFilter]);
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [debouncedCaseName, caseGroupFilter, simulationFilters]);
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [sorting]);
+  useEffect(() => {
+    setExpandedSimulationPage(1);
+  }, [expandedCaseId, simulationFilters]);
+  const primarySort = sorting[0];
+  const { data: cases, page: casePage, loading, error } = useCases({
+    page: pagination.pageIndex + 1,
+    pageSize: pagination.pageSize,
+    search: debouncedCaseName || undefined,
+    caseGroup: caseGroupFilter || undefined,
+    hpcUsername: simulationFilters.hpcUsername || undefined,
+    machineId: simulationFilters.machineId || undefined,
+    campaign: simulationFilters.campaign || undefined,
+    simulationType: simulationFilters.simulationType || undefined,
+    initializationType: simulationFilters.initializationType || undefined,
+    compiler: simulationFilters.compiler || undefined,
+    gitTag: simulationFilters.gitTag || undefined,
+    createdBy: simulationFilters.createdBy || undefined,
+    sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'updated_at',
+    sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
+  });
 
-  const caseGroups = useMemo(
-    () =>
-      [
-        ...new Set(
-          cases
-            .map((caseRecord) => caseRecord.caseGroup)
-            .filter((group): group is string => Boolean(group)),
-        ),
-      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' })),
-    [cases],
-  );
+  const caseGroups = filterOptions?.caseGroups ?? [];
 
   const simulationsByCaseId = useMemo(() => {
-    const caseMap = new Map<string, SimulationOut[]>();
+    const caseMap = new Map<string, SimulationListItemOut[]>();
     for (const simulation of simulations) {
       const caseSimulations = caseMap.get(simulation.caseId) ?? [];
       caseSimulations.push(simulation);
@@ -139,127 +182,21 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     return caseMap;
   }, [simulations]);
 
-  const caseMachineSummaries = useMemo(() => {
-    const summaries = new Map<string, string>();
-
-    for (const [caseId, caseSimulations] of simulationsByCaseId.entries()) {
-      const machineNames = [
-        ...new Set(
-          caseSimulations
-            .map((simulation) => simulation.machine?.name)
-            .filter((machineName): machineName is string => Boolean(machineName)),
-        ),
-      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-
-      if (machineNames.length === 0) {
-        summaries.set(caseId, '—');
-      } else if (machineNames.length === 1) {
-        summaries.set(caseId, machineNames[0]);
-      } else {
-        summaries.set(caseId, `${machineNames[0]} +${machineNames.length - 1}`);
-      }
-    }
-
-    return summaries;
-  }, [simulationsByCaseId]);
-
-  const caseHpcUserSummaries = useMemo(() => {
-    const summaries = new Map<string, string>();
-
-    for (const [caseId, caseSimulations] of simulationsByCaseId.entries()) {
-      const usernames = [
-        ...new Set(
-          caseSimulations
-            .map((simulation) => simulation.hpcUsername)
-            .filter((username): username is string => Boolean(username)),
-        ),
-      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-
-      if (simulationFilters.hpcUsername) {
-        summaries.set(caseId, simulationFilters.hpcUsername);
-      } else if (usernames.length === 0) {
-        summaries.set(caseId, '—');
-      } else if (usernames.length === 1) {
-        summaries.set(caseId, usernames[0]);
-      } else {
-        summaries.set(caseId, `${usernames.length} users`);
-      }
-    }
-
-    return summaries;
-  }, [simulationFilters.hpcUsername, simulationsByCaseId]);
-  const hpcUsernames = useMemo(
-    () =>
-      [
-        ...new Set(
-          simulations
-            .map((simulation) => simulation.hpcUsername)
-            .filter((username): username is string => Boolean(username)),
-        ),
-      ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' })),
-    [simulations],
-  );
-
-  const machineOptions = useMemo(() => {
-    const machineMap = new Map<string, string>();
-
-    for (const simulation of simulations) {
-      if (!simulation.machine?.id) continue;
-      machineMap.set(simulation.machine.id, simulation.machine.name);
-    }
-
-    return Array.from(machineMap, ([value, label]) => ({ value, label })).sort((left, right) =>
-      left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }),
-    );
-  }, [simulations]);
-
-  const creatorOptions = useMemo(() => {
-    const creatorMap = new Map<string, string>();
-
-    for (const simulation of simulations) {
-      if (!simulation.createdBy) continue;
-      creatorMap.set(simulation.createdBy, simulation.createdByUser?.email ?? simulation.createdBy);
-    }
-
-    return Array.from(creatorMap, ([value, label]) => ({ value, label })).sort((left, right) =>
-      left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }),
-    );
-  }, [simulations]);
-
-  const { campaigns, simulationTypes, initializationTypes, compilers, gitTags } = useMemo(() => {
-    const campaigns = new Set<string>();
-    const simulationTypes = new Set<string>();
-    const initializationTypes = new Set<string>();
-    const compilers = new Set<string>();
-    const gitTags = new Set<string>();
-
-    for (const simulation of simulations) {
-      if (simulation.campaign) campaigns.add(simulation.campaign);
-      if (simulation.simulationType) simulationTypes.add(simulation.simulationType);
-      if (simulation.initializationType) {
-        initializationTypes.add(simulation.initializationType);
-      }
-      if (simulation.compiler) compilers.add(simulation.compiler);
-      if (simulation.gitTag) gitTags.add(simulation.gitTag);
-    }
-
-    return {
-      campaigns: sortStringValues([...campaigns]),
-      simulationTypes: sortStringValues([...simulationTypes]),
-      initializationTypes: sortStringValues([...initializationTypes]),
-      compilers: sortStringValues([...compilers]),
-      gitTags: sortStringValues([...gitTags]),
-    };
-  }, [simulations]);
+  const hpcUsernames = filterOptions?.hpcUsernames ?? [];
+  const machineOptions = useMemo(() => filterOptions?.machines ?? [], [filterOptions?.machines]);
+  const creatorOptions = useMemo(() => filterOptions?.creators ?? [], [filterOptions?.creators]);
+  const campaigns = filterOptions?.campaigns ?? [];
+  const simulationTypes = filterOptions?.simulationTypes ?? [];
+  const initializationTypes = filterOptions?.initializationTypes ?? [];
+  const compilers = filterOptions?.compilers ?? [];
+  const gitTags = filterOptions?.gitTags ?? [];
 
   const hasActiveSimulationFilters = useMemo(
     () => Object.values(simulationFilters).some(Boolean),
     [simulationFilters],
   );
   const hasActiveFilters =
-    caseNameFilter.trim().length > 0 ||
-    caseGroupFilter.length > 0 ||
-    hasActiveSimulationFilters;
+    caseNameFilter.trim().length > 0 || caseGroupFilter.length > 0 || hasActiveSimulationFilters;
   const advancedFilterCount = useMemo(
     () =>
       [
@@ -274,58 +211,6 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       ].filter(Boolean).length,
     [caseGroupFilter, simulationFilters],
   );
-  const matchingSimulationsByCaseId = useMemo(() => {
-    const matchingMap = new Map<string, SimulationOut[]>();
-
-    const matchesSimulationFilters = (simulation: SimulationOut) => {
-      if (
-        simulationFilters.hpcUsername &&
-        simulation.hpcUsername !== simulationFilters.hpcUsername
-      ) {
-        return false;
-      }
-      if (simulationFilters.machineId && simulation.machine?.id !== simulationFilters.machineId) {
-        return false;
-      }
-      if (simulationFilters.campaign && simulation.campaign !== simulationFilters.campaign) {
-        return false;
-      }
-      if (
-        simulationFilters.simulationType &&
-        simulation.simulationType !== simulationFilters.simulationType
-      ) {
-        return false;
-      }
-      if (
-        simulationFilters.initializationType &&
-        simulation.initializationType !== simulationFilters.initializationType
-      ) {
-        return false;
-      }
-      if (simulationFilters.compiler && simulation.compiler !== simulationFilters.compiler) {
-        return false;
-      }
-      if (simulationFilters.gitTag && simulation.gitTag !== simulationFilters.gitTag) {
-        return false;
-      }
-      if (simulationFilters.createdBy && simulation.createdBy !== simulationFilters.createdBy) {
-        return false;
-      }
-
-      return true;
-    };
-
-    for (const simulation of simulations) {
-      if (!matchesSimulationFilters(simulation)) continue;
-
-      const caseSimulations = matchingMap.get(simulation.caseId) ?? [];
-      caseSimulations.push(simulation);
-      matchingMap.set(simulation.caseId, caseSimulations);
-    }
-
-    return matchingMap;
-  }, [simulationFilters, simulations]);
-
   const activeFilterPills = useMemo(() => {
     const filters: ActiveFilterPill[] = [];
 
@@ -387,13 +272,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
     return filters;
-  }, [
-    caseGroupFilter,
-    caseNameFilter,
-    creatorOptions,
-    machineOptions,
-    simulationFilters,
-  ]);
+  }, [caseGroupFilter, caseNameFilter, creatorOptions, machineOptions, simulationFilters]);
 
   const setSimulationFilter = (key: keyof CaseSimulationFilters, value: string) => {
     setSimulationFilters((current) => ({
@@ -438,29 +317,20 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         normalizedNameFilter.length === 0 ||
         caseRecord.name.toLowerCase().includes(normalizedNameFilter);
       const matchesGroup = !caseGroupFilter || caseRecord.caseGroup === caseGroupFilter;
-      const matchesSimulationFilters =
-        !hasActiveSimulationFilters ||
-        (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0) > 0;
-
-      return matchesName && matchesGroup && matchesSimulationFilters;
+      return matchesName && matchesGroup;
     });
-  }, [caseGroupFilter, cases, caseNameFilter, hasActiveSimulationFilters, matchingSimulationsByCaseId]);
+  }, [
+    caseGroupFilter,
+    cases,
+    caseNameFilter,
+  ]);
 
   const visibleRunCount = useMemo(
-    () =>
-      filteredCases.reduce((count, caseRecord) => {
-        if (hasActiveSimulationFilters) {
-          return count + (matchingSimulationsByCaseId.get(caseRecord.id)?.length ?? 0);
-        }
-
-        return (
-          count + (simulationsByCaseId.get(caseRecord.id)?.length ?? caseRecord.simulations.length)
-        );
-      }, 0),
-    [filteredCases, hasActiveSimulationFilters, matchingSimulationsByCaseId, simulationsByCaseId],
+    () => filteredCases.reduce((count, caseRecord) => count + caseRecord.simulationCount, 0),
+    [filteredCases],
   );
 
-  const columns = useMemo<ColumnDef<CaseSummaryOut>[]>(
+  const columns = useMemo<ColumnDef<CaseListItemOut>[]>(
     () => [
       {
         id: 'expand',
@@ -510,28 +380,25 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
       {
         id: 'hpcUsers',
         header: 'HPC Users',
-        accessorFn: (caseRecord) => caseHpcUserSummaries.get(caseRecord.id) ?? '—',
+        accessorFn: (caseRecord) => caseRecord.hpcUsername,
         cell: ({ row }) => (
-          <TableCellText value={caseHpcUserSummaries.get(row.original.id) ?? '—'} lines={1} />
+          <TableCellText value={row.original.hpcUsername} lines={1} />
         ),
       },
       {
         id: 'machines',
         header: 'Machines',
-        accessorFn: (caseRecord) => caseMachineSummaries.get(caseRecord.id) ?? '—',
+        accessorFn: (caseRecord) => caseRecord.machineName,
         cell: ({ row }) => (
-          <TableCellText value={caseMachineSummaries.get(row.original.id) ?? '—'} lines={1} />
+          <TableCellText value={row.original.machineName} lines={1} />
         ),
       },
       {
         id: 'simulationCount',
         header: 'Total Simulations',
-        accessorFn: (caseRecord) => caseRecord.simulations.length,
+        accessorFn: (caseRecord) => caseRecord.simulationCount,
         cell: ({ row }) => {
-          const totalSimulations =
-            simulationsByCaseId.get(row.original.id)?.length ?? row.original.simulations.length;
-
-          return <Badge variant="secondary">{totalSimulations}</Badge>;
+          return <Badge variant="secondary">{row.original.simulationCount}</Badge>;
         },
       },
       {
@@ -557,23 +424,19 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
         ),
       },
     ],
-    [caseHpcUserSummaries, caseMachineSummaries, currentPath, expandedCaseId, simulationsByCaseId],
+    [currentPath, expandedCaseId],
   );
 
   const table = useReactTable({
     data: filteredCases,
     columns,
-    state: { sorting },
+    state: { sorting, pagination },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageIndex: 0,
-        pageSize: 25,
-      },
-    },
+    manualSorting: true,
+    manualPagination: true,
+    pageCount: Math.max(1, Math.ceil((casePage?.total ?? 0) / pagination.pageSize)),
   });
 
   const renderSelectField = ({
@@ -609,23 +472,12 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
     </div>
   );
 
-  const renderExpandedContent = (caseRecord: CaseSummaryOut) => {
-    const detailedCaseSimulations = simulationsByCaseId.get(caseRecord.id);
-    const summaryCaseSimulations = caseRecord.simulations;
-    const isUsingSummaryFallback =
-      (detailedCaseSimulations == null || detailedCaseSimulations.length === 0) &&
-      summaryCaseSimulations.length > 0;
-    const allCaseSimulations = sortCaseSimulations(
-      detailedCaseSimulations?.length ? detailedCaseSimulations : summaryCaseSimulations,
+  const renderExpandedContent = (caseRecord: CaseListItemOut) => {
+    const visibleCaseSimulations = sortCaseSimulations(
+      simulationsByCaseId.get(caseRecord.id) ?? [],
     );
-    const matchingCaseSimulations = sortCaseSimulations(
-      isUsingSummaryFallback
-        ? summaryCaseSimulations
-        : (matchingSimulationsByCaseId.get(caseRecord.id) ?? []),
-    );
-    const visibleCaseSimulations = hasActiveSimulationFilters
-      ? matchingCaseSimulations
-      : allCaseSimulations;
+    const expandedSimulationTotal = expandedSimulationPageData?.total ?? 0;
+    const expandedSimulationPageCount = Math.max(1, Math.ceil(expandedSimulationTotal / 25));
 
     return (
       <div className="space-y-3 bg-muted/20 p-4">
@@ -633,10 +485,8 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
           <div>
             <p className="text-sm font-medium">Simulation Summaries</p>
             <p className="text-xs text-muted-foreground">
-              {isUsingSummaryFallback
-                ? 'Showing case-level run summaries because full simulation details are unavailable.'
-                : hasActiveSimulationFilters
-                  ? `${matchingCaseSimulations.length} of ${allCaseSimulations.length} runs match the current filters.`
+              {hasActiveSimulationFilters
+                  ? `${expandedSimulationTotal} runs match the current filters.`
                   : 'Open the case page to organize runs by Case Hash and launch compare.'}
             </p>
           </div>
@@ -688,6 +538,31 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
             </Table>
           </div>
         </div>
+        {expandedSimulationTotal > 25 && (
+          <div className="flex max-w-4xl items-center justify-end gap-2 text-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={expandedSimulationPage <= 1}
+              onClick={() => setExpandedSimulationPage((page) => Math.max(1, page - 1))}
+            >
+              Previous runs
+            </Button>
+            <span>
+              Page {expandedSimulationPage} of {expandedSimulationPageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={expandedSimulationPage >= expandedSimulationPageCount}
+              onClick={() =>
+                setExpandedSimulationPage((page) => Math.min(expandedSimulationPageCount, page + 1))
+              }
+            >
+              Next runs
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
@@ -726,24 +601,24 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
             <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[440px]">
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Cases shown
+                  Cases on page
                 </p>
                 <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
                   {filteredCases.length}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">of {cases.length} total cases</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  of {casePage?.total ?? 0} matching cases
+                </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Runs shown
+                  Runs on page
                 </p>
                 <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
                   {visibleRunCount}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {hasActiveSimulationFilters
-                    ? 'matching runs in visible cases'
-                    : 'runs across visible cases'}
+                  total runs across visible cases
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
@@ -1040,7 +915,7 @@ export const CasesPage = ({ simulations }: CasesPageProps) => {
 
       <div className="flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
         <div>
-          Showing {table.getRowModel().rows.length} of {filteredCases.length} filtered cases
+          Showing {table.getRowModel().rows.length} of {casePage?.total ?? 0} filtered cases
         </div>
         <div className="flex items-center gap-2">
           <Button

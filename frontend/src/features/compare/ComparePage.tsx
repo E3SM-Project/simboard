@@ -1,3 +1,4 @@
+import { useQueries } from '@tanstack/react-query';
 import { ChevronRight, EyeOff, GripVertical, X } from 'lucide-react';
 import {
   type DragEvent,
@@ -10,12 +11,14 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { getSimulationById } from '@/api/catalog';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
+import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
@@ -23,9 +26,7 @@ import { formatDate, getSimulationDuration } from '@/utils/utils';
 interface ComparePageProps {
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   selectedSimulationIds: string[];
-  simulations: SimulationOut[];
   setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: SimulationOut[];
 }
 
 interface CompareLocationState {
@@ -1025,9 +1026,7 @@ export const CompareWorkspace = ({
 export const ComparePage = ({
   selectedCaseSimulationIdsByCase,
   selectedSimulationIds,
-  simulations,
   setSelectedSimulationIds,
-  selectedSimulations,
 }: ComparePageProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1054,12 +1053,16 @@ export const ComparePage = ({
     : shouldUseCaseSelectionFallback
       ? caseSelectionFallbackIds
       : selectedSimulationIds;
-  const effectiveSelectedSimulations =
-    shouldUseRoutedSelection && routedSelectedSimulations.length >= 2
-      ? routedSelectedSimulations
-      : shouldUseCaseSelectionFallback
-        ? simulations.filter((simulation) => effectiveSelectedSimulationIds.includes(simulation.id))
-        : selectedSimulations;
+  const detailQueries = useQueries({
+    queries: effectiveSelectedSimulationIds.map((simulationId) => ({
+      queryKey: catalogQueryKeys.simulations.detail(simulationId),
+      queryFn: () => getSimulationById(simulationId),
+      initialData: routedSelectedSimulations.find((simulation) => simulation.id === simulationId),
+    })),
+  });
+  const effectiveSelectedSimulations = detailQueries
+    .map((query) => query.data)
+    .filter((simulation): simulation is SimulationOut => simulation != null);
 
   useEffect(() => {
     if (!shouldUseRoutedSelection && !shouldUseCaseSelectionFallback) {

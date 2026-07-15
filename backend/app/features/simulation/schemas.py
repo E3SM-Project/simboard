@@ -595,6 +595,130 @@ class SimulationSummaryCapabilitiesOut(CamelOutBaseModel):
     ]
 
 
+class CaseListItemOut(CamelOutBaseModel):
+    """Lightweight case row for paginated catalog views."""
+
+    id: UUID
+    name: str
+    case_group: str | None = None
+    machine_id: UUID
+    machine_name: str
+    hpc_username: str
+    simulation_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CasePageOut(CamelOutBaseModel):
+    """Paginated case catalog response."""
+
+    items: list[CaseListItemOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class FilterOptionOut(CamelOutBaseModel):
+    """Stable identifier and display label for a catalog filter option."""
+
+    value: str
+    label: str
+
+
+class CaseFilterOptionsOut(CamelOutBaseModel):
+    """Distinct scalar options supported by case catalog filters."""
+
+    names: list[str]
+    case_groups: list[str]
+    hpc_usernames: list[str]
+    machine_ids: list[UUID]
+    machines: list[FilterOptionOut]
+    statuses: list[SimulationStatus]
+    simulation_types: list[SimulationType]
+    campaigns: list[str]
+    initialization_types: list[str]
+    compilers: list[str]
+    git_tags: list[str]
+    created_by_ids: list[UUID]
+    creators: list[FilterOptionOut]
+
+
+class SimulationListItemOut(CamelOutBaseModel):
+    """Scalar-only simulation row for paginated catalog views."""
+
+    id: UUID
+    case_id: UUID
+    case_name: str
+    case_group: str | None = None
+    execution_id: str
+    case_hash: str | None = None
+    simulation_type: SimulationType
+    status: SimulationStatus
+    campaign: str | None = None
+    experiment_type: str | None = None
+    compset: str
+    compset_alias: str
+    grid_name: str
+    grid_resolution: str
+    initialization_type: str
+    simulation_start_date: datetime
+    simulation_end_date: datetime | None = None
+    run_start_date: datetime | None = None
+    run_end_date: datetime | None = None
+    compiler: str | None = None
+    git_branch: str | None = None
+    git_tag: str | None = None
+    git_commit_hash: str | None = None
+    machine_id: UUID
+    machine_name: str
+    hpc_username: str
+    created_by: UUID | None = None
+    last_updated_by: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SimulationPageOut(CamelOutBaseModel):
+    """Paginated simulation catalog response."""
+
+    items: list[SimulationListItemOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class SimulationFilterOptionsOut(CamelOutBaseModel):
+    """Distinct scalar options supported by simulation catalog filters."""
+
+    case_names: list[str]
+    case_groups: list[str]
+    machine_ids: list[UUID]
+    machines: list[FilterOptionOut]
+    hpc_usernames: list[str]
+    campaigns: list[str]
+    experiment_types: list[str]
+    compsets: list[str]
+    grid_names: list[str]
+    grid_resolutions: list[str]
+    simulation_types: list[SimulationType]
+    initialization_types: list[str]
+    compilers: list[str]
+    statuses: list[SimulationStatus]
+    git_tags: list[str]
+    created_by_ids: list[UUID]
+    creators: list[FilterOptionOut]
+
+
+class CatalogOverviewOut(CamelOutBaseModel):
+    """Fixed-size homepage catalog summary."""
+
+    total_cases: int
+    total_simulations: int
+    latest_submission: datetime | None = None
+    machine_counts: dict[UUID, int]
+    recent_cases: list[CaseListItemOut]
+
+
 class CaseSummaryOut(CamelOutBaseModel):
     """Schema for representing a Case summary with nested simulation summaries."""
 

@@ -2,6 +2,7 @@ import type {
   Column,
   ColumnDef,
   ColumnFiltersState,
+  OnChangeFn,
   Row,
   SortingState,
   VisibilityState,
@@ -10,7 +11,6 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
@@ -30,7 +30,7 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
-import type { SimulationOut } from '@/types/index';
+import type { SimulationListItemOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
 const MAX_SELECTION = 5;
@@ -64,10 +64,10 @@ const renderSortableHeader = (label: string) =>
   };
 
 interface SimulationResultsTable {
-  simulations: SimulationOut[];
-  filteredData: SimulationOut[];
-  page: number;
-  pageSize: number;
+  simulations: SimulationListItemOut[];
+  filteredData: SimulationListItemOut[];
+  sorting: SortingState;
+  setSorting: OnChangeFn<SortingState>;
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
@@ -81,7 +81,7 @@ const shouldIgnoreRowSelection = (target: EventTarget | null): boolean =>
   target instanceof Element &&
   Boolean(target.closest('button, a, input, [role="button"], [data-prevent-selection]'));
 
-const SimulationTableActions = ({ simulation }: { simulation: SimulationOut }) => {
+const SimulationTableActions = ({ simulation }: { simulation: SimulationListItemOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = `${location.pathname}${location.search}`;
@@ -109,7 +109,7 @@ const SimulationTableActions = ({ simulation }: { simulation: SimulationOut }) =
   );
 };
 
-const columns: ColumnDef<SimulationOut>[] = [
+const columns: ColumnDef<SimulationListItemOut>[] = [
   {
     id: 'select',
     header: () => null,
@@ -206,7 +206,7 @@ const columns: ColumnDef<SimulationOut>[] = [
     accessorKey: 'ensembleMember',
     header: renderSortableHeader('Ensemble Member'),
     cell: ({ getValue }) => <TableCellText value={String(getValue() ?? '—')} />,
-    enableSorting: true,
+    enableSorting: false,
     meta: { width: 160 },
   },
   {
@@ -291,7 +291,7 @@ const getStickyLeftOffset = (
   headerOrCell: {
     column: { id: string; columnDef: { meta?: { sticky?: boolean; width?: number } } };
   },
-  table: { getAllLeafColumns: () => Column<SimulationOut, unknown>[] },
+  table: { getAllLeafColumns: () => Column<SimulationListItemOut, unknown>[] },
 ): number => {
   const all = table.getAllLeafColumns();
   const idx = all.findIndex((c) => c.id === headerOrCell.column.id);
@@ -309,8 +309,8 @@ const getStickyLeftOffset = (
 export const SimulationResultsTable = ({
   simulations,
   filteredData,
-  page,
-  pageSize,
+  sorting,
+  setSorting,
   selectedSimulationIds,
   setSelectedSimulationIds,
   handleCompareButtonClick,
@@ -318,13 +318,12 @@ export const SimulationResultsTable = ({
   setColumnVisibility,
 }: SimulationResultsTable) => {
   // -------------------- Local State --------------------
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   // -------------------- Derived Data --------------------
   const rowSelection = idsToRowSelection(selectedSimulationIds);
 
-  const renderSelectCheckbox = (row: Row<SimulationOut>) => {
+  const renderSelectCheckbox = (row: Row<SimulationListItemOut>) => {
     const isSelected = row.getIsSelected();
     const isDisabled =
       !isSelected && Object.values(rowSelection).filter(Boolean).length >= MAX_SELECTION;
@@ -340,14 +339,14 @@ export const SimulationResultsTable = ({
     );
   };
 
-  const tableColumns = columns.map((col: ColumnDef<SimulationOut>) =>
+  const tableColumns = columns.map((col: ColumnDef<SimulationListItemOut>) =>
     col.id === 'select'
       ? {
           ...col,
           cell: ({ row }) => renderSelectCheckbox(row),
         }
       : col,
-  ) as ColumnDef<SimulationOut>[];
+  ) as ColumnDef<SimulationListItemOut>[];
 
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
 
@@ -370,8 +369,8 @@ export const SimulationResultsTable = ({
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
-    getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    manualSorting: true,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: handleRowSelectionChange,
     state: {
@@ -382,9 +381,7 @@ export const SimulationResultsTable = ({
     },
   });
 
-  const sortedFilteredRows = table.getRowModel().rows;
-  const pageStart = (page - 1) * pageSize;
-  const paginatedRows = sortedFilteredRows.slice(pageStart, pageStart + pageSize);
+  const visibleRows = table.getRowModel().rows;
   const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => {
     const meta = column.columnDef.meta as { width?: number } | undefined;
     return sum + (meta?.width ?? 180);
@@ -445,7 +442,7 @@ export const SimulationResultsTable = ({
             ))}
           </TableHeader>
           <TableBody>
-            {paginatedRows.map((row) => (
+            {visibleRows.map((row) => (
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() ? 'selected' : undefined}

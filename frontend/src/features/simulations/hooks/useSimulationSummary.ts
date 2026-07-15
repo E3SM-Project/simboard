@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import { generateSimulationSummary } from '@/features/simulations/api/api';
+import { generateSimulationSummary } from '@/api/catalog';
 import type { SimulationSummaryResponseOut } from '@/types';
 
 export const useSimulationSummary = (

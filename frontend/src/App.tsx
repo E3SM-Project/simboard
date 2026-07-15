@@ -1,11 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { NavBar } from '@/components/layout/NavBar';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { useMachines } from '@/features/machines/hooks/useMachines';
-import { useSimulations } from '@/features/simulations/hooks/useSimulations';
 import { CaseCompareRoute } from '@/routes/CaseCompareRoute';
 import { AppRoutes } from '@/routes/routes';
 
@@ -16,9 +14,6 @@ const App = () => {
   const LOCAL_STORAGE_KEY = 'selectedSimulationIds';
 
   // -------------------- Local State --------------------
-  const queryClient = useMemo(() => new QueryClient(), []);
-
-  const { data: simulations = [] } = useSimulations();
   const { data: machines = [] } = useMachines();
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
@@ -28,11 +23,6 @@ const App = () => {
   const [selectedCaseSimulationIdsByCase, setSelectedCaseSimulationIdsByCase] = useState<
     Record<string, string[]>
   >({});
-
-  const selectedSimulations = useMemo(
-    () => (simulations ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
-    [simulations, selectedSimulationIds],
-  );
 
   const setSelectedCaseSimulationIdsForCase = (caseId: string, ids: string[]) => {
     const nextIds = normalizeSelectedSimulationIds(ids);
@@ -62,30 +52,25 @@ const App = () => {
 
   // -------------------- Render --------------------
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <NavBar />
-        <AppRoutes
-          simulations={simulations}
-          machines={machines}
-          renderCaseCompareSection={({ onClose }) => (
-            <CaseCompareRoute
-              onClose={onClose}
-              simulations={simulations}
-              selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
-              setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
-              setSelectedSimulationIds={setSelectedSimulationIds}
-            />
-          )}
-          selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
-          setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
-          selectedSimulationIds={selectedSimulationIds}
-          setSelectedSimulationIds={setSelectedSimulationIds}
-          selectedSimulations={selectedSimulations}
-        />
-      </BrowserRouter>
+    <BrowserRouter>
+      <NavBar />
+      <AppRoutes
+        machines={machines}
+        renderCaseCompareSection={({ onClose }) => (
+          <CaseCompareRoute
+            onClose={onClose}
+            selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+            setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
+            setSelectedSimulationIds={setSelectedSimulationIds}
+          />
+        )}
+        selectedCaseSimulationIdsByCase={selectedCaseSimulationIdsByCase}
+        setSelectedCaseSimulationIdsForCase={setSelectedCaseSimulationIdsForCase}
+        selectedSimulationIds={selectedSimulationIds}
+        setSelectedSimulationIds={setSelectedSimulationIds}
+      />
       <Toaster />
-    </QueryClientProvider>
+    </BrowserRouter>
   );
 };
 

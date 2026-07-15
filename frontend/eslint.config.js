@@ -129,11 +129,19 @@ export default [
             },
             {
               from: 'routes',
-              allow: ['feature', 'ui', 'shared', 'types'],
+              allow: ['feature', 'ui', 'shared', 'lib', 'types', 'api'],
             },
             {
               from: 'ui',
               allow: ['lib', 'types'],
+            },
+            {
+              from: 'lib',
+              allow: ['lib', 'types', 'api'],
+            },
+            {
+              from: 'api',
+              allow: ['api', 'types'],
             },
           ],
         },

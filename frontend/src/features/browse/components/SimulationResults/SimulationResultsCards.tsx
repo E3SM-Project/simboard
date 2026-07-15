@@ -1,13 +1,13 @@
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import { SimulationResultCard } from '@/features/browse/components/SimulationResults/SimulationResultCard';
 import { cn } from '@/lib/utils';
-import type { SimulationOut } from '@/types/index';
+import type { SimulationListItemOut } from '@/types/index';
 
 const MAX_SELECTION = 5;
 
 interface SimulationResultCards {
-  simulations: SimulationOut[];
-  filteredData: SimulationOut[];
+  simulations: SimulationListItemOut[];
+  filteredData: SimulationListItemOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
@@ -23,7 +23,7 @@ export const SimulationResultCards = ({
   const isCompareButtonDisabled = selectedSimulationIds.length < 2;
   const isSingleResult = filteredData.length === 1;
 
-  const handleSelectSimulation = (simulation: SimulationOut) => {
+  const handleSelectSimulation = (simulation: SimulationListItemOut) => {
     const isSelected = selectedSimulationIds.includes(simulation.id);
 
     if (isSelected) {
