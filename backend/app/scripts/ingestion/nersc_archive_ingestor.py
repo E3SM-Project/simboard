@@ -2854,13 +2854,13 @@ def _fetch_archive_checkpoints(
             transient=False,
         ) from exc
 
-    snapshots = body.get("snapshots", []) if isinstance(body, dict) else []
-    if not isinstance(snapshots, list):
+    if not isinstance(body, dict) or not isinstance(body.get("snapshots"), list):
         raise IngestionRequestError(
             "Invalid checkpoint response payload.",
             status_code=None,
             transient=False,
         )
+    snapshots = body["snapshots"]
     return {
         f"{snapshot['archive_month']}/{snapshot['snapshot_name']}"
         for snapshot in snapshots

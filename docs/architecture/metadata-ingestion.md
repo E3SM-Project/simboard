@@ -27,12 +27,12 @@ Case-level state is derived from execution-level state.
 | Term                      | Definition                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
-| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. This immutable content result is distinct from a transient filesystem access failure.                                                                                                                                                                                         |
+| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. This immutable content result is distinct from a transient filesystem access failure.                                                                                                                                                                                     |
 | Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
 | Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
-| Discovery result          | Immutable validation outcome keyed by machine, normalized case identity, and execution ID. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`.                                                                                                                                                                                                             |
+| Discovery result          | Immutable validation outcome keyed by machine, normalized case identity, and execution ID. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`.                                                                                                                                                                                                           |
 
 ### Runner counter and log field terms
 
@@ -54,7 +54,7 @@ that canonical term instead of repeating the full concept definition.
 | `rejected_existing_execution_ids`   | Count of valid discovered execution IDs already present in stored `processed_execution_ids` state.                                          |
 | `rejected_incomplete_execution_ids` | Count of execution IDs rejected during discovery because required metadata files or fields were missing or incomplete.                      |
 | `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata content was invalid.                                                      |
-| `transient_execution_ids`           | Count of execution IDs skipped for transient filesystem access failures; these outcomes are never persisted.                               |
+| `transient_execution_ids`           | Count of execution IDs skipped for transient filesystem access failures; these outcomes are never persisted.                                |
 | `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection. |
 
 ## Performance Directories
@@ -189,6 +189,11 @@ mode, they first list eligible immutable snapshots from `ARCHIVE_YEAR_START`
 through `ARCHIVE_YEAR_END`, then subtract snapshots already completed in the
 SimBoard database. This finds newly added snapshots even when they appear in an
 older month.
+
+To force a full archive rescan, pause the archive runner and delete its rows
+from `archive_scan_checkpoints`, scoped by the canonical machine name and
+archive root basename. The next run treats every eligible snapshot as
+uncheckpointed. See the NERSC Spin runbook for the operational SQL procedure.
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
 2. Read processed execution IDs and immutable discovery results from `/api/v1/ingestions/state`.

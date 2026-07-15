@@ -370,6 +370,26 @@ snapshots in any eligible month are discovered automatically.
    - Confirm unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events for both jobs.
 
+To force a full archive rescan, suspend `nersc-archive-ingestor` so it cannot
+recreate checkpoints during the reset. In Rancher, open a shell in the `db`
+container and run the following command after replacing the placeholders. Use
+the canonical machine name stored in SimBoard and the basename of
+`OLD_PERF_ARCHIVE_ROOT` as the archive name (for example, `OLD_PERF`):
+
+```bash
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
+DELETE FROM archive_scan_checkpoints AS checkpoint
+USING machines AS machine
+WHERE checkpoint.machine_id = machine.id
+   AND machine.name = '<machine-name>'
+   AND checkpoint.archive_name = '<archive-name>';
+SQL
+```
+
+Confirm the deleted row count, then resume or trigger the archive CronJob. The
+next run scans all snapshots in the configured year range; ingestion state
+still prevents already processed executions from being submitted again.
+
 #### Staging CronJob (`nersc-staging-ingestor`)
 
 `Top-level configuration`:

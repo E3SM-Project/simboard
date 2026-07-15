@@ -31,6 +31,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _build_walk_dir_filter,
     _case_state_processed_ids,
     _discover_case_executions,
+    _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _fresh_state,
     _ingest_case_with_retries,
@@ -2544,6 +2545,34 @@ def test_fetch_ingestion_state_handles_invalid_json(monkeypatch) -> None:
             "pm",
             timeout_seconds=12,
         )
+
+
+@pytest.mark.parametrize("payload", [[], {}, {"snapshots": "bad"}])
+def test_fetch_archive_checkpoints_rejects_invalid_payload(
+    monkeypatch,
+    payload: object,
+) -> None:
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(200, json.dumps(payload)),
+    )
+
+    with pytest.raises(
+        IngestionRequestError,
+        match="Invalid checkpoint response payload.",
+    ) as exc_info:
+        _fetch_archive_checkpoints(
+            "http://backend:8000/api/v1/ingestions/archive-checkpoints",
+            "token",
+            "pm",
+            "OLD_PERF",
+            archive_start=None,
+            archive_end=None,
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.transient is False
 
 
 def test_record_successful_case_replaces_non_dict_cases() -> None:
