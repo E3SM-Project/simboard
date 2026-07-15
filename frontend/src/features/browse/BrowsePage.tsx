@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import type { VisibilityState } from '@tanstack/react-table';
+import type { SortingState, VisibilityState } from '@tanstack/react-table';
 import { ChevronDown, LayoutGrid, Table } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -22,8 +22,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
-import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
-import type { SimulationOut } from '@/types/index';
+import { useSimulationFilterOptions } from '@/features/simulations/hooks/useSimulationFilterOptions';
+import { useSimulations } from '@/features/simulations/hooks/useSimulations';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
@@ -38,6 +38,19 @@ const TOGGLEABLE_BROWSE_COLUMNS = [
   { id: 'gridName', label: 'Grid name' },
   { id: 'compset', label: 'Component set' },
 ] as const;
+const BROWSE_SORT_FIELDS: Record<string, string> = {
+  caseName: 'case_name',
+  executionId: 'execution_id',
+  caseHash: 'case_hash',
+  campaign: 'campaign',
+  experimentType: 'experiment_type',
+  gitTag: 'git_tag',
+  simulationStartDate: 'simulation_start_date',
+  simulationEndDate: 'simulation_end_date',
+  gridResolution: 'grid_resolution',
+  compset: 'compset',
+  gridName: 'grid_name',
+};
 
 // -------------------- Types & Interfaces --------------------
 export interface FilterState {
@@ -133,10 +146,7 @@ const decodeFilterValue = (value: string): string => {
 };
 
 const deserializeArrayFilter = (value: string): string[] =>
-  value
-    .split(',')
-    .filter(Boolean)
-    .map(decodeFilterValue);
+  value.split(',').filter(Boolean).map(decodeFilterValue);
 
 const serializeArrayFilter = (values: string[]): string =>
   values.map((value) => encodeURIComponent(value)).join(',');
@@ -150,195 +160,65 @@ export const BrowsePage = ({
   const [searchParams, setSearchParams] = useSearchParams();
 
   // -------------------- Local State --------------------
-  const [simulations, setSimulations] = useState<SimulationOut[]>([]);
-  const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => parseViewMode(searchParams));
   const [page, setPage] = useState(() => parsePage(searchParams));
   const [pageSize, setPageSize] = useState(() => parsePageSize(searchParams));
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(DEFAULT_COLUMN_VISIBILITY);
 
   // -------------------- Derived Data --------------------
-  const availableFilters = useMemo(() => {
-    // Start with empty filter options.
-    const filters = createEmptyFilters();
-
-    // Array-based filter keys that correspond to SimulationOut properties.
-    const arrayKeys = MULTI_SELECT_FILTER_KEYS as (keyof SimulationOut)[];
-
-    // Populate filter options based on available simulations.
-    for (const sim of simulations) {
-      for (const key of arrayKeys) {
-        const value = sim[key];
-
-        // Handle both string and string[] fields.
-        if (Array.isArray(value)) {
-          value.forEach((v) => {
-            if (typeof v !== 'string') return;
-            const filterValues = filters[key as keyof FilterState] as string[];
-            const isValueValid = v && !filterValues.includes(v);
-
-            if (isValueValid) {
-              filterValues.push(v);
-            }
-          });
-        } else if (typeof value === 'string' && value) {
-          const filterValues = filters[key as keyof FilterState] as string[];
-          const isValueValid = !filterValues.includes(value);
-
-          if (isValueValid) {
-            filterValues.push(value);
-          }
-        }
-      }
-    }
-
-    // Sort all string array filters alphabetically for easier navigation.
-    (Object.keys(filters) as (keyof FilterState)[]).forEach((key) => {
-      const val = filters[key];
-      if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
-        (val as string[]).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-      }
-    });
-
-    return filters;
-  }, [simulations]);
-
-  const simMachineId = (simulation: SimulationOut) => {
-    if (simulation.machine?.id) {
-      return simulation.machine.id;
-    }
-
-    const legacyMachineId = (simulation as { machineId?: string }).machineId;
-    if (typeof legacyMachineId === 'string') {
-      return legacyMachineId;
-    }
-
-    return undefined;
-  };
-  const simMachineName = (s: SimulationOut) => s.machine?.name ?? 'Unknown machine';
-
-  const machineOptions = useMemo(() => {
-    const machines = new Map<string, string>();
-
-    for (const s of simulations) {
-      const id = simMachineId(s);
-
-      if (id) machines.set(id, simMachineName(s));
-    }
-
-    const sortedMachines = Array.from(machines, ([value, label]) => ({ value, label })).sort(
-      (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
-    );
-
-    return sortedMachines;
-  }, [simulations]);
-
-  const creatorOptions = useMemo(() => {
-    const creators = new Map<string, string>();
-
-    for (const simulation of simulations) {
-      if (!simulation.createdBy) continue;
-
-      creators.set(simulation.createdBy, simulation.createdByUser?.email ?? simulation.createdBy);
-    }
-
-    return Array.from(creators, ([value, label]) => ({ value, label })).sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
-    );
-  }, [simulations]);
-
-  const filteredData = useMemo(() => {
-    const arrayFilterGetters: Partial<
-      Record<
-        keyof FilterState,
-        (rec: SimulationOut) => string | string[] | [string | null, string | null] | undefined
-      >
-    > = {
-      caseName: (rec) => rec.caseName ?? [],
-      machineId: (rec) => simMachineId(rec) ?? '',
-      campaign: (rec) => rec.campaign ?? [],
-      experimentType: (rec) => rec.experimentType ?? [],
-      compset: (rec) => rec.compset ?? [],
-      gridName: (rec) => rec.gridName ?? [],
-      gridResolution: (rec) => rec.gridResolution ?? [],
-      simulationType: (rec) => rec.simulationType ?? [],
-      initializationType: (rec) => rec.initializationType ?? [],
-      compiler: (rec) => rec.compiler ?? [],
-      status: (rec) => rec.status ?? [],
-      gitTag: (rec) => rec.gitTag ?? [],
-      createdBy: (rec) => rec.createdBy ?? [],
-      hpcUsername: (rec) => rec.hpcUsername ?? [],
-    };
-
-    return simulations.filter((record) => {
-      for (const key of Object.keys(arrayFilterGetters) as (keyof FilterState)[]) {
-        const getter = arrayFilterGetters[key];
-        if (
-          getter &&
-          Array.isArray(appliedFilters[key]) &&
-          (appliedFilters[key] as string[]).length > 0
-        ) {
-          const raw = getter(record);
-          const recVals = Array.isArray(raw) ? raw : ([raw].filter(Boolean) as string[]);
-          if (!recVals.some((v) => (appliedFilters[key] as string[]).includes(v as string))) {
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-  }, [simulations, appliedFilters]);
+  const { data: filterOptions } = useSimulationFilterOptions();
+  const primarySort = sorting[0];
+  const simulationParams = useMemo(
+    () => ({
+      page,
+      pageSize,
+      ...Object.fromEntries(
+        FILTER_KEYS.map((key) => [key, appliedFilters[key].length ? appliedFilters[key] : undefined]),
+      ),
+      sortBy: primarySort ? BROWSE_SORT_FIELDS[primarySort.id] : 'created_at',
+      sortOrder: primarySort?.desc === false ? ('asc' as const) : ('desc' as const),
+    }),
+    [appliedFilters, page, pageSize, primarySort],
+  );
+  const {
+    data: simulations,
+    page: simulationPage,
+    loading,
+    error,
+    refetch,
+  } = useSimulations(simulationParams);
+  const totalItems = simulationPage?.total ?? 0;
+  const availableFilters = useMemo<FilterState>(
+    () => ({
+      caseName: filterOptions?.caseNames ?? [],
+      campaign: filterOptions?.campaigns ?? [],
+      experimentType: filterOptions?.experimentTypes ?? [],
+      simulationType: filterOptions?.simulationTypes ?? [],
+      initializationType: filterOptions?.initializationTypes ?? [],
+      compset: filterOptions?.compsets ?? [],
+      gridName: filterOptions?.gridNames ?? [],
+      gridResolution: filterOptions?.gridResolutions ?? [],
+      machineId: filterOptions?.machineIds ?? [],
+      compiler: filterOptions?.compilers ?? [],
+      status: filterOptions?.statuses ?? [],
+      gitTag: filterOptions?.gitTags ?? [],
+      createdBy: filterOptions?.createdByIds ?? [],
+      hpcUsername: filterOptions?.hpcUsernames ?? [],
+    }),
+    [filterOptions],
+  );
+  const machineOptions = filterOptions?.machines ?? [];
+  const creatorOptions = filterOptions?.creators ?? [];
+  const caseOptions = useMemo(
+    () => availableFilters.caseName.map((name) => ({ value: name, label: name })),
+    [availableFilters.caseName],
+  );
 
   // -------------------- Effects --------------------
-  useEffect(() => {
-    let cancelled = false;
-
-    listCaseNames()
-      .then((names) => {
-        if (!cancelled) {
-          const options = names
-            .map((name) => ({ value: name, label: name }))
-            .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-          setCaseOptions(options);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setCaseOptions([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    // If exactly one caseName filter is applied, pass it as a query param for server-side narrowing.
-    const caseNames = appliedFilters.caseName;
-    const fetchPromise =
-      Array.isArray(caseNames) && caseNames.length === 1
-        ? listSimulations(`${SIMULATIONS_URL}?case_name=${encodeURIComponent(caseNames[0])}`)
-        : listSimulations(SIMULATIONS_URL);
-
-    fetchPromise
-      .then((res) => {
-        if (!cancelled) setSimulations(res);
-      })
-      .catch(() => {
-        if (!cancelled) setSimulations([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // Re-run when the caseName filter changes.
-  }, [appliedFilters.caseName]);
-
   useEffect(() => {
     const next = createEmptyFilters();
 
@@ -362,6 +242,7 @@ export const BrowsePage = ({
   useEffect(() => {
     const currentSignature = JSON.stringify({
       appliedFilters,
+      sorting,
     });
 
     if (prevPageResetSignature.current === null) {
@@ -374,7 +255,7 @@ export const BrowsePage = ({
       prevPageResetSignature.current = currentSignature;
       setPage(1);
     }
-  }, [appliedFilters]);
+  }, [appliedFilters, sorting]);
 
   // Sync applied filters to URL via setSearchParams (single writer).
   // Use a ref to avoid re-running this effect on every searchParams change.
@@ -458,7 +339,6 @@ export const BrowsePage = ({
   }, []);
 
   // -------------------- Pagination --------------------
-  const totalItems = filteredData.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   // Clamp page state when totalPages shrinks (e.g. after filtering).
@@ -466,15 +346,40 @@ export const BrowsePage = ({
     setPage((p) => (p > totalPages ? totalPages : p));
   }, [totalPages]);
 
-  const paginatedData = useMemo(
-    () => filteredData.slice((page - 1) * pageSize, page * pageSize),
-    [filteredData, page, pageSize],
-  );
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-slate-500">
+        Loading runs…
+      </div>
+    );
+  }
+
+  if (error && !simulationPage) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-6">
+        <div className="space-y-3 text-center">
+          <p className="text-red-600">Could not load runs: {error}</p>
+          <Button type="button" variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // -------------------- Render --------------------
   return (
     <div className="w-full bg-white">
       <div className="mx-auto w-full max-w-[2200px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+        {error ? (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <span>Could not refresh runs: {error}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+
         <div className="grid gap-6 lg:items-start lg:grid-cols-[clamp(300px,22vw,380px)_minmax(0,1fr)] xl:gap-8">
           <div className="min-w-0 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:self-start">
             <div className="lg:h-full lg:pr-2">
@@ -506,7 +411,7 @@ export const BrowsePage = ({
                         <div>
                           <span className="font-medium text-slate-500">Results</span>{' '}
                           <span className="font-semibold text-slate-950">
-                            {filteredData.length}
+                            {totalItems}
                           </span>
                         </div>
                         <div>
@@ -712,9 +617,9 @@ export const BrowsePage = ({
                 {viewMode === 'table' ? (
                   <SimulationResultsTable
                     simulations={simulations}
-                    filteredData={filteredData}
-                    page={page}
-                    pageSize={pageSize}
+                    filteredData={simulations}
+                    sorting={sorting}
+                    setSorting={setSorting}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}
@@ -724,7 +629,7 @@ export const BrowsePage = ({
                 ) : (
                   <SimulationResultCards
                     simulations={simulations}
-                    filteredData={paginatedData}
+                    filteredData={simulations}
                     selectedSimulationIds={selectedSimulationIds}
                     setSelectedSimulationIds={setSelectedSimulationIds}
                     handleCompareButtonClick={handleCompareButtonClick}

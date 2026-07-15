@@ -11,11 +11,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { suppressNextBrowseInteraction } from '@/features/browse/components/SimulationResults/selectionGuard';
+import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 import { getArtifactsByKind } from '@/types/artifact';
-import type { SimulationOut } from '@/types/index';
+import type { SimulationListItemOut } from '@/types/index';
 
 interface SimulationBrowseDetailsDialogProps {
-  simulation: SimulationOut;
+  simulation: SimulationListItemOut;
   triggerLabel?: string;
   triggerVariant?: ButtonProps['variant'];
   triggerSize?: ButtonProps['size'];
@@ -23,19 +24,62 @@ interface SimulationBrowseDetailsDialogProps {
 }
 
 export const SimulationBrowseDetailsDialog = ({
-  simulation,
+  simulation: listSimulation,
   triggerLabel = 'More Details',
   triggerVariant = 'outline',
   triggerSize = 'default',
   triggerClassName,
 }: SimulationBrowseDetailsDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { data: simulationDetail, error, isFetching, refetch } = useSimulation(
+    listSimulation.id,
+    isOpen,
+  );
   const handleTriggerInteraction = (event: React.SyntheticEvent) => {
     event.stopPropagation();
   };
   const stopDrawerPropagation = (event: React.SyntheticEvent) => {
     event.stopPropagation();
   };
+
+  if (!simulationDetail) {
+    return (
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger asChild>
+          <Button
+            variant={triggerVariant}
+            size={triggerSize}
+            className={triggerClassName}
+            data-prevent-selection="true"
+            onPointerDown={handleTriggerInteraction}
+            onMouseDown={handleTriggerInteraction}
+            onClick={handleTriggerInteraction}
+          >
+            {triggerLabel}
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{listSimulation.executionId}</DialogTitle>
+            <DialogDescription>
+              {error
+                ? `Could not load simulation details: ${error}`
+                : isFetching
+                  ? 'Loading simulation details…'
+                  : 'Simulation details are unavailable.'}
+            </DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <Button type="button" variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const simulation = simulationDetail;
 
   const startStr = simulation.simulationStartDate
     ? new Date(simulation.simulationStartDate).toISOString().slice(0, 10)

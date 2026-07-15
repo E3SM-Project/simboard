@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import {
   AlertTriangle,
@@ -57,13 +58,15 @@ import {
   type ValidationDetail,
 } from '@/features/simulations/externalLinkEditing';
 import { useCase } from '@/features/simulations/hooks/useCase';
+import { useCaseSimulations } from '@/features/simulations/hooks/useCaseSimulations';
+import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import { toast } from '@/hooks/use-toast';
 import type {
   CaseDetailOut,
   CaseEditableField,
   CaseUpdate,
   ExternalLinkOut,
-  SimulationOut,
+  SimulationListItemOut,
   SimulationSummaryOut,
 } from '@/types';
 
@@ -137,14 +140,13 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 
 interface CaseDetailsPageProps {
   renderCompareSection?: (options: { onClose: () => void }) => React.ReactNode;
-  simulations: SimulationOut[];
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
 }
 
 interface GroupSimulation {
   summary: SimulationSummaryOut;
-  details?: SimulationOut;
+  details?: SimulationListItemOut;
 }
 
 type SimulationViewMode = 'grouped' | 'flat';
@@ -328,11 +330,21 @@ const mergeRowFieldErrors = (
 
 export const CaseDetailsPage = ({
   renderCompareSection,
-  simulations: allSimulations,
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
 }: CaseDetailsPageProps) => {
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
+  const {
+    data: allSimulations,
+    error: simulationsError,
+    fetchNextPage,
+    hasNextPage,
+    isLoading: simulationsLoading,
+    isFetchingNextPage,
+    refetch: refetchSimulations,
+    total: simulationTotal,
+  } = useCaseSimulations(id);
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
@@ -353,14 +365,13 @@ export const CaseDetailsPage = ({
   const currentPath = `${location.pathname}${location.search}`;
   const state = location.state as CaseDetailsLocationState | null;
   const backHref = typeof state?.from === 'string' ? state.from : '/cases';
-  const caseSimulations = useMemo(() => caseRecord?.simulations ?? [], [caseRecord?.simulations]);
   const simulationDetailsById = useMemo(
     () => new Map(allSimulations.map((simulation) => [simulation.id, simulation])),
     [allSimulations],
   );
   const rawSimulationGroups = useMemo(
-    () => groupSimulationSummaries(caseSimulations),
-    [caseSimulations],
+    () => groupSimulationSummaries(caseRecord?.simulations ?? []),
+    [caseRecord?.simulations],
   );
   const simulationGroups = useMemo(
     () =>
@@ -446,8 +457,8 @@ export const CaseDetailsPage = ({
     [filteredFlatSimulations],
   );
   const caseSimulationIdSet = useMemo(
-    () => new Set(caseSimulations.map((simulation) => simulation.id)),
-    [caseSimulations],
+    () => new Set(caseRecord?.simulations.map((simulation) => simulation.id) ?? []),
+    [caseRecord?.simulations],
   );
   const rawCaseSelectedSimulationIds = id
     ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[id] ?? [])
@@ -655,6 +666,7 @@ export const CaseDetailsPage = ({
       setFormState(toEditableFormState(updatedCaseRecord));
       setLinkRows(toEditableLinkRows(updatedCaseRecord.links, 'case'));
       setIsEditing(false);
+      await invalidateCatalog(queryClient);
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));
     } finally {
@@ -670,7 +682,7 @@ export const CaseDetailsPage = ({
     );
   }
 
-  if (loading || (caseRecord != null && caseRecord.id !== id)) {
+  if (loading || simulationsLoading || (caseRecord != null && caseRecord.id !== id)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-gray-500">Loading case details…</div>
@@ -682,6 +694,19 @@ export const CaseDetailsPage = ({
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-red-600">Error: {error}</div>
+      </div>
+    );
+  }
+
+  if (simulationsError && allSimulations.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-6">
+        <div className="space-y-3 text-center">
+          <p className="text-red-600">Could not load case simulations: {simulationsError}</p>
+          <Button type="button" variant="outline" onClick={() => void refetchSimulations()}>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -715,7 +740,7 @@ export const CaseDetailsPage = ({
   const activeSimulationCount =
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
   const totalSimulationCount =
-    viewMode === 'grouped' ? simulationGroups.length : caseRecord.simulations.length;
+    viewMode === 'grouped' ? simulationGroups.length : simulationTotal;
   const summaryHeadline =
     caseRecord.simulations.length === 0
       ? '0 runs'
@@ -1570,6 +1595,38 @@ export const CaseDetailsPage = ({
               </div>
             </div>
           </div>
+
+          {simulationsError ? (
+            <div className="flex items-center justify-between gap-3 border-t border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+              <span>Could not load more simulation metadata: {simulationsError}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void refetchSimulations()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+
+          {hasNextPage ? (
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
+              <p className="text-sm text-slate-600">
+                Loaded metadata for {allSimulations.length} of {simulationTotal} runs. Search and
+                grouping include all case runs.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? 'Loading more…' : 'Load more metadata'}
+              </Button>
+            </div>
+          ) : null}
 
           {shouldRenderCompare && renderCompareSection ? (
             <div

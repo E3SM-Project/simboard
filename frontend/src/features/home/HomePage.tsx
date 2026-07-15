@@ -1,5 +1,4 @@
 import { ArrowRight, FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -12,109 +11,26 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import type { Machine, SimulationOut } from '@/types/index';
+import { useCatalogOverview } from '@/features/simulations/hooks/useCatalogOverview';
+import type { Machine } from '@/types/index';
 
 interface HomePageProps {
-  simulations: SimulationOut[];
   machines: Machine[];
 }
 
-export const HomePage = ({ simulations, machines }: HomePageProps) => {
-  const totalCases = useMemo(
-    () => new Set(simulations.map((simulation) => simulation.caseId)).size,
-    [simulations],
+export const HomePage = ({ machines }: HomePageProps) => {
+  const { data: overview, error, isLoading, refetch } = useCatalogOverview();
+  const totalCases = overview?.totalCases ?? 0;
+  const latestSubmission = overview?.latestSubmission;
+  const recentCases = (overview?.recentCases ?? []).map((caseRecord) => ({
+    ...caseRecord,
+    machineSummary: caseRecord.machineName,
+    hpcUsernameSummary: caseRecord.hpcUsername,
+    lastUpdated: caseRecord.updatedAt,
+  }));
+  const machineSimulationCounts = new Map<Machine['id'], number>(
+    Object.entries(overview?.machineCounts ?? {}),
   );
-  const latestSubmission = useMemo(
-    () =>
-      [...simulations]
-        .map((simulation) => simulation.createdAt)
-        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0],
-    [simulations],
-  );
-  const recentCases = useMemo(() => {
-    const casesById = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        caseGroup: string | null;
-        machineNames: Set<string>;
-        hpcUsernames: Set<string>;
-        simulationCount: number;
-        lastUpdated: string;
-      }
-    >();
-
-    for (const simulation of simulations) {
-      const existing = casesById.get(simulation.caseId);
-      const simulationUpdatedAt = simulation.updatedAt ?? simulation.createdAt;
-
-      if (existing) {
-        existing.simulationCount += 1;
-        if (simulation.machine?.name) {
-          existing.machineNames.add(simulation.machine.name);
-        }
-        if (simulation.hpcUsername) {
-          existing.hpcUsernames.add(simulation.hpcUsername);
-        }
-        if (new Date(simulationUpdatedAt).getTime() > new Date(existing.lastUpdated).getTime()) {
-          existing.lastUpdated = simulationUpdatedAt;
-        }
-        continue;
-      }
-
-      casesById.set(simulation.caseId, {
-        id: simulation.caseId,
-        name: simulation.caseName,
-        caseGroup: simulation.caseGroup ?? null,
-        machineNames: simulation.machine?.name ? new Set([simulation.machine.name]) : new Set(),
-        hpcUsernames: simulation.hpcUsername ? new Set([simulation.hpcUsername]) : new Set(),
-        simulationCount: 1,
-        lastUpdated: simulationUpdatedAt,
-      });
-    }
-
-    const summarizeMachines = (machineNames: Set<string>) => {
-      const names = [...machineNames].sort((left, right) =>
-        left.localeCompare(right, undefined, { sensitivity: 'base' }),
-      );
-
-      if (names.length === 0) return '—';
-      if (names.length === 1) return names[0];
-
-      return `${names[0]} +${names.length - 1}`;
-    };
-
-    const summarizeUsers = (hpcUsernames: Set<string>) => {
-      const names = [...hpcUsernames].sort((left, right) =>
-        left.localeCompare(right, undefined, { sensitivity: 'base' }),
-      );
-
-      if (names.length === 0) return '—';
-      if (names.length === 1) return names[0];
-
-      return `${names[0]} +${names.length - 1}`;
-    };
-
-    return [...casesById.values()]
-      .sort(
-        (left, right) =>
-          new Date(right.lastUpdated).getTime() - new Date(left.lastUpdated).getTime(),
-      )
-      .slice(0, 6)
-      .map((caseRecord) => ({
-        ...caseRecord,
-        machineSummary: summarizeMachines(caseRecord.machineNames),
-        hpcUsernameSummary: summarizeUsers(caseRecord.hpcUsernames),
-      }));
-  }, [simulations]);
-  const machineSimulationCounts = new Map<Machine['id'], number>();
-  for (const simulation of simulations) {
-    machineSimulationCounts.set(
-      simulation.machineId,
-      (machineSimulationCounts.get(simulation.machineId) ?? 0) + 1,
-    );
-  }
   const featuredMachines = [...machines]
     .sort(
       (left, right) =>
@@ -155,8 +71,38 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
     },
   ];
 
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-slate-500">
+        Loading catalog overview…
+      </div>
+    );
+  }
+
+  if (error && !overview) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-6">
+        <div className="space-y-3 text-center">
+          <p className="text-red-600">Could not load catalog overview.</p>
+          <Button type="button" variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-[70vh] bg-white px-4 py-10">
+      {error ? (
+        <div className="mx-auto mb-4 flex w-full max-w-7xl items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <span>Could not refresh catalog overview. Showing previously loaded data.</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-8 rounded-2xl border border-muted bg-white p-8 shadow-sm md:flex-row md:items-start md:justify-between md:p-10">
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
@@ -214,7 +160,7 @@ export const HomePage = ({ simulations, machines }: HomePageProps) => {
                 Total Simulations
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {simulations.length}
+                {overview?.totalSimulations ?? 0}
               </p>
             </div>
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">

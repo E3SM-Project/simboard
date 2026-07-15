@@ -72,6 +72,56 @@ export interface CaseDetailOut extends CaseSummaryOut {
   notesMarkdown: string | null;
 }
 
+export interface CaseListItemOut {
+  id: string;
+  name: string;
+  caseGroup: string | null;
+  machineId: string;
+  machineName: string;
+  hpcUsername: string;
+  simulationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PageOut<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type CasePageOut = PageOut<CaseListItemOut>;
+
+export interface FilterOptionOut {
+  value: string;
+  label: string;
+}
+
+export interface CatalogOverviewOut {
+  totalCases: number;
+  totalSimulations: number;
+  latestSubmission: string | null;
+  machineCounts: Record<string, number>;
+  recentCases: CaseListItemOut[];
+}
+
+export interface CaseFilterOptionsOut {
+  names: string[];
+  caseGroups: string[];
+  hpcUsernames: string[];
+  machineIds: string[];
+  machines: FilterOptionOut[];
+  statuses: SimulationStatusValue[];
+  simulationTypes: SimulationTypeValue[];
+  campaigns: string[];
+  initializationTypes: string[];
+  compilers: string[];
+  gitTags: string[];
+  createdByIds: string[];
+  creators: FilterOptionOut[];
+}
+
 export const CASE_EDITABLE_FIELDS = [
   'description',
   'keyFeatures',
@@ -218,4 +268,59 @@ export interface SimulationOut extends SimulationCreate {
   groupedArtifacts: Record<string, ArtifactOut[]>;
   groupedLinks: Record<string, ExternalLinkOut[]>;
   summaryCapabilities: SimulationSummaryCapabilitiesOut;
+}
+
+export interface SimulationListItemOut {
+  id: string;
+  caseId: string;
+  caseName: string;
+  caseGroup: string | null;
+  executionId: string;
+  caseHash: string | null;
+  simulationType: SimulationTypeValue;
+  status: SimulationStatusValue;
+  campaign: string | null;
+  experimentType: string | null;
+  compset: string;
+  compsetAlias: string;
+  gridName: string;
+  gridResolution: string;
+  initializationType: string;
+  simulationStartDate: string;
+  simulationEndDate: string | null;
+  runStartDate: string | null;
+  runEndDate: string | null;
+  compiler: string | null;
+  gitBranch: string | null;
+  gitTag: string | null;
+  gitCommitHash: string | null;
+  machineId: string;
+  machineName: string;
+  hpcUsername: string;
+  createdBy: string | null;
+  lastUpdatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SimulationPageOut = PageOut<SimulationListItemOut>;
+
+export interface SimulationFilterOptionsOut {
+  caseNames: string[];
+  caseGroups: string[];
+  machineIds: string[];
+  machines: FilterOptionOut[];
+  hpcUsernames: string[];
+  campaigns: string[];
+  experimentTypes: string[];
+  compsets: string[];
+  gridNames: string[];
+  gridResolutions: string[];
+  simulationTypes: SimulationTypeValue[];
+  initializationTypes: string[];
+  compilers: string[];
+  statuses: SimulationStatusValue[];
+  gitTags: string[];
+  createdByIds: string[];
+  creators: FilterOptionOut[];
 }

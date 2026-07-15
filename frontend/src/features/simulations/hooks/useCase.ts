@@ -1,33 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { getCaseById } from '@/features/simulations/api/api';
-import type { CaseDetailOut } from '@/types';
+import { catalogQueryKeys } from '@/features/simulations/queryKeys';
 
 export const useCase = (id: string) => {
-  const [data, setData] = useState<CaseDetailOut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    getCaseById(id)
-      .then((json) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  return { data, loading, error };
+  const query = useQuery({
+    queryKey: catalogQueryKeys.cases.detail(id),
+    queryFn: () => getCaseById(id),
+    enabled: Boolean(id),
+  });
+  return {
+    ...query,
+    data: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 };

@@ -17,13 +17,13 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
-import type { SimulationOut } from '@/types/index';
+import type { SimulationListItemOut } from '@/types/index';
 
 interface SimulationResultCard {
-  simulation: SimulationOut;
+  simulation: SimulationListItemOut;
   selected: boolean;
   isSelectionDisabled: boolean;
-  handleSelect: (sim: SimulationOut) => void;
+  handleSelect: (sim: SimulationListItemOut) => void;
 }
 
 const shouldIgnoreSelection = (target: EventTarget | null): boolean =>
@@ -160,7 +160,7 @@ export const SimulationResultCard = ({
                 <Server className="mt-0.5 h-3 w-3 shrink-0 text-slate-700" />
                 <span className="font-semibold">Machine:</span>
                 <span className="min-w-0 break-words font-normal text-slate-500">
-                  {simulation.machine.name}
+                  {simulation.machineName}
                 </span>
               </div>
             </div>

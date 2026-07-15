@@ -1,15 +1,12 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   SortingState,
   useReactTable,
   VisibilityState,
 } from '@tanstack/react-table';
 import { format } from 'date-fns';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -40,14 +37,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { useSimulationFilterOptions } from '@/features/simulations/hooks/useSimulationFilterOptions';
+import { useSimulations } from '@/features/simulations/hooks/useSimulations';
 import { cn } from '@/lib/utils';
-import type { SimulationOut } from '@/types/index';
+import type { SimulationListItemOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
-interface SimulationsPageProps {
-  simulations: SimulationOut[];
-}
-
 // -------------------- Pure Helpers --------------------
 const statusColors: Record<string, string> = {
   running: 'bg-blue-100 text-blue-800',
@@ -60,7 +55,7 @@ const statusColors: Record<string, string> = {
   'not-started': 'bg-gray-100 text-gray-800',
 };
 
-const typeColors: Record<SimulationOut['simulationType'], string> = {
+const typeColors: Record<SimulationListItemOut['simulationType'], string> = {
   production: 'border-green-600 text-green-700',
   master: 'border-blue-600 text-blue-700',
   experimental: 'border-amber-600 text-amber-700',
@@ -91,7 +86,25 @@ const formatDate = (d?: string) => {
   return format(dt, 'yyyy-MM-dd');
 };
 
-export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
+const SIMULATION_SORT_FIELDS: Record<string, string> = {
+  executionId: 'execution_id',
+  caseName: 'case_name',
+  caseHash: 'case_hash',
+  simulationType: 'simulation_type',
+  status: 'status',
+  gitTag: 'git_tag',
+  gridName: 'grid_name',
+  compset: 'compset',
+  modelDates: 'simulation_start_date',
+  machineId: 'machine_name',
+  createdAt: 'created_at',
+  gitBranch: 'git_branch',
+  gitCommitHash: 'git_commit_hash',
+  runDates: 'run_start_date',
+  lastUpdatedAt: 'updated_at',
+};
+
+export const SimulationsPage = () => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [caseNameFilter, setCaseNameFilter] = useState<string>('');
   const [caseGroupFilter, setCaseGroupFilter] = useState<string>('');
@@ -102,37 +115,55 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   ]);
   const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = `${location.pathname}${location.search}`;
   const navigateToSimulationDetails = (simulationId: string) => {
     navigate(`/simulations/${simulationId}`, { state: { from: currentPath } });
   };
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(globalFilter.trim());
+      setPagination((current) => ({ ...current, pageIndex: 0 }));
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [globalFilter]);
+
+  const primarySort = sorting[0];
+  const sortBy = primarySort ? SIMULATION_SORT_FIELDS[primarySort.id] : 'created_at';
+  const {
+    data: simulations,
+    page: simulationPage,
+    loading,
+    error,
+    refetch,
+  } = useSimulations({
+    page: pagination.pageIndex + 1,
+    pageSize: pagination.pageSize,
+    search: debouncedSearch || undefined,
+    caseName: caseNameFilter || undefined,
+    caseGroup: caseGroupFilter || undefined,
+    sortBy,
+    sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
+  });
+  const { data: filterOptions } = useSimulationFilterOptions();
 
   // Derive unique case names and case groups for filter dropdowns.
-  const caseNames = useMemo(
-    () => [...new Set(simulations.map((s) => s.caseName))].sort(),
-    [simulations],
-  );
-  const caseGroups = useMemo(
-    () =>
-      [...new Set(simulations.map((s) => s.caseGroup).filter((g): g is string => g != null))].sort(),
-    [simulations],
-  );
+  const caseNames = filterOptions?.caseNames ?? [];
+  const caseGroups = filterOptions?.caseGroups ?? [];
 
-  // Pre-filter simulations by case name / case group before passing to table.
-  const filteredSimulations = useMemo(() => {
-    let result = simulations;
-    if (caseNameFilter) {
-      result = result.filter((s) => s.caseName === caseNameFilter);
-    }
-    if (caseGroupFilter) {
-      result = result.filter((s) => s.caseGroup === caseGroupFilter);
-    }
-    return result;
-  }, [simulations, caseNameFilter, caseGroupFilter]);
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [caseNameFilter, caseGroupFilter]);
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [sorting]);
 
-  const columns = useMemo<ColumnDef<SimulationOut>[]>(
+  const filteredSimulations = simulations;
+
+  const columns = useMemo<ColumnDef<SimulationListItemOut>[]>(
     () => [
       {
         accessorKey: 'executionId',
@@ -219,7 +250,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
       {
         accessorKey: 'machineId',
         header: 'Machine',
-        cell: ({ row }) => <TableCellText value={row.original.machine?.name ?? '—'} />,
+        cell: ({ row }) => <TableCellText value={row.original.machineName} />,
         size: 140,
       },
       {
@@ -280,24 +311,39 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
   const table = useReactTable({
     data: filteredSimulations,
     columns,
-    state: { globalFilter, sorting, columnVisibility },
+    state: { globalFilter, sorting, columnVisibility, pagination },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
     onColumnVisibilityChange: setColumnVisibility,
-    globalFilterFn: (row, _id, value) => {
-      if (!value) return true;
-      const v = String(value).toLowerCase();
-      const s: SimulationOut = row.original as SimulationOut;
-      return [s.id, s.caseName, s.executionId, s.gitTag, s.gridName, s.compset, s.machineId]
-        .filter(Boolean)
-        .some((field) => String(field).toLowerCase().includes(v));
-    },
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    manualFiltering: true,
+    manualSorting: true,
+    manualPagination: true,
+    pageCount: Math.ceil((simulationPage?.total ?? 0) / pagination.pageSize),
   });
   const tableWidth =
     40 + table.getVisibleLeafColumns().reduce((sum, column) => sum + column.getSize(), 0);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        Loading simulations…
+      </div>
+    );
+  }
+
+  if (error && !simulationPage) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-6">
+        <div className="space-y-3 text-center">
+          <p className="text-red-600">Could not load simulations: {error}</p>
+          <Button type="button" variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Select all in current page helper
   const toggleAllOnPage = (checked: boolean | 'indeterminate') => {
@@ -310,6 +356,15 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-8 py-8 space-y-6">
+      {error ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <span>Could not refresh simulations: {error}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -335,7 +390,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
         />
 
         {/* Case Name filter */}
-        <Select value={caseNameFilter} onValueChange={(v) => setCaseNameFilter(v === '__all__' ? '' : v)}>
+        <Select
+          value={caseNameFilter}
+          onValueChange={(v) => setCaseNameFilter(v === '__all__' ? '' : v)}
+        >
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="All case names" />
           </SelectTrigger>
@@ -351,7 +409,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
 
         {/* Case Group filter */}
         {caseGroups.length > 0 && (
-          <Select value={caseGroupFilter} onValueChange={(v) => setCaseGroupFilter(v === '__all__' ? '' : v)}>
+          <Select
+            value={caseGroupFilter}
+            onValueChange={(v) => setCaseGroupFilter(v === '__all__' ? '' : v)}
+          >
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="All case groups" />
             </SelectTrigger>
@@ -503,7 +564,10 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
                     <Checkbox
                       checked={!!selectedRows[row.original.id]}
                       onCheckedChange={(checked) =>
-                        setSelectedRows((prev) => ({ ...prev, [row.original.id]: checked === true }))
+                        setSelectedRows((prev) => ({
+                          ...prev,
+                          [row.original.id]: checked === true,
+                        }))
                       }
                       aria-label="Select row"
                     />
@@ -561,7 +625,7 @@ export const SimulationsPage = ({ simulations }: SimulationsPageProps) => {
             </SelectContent>
           </Select>
           <span className="ml-2">
-            Showing {table.getRowModel().rows.length} of {filteredSimulations.length}
+            Showing {table.getRowModel().rows.length} of {simulationPage?.total ?? 0}
           </span>
         </div>
         <div className="flex items-center gap-2">

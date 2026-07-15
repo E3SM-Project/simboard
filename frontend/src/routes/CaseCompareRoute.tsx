@@ -1,3 +1,4 @@
+import { useQueries } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -5,7 +6,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { Button } from '@/components/ui/button';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
+import { getSimulationById } from '@/features/simulations/api/api';
 import { useCase } from '@/features/simulations/hooks/useCase';
+import { catalogQueryKeys } from '@/features/simulations/queryKeys';
 import type { SimulationOut } from '@/types';
 
 interface CaseCompareRouteProps {
@@ -13,7 +16,6 @@ interface CaseCompareRouteProps {
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
   setSelectedSimulationIds: (ids: string[]) => void;
-  simulations: SimulationOut[];
 }
 
 const EMPTY_SELECTED_SIMULATION_IDS: string[] = [];
@@ -23,7 +25,6 @@ export const CaseCompareRoute = ({
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
   setSelectedSimulationIds,
-  simulations,
 }: CaseCompareRouteProps) => {
   const navigate = useNavigate();
   const { id: caseId } = useParams<{ id: string }>();
@@ -34,10 +35,6 @@ export const CaseCompareRoute = ({
     () => new Set(caseRecord?.simulations.map((simulation) => simulation.id) ?? []),
     [caseRecord],
   );
-  const simulationById = useMemo(
-    () => new Map(simulations.map((simulation) => [simulation.id, simulation])),
-    [simulations],
-  );
 
   const rawCaseSelectedSimulationIds = caseId
     ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[caseId] ?? [])
@@ -46,6 +43,22 @@ export const CaseCompareRoute = ({
     () =>
       rawCaseSelectedSimulationIds.filter((simulationId) => caseSimulationIdSet.has(simulationId)),
     [caseSimulationIdSet, rawCaseSelectedSimulationIds],
+  );
+  const detailQueries = useQueries({
+    queries: caseSelectedSimulationIds.map((simulationId) => ({
+      queryKey: catalogQueryKeys.simulations.detail(simulationId),
+      queryFn: () => getSimulationById(simulationId),
+    })),
+  });
+  const simulationById = useMemo(
+    () =>
+      new Map(
+        detailQueries
+          .map((query) => query.data)
+          .filter((simulation): simulation is SimulationOut => simulation != null)
+          .map((simulation) => [simulation.id, simulation]),
+      ),
+    [detailQueries],
   );
   const excludedSimulationCount =
     rawCaseSelectedSimulationIds.length - caseSelectedSimulationIds.length;

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
@@ -10,6 +11,7 @@ import {
 } from '@/features/simulations/components/SimulationDetailsView';
 import { useSimulation } from '@/features/simulations/hooks/useSimulation';
 import { useSimulationSummary } from '@/features/simulations/hooks/useSimulationSummary';
+import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import { toast } from '@/hooks/use-toast';
 import type { SimulationOut, SimulationUpdate } from '@/types';
 
@@ -69,6 +71,7 @@ export const SimulationDetailsPage = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
 }: SimulationDetailsPageProps) => {
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { data: fetchedSimulation, loading, error } = useSimulation(id ?? '');
@@ -158,6 +161,7 @@ export const SimulationDetailsPage = ({
     try {
       const updatedSimulation = await updateSimulation(id, payload);
       setSimulation(updatedSimulation);
+      await invalidateCatalog(queryClient);
       return true;
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));

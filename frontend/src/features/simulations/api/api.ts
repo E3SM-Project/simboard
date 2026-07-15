@@ -1,13 +1,39 @@
 import { api } from '@/api/api';
 import type {
   CaseDetailOut,
-  CaseSummaryOut,
+  CaseFilterOptionsOut,
+  CasePageOut,
   CaseUpdate,
+  CatalogOverviewOut,
   SimulationCreate,
+  SimulationFilterOptionsOut,
   SimulationOut,
+  SimulationPageOut,
   SimulationSummaryResponseOut,
   SimulationUpdate,
 } from '@/types';
+
+export interface PageParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  [key: string]: string | number | string[] | undefined;
+}
+
+const toQueryParams = (params: PageParams) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, rawValue]) => {
+    if (rawValue === undefined) return;
+    const queryKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    values.forEach((value) => query.append(queryKey, String(value)));
+  });
+
+  return query;
+};
 
 export const SIMULATIONS_URL = '/simulations';
 export const CASES_URL = '/cases';
@@ -25,9 +51,10 @@ export const createSimulation = async (data: SimulationCreate): Promise<Simulati
   return res.data;
 };
 
-export const listSimulations = async (url: string = SIMULATIONS_URL): Promise<SimulationOut[]> => {
-  const res = await api.get<SimulationOut[]>(url, {
+export const listSimulations = async (params: PageParams = {}): Promise<SimulationPageOut> => {
+  const res = await api.get<SimulationPageOut>(SIMULATIONS_URL, {
     headers: { 'Cache-Control': 'no-cache' },
+    params: toQueryParams(params),
   });
 
   return res.data;
@@ -71,11 +98,27 @@ export const resolvePaceExecution = async (executionId: string): Promise<PaceRes
   return res.data;
 };
 
-export const listCases = async (url: string = CASES_URL): Promise<CaseSummaryOut[]> => {
-  const res = await api.get<CaseSummaryOut[]>(url, {
+export const listCases = async (params: PageParams = {}): Promise<CasePageOut> => {
+  const res = await api.get<CasePageOut>(CASES_URL, {
     headers: { 'Cache-Control': 'no-cache' },
+    params: toQueryParams(params),
   });
 
+  return res.data;
+};
+
+export const getCatalogOverview = async (): Promise<CatalogOverviewOut> => {
+  const res = await api.get<CatalogOverviewOut>(`${CASES_URL}/overview`);
+  return res.data;
+};
+
+export const getCaseFilterOptions = async (): Promise<CaseFilterOptionsOut> => {
+  const res = await api.get<CaseFilterOptionsOut>(`${CASES_URL}/filter-options`);
+  return res.data;
+};
+
+export const getSimulationFilterOptions = async (): Promise<SimulationFilterOptionsOut> => {
+  const res = await api.get<SimulationFilterOptionsOut>(`${SIMULATIONS_URL}/filter-options`);
   return res.data;
 };
 

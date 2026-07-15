@@ -1,35 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { listSimulations } from '@/features/simulations/api/api';
-import { SimulationOut } from '@/types/simulation';
+import { listSimulations, type PageParams } from '@/features/simulations/api/api';
+import { catalogQueryKeys } from '@/features/simulations/queryKeys';
 
-export const useSimulations = () => {
-  const [data, setData] = useState<SimulationOut[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export const useSimulations = (params: PageParams = {}, enabled = true) => {
+  const queryKey = params.caseId
+    ? catalogQueryKeys.simulations.casePage(String(params.caseId), params)
+    : catalogQueryKeys.simulations.page(params);
+  const query = useQuery({
+    queryKey,
+    queryFn: () => listSimulations(params),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    listSimulations()
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const byId = useMemo(() => new Map(data.map((s) => [s.id, s])), [data]);
-
-  return { data, loading, error, byId };
+  return {
+    ...query,
+    data: query.data?.items ?? [],
+    page: query.data,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 };

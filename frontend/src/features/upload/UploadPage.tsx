@@ -1,8 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { invalidateCatalog } from '@/features/simulations/invalidateCatalog';
 import {
   ArchiveUploadValidationDetail,
   ArchiveUploadValidationError,
@@ -146,6 +148,7 @@ const isArchiveUploadValidationDetail = (
 };
 
 export const UploadPage = ({ machines }: UploadPageProps) => {
+  const queryClient = useQueryClient();
   const [selectedMachineId, setSelectedMachineId] = useState('');
   const [hpcUsername, setHpcUsername] = useState('');
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
@@ -269,6 +272,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
       resetFileSelection();
       setCreatedSimulations(response.simulations);
+      await invalidateCatalog(queryClient);
 
       setUploadStatus({
         tone: 'success',

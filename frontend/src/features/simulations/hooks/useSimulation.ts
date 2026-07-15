@@ -1,33 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { getSimulationById } from '@/features/simulations/api/api';
-import { SimulationOut } from '@/types/simulation';
+import { catalogQueryKeys } from '@/features/simulations/queryKeys';
 
-export const useSimulation = (id: string) => {
-  const [data, setData] = useState<SimulationOut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    getSimulationById(id)
-      .then((json) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  return { data, loading, error };
+export const useSimulation = (id: string, enabled = true) => {
+  const query = useQuery({
+    queryKey: catalogQueryKeys.simulations.detail(id),
+    queryFn: () => getSimulationById(id),
+    enabled: enabled && Boolean(id),
+  });
+  return {
+    ...query,
+    data: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 };

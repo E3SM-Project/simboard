@@ -1,36 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { listMachines } from '@/features/machines/api/api';
-import { Machine } from '@/types';
+import { catalogQueryKeys } from '@/features/simulations/queryKeys';
 
 export const useMachines = () => {
-  const [data, setData] = useState<Machine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: catalogQueryKeys.machines,
+    queryFn: () => listMachines(),
+  });
+  const data = query.data ?? [];
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    listMachines()
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      })
-
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const byId = useMemo(() => new Map(data.map((s) => [s.id, s])), [data]);
-
-  return { data, loading, error, byId };
+  return {
+    ...query,
+    data,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    byId: new Map(data.map((machine) => [machine.id, machine])),
+  };
 };
