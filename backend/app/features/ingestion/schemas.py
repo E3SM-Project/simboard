@@ -165,6 +165,50 @@ class ExecutionDiscoveryResultsResponse(BaseModel):
     existing_count: int
 
 
+class ArchiveCheckpointEntry(BaseModel):
+    """One completed immutable archive snapshot."""
+
+    archive_month: Annotated[str, Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
+    snapshot_name: Annotated[
+        str,
+        Field(
+            ...,
+            pattern=(r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"),
+        ),
+    ]
+
+
+class ArchiveCheckpointsRequest(BaseModel):
+    """Batch of completed archive snapshots for one machine and archive."""
+
+    machine_name: Annotated[str, Field(..., min_length=1)]
+    archive_name: Annotated[str, Field(..., min_length=1)]
+    snapshots: Annotated[list[ArchiveCheckpointEntry], Field(..., min_length=1)]
+
+    @field_validator("machine_name", "archive_name")
+    @classmethod
+    def strip_checkpoint_identity(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Checkpoint identity must not be blank")
+        return normalized
+
+
+class ArchiveCheckpointsResponse(BaseModel):
+    """Persistence summary for an archive-checkpoint batch."""
+
+    inserted_count: int
+    existing_count: int
+
+
+class ArchiveCheckpointListResponse(BaseModel):
+    """Completed immutable snapshots for one machine and archive."""
+
+    machine_name: str
+    archive_name: str
+    snapshots: list[ArchiveCheckpointEntry]
+
+
 class IngestionStateResponse(BaseModel):
     """Database-backed ingestion state for one machine."""
 

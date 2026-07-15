@@ -107,8 +107,9 @@ YYYY-MM/
           execution/
 ```
 
-Archive runners currently traverse only top-level `YYYY-MM` directories under
-`OLD_PERF_ARCHIVE_DIR`. Other top-level directories are ignored.
+Archive runners treat each immediate `YYYY-MM/performance_archive_<timestamp>`
+directory as an atomic, immutable snapshot. Other top-level directories are
+ignored.
 
 Example NERSC path for `COMPLETED` status cases:
 
@@ -183,7 +184,11 @@ Automated HPC collection reaches SimBoard ingestion through two site-side submis
 
 ### Automated Submission-State Flow
 
-Both automated scripts follow the same submission-state sequence:
+Both automated scripts follow the same submission-state sequence. In archive
+mode, they first list eligible immutable snapshots from `ARCHIVE_YEAR_START`
+through `ARCHIVE_YEAR_END`, then subtract snapshots already completed in the
+SimBoard database. This finds newly added snapshots even when they appear in an
+older month.
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
 2. Read processed execution IDs and immutable discovery results from `/api/v1/ingestions/state`.
@@ -193,14 +198,16 @@ Both automated scripts follow the same submission-state sequence:
 6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`.
 7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
 8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
+9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has an immutable rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed.
 
 Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
 scans additionally deduplicate by stable logical case identity plus
 `execution_id` so timestamped snapshot parents do not cause repeated archive
 ingestion across `OLD_PERF_ARCHIVE_DIR` snapshots. Updating files inside an
 already recorded execution directory does not make that execution eligible
-again. Dry runs compute and log proposed results but never persist discovery or
-processed state.
+again. Completed archive snapshots are skipped before their contents are
+walked. Dry runs compute and log proposed results but never persist discovery,
+processed state, or archive checkpoints.
 
 Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable case identifier for that uploaded case.
 

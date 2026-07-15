@@ -133,3 +133,39 @@ class ExecutionDiscoveryResult(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class ArchiveScanCheckpoint(Base):
+    """Completed scan of one immutable archive snapshot."""
+
+    __tablename__ = "archive_scan_checkpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "machine_id",
+            "archive_name",
+            "archive_month",
+            "snapshot_name",
+            name="uq_archive_scan_checkpoint_identity",
+        ),
+        Index(
+            "ix_archive_scan_checkpoints_lookup",
+            "machine_id",
+            "archive_name",
+            "archive_month",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    machine_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("machines.id"), nullable=False
+    )
+    archive_name: Mapped[str] = mapped_column(Text, nullable=False)
+    archive_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    snapshot_name: Mapped[str] = mapped_column(Text, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
