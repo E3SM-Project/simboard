@@ -17,6 +17,7 @@ from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.api import (
+    _case_to_summary_out,
     create_simulation,
     update_case,
     update_simulation,
@@ -384,7 +385,10 @@ class TestListCases:
         machine = db.query(Machine).first()
         assert machine is not None
         split_case = _create_case(db, "split-filter-case")
-        matching_case = _create_case(db, "matching-filter-case")
+        matching_case = _create_case(
+            db, "matching-filter-case", hpc_username="matching-user"
+        )
+        matching_case.case_group = "matching-group"
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
         for case, execution_id, campaign, compiler in (
             (split_case, "split-campaign", "campaign-a", "intel"),
@@ -405,7 +409,17 @@ class TestListCases:
 
         data = client.get(
             f"{API_BASE}/cases",
-            params={"campaign": "campaign-a", "compiler": "gcc"},
+            params={
+                "name": matching_case.name,
+                "case_group": matching_case.case_group,
+                "machine_id": str(machine.id),
+                "hpc_username": matching_case.hpc_username,
+                "execution_id": "combined-match",
+                "status": SimulationStatus.CREATED.value,
+                "simulation_type": SimulationType.EXPERIMENTAL.value,
+                "campaign": "campaign-a",
+                "compiler": "gcc",
+            },
         ).json()
 
         assert data["total"] == 1
@@ -645,6 +659,16 @@ class TestListCaseNames:
 
 
 class TestGetCase:
+    def test_case_summary_conversion(self, db: Session):
+        case = _create_case(db, "summary-conversion-case")
+        db.commit()
+
+        result = _case_to_summary_out(case)
+
+        assert result.id == case.id
+        assert result.name == case.name
+        assert result.simulations == []
+
     def test_endpoint_returns_case_detail_with_metadata(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
@@ -1527,6 +1551,9 @@ class TestListSimulations:
                 ("campaign", "campaign-a"),
                 ("campaign", "campaign-b"),
                 ("status", "created"),
+                ("simulation_type", "experimental"),
+                ("machine_id", str(machine.id)),
+                ("hpc_username", case.hpc_username),
             ],
         ).json()
 

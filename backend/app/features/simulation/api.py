@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, asc, desc, distinct, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
@@ -93,7 +94,7 @@ def list_cases(  # noqa: C901
         query = query.filter(Case.machine_id == machine_id)
     if hpc_username:
         query = query.filter(Case.hpc_username == hpc_username)
-    simulation_predicates = []
+    simulation_predicates: list[ColumnElement[bool]] = []
     if execution_id:
         simulation_predicates.append(
             Simulation.execution_id.ilike(f"%{execution_id.strip()}%")
