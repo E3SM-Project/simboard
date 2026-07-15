@@ -383,6 +383,17 @@ class CaseCollectionLogData:
     rejected_decisions: list[ExecutionCollectionDecision] = field(default_factory=list)
 
 
+@dataclass
+class ArchiveSnapshotScan:
+    """Filesystem snapshot units and execution identities scanned in this run."""
+
+    archive_name: str
+    eligible_keys: set[str] = field(default_factory=set)
+    completed_keys: set[str] = field(default_factory=set)
+    references_by_key: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
+    traversal_complete: bool = True
+
+
 # Entrypoint and Configuration
 # ----------------------------
 
@@ -592,12 +603,13 @@ def _parse_optional_archive_bound(
 # --------------------
 
 
-def _run_ingestor(
+def _run_ingestor(  # noqa: C901
     config: IngestorConfig,
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
     sleep_fn: Callable[[float], None] = time.sleep,
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
     discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> int:
     """Execute one complete archive scan-and-ingest cycle.
 
@@ -650,15 +662,39 @@ def _run_ingestor(
         )
         return 1
 
+    completed_snapshot_keys: set[str] = set()
+    if config.scan_mode == "archive":
+        try:
+            completed_snapshot_keys = _fetch_archive_checkpoints(
+                _build_archive_checkpoints_endpoint_url(config),
+                config.api_token,
+                config.machine_name,
+                config.archive_root.name,
+                archive_start=config.archive_year_start,
+                archive_end=config.archive_year_end,
+                timeout_seconds=config.request_timeout_seconds,
+            )
+        except IngestionRequestError as exc:
+            _log_event(
+                "archive_checkpoint_fetch_failed",
+                {"status_code": exc.status_code, "error": str(exc)},
+            )
+            return 1
+
     new_discovery_results: list[ExecutionDiscoveryResult] = []
     try:
-        (scan_results, candidates, submission_qualified_case_count, discovery_stats) = (
-            _scan_archive(
-                config,
-                state,
-                metadata_locator=metadata_locator,
-                discovery_results=new_discovery_results,
-            )
+        (
+            scan_results,
+            candidates,
+            submission_qualified_case_count,
+            discovery_stats,
+            snapshot_scan,
+        ) = _scan_archive(
+            config,
+            state,
+            metadata_locator=metadata_locator,
+            discovery_results=new_discovery_results,
+            completed_snapshot_keys=completed_snapshot_keys,
         )
     except UnsupportedArchiveLayoutError as exc:
         _log_event("configuration_error", {"error": str(exc)})
@@ -720,7 +756,7 @@ def _run_ingestor(
     ):
         return 1
 
-    return _handle_ingest_run(
+    ingest_exit_code = _handle_ingest_run(
         candidates,
         scan_results,
         config,
@@ -731,6 +767,27 @@ def _run_ingestor(
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
     )
+    if config.scan_mode != "archive":
+        return ingest_exit_code
+
+    settled_snapshot_keys = _settled_archive_snapshot_keys(
+        snapshot_scan,
+        state,
+        new_discovery_results,
+    )
+    if not _persist_archive_checkpoints_with_retries(
+        settled_snapshot_keys,
+        _build_archive_checkpoints_endpoint_url(config),
+        config.api_token,
+        config.machine_name,
+        snapshot_scan.archive_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=checkpoint_post_request_fn,
+    ):
+        return 1
+    return ingest_exit_code
 
 
 def _build_endpoint_url(config: IngestorConfig) -> str:
@@ -761,6 +818,11 @@ def _build_discovery_results_endpoint_url(config: IngestorConfig) -> str:
     )
 
 
+def _build_archive_checkpoints_endpoint_url(config: IngestorConfig) -> str:
+    """Build archive checkpoint read/write endpoint URL."""
+    return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/archive-checkpoints"
+
+
 # Archive Discovery
 # -----------------
 
@@ -770,11 +832,13 @@ def _scan_archive(
     state: dict[str, Any],
     metadata_locator: Callable[[str], object],
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
+    completed_snapshot_keys: set[str] | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
     int,
     DiscoveryStats,
+    ArchiveSnapshotScan,
 ]:
     """Compute scan results, candidates, and discovery counters.
 
@@ -802,12 +866,36 @@ def _scan_archive(
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
     case_path_filter = _build_case_path_filter(config)
-    walk_dir_filter = _build_walk_dir_filter(config)
+    snapshot_scan = ArchiveSnapshotScan(archive_name=config.archive_root.name)
+    if config.scan_mode == "archive":
+        snapshot_scan.eligible_keys = _enumerate_archive_snapshot_keys(config)
+        snapshot_scan.completed_keys = (
+            set() if completed_snapshot_keys is None else completed_snapshot_keys
+        ) & snapshot_scan.eligible_keys
+    selected_snapshot_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
+    walk_dir_filter = _build_walk_dir_filter(
+        config,
+        selected_snapshot_keys=(
+            selected_snapshot_keys if config.scan_mode == "archive" else None
+        ),
+    )
     processed_ids_by_key = _build_processed_ids_by_key(
         state,
         scan_mode=config.scan_mode,
         staging_root_basename=staging_root_basename,
     )
+
+    def handle_walk_error(exc: OSError) -> None:
+        snapshot_scan.traversal_complete = False
+        _log_event(
+            "archive_scan_failed",
+            {
+                "scan_mode": config.scan_mode,
+                "archive_root": str(config.archive_root),
+                "error": f"{exc.__class__.__name__}: {exc}",
+            },
+        )
+
     grouped_executions = _discover_case_executions(
         config.archive_root,
         metadata_locator,
@@ -820,6 +908,18 @@ def _scan_archive(
         discovery_results=discovery_results,
         discovery_results_by_key=_build_discovery_results_by_key(state),
         staging_root_basename=staging_root_basename,
+        walk_error_handler=(
+            handle_walk_error if config.scan_mode == "archive" else None
+        ),
+        execution_observer=(
+            partial(
+                _record_archive_snapshot_reference,
+                archive_root=config.archive_root.resolve(),
+                references_by_key=snapshot_scan.references_by_key,
+            )
+            if config.scan_mode == "archive"
+            else None
+        ),
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
@@ -849,6 +949,7 @@ def _scan_archive(
         candidates,
         len(all_candidates),
         discovery_stats,
+        snapshot_scan,
     )
 
 
@@ -865,6 +966,8 @@ def _discover_case_executions(
     staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     discovery_results_by_key: dict[tuple[str, str], str] | None = None,
+    execution_observer: Callable[[Path, str], None] | None = None,
+    walk_error_handler: Callable[[OSError], None] | None = None,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -901,7 +1004,7 @@ def _discover_case_executions(
         {"scan_mode": scan_mode, "archive_root": archive_root_str},
     )
 
-    for dirpath, dirnames, _ in os.walk(archive_root):
+    for dirpath, dirnames, _ in os.walk(archive_root, onerror=walk_error_handler):
         directories_visited += 1
         current_dir = dirpath
 
@@ -914,6 +1017,8 @@ def _discover_case_executions(
                 continue
             if case_path_filter is not None and not case_path_filter(case_dir):
                 continue
+            if execution_observer is not None:
+                execution_observer(case_dir, dirname)
 
             _collect_case_execution(
                 grouped,
@@ -1478,6 +1583,8 @@ def _build_case_path_filter(
 
 def _build_walk_dir_filter(
     config: IngestorConfig,
+    *,
+    selected_snapshot_keys: set[str] | None = None,
 ) -> Callable[[str, list[str]], None] | None:
     """Return optional top-level directory pruning hook."""
     if config.scan_mode != "archive":
@@ -1492,6 +1599,7 @@ def _build_walk_dir_filter(
             config.archive_year_start,
             config.archive_year_end,
         ),
+        selected_snapshot_keys=selected_snapshot_keys,
     )
 
 
@@ -1503,6 +1611,7 @@ def _filter_archive_walk_dirnames(
     archive_start: str | None,
     archive_end: str | None,
     archive_year_filter_enabled: bool,
+    selected_snapshot_keys: set[str] | None = None,
 ) -> None:
     """Prune walked directories for supported archive layouts and ranges."""
     current_path = Path(dirpath).resolve()
@@ -1514,6 +1623,21 @@ def _filter_archive_walk_dirnames(
             archive_start=archive_start,
             archive_end=archive_end,
         )
+        return
+
+    relative_parts = _archive_relative_parts(current_path, archive_root)
+    if (
+        selected_snapshot_keys is not None
+        and relative_parts is not None
+        and len(relative_parts) == 1
+        and _archive_dir_bucket(relative_parts[0]) is not None
+    ):
+        archive_month = relative_parts[0]
+        dirnames[:] = [
+            dirname
+            for dirname in dirnames
+            if f"{archive_month}/{dirname}" in selected_snapshot_keys
+        ]
         return
 
     if _is_archive_snapshot_dir(current_path.name):
@@ -1821,6 +1945,100 @@ def _archive_year_part_index(path_parts: tuple[str, ...]) -> int | None:
 def _is_archive_snapshot_dir(dirname: str) -> bool:
     """Return whether dirname is archive-only snapshot bucket."""
     return ARCHIVE_SNAPSHOT_DIR_PATTERN.fullmatch(dirname) is not None
+
+
+def _enumerate_archive_snapshot_keys(config: IngestorConfig) -> set[str]:
+    """List eligible immediate ``YYYY-MM/performance_archive_*`` snapshots."""
+    keys: set[str] = set()
+
+    try:
+        for month_dir in config.archive_root.iterdir():
+            if (
+                not month_dir.is_dir()
+                or month_dir.is_symlink()
+                or not _archive_dir_in_range(
+                    month_dir.name,
+                    archive_start=config.archive_year_start,
+                    archive_end=config.archive_year_end,
+                )
+            ):
+                continue
+            for snapshot_dir in month_dir.iterdir():
+                if (
+                    snapshot_dir.is_dir()
+                    and not snapshot_dir.is_symlink()
+                    and _is_archive_snapshot_dir(snapshot_dir.name)
+                ):
+                    keys.add(f"{month_dir.name}/{snapshot_dir.name}")
+    except OSError as exc:
+        raise UnsupportedArchiveLayoutError(
+            f"Unable to enumerate archive snapshots under {config.archive_root}: "
+            f"{exc.__class__.__name__}: {exc}"
+        ) from exc
+
+    return keys
+
+
+def _record_archive_snapshot_reference(
+    case_dir: Path,
+    execution_id: str,
+    *,
+    archive_root: Path,
+    references_by_key: dict[str, set[tuple[str, str]]],
+) -> None:
+    """Associate a discovered execution identity with its immutable snapshot."""
+    try:
+        relative_parts = case_dir.resolve().relative_to(archive_root).parts
+    except ValueError:
+        return
+
+    if (
+        len(relative_parts) < 3
+        or _archive_dir_bucket(relative_parts[0]) is None
+        or not _is_archive_snapshot_dir(relative_parts[1])
+    ):
+        return
+
+    snapshot_key = f"{relative_parts[0]}/{relative_parts[1]}"
+    references_by_key.setdefault(snapshot_key, set()).add(
+        (
+            _case_identity_key(str(case_dir.resolve()), "archive"),
+            execution_id,
+        )
+    )
+
+
+def _settled_archive_snapshot_keys(
+    snapshot_scan: ArchiveSnapshotScan,
+    state: dict[str, Any],
+    new_discovery_results: list[ExecutionDiscoveryResult],
+) -> set[str]:
+    """Return scanned snapshots whose executions are all permanently resolved."""
+    if not snapshot_scan.traversal_complete:
+        return set()
+
+    processed_ids = _build_processed_ids_by_key(state, scan_mode="archive")
+    outcomes = _build_discovery_results_by_key(state)
+    outcomes.update(
+        {
+            (result.case_identity, result.execution_id): result.outcome
+            for result in _deduplicate_discovery_results(new_discovery_results)
+        }
+    )
+    selected_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
+
+    return {
+        snapshot_key
+        for snapshot_key in selected_keys
+        if all(
+            execution_id in processed_ids[case_identity]
+            or outcomes.get((case_identity, execution_id))
+            in {"rejected_incomplete", "rejected_invalid"}
+            for case_identity, execution_id in snapshot_scan.references_by_key.get(
+                snapshot_key, set()
+            )
+        )
+    }
 
 
 def _build_processed_ids_by_key(
@@ -2360,11 +2578,15 @@ def _post_discovery_results_request(
         ) from exc
     except urllib.error.URLError as exc:
         raise IngestionRequestError(
-            f"URL error: {exc.reason}", status_code=None, transient=True
+            f"URL error: {exc.reason}",
+            status_code=None,
+            transient=True,
         ) from exc
     except TimeoutError as exc:
         raise IngestionRequestError(
-            "Request timed out", status_code=None, transient=True
+            "Request timed out",
+            status_code=None,
+            transient=True,
         ) from exc
 
 
@@ -2535,15 +2757,11 @@ def _post_ingestion_request(
         ) from exc
     except urllib.error.URLError as exc:
         raise IngestionRequestError(
-            f"URL error: {exc.reason}",
-            status_code=None,
-            transient=True,
+            f"URL error: {exc.reason}", status_code=None, transient=True
         ) from exc
     except TimeoutError as exc:
         raise IngestionRequestError(
-            "Request timed out",
-            status_code=None,
-            transient=True,
+            "Request timed out", status_code=None, transient=True
         ) from exc
 
 
@@ -2583,13 +2801,169 @@ def _fetch_ingestion_state(
         ) from exc
     except urllib.error.URLError as exc:
         raise IngestionRequestError(
-            f"URL error: {exc.reason}",
-            status_code=None,
-            transient=True,
+            f"URL error: {exc.reason}", status_code=None, transient=True
         ) from exc
     except TimeoutError as exc:
         raise IngestionRequestError(
-            "Request timed out",
+            "Request timed out", status_code=None, transient=True
+        ) from exc
+
+
+def _fetch_archive_checkpoints(
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    archive_name: str,
+    *,
+    archive_start: str | None,
+    archive_end: str | None,
+    timeout_seconds: int,
+) -> set[str]:
+    """Fetch completed immutable snapshot keys from SimBoard."""
+    query_values = {"machine_name": machine_name, "archive_name": archive_name}
+    if archive_start is not None:
+        query_values["archive_start"] = archive_start
+    if archive_end is not None:
+        query_values["archive_end"] = archive_end
+    request = urllib.request.Request(
+        f"{endpoint_url}?{urllib.parse.urlencode(query_values)}",
+        headers={"Authorization": f"Bearer {api_token}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_body = response.read().decode("utf-8")
+            body = json.loads(raw_body) if raw_body else {}
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        raise IngestionRequestError(
+            f"HTTP {exc.code}: {response_text}",
+            status_code=exc.code,
+            transient=_is_transient_status(exc.code),
+        ) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise IngestionRequestError(
+            f"Checkpoint request failed: {exc}",
+            status_code=None,
+            transient=True,
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise IngestionRequestError(
+            f"Invalid checkpoint response: {exc}",
+            status_code=None,
+            transient=False,
+        ) from exc
+
+    if not isinstance(body, dict) or not isinstance(body.get("snapshots"), list):
+        raise IngestionRequestError(
+            "Invalid checkpoint response payload.",
+            status_code=None,
+            transient=False,
+        )
+    snapshots = body["snapshots"]
+    return {
+        f"{snapshot['archive_month']}/{snapshot['snapshot_name']}"
+        for snapshot in snapshots
+        if isinstance(snapshot, dict)
+        and isinstance(snapshot.get("archive_month"), str)
+        and isinstance(snapshot.get("snapshot_name"), str)
+    }
+
+
+def _persist_archive_checkpoints_with_retries(
+    snapshot_keys: set[str],
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    archive_name: str,
+    *,
+    max_attempts: int,
+    timeout_seconds: int,
+    sleep_fn: Callable[[float], None],
+    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+) -> bool:
+    """Persist settled immutable snapshot keys with bounded retries."""
+    if not snapshot_keys:
+        return True
+    if post_request_fn is None:
+        post_request_fn = _post_archive_checkpoints_request
+    for attempt in range(1, max_attempts + 1):
+        try:
+            post_request_fn(
+                endpoint_url,
+                api_token,
+                machine_name,
+                archive_name=archive_name,
+                snapshot_keys=sorted(snapshot_keys),
+                timeout_seconds=timeout_seconds,
+            )
+            return True
+        except IngestionRequestError as exc:
+            retrying = exc.transient and attempt < max_attempts
+            _log_event(
+                "archive_checkpoint_persistence_failed",
+                {
+                    "attempt": attempt,
+                    "status_code": exc.status_code,
+                    "retrying": retrying,
+                    "error": str(exc),
+                },
+            )
+            if not retrying:
+                return False
+            sleep_fn(2 ** (attempt - 1))
+    return False
+
+
+def _post_archive_checkpoints_request(
+    endpoint_url: str,
+    api_token: str,
+    machine_name: str,
+    *,
+    archive_name: str,
+    snapshot_keys: list[str],
+    timeout_seconds: int,
+) -> IngestionRequestResponse:
+    """POST one completed archive-checkpoint batch."""
+    body = json.dumps(
+        {
+            "machine_name": machine_name,
+            "archive_name": archive_name,
+            "snapshots": [
+                {
+                    "archive_month": key.split("/", 1)[0],
+                    "snapshot_name": key.split("/", 1)[1],
+                }
+                for key in snapshot_keys
+            ],
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint_url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_body = response.read().decode("utf-8")
+            return {
+                "status_code": response.status,
+                "body": json.loads(raw_body) if raw_body else {},
+            }
+    except urllib.error.HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        raise IngestionRequestError(
+            f"HTTP {exc.code}: {response_text}",
+            status_code=exc.code,
+            transient=_is_transient_status(exc.code),
+        ) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise IngestionRequestError(
+            f"Checkpoint request failed: {exc}",
             status_code=None,
             transient=True,
         ) from exc

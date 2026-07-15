@@ -342,8 +342,11 @@ Key table for `nersc-archive-ingestor-env`:
 | `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
 
 `OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
-`YYYY-MM` buckets. `nersc-archive-ingestor` ignores other top-level directories
-under that mount.
+`YYYY-MM` buckets containing immutable `performance_archive_<timestamp>`
+snapshots. The runner stores completed snapshot checkpoints in SimBoard's
+database, so no separate checkpoint file or persistent checkpoint volume is
+needed. `ARCHIVE_YEAR_START` is the earliest month considered; newly arriving
+snapshots in any eligible month are discovered automatically.
 
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
@@ -366,6 +369,26 @@ under that mount.
    - Confirm `nersc-archive-ingestor` runs daily at `0 12 * * *`.
    - Confirm unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events for both jobs.
+
+To force a full archive rescan, suspend `nersc-archive-ingestor` so it cannot
+recreate checkpoints during the reset. In Rancher, open a shell in the `db`
+container and run the following command after replacing the placeholders. Use
+the canonical machine name stored in SimBoard and the basename of
+`OLD_PERF_ARCHIVE_ROOT` as the archive name (for example, `OLD_PERF`):
+
+```bash
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
+DELETE FROM archive_scan_checkpoints AS checkpoint
+USING machines AS machine
+WHERE checkpoint.machine_id = machine.id
+   AND machine.name = '<machine-name>'
+   AND checkpoint.archive_name = '<archive-name>';
+SQL
+```
+
+Confirm the deleted row count, then resume or trigger the archive CronJob. The
+next run scans all snapshots in the configured year range; ingestion state
+still prevents already processed executions from being submitted again.
 
 #### Staging CronJob (`nersc-staging-ingestor`)
 

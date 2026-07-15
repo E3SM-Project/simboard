@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import Any, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from pydantic import ValidationError
 from sqlalchemy import func, or_, tuple_
 from sqlalchemy.dialects.postgresql import insert
@@ -16,12 +25,17 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
 from app.features.ingestion.models import (
+    ArchiveScanCheckpoint,
     ExecutionDiscoveryResult,
     Ingestion,
     IngestionSourceType,
 )
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.schemas import (
+    ArchiveCheckpointEntry,
+    ArchiveCheckpointListResponse,
+    ArchiveCheckpointsRequest,
+    ArchiveCheckpointsResponse,
     ExecutionDiscoveryResultEntry,
     ExecutionDiscoveryResultsRequest,
     ExecutionDiscoveryResultsResponse,
@@ -47,6 +61,100 @@ STATEFUL_INGESTION_SOURCE_TYPES = (
     IngestionSourceType.HPC_PATH,
     IngestionSourceType.HPC_UPLOAD,
 )
+
+
+def _require_ingestion_state_access(user: User) -> None:
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators and service accounts may manage ingestion state.",
+        )
+
+
+@router.get(
+    "/archive-checkpoints",
+    response_model=ArchiveCheckpointListResponse,
+)
+def get_archive_checkpoints(
+    machine_name: str,
+    archive_name: str,
+    archive_start: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    archive_end: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> ArchiveCheckpointListResponse:
+    """Return completed immutable archive snapshots."""
+    _require_ingestion_state_access(user)
+    machine = _resolve_request_machine(db, machine_name)
+    query = db.query(ArchiveScanCheckpoint).filter(
+        ArchiveScanCheckpoint.machine_id == machine.id,
+        ArchiveScanCheckpoint.archive_name == archive_name,
+    )
+
+    if archive_start is not None:
+        query = query.filter(ArchiveScanCheckpoint.archive_month >= archive_start)
+    if archive_end is not None:
+        query = query.filter(ArchiveScanCheckpoint.archive_month <= archive_end)
+
+    rows = query.order_by(
+        ArchiveScanCheckpoint.archive_month,
+        ArchiveScanCheckpoint.snapshot_name,
+    ).all()
+
+    return ArchiveCheckpointListResponse(
+        machine_name=machine.name,
+        archive_name=archive_name,
+        snapshots=[
+            ArchiveCheckpointEntry(
+                archive_month=row.archive_month,
+                snapshot_name=row.snapshot_name,
+            )
+            for row in rows
+        ],
+    )
+
+
+@router.post(
+    "/archive-checkpoints",
+    response_model=ArchiveCheckpointsResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def persist_archive_checkpoints(
+    payload: ArchiveCheckpointsRequest,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> ArchiveCheckpointsResponse:
+    """Idempotently record fully resolved immutable archive snapshots."""
+    _require_ingestion_state_access(user)
+    machine = _resolve_request_machine(db, payload.machine_name)
+    unique_snapshots = {
+        (snapshot.archive_month, snapshot.snapshot_name)
+        for snapshot in payload.snapshots
+    }
+
+    with transaction(db):
+        statement = (
+            insert(ArchiveScanCheckpoint)
+            .values(
+                [
+                    {
+                        "machine_id": machine.id,
+                        "archive_name": payload.archive_name,
+                        "archive_month": archive_month,
+                        "snapshot_name": snapshot_name,
+                    }
+                    for archive_month, snapshot_name in unique_snapshots
+                ]
+            )
+            .on_conflict_do_nothing(constraint="uq_archive_scan_checkpoint_identity")
+            .returning(ArchiveScanCheckpoint.id)
+        )
+        inserted_count = len(db.execute(statement).all())
+
+    return ArchiveCheckpointsResponse(
+        inserted_count=inserted_count,
+        existing_count=len(unique_snapshots) - inserted_count,
+    )
 
 
 @router.post(

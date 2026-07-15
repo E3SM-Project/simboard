@@ -6,6 +6,8 @@ from pydantic import ValidationError
 
 from app.features.ingestion.enums import IngestionSourceType
 from app.features.ingestion.schemas import (
+    ArchiveCheckpointEntry,
+    ArchiveCheckpointsRequest,
     IngestFromHpcUploadRequest,
     IngestFromPathRequest,
     IngestionRead,
@@ -15,6 +17,43 @@ from app.features.ingestion.schemas import (
 
 
 class TestIngestionSchemas:
+    def test_archive_checkpoints_request_strips_identity(self) -> None:
+        snapshot = ArchiveCheckpointEntry(
+            archive_month="2026-07",
+            snapshot_name="performance_archive_2026_07_15_12_00_00",
+        )
+
+        payload = ArchiveCheckpointsRequest(
+            machine_name=" perlmutter ",
+            archive_name=" OLD_PERF ",
+            snapshots=[snapshot],
+        )
+
+        assert payload.machine_name == "perlmutter"
+        assert payload.archive_name == "OLD_PERF"
+        assert payload.snapshots == [snapshot]
+
+    @pytest.mark.parametrize("field", ["machine_name", "archive_name"])
+    def test_archive_checkpoints_request_rejects_blank_identity(
+        self, field: str
+    ) -> None:
+        payload = {
+            "machine_name": "perlmutter",
+            "archive_name": "OLD_PERF",
+            "snapshots": [
+                {
+                    "archive_month": "2026-07",
+                    "snapshot_name": "performance_archive_2026_07_15_12_00_00",
+                }
+            ],
+        }
+        payload[field] = "   "
+
+        with pytest.raises(
+            ValidationError, match="Checkpoint identity must not be blank"
+        ):
+            ArchiveCheckpointsRequest.model_validate(payload)
+
     def test_ingest_archive_request_valid(self) -> None:
         payload = IngestFromPathRequest(
             archive_path="/tmp/archive.zip",

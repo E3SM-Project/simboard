@@ -27,9 +27,11 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    _build_archive_checkpoints_endpoint_url,
     _build_config_from_env,
     _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
+    _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _handle_dry_run,
     _handle_ingest_run,
@@ -37,8 +39,10 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _log_event,
     _log_startup_configuration,
     _normalized_api_base_url,
+    _persist_archive_checkpoints_with_retries,
     _persist_discovery_results_with_retries,
     _scan_archive,
+    _settled_archive_snapshot_keys,
 )
 
 
@@ -72,12 +76,13 @@ def main() -> int:
     return exit_code
 
 
-def _run_ingestor(
+def _run_ingestor(  # noqa: C901
     config: IngestorConfig,
     metadata_locator: Callable[[str], object] = _locate_metadata_files,
     sleep_fn: Callable[[float], None] = time.sleep,
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
     discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     if post_request_fn is None:
@@ -101,6 +106,25 @@ def _run_ingestor(
     if not config.api_token:
         _log_event("configuration_error", {"error": "SIMBOARD_API_TOKEN is required"})
         return 1
+
+    completed_snapshot_keys: set[str] = set()
+    if config.scan_mode == "archive":
+        try:
+            completed_snapshot_keys = _fetch_archive_checkpoints(
+                _build_archive_checkpoints_endpoint_url(config),
+                config.api_token,
+                config.machine_name,
+                config.archive_root.name,
+                archive_start=config.archive_year_start,
+                archive_end=config.archive_year_end,
+                timeout_seconds=config.request_timeout_seconds,
+            )
+        except IngestionRequestError as exc:
+            _log_event(
+                "archive_checkpoint_fetch_failed",
+                {"status_code": exc.status_code, "error": str(exc)},
+            )
+            return 1
 
     try:
         state = _fetch_ingestion_state(
@@ -127,11 +151,13 @@ def _run_ingestor(
             candidates,
             submission_qualified_case_count,
             discovery_stats,
+            snapshot_scan,
         ) = _scan_archive(
             config,
             state,
             metadata_locator=metadata_locator,
             discovery_results=new_discovery_results,
+            completed_snapshot_keys=completed_snapshot_keys,
         )
     except Exception as exc:
         _log_event(
@@ -189,7 +215,7 @@ def _run_ingestor(
     ):
         return 1
 
-    return _handle_ingest_run(
+    ingest_exit_code = _handle_ingest_run(
         candidates,
         scan_results,
         config,
@@ -200,6 +226,26 @@ def _run_ingestor(
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
     )
+    if config.scan_mode != "archive":
+        return ingest_exit_code
+
+    settled_snapshot_keys = _settled_archive_snapshot_keys(
+        snapshot_scan, state, new_discovery_results
+    )
+    if not _persist_archive_checkpoints_with_retries(
+        settled_snapshot_keys,
+        _build_archive_checkpoints_endpoint_url(config),
+        config.api_token,
+        config.machine_name,
+        snapshot_scan.archive_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=checkpoint_post_request_fn,
+    ):
+        return 1
+
+    return ingest_exit_code
 
 
 def _build_endpoint_url(config: IngestorConfig) -> str:

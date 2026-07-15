@@ -31,6 +31,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _build_walk_dir_filter,
     _case_state_processed_ids,
     _discover_case_executions,
+    _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _fresh_state,
     _ingest_case_with_retries,
@@ -59,6 +60,16 @@ def _stub_remote_state(monkeypatch) -> None:
     monkeypatch.setattr(
         ingestor_module,
         "_post_discovery_results_request",
+        lambda *args, **kwargs: {"status_code": 201, "body": {}},
+    )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *args, **kwargs: set(),
+    )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_post_archive_checkpoints_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
 
@@ -2536,6 +2547,34 @@ def test_fetch_ingestion_state_handles_invalid_json(monkeypatch) -> None:
         )
 
 
+@pytest.mark.parametrize("payload", [[], {}, {"snapshots": "bad"}])
+def test_fetch_archive_checkpoints_rejects_invalid_payload(
+    monkeypatch,
+    payload: object,
+) -> None:
+    monkeypatch.setattr(
+        ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(200, json.dumps(payload)),
+    )
+
+    with pytest.raises(
+        IngestionRequestError,
+        match="Invalid checkpoint response payload.",
+    ) as exc_info:
+        _fetch_archive_checkpoints(
+            "http://backend:8000/api/v1/ingestions/archive-checkpoints",
+            "token",
+            "pm",
+            "OLD_PERF",
+            archive_start=None,
+            archive_end=None,
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.transient is False
+
+
 def test_record_successful_case_replaces_non_dict_cases() -> None:
     state: dict[str, Any] = {"cases": []}
     candidate = IngestionCandidate(
@@ -3412,3 +3451,213 @@ def test_log_event_uses_event_specific_field_order(monkeypatch) -> None:
         "case=case_a execution_id=100.1-1 decision=rejected "
         "reason=incomplete error_count=2 detail=missing zzz=tail"
     ]
+
+
+def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    first_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    second_key = "2025-01/performance_archive_2025_01_02_00_00_00"
+    for key, execution_id in ((first_key, "100.1-1"), (second_key, "101.1-1")):
+        (archive_root / key / "COMPLETED" / "case-a" / execution_id).mkdir(parents=True)
+    visited: list[str] = []
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+    )
+
+    results = ingestor_module._scan_archive(
+        config,
+        _fresh_state(),
+        metadata_locator=lambda path: visited.append(path),
+        completed_snapshot_keys={first_key},
+    )
+
+    assert len(results) == 5
+    assert visited == [
+        str(archive_root / second_key / "COMPLETED" / "case-a" / "101.1-1")
+    ]
+    assert results[4].eligible_keys == {first_key, second_key}
+    assert results[4].completed_keys == {first_key}
+
+
+def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    snapshot_scan = ingestor_module.ArchiveSnapshotScan(
+        archive_name="OLD_PERF",
+        eligible_keys={snapshot_key},
+        references_by_key={
+            snapshot_key: {
+                ("case-a", "100.1-1"),
+                ("case-a", "101.1-1"),
+                ("case-a", "102.1-1"),
+            }
+        },
+    )
+    state = _fresh_state()
+    state["cases"] = {
+        "case-a": {"processed_execution_ids": ["100.1-1"]},
+    }
+    results = [
+        ingestor_module.ExecutionDiscoveryResult(
+            case_identity="case-a",
+            execution_id="101.1-1",
+            outcome="rejected_invalid",
+        ),
+        ingestor_module.ExecutionDiscoveryResult(
+            case_identity="case-a",
+            execution_id="102.1-1",
+            outcome="accepted",
+        ),
+    ]
+
+    assert (
+        ingestor_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        == set()
+    )
+
+    state["cases"]["case-a"]["processed_execution_ids"].append("102.1-1")
+    assert ingestor_module._settled_archive_snapshot_keys(
+        snapshot_scan, state, results
+    ) == {snapshot_key}
+
+
+@pytest.mark.parametrize(
+    "results",
+    [
+        [
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case-a",
+                execution_id="100.1-1",
+                outcome="accepted",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case-a",
+                execution_id="100.1-1",
+                outcome="rejected_invalid",
+            ),
+        ],
+        [
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case-a",
+                execution_id="100.1-1",
+                outcome="rejected_invalid",
+            ),
+            ingestor_module.ExecutionDiscoveryResult(
+                case_identity="case-a",
+                execution_id="100.1-1",
+                outcome="accepted",
+            ),
+        ],
+    ],
+)
+def test_snapshot_settlement_uses_order_independent_discovery_precedence(
+    results: list[ingestor_module.ExecutionDiscoveryResult],
+) -> None:
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    snapshot_scan = ingestor_module.ArchiveSnapshotScan(
+        archive_name="OLD_PERF",
+        eligible_keys={snapshot_key},
+        references_by_key={snapshot_key: {("case-a", "100.1-1")}},
+    )
+
+    assert (
+        ingestor_module._settled_archive_snapshot_keys(
+            snapshot_scan,
+            _fresh_state(),
+            results,
+        )
+        == set()
+    )
+
+
+def test_archive_traversal_error_prevents_snapshot_settlement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    (archive_root / snapshot_key).mkdir(parents=True)
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+    )
+
+    def failing_walk(path, *, onerror=None):
+        assert path == archive_root
+        assert onerror is not None
+        onerror(PermissionError("permission denied"))
+        return iter(())
+
+    monkeypatch.setattr(ingestor_module.os, "walk", failing_walk)
+    checkpoint_calls: list[dict[str, Any]] = []
+
+    def record_checkpoint(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        checkpoint_calls.append(kwargs)
+        return {"status_code": 201, "body": {}}
+
+    snapshot_scan = ingestor_module._scan_archive(
+        config,
+        _fresh_state(),
+        metadata_locator=lambda *_: {},
+    )[4]
+
+    assert snapshot_scan.traversal_complete is False
+    assert (
+        ingestor_module._settled_archive_snapshot_keys(
+            snapshot_scan,
+            _fresh_state(),
+            [],
+        )
+        == set()
+    )
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=lambda *_: {},
+            checkpoint_post_request_fn=record_checkpoint,
+        )
+        == 0
+    )
+    assert checkpoint_calls == []
+
+
+def test_snapshot_enumeration_finds_late_snapshot_in_old_month(tmp_path: Path) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    old_key = "2024-01/performance_archive_2024_01_01_00_00_00"
+    late_key = "2024-01/performance_archive_2024_01_02_00_00_00"
+    (archive_root / old_key).mkdir(parents=True)
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2024-01",
+    )
+    assert ingestor_module._enumerate_archive_snapshot_keys(config) == {old_key}
+
+    (archive_root / late_key).mkdir(parents=True)
+
+    assert ingestor_module._enumerate_archive_snapshot_keys(config) - {old_key} == {
+        late_key
+    }

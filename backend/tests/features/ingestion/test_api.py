@@ -29,6 +29,7 @@ from app.features.ingestion.api import (
     _validate_upload_file,
     ingest_from_hpc_upload,
     ingest_from_upload,
+    persist_archive_checkpoints,
     persist_execution_discovery_results,
 )
 from app.features.ingestion.enums import (
@@ -37,10 +38,15 @@ from app.features.ingestion.enums import (
     IngestionStatus,
 )
 from app.features.ingestion.ingest import IngestArchiveResult
-from app.features.ingestion.models import ExecutionDiscoveryResult, Ingestion
+from app.features.ingestion.models import (
+    ArchiveScanCheckpoint,
+    ExecutionDiscoveryResult,
+    Ingestion,
+)
 from app.features.ingestion.parsers.parser import ArchiveValidationError
 from app.features.ingestion.parsers.types import ParsedSimulation
 from app.features.ingestion.schemas import (
+    ArchiveCheckpointsRequest,
     ExecutionDiscoveryResultsRequest,
     IngestionStateResponse,
 )
@@ -506,6 +512,71 @@ class TestExecutionDiscoveryResultsEndpoint:
         )
 
         assert state.discovery_results == {}
+
+
+class TestArchiveCheckpointsEndpoint:
+    def test_batch_is_idempotent_and_get_is_range_filtered(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        endpoint = f"{API_BASE}/ingestions/archive-checkpoints"
+        payload = {
+            "machine_name": machine.name,
+            "archive_name": "OLD_PERF",
+            "snapshots": [
+                {
+                    "archive_month": "2025-01",
+                    "snapshot_name": "performance_archive_2025_01_10_00_00_00",
+                },
+                {
+                    "archive_month": "2025-02",
+                    "snapshot_name": "performance_archive_2025_02_10_00_00_00",
+                },
+            ],
+        }
+
+        first = client.post(endpoint, json=payload)
+        second = client.post(endpoint, json=payload)
+        response = client.get(
+            endpoint,
+            params={
+                "machine_name": machine.name,
+                "archive_name": "OLD_PERF",
+                "archive_start": "2025-02",
+                "archive_end": "2025-02",
+            },
+        )
+
+        assert first.status_code == 201
+        assert first.json() == {"inserted_count": 2, "existing_count": 0}
+        assert second.json() == {"inserted_count": 0, "existing_count": 2}
+        assert response.status_code == 200
+        assert response.json()["snapshots"] == payload["snapshots"][1:]
+
+    def test_non_admin_cannot_persist(self, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+        request = ArchiveCheckpointsRequest(
+            machine_name=machine.name,
+            archive_name="OLD_PERF",
+            snapshots=[
+                {
+                    "archive_month": "2025-01",
+                    "snapshot_name": "performance_archive_2025_01_10_00_00_00",
+                }
+            ],
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            persist_archive_checkpoints(
+                request,
+                db=db,
+                user=fake_non_admin_user(),
+            )
+
+        assert exc_info.value.status_code == 403
+        assert db.query(ArchiveScanCheckpoint).count() == 0
 
 
 class TestGetIngestionStateEndpoint:

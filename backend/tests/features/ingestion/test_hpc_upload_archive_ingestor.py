@@ -36,6 +36,16 @@ def _stub_discovery_result_persistence(monkeypatch) -> None:
         "_post_discovery_results_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *args, **kwargs: set(),
+    )
+    monkeypatch.setattr(
+        nersc_ingestor_module,
+        "_post_archive_checkpoints_request",
+        lambda *args, **kwargs: {"status_code": 201, "body": {}},
+    )
 
 
 class _FakeHttpResponse:
