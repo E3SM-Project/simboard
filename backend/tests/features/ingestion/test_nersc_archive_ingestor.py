@@ -2149,7 +2149,7 @@ def test_module_main_guard_exits_via_system_exit_on_configuration_error(
 def test_generic_hpc_module_main_guard_delegates_to_ingestor(monkeypatch) -> None:
     script_path = (
         Path(__file__).resolve().parents[3]
-        / "app/scripts/ingestion/hpc_archive_ingestor.py"
+        / "app/scripts/ingestion/hpc_upload_archive_ingestor.py"
     )
     monkeypatch.setenv("MAX_ATTEMPTS", "0")
     monkeypatch.setattr(logging.Logger, "info", lambda *args, **kwargs: None)

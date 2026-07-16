@@ -135,12 +135,16 @@ belongs in Python, not in shell wrappers.
 Jenkins workflow. It sets Chrysalis defaults and requires caller-provided
 `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`.
 
-Default Chrysalis archive root:
+Default Chrysalis staging root:
 
 - `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`
 
-The wrapper defaults to `DRY_RUN=true`; set `DRY_RUN=false` only after validating
-archive access, token storage, network egress, and candidate counts.
+The wrapper defaults to `SCAN_MODE=staging` and `DRY_RUN=true`. When
+`SCAN_MODE=archive`, it uses
+`/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF` and defaults
+`ARCHIVE_YEAR_START=2025-01`; callers may override that lower bound. Set
+`DRY_RUN=false` only after validating archive access, token storage, network
+egress, and candidate counts.
 
 Compy, Aurora, and Frontier adapters are intentionally deferred until accounts
 or equivalent native-runner access exists for those sites.
@@ -181,7 +185,8 @@ Configuration surface (via env vars):
 
 Helper wrapper:
 
-- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=archive`, defaults to `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
+- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=staging` and `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
+- When the NERSC wrapper runs with `SCAN_MODE=archive`, it defaults `ARCHIVE_YEAR_START=2025-01`; callers may override that lower bound. `ARCHIVE_YEAR_END` remains unset unless the caller provides it.
 - Override `SCAN_MODE`, `DRY_RUN`, or any other supported env var in the caller or cron entry when you need a different schedule or behavior.
 
 Archive notes:
@@ -189,7 +194,7 @@ Archive notes:
 - Archive mode traverses only top-level `YYYY-MM` directories under `OLD_PERF_ARCHIVE_ROOT`. Other top-level directories are ignored.
 - Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
-- `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
+- Direct Python entrypoints leave `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` unset. The NERSC and Chrysalis site wrappers default `ARCHIVE_YEAR_START=2025-01` in archive mode and leave `ARCHIVE_YEAR_END` unset. Override either bound for a differently scoped archive scan.
 - `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
 
 ## HPC Upload Archive Ingestor
