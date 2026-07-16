@@ -1,9 +1,5 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -12,13 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -33,14 +22,12 @@ import {
   formatCaseHashLabel,
   MISSING_CASE_HASH_LABEL,
 } from '@/features/simulations/caseUtils';
+import { SearchableFilterSelect } from '@/features/simulations/components/SearchableFilterSelect';
 import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
 import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
-import type {
-  CaseListItemOut,
-  SimulationListItemOut,
-} from '@/types';
+import type { CaseListItemOut, SimulationListItemOut } from '@/types';
 
 type ActiveFilterKey =
   | 'caseName'
@@ -152,7 +139,12 @@ export const CasesPage = () => {
     setExpandedSimulationPage(1);
   }, [expandedCaseId, simulationFilters]);
   const primarySort = sorting[0];
-  const { data: cases, page: casePage, loading, error } = useCases({
+  const {
+    data: cases,
+    page: casePage,
+    loading,
+    error,
+  } = useCases({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     search: debouncedCaseName || undefined,
@@ -169,8 +161,6 @@ export const CasesPage = () => {
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
 
-  const caseGroups = filterOptions?.caseGroups ?? [];
-
   const simulationsByCaseId = useMemo(() => {
     const caseMap = new Map<string, SimulationListItemOut[]>();
     for (const simulation of simulations) {
@@ -182,14 +172,50 @@ export const CasesPage = () => {
     return caseMap;
   }, [simulations]);
 
-  const hpcUsernames = filterOptions?.hpcUsernames ?? [];
-  const machineOptions = useMemo(() => filterOptions?.machines ?? [], [filterOptions?.machines]);
-  const creatorOptions = useMemo(() => filterOptions?.creators ?? [], [filterOptions?.creators]);
-  const campaigns = filterOptions?.campaigns ?? [];
-  const simulationTypes = filterOptions?.simulationTypes ?? [];
-  const initializationTypes = filterOptions?.initializationTypes ?? [];
-  const compilers = filterOptions?.compilers ?? [];
-  const gitTags = filterOptions?.gitTags ?? [];
+  const {
+    caseGroupOptions,
+    hpcUsernameOptions,
+    machineOptions,
+    creatorOptions,
+    campaignOptions,
+    simulationTypeOptions,
+    initializationTypeOptions,
+    compilerOptions,
+    gitTagOptions,
+  } = useMemo(
+    () => ({
+      caseGroupOptions: (filterOptions?.caseGroups ?? []).map((group) => ({
+        value: group,
+        label: group,
+      })),
+      hpcUsernameOptions: (filterOptions?.hpcUsernames ?? []).map((username) => ({
+        value: username,
+        label: username,
+      })),
+      machineOptions: filterOptions?.machines ?? [],
+      creatorOptions: filterOptions?.creators ?? [],
+      campaignOptions: (filterOptions?.campaigns ?? []).map((campaign) => ({
+        value: campaign,
+        label: campaign,
+      })),
+      simulationTypeOptions: (filterOptions?.simulationTypes ?? []).map((simulationType) => ({
+        value: simulationType,
+        label: simulationType,
+      })),
+      initializationTypeOptions: (filterOptions?.initializationTypes ?? []).map(
+        (initializationType) => ({ value: initializationType, label: initializationType }),
+      ),
+      compilerOptions: (filterOptions?.compilers ?? []).map((compiler) => ({
+        value: compiler,
+        label: compiler,
+      })),
+      gitTagOptions: (filterOptions?.gitTags ?? []).map((gitTag) => ({
+        value: gitTag,
+        label: gitTag,
+      })),
+    }),
+    [filterOptions],
+  );
 
   const hasActiveSimulationFilters = useMemo(
     () => Object.values(simulationFilters).some(Boolean),
@@ -319,11 +345,7 @@ export const CasesPage = () => {
       const matchesGroup = !caseGroupFilter || caseRecord.caseGroup === caseGroupFilter;
       return matchesName && matchesGroup;
     });
-  }, [
-    caseGroupFilter,
-    cases,
-    caseNameFilter,
-  ]);
+  }, [caseGroupFilter, cases, caseNameFilter]);
 
   const visibleRunCount = useMemo(
     () => filteredCases.reduce((count, caseRecord) => count + caseRecord.simulationCount, 0),
@@ -381,17 +403,13 @@ export const CasesPage = () => {
         id: 'hpcUsers',
         header: 'HPC Users',
         accessorFn: (caseRecord) => caseRecord.hpcUsername,
-        cell: ({ row }) => (
-          <TableCellText value={row.original.hpcUsername} lines={1} />
-        ),
+        cell: ({ row }) => <TableCellText value={row.original.hpcUsername} lines={1} />,
       },
       {
         id: 'machines',
         header: 'Machines',
         accessorFn: (caseRecord) => caseRecord.machineName,
-        cell: ({ row }) => (
-          <TableCellText value={row.original.machineName} lines={1} />
-        ),
+        cell: ({ row }) => <TableCellText value={row.original.machineName} lines={1} />,
       },
       {
         id: 'simulationCount',
@@ -456,19 +474,13 @@ export const CasesPage = () => {
       <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
         {label}
       </label>
-      <Select value={value || '__all__'} onValueChange={onValueChange}>
-        <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white shadow-none">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__all__">{placeholder}</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SearchableFilterSelect
+        label={label}
+        value={value}
+        placeholder={placeholder}
+        options={options}
+        onValueChange={onValueChange}
+      />
     </div>
   );
 
@@ -486,8 +498,8 @@ export const CasesPage = () => {
             <p className="text-sm font-medium">Simulation Summaries</p>
             <p className="text-xs text-muted-foreground">
               {hasActiveSimulationFilters
-                  ? `${expandedSimulationTotal} runs match the current filters.`
-                  : 'Open the case page to organize runs by Case Hash and launch compare.'}
+                ? `${expandedSimulationTotal} runs match the current filters.`
+                : 'Open the case page to organize runs by Case Hash and launch compare.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
@@ -617,9 +629,7 @@ export const CasesPage = () => {
                 <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
                   {visibleRunCount}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  total runs across visible cases
-                </p>
+                <p className="mt-1 text-xs text-slate-500">total runs across visible cases</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
@@ -663,12 +673,8 @@ export const CasesPage = () => {
                     label: 'HPC Username',
                     value: simulationFilters.hpcUsername,
                     placeholder: 'All HPC usernames',
-                    options: hpcUsernames.map((username) => ({
-                      value: username,
-                      label: username,
-                    })),
-                    onValueChange: (value) =>
-                      setSimulationFilter('hpcUsername', value === '__all__' ? '' : value),
+                    options: hpcUsernameOptions,
+                    onValueChange: (value) => setSimulationFilter('hpcUsername', value),
                   })}
 
                   {renderSelectField({
@@ -676,8 +682,7 @@ export const CasesPage = () => {
                     value: simulationFilters.machineId,
                     placeholder: 'All machines',
                     options: machineOptions,
-                    onValueChange: (value) =>
-                      setSimulationFilter('machineId', value === '__all__' ? '' : value),
+                    onValueChange: (value) => setSimulationFilter('machineId', value),
                   })}
                 </div>
 
@@ -727,64 +732,44 @@ export const CasesPage = () => {
                           label: 'Campaign',
                           value: simulationFilters.campaign,
                           placeholder: 'All campaigns',
-                          options: campaigns.map((campaign) => ({
-                            value: campaign,
-                            label: campaign,
-                          })),
-                          onValueChange: (value) =>
-                            setSimulationFilter('campaign', value === '__all__' ? '' : value),
+                          options: campaignOptions,
+                          onValueChange: (value) => setSimulationFilter('campaign', value),
                         })}
                         {renderSelectField({
                           label: 'Type',
                           value: simulationFilters.simulationType,
                           placeholder: 'All types',
-                          options: simulationTypes.map((simulationType) => ({
-                            value: simulationType,
-                            label: simulationType,
-                          })),
-                          onValueChange: (value) =>
-                            setSimulationFilter('simulationType', value === '__all__' ? '' : value),
+                          options: simulationTypeOptions,
+                          onValueChange: (value) => setSimulationFilter('simulationType', value),
                         })}
                         {renderSelectField({
                           label: 'Initialization',
                           value: simulationFilters.initializationType,
                           placeholder: 'All init types',
-                          options: initializationTypes.map((initializationType) => ({
-                            value: initializationType,
-                            label: initializationType,
-                          })),
+                          options: initializationTypeOptions,
                           onValueChange: (value) =>
-                            setSimulationFilter(
-                              'initializationType',
-                              value === '__all__' ? '' : value,
-                            ),
+                            setSimulationFilter('initializationType', value),
                         })}
                         {renderSelectField({
                           label: 'Compiler',
                           value: simulationFilters.compiler,
                           placeholder: 'All compilers',
-                          options: compilers.map((compiler) => ({
-                            value: compiler,
-                            label: compiler,
-                          })),
-                          onValueChange: (value) =>
-                            setSimulationFilter('compiler', value === '__all__' ? '' : value),
+                          options: compilerOptions,
+                          onValueChange: (value) => setSimulationFilter('compiler', value),
                         })}
                         {renderSelectField({
                           label: 'Tag',
                           value: simulationFilters.gitTag,
                           placeholder: 'All tags',
-                          options: gitTags.map((gitTag) => ({ value: gitTag, label: gitTag })),
-                          onValueChange: (value) =>
-                            setSimulationFilter('gitTag', value === '__all__' ? '' : value),
+                          options: gitTagOptions,
+                          onValueChange: (value) => setSimulationFilter('gitTag', value),
                         })}
                         {renderSelectField({
                           label: 'Creator',
                           value: simulationFilters.createdBy,
                           placeholder: 'All creators',
                           options: creatorOptions,
-                          onValueChange: (value) =>
-                            setSimulationFilter('createdBy', value === '__all__' ? '' : value),
+                          onValueChange: (value) => setSimulationFilter('createdBy', value),
                         })}
                       </div>
                     </div>
@@ -801,9 +786,9 @@ export const CasesPage = () => {
                           label: 'Case group',
                           value: caseGroupFilter,
                           placeholder: 'All case groups',
-                          options: caseGroups.map((group) => ({ value: group, label: group })),
+                          options: caseGroupOptions,
                           onValueChange: (value) => {
-                            setCaseGroupFilter(value === '__all__' ? '' : value);
+                            setCaseGroupFilter(value);
                             table.setPageIndex(0);
                           },
                         })}
