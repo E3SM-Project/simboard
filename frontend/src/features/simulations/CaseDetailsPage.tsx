@@ -124,6 +124,9 @@ const formatGroupSimulationWindow = (simulations: SimulationSummaryOut[]) => {
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
+const areStringArraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 const RESOURCE_GROUP_LABELS: Record<ExternalLinkOut['kind'], string> = {
   diagnostic: 'Diagnostics',
   performance: 'Performance',
@@ -549,12 +552,20 @@ export const CaseDetailsPage = ({
   }, [linkRows.length, saveError]);
 
   useEffect(() => {
-    setExpandedGroupKeys(getDefaultExpandedGroupKeys(sortedSimulationGroups));
+    const defaultExpandedGroupKeys = getDefaultExpandedGroupKeys(sortedSimulationGroups);
+    setExpandedGroupKeys((currentKeys) =>
+      areStringArraysEqual(currentKeys, defaultExpandedGroupKeys)
+        ? currentKeys
+        : defaultExpandedGroupKeys,
+    );
   }, [sortedSimulationGroups]);
 
   useEffect(() => {
     const visibleGroupKeys = new Set(filteredSimulationGroups.map((group) => group.key));
-    setExpandedGroupKeys((currentKeys) => currentKeys.filter((key) => visibleGroupKeys.has(key)));
+    setExpandedGroupKeys((currentKeys) => {
+      const nextKeys = currentKeys.filter((key) => visibleGroupKeys.has(key));
+      return areStringArraysEqual(currentKeys, nextKeys) ? currentKeys : nextKeys;
+    });
   }, [filteredSimulationGroups]);
 
   useEffect(() => {

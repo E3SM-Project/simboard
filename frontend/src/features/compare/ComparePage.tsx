@@ -76,6 +76,9 @@ interface CompareSummaryCard {
   uniqueValueCount: number;
 }
 
+const arraysEqual = <T,>(left: T[], right: T[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 export const CompareWorkspace = ({
   backLabel = 'Back to Browse',
   contextNotice,
@@ -121,6 +124,7 @@ export const CompareWorkspace = ({
     }
   });
   const dragCol = useRef<number | null>(null);
+  const previousSelectedSimulationIds = useRef(selectedSimulationIds);
   const [diffsEnabled, setDiffsEnabled] = useState(false);
   const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
@@ -396,7 +400,10 @@ export const CompareWorkspace = ({
 
   // -------------------- Effects --------------------
   useEffect(() => {
-    setHidden((prev) => prev.filter((id) => selectedSimulationIds.includes(id)));
+    setHidden((prev) => {
+      const nextHidden = prev.filter((id) => selectedSimulationIds.includes(id));
+      return arraysEqual(prev, nextHidden) ? prev : nextHidden;
+    });
   }, [selectedSimulationIds]);
 
   useEffect(() => {
@@ -404,12 +411,16 @@ export const CompareWorkspace = ({
   }, [hidden, hiddenStorageKey]);
 
   useEffect(() => {
-    setHeaders(
-      selectedSimulationIds.map(
-        (id) => selectedSimulations.find((s) => s.id === id)?.executionId || id,
-      ),
+    const nextHeaders = selectedSimulationIds.map(
+      (id) => selectedSimulations.find((s) => s.id === id)?.executionId || id,
     );
-    setOrder(selectedSimulationIds.map((_, i) => i));
+
+    setHeaders((prev) => (arraysEqual(prev, nextHeaders) ? prev : nextHeaders));
+
+    if (!arraysEqual(previousSelectedSimulationIds.current, selectedSimulationIds)) {
+      setOrder(selectedSimulationIds.map((_, i) => i));
+      previousSelectedSimulationIds.current = selectedSimulationIds;
+    }
   }, [selectedSimulationIds, selectedSimulations]);
 
   useEffect(() => {
