@@ -1,20 +1,32 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
-# Thin SimBoard entrypoint for the existing Chrysalis Jenkins workflow.
-# Keep site-specific setup here; keep ingestion logic in hpc_upload_archive_ingestor.py.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(cd -- "${SCRIPT_DIR}/../../../../" && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-${BACKEND_DIR}/.venv/bin/python}"
 
-: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL is required}"
-: "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN is required}"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
+  echo "Run 'make install' from the repository root to create it." >&2
+  exit 1
+fi
+
+: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set before running this script.}"
+: "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set before running this script.}"
 
 export MACHINE_NAME="${MACHINE_NAME:-chrysalis}"
-export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/performance_archive}"
-export STATE_PATH="${STATE_PATH:-${PERF_ARCHIVE_ROOT}/../simboard-ingestion-state.json}"
+export SCAN_MODE="${SCAN_MODE:-staging}"
 export DRY_RUN="${DRY_RUN:-true}"
+export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/performance_archive}"
+export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_root="$(cd "${script_dir}/../../../.." && pwd)"
-python_bin="${PYTHON_BIN:-python}"
+if [[ "${SCAN_MODE}" == "archive" ]]; then
+  export ARCHIVE_YEAR_START="${ARCHIVE_YEAR_START:-2025-01}"
+elif [[ "${SCAN_MODE}" != "staging" ]]; then
+  echo "SCAN_MODE must be either 'staging' or 'archive'." >&2
+  exit 1
+fi
 
-cd "${backend_root}"
-exec "${python_bin}" -m app.scripts.ingestion.hpc_upload_archive_ingestor
+cd "${BACKEND_DIR}"
+exec "${PYTHON_BIN}" -m app.scripts.ingestion.hpc_upload_archive_ingestor
