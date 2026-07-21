@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -180,8 +180,9 @@ def test_lcrc_migration_preserves_unrelated_existing_site_relationships() -> Non
 
         command.upgrade(alembic_config, "head")
         with engine.connect() as connection:
-            upgraded_sites = dict(
-                connection.execute(
+            upgraded_sites: dict[str, UUID] = {
+                row[0]: row[1]
+                for row in connection.execute(
                     text(
                         """
                         SELECT machines.name, machines.site_id
@@ -190,7 +191,7 @@ def test_lcrc_migration_preserves_unrelated_existing_site_relationships() -> Non
                         """
                     )
                 ).all()
-            )
+            }
         assert upgraded_sites == {
             "chrysalis": site_id,
             "unrelated-lcrc-machine": site_id,
@@ -198,8 +199,9 @@ def test_lcrc_migration_preserves_unrelated_existing_site_relationships() -> Non
 
         command.downgrade(alembic_config, "20260721_000000")
         with engine.connect() as connection:
-            downgraded_sites = dict(
-                connection.execute(
+            downgraded_sites: dict[str, str] = {
+                row[0]: row[1]
+                for row in connection.execute(
                     text(
                         """
                         SELECT machines.name, sites.name
@@ -209,7 +211,7 @@ def test_lcrc_migration_preserves_unrelated_existing_site_relationships() -> Non
                         """
                     )
                 ).all()
-            )
+            }
         assert downgraded_sites == {
             "chrysalis": "ANL (LCRC)",
             "unrelated-lcrc-machine": "LCRC",
