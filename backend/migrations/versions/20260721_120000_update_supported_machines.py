@@ -11,7 +11,6 @@ from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision: str = "20260721_120000"
 down_revision: Union[str, Sequence[str], None] = "20260721_000000"
@@ -77,20 +76,20 @@ def upgrade() -> None:
     connection = op.get_bind()
     nersc_site_id = _get_or_create_site_id(connection, "NERSC")
     now = datetime.now(timezone.utc)
-    machines = sa.table(
-        "machines",
-        sa.column("id", postgresql.UUID(as_uuid=True)),
-        sa.column("name", sa.String(length=200)),
-        sa.column("site_id", postgresql.UUID(as_uuid=True)),
-        sa.column("architecture", sa.String(length=100)),
-        sa.column("scheduler", sa.String(length=100)),
-        sa.column("gpu", sa.Boolean()),
-        sa.column("notes", sa.Text()),
-        sa.column("created_at", sa.DateTime(timezone=True)),
-        sa.column("updated_at", sa.DateTime(timezone=True)),
-    )
-    op.bulk_insert(
-        machines,
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO machines (
+                id, name, site_id, architecture, scheduler, gpu, notes,
+                created_at, updated_at
+            )
+            VALUES (
+                :id, :name, :site_id, :architecture, :scheduler, :gpu, :notes,
+                :created_at, :updated_at
+            )
+            ON CONFLICT ((lower(name))) DO NOTHING
+            """
+        ),
         [
             {
                 "id": uuid4(),

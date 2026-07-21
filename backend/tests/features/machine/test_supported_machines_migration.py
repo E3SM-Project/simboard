@@ -103,6 +103,53 @@ def test_upgrade_refuses_to_remove_referenced_anvil() -> None:
         command.upgrade(alembic_config, "head")
 
 
+def test_upgrade_tolerates_existing_supported_machine() -> None:
+    alembic_config = Config(ALEMBIC_INI_PATH)
+    alembic_config.set_main_option("sqlalchemy.url", TEST_DB_URL)
+    machine_id = uuid4()
+
+    command.downgrade(alembic_config, "20260721_000000")
+    try:
+        with engine.begin() as connection:
+            nersc_site_id = connection.execute(
+                text("SELECT id FROM sites WHERE name = 'NERSC'")
+            ).scalar_one()
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO machines (
+                        id, name, site_id, architecture, scheduler, gpu
+                    )
+                    VALUES (
+                        :id, 'muller', :site_id, 'existing', 'slurm', true
+                    )
+                    """
+                ),
+                {"id": machine_id, "site_id": nersc_site_id},
+            )
+
+        command.upgrade(alembic_config, "head")
+
+        with engine.connect() as connection:
+            existing_machine = connection.execute(
+                text(
+                    """
+                    SELECT id, architecture
+                    FROM machines
+                    WHERE lower(name) = 'muller'
+                    """
+                )
+            ).one()
+        assert existing_machine == (machine_id, "existing")
+    finally:
+        command.downgrade(alembic_config, "20260721_000000")
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM machines WHERE id = :id"), {"id": machine_id}
+            )
+        command.upgrade(alembic_config, "head")
+
+
 def test_lcrc_migration_preserves_unrelated_existing_site_relationships() -> None:
     alembic_config = Config(ALEMBIC_INI_PATH)
     alembic_config.set_main_option("sqlalchemy.url", TEST_DB_URL)
