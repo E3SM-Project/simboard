@@ -167,6 +167,33 @@ def _create_simulation(
 
 
 class TestSimulationModelCreateAllSchema:
+    def test_create_all_schema_rejects_invalid_compute_type(
+        self, simulation_create_all_db: Session
+    ) -> None:
+        user, machine, ingestion = _create_dependencies(simulation_create_all_db)
+        case = _create_case(simulation_create_all_db, machine=machine)
+        simulation = _create_simulation(
+            simulation_create_all_db,
+            case_id=case.id,
+            ingestion_id=ingestion.id,
+            user_id=user.id,
+            execution_id="invalid-compute-type",
+        )
+        with pytest.raises(IntegrityError):
+            simulation_create_all_db.execute(
+                text(
+                    """
+                    UPDATE simulations
+                    SET compute_type = 'tpu'
+                    WHERE id = :simulation_id
+                    """
+                ),
+                {"simulation_id": simulation.id},
+            )
+            simulation_create_all_db.commit()
+
+        simulation_create_all_db.rollback()
+
     def test_create_all_schema_enforces_case_scoped_execution_uniqueness(
         self, simulation_create_all_db: Session
     ) -> None:

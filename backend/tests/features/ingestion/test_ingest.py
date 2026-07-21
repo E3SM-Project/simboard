@@ -544,13 +544,28 @@ class TestIngestArchive:
         assert ingest_result.errors[0]["error_type"] == "LookupError"
         assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
 
-    @pytest.mark.parametrize("machine_alias", ["pm", "pm-cpu", "pm-gpu"])
-    def test_machine_aliases_resolve_to_perlmutter(
-        self, db: Session, machine_alias: str
+    @pytest.mark.parametrize(
+        ("machine_alias", "canonical_name", "compute_type"),
+        [
+            ("pm", "perlmutter", None),
+            ("pm-cpu", "perlmutter", "cpu"),
+            ("pm-gpu", "perlmutter", "gpu"),
+            ("muller-cpu", "muller", "cpu"),
+            ("muller-gpu", "muller", "gpu"),
+            ("alvarez-cpu", "alvarez", "cpu"),
+            ("alvarez-gpu", "alvarez", "gpu"),
+        ],
+    )
+    def test_machine_aliases_resolve_and_preserve_compute_type(
+        self,
+        db: Session,
+        machine_alias: str,
+        canonical_name: str,
+        compute_type: str | None,
     ) -> None:
-        machine = db.query(Machine).filter(Machine.name == "perlmutter").first()
+        machine = db.query(Machine).filter(Machine.name == canonical_name).first()
         if machine is None:
-            machine = self._create_machine(db, "perlmutter")
+            machine = self._create_machine(db, canonical_name)
 
         mock_simulations = {
             "/path/to/1081175.251218-200935": {
@@ -588,6 +603,7 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.simulations) == 1
+        assert ingest_result.simulations[0].compute_type == compute_type
         resolved_case = (
             db.query(Case).filter(Case.id == ingest_result.simulations[0].case_id).one()
         )

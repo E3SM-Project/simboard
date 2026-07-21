@@ -76,6 +76,7 @@ class TestSimulationCreateSchema:
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
+            "computeType": "gpu",
             "notesMarkdown": "Some notes",
             "knownIssues": "No known issues",
             "gitBranch": "main",
@@ -113,6 +114,22 @@ class TestSimulationCreateSchema:
                         )
             else:
                 assert getattr(simulation_create, snake_case_key) == value
+
+    def test_rejects_invalid_compute_type(self):
+        with pytest.raises(ValidationError):
+            SimulationCreate(
+                caseId=uuid4(),
+                executionId="1081156.251218-200923",
+                compset="AQUAPLANET",
+                compsetAlias="QPC4",
+                gridName="f19_f19",
+                gridResolution="1.9x2.5",
+                initializationType="startup",
+                simulationType="experimental",
+                status="created",
+                simulationStartDate=datetime(2023, 1, 1),
+                computeType="tpu",
+            )
 
 
 class TestSimulationUpdateSchema:
@@ -513,6 +530,7 @@ class TestSimulationOutSchema:
             "run_start_date",
             "run_end_date",
             "compiler",
+            "compute_type",
             "notes_markdown",
             "known_issues",
             "git_repository_url",

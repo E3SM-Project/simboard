@@ -296,7 +296,8 @@ class TestListMachines:
         expected_machines = {
             "aurora",
             "frontier",
-            "anvil",
+            "muller",
+            "alvarez",
             "polaris",
             "andes",
             "perlmutter",
@@ -314,7 +315,8 @@ class TestListMachines:
         expected_machines = {
             "aurora",
             "frontier",
-            "anvil",
+            "muller",
+            "alvarez",
             "polaris",
             "andes",
             "perlmutter",

@@ -24,6 +24,7 @@ from app.features.simulation.enums import (
 from app.features.user.schemas import UserPreview
 
 KNOWN_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
+ComputeType = Literal["cpu", "gpu"]
 
 
 def _normalize_optional_label(value: str | None) -> str | None:
@@ -352,6 +353,13 @@ class SimulationCreate(CamelInBaseModel):
     compiler: Annotated[
         str | None, Field(None, description="Optional compiler used for the simulation")
     ]
+    compute_type: Annotated[
+        ComputeType | None,
+        Field(
+            None,
+            description="CPU or GPU execution type when encoded by the machine alias",
+        ),
+    ]
 
     # Metadata & audit
     # -----------------
@@ -565,6 +573,7 @@ class SimulationSummaryOut(CamelOutBaseModel):
             ),
         ),
     ]
+    compute_type: ComputeType | None = None
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
@@ -666,6 +675,7 @@ class SimulationListItemOut(CamelOutBaseModel):
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
+    compute_type: ComputeType | None = None
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
@@ -955,6 +965,13 @@ class SimulationOut(CamelOutBaseModel):
     ]
     compiler: Annotated[
         str | None, Field(None, description="Optional compiler used for the simulation")
+    ]
+    compute_type: Annotated[
+        ComputeType | None,
+        Field(
+            None,
+            description="CPU or GPU execution type when encoded by the machine alias",
+        ),
     ]
 
     # Metadata & audit

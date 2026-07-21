@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -42,28 +44,30 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
     alembic_config = Config(ALEMBIC_INI_PATH)
     alembic_config.set_main_option("sqlalchemy.url", TEST_DB_URL)
 
-    with engine.connect() as connection:
-        expected_sites: dict[int, str] = {
-            row[0]: row[1]
-            for row in connection.execute(
-                text(
-                    """
-                    SELECT machines.id, sites.name
-                    FROM machines
-                    JOIN sites ON sites.id = machines.site_id
-                    """
-                )
-            )
-        }
-
     try:
+        command.downgrade(alembic_config, "20260721_000000")
+
+        with engine.connect() as connection:
+            expected_sites: dict[UUID, str] = {
+                row[0]: row[1]
+                for row in connection.execute(
+                    text(
+                        """
+                        SELECT machines.id, sites.name
+                        FROM machines
+                        JOIN sites ON sites.id = machines.site_id
+                        """
+                    )
+                )
+            }
+
         command.downgrade(alembic_config, "20260715_000000")
 
         with engine.connect() as connection:
             columns = {
                 column["name"] for column in inspect(connection).get_columns("machines")
             }
-            downgraded_sites: dict[int, str] = {
+            downgraded_sites: dict[UUID, str] = {
                 row[0]: row[1]
                 for row in connection.execute(text("SELECT id, site FROM machines"))
             }
@@ -71,24 +75,26 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
         assert "site" in columns
         assert "site_id" not in columns
         assert downgraded_sites == expected_sites
+
+        command.upgrade(alembic_config, "20260721_000000")
+
+        with engine.connect() as connection:
+            reupgraded_sites: dict[UUID, str] = {
+                row[0]: row[1]
+                for row in connection.execute(
+                    text(
+                        """
+                        SELECT machines.id, sites.name
+                        FROM machines
+                        JOIN sites ON sites.id = machines.site_id
+                        """
+                    )
+                )
+            }
+
+        assert reupgraded_sites == expected_sites
     finally:
         command.upgrade(alembic_config, "head")
-
-    with engine.connect() as connection:
-        reupgraded_sites: dict[int, str] = {
-            row[0]: row[1]
-            for row in connection.execute(
-                text(
-                    """
-                    SELECT machines.id, sites.name
-                    FROM machines
-                    JOIN sites ON sites.id = machines.site_id
-                    """
-                )
-            )
-        }
-
-    assert reupgraded_sites == expected_sites
 
 
 def test_multiple_machines_can_share_site(db: Session) -> None:
