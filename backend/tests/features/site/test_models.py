@@ -43,8 +43,9 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
     alembic_config.set_main_option("sqlalchemy.url", TEST_DB_URL)
 
     with engine.connect() as connection:
-        expected_sites = dict(
-            connection.execute(
+        expected_sites: dict[int, str] = {
+            row[0]: row[1]
+            for row in connection.execute(
                 text(
                     """
                     SELECT machines.id, sites.name
@@ -52,8 +53,8 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
                     JOIN sites ON sites.id = machines.site_id
                     """
                 )
-            ).all()
-        )
+            )
+        }
 
     try:
         command.downgrade(alembic_config, "20260715_000000")
@@ -62,9 +63,10 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
             columns = {
                 column["name"] for column in inspect(connection).get_columns("machines")
             }
-            downgraded_sites = dict(
-                connection.execute(text("SELECT id, site FROM machines")).all()
-            )
+            downgraded_sites: dict[int, str] = {
+                row[0]: row[1]
+                for row in connection.execute(text("SELECT id, site FROM machines"))
+            }
 
         assert "site" in columns
         assert "site_id" not in columns
@@ -73,8 +75,9 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
         command.upgrade(alembic_config, "head")
 
     with engine.connect() as connection:
-        reupgraded_sites = dict(
-            connection.execute(
+        reupgraded_sites: dict[int, str] = {
+            row[0]: row[1]
+            for row in connection.execute(
                 text(
                     """
                     SELECT machines.id, sites.name
@@ -82,8 +85,8 @@ def test_migration_downgrade_and_reupgrade_preserves_machine_sites() -> None:
                     JOIN sites ON sites.id = machines.site_id
                     """
                 )
-            ).all()
-        )
+            )
+        }
 
     assert reupgraded_sites == expected_sites
 
