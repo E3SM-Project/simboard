@@ -27,7 +27,7 @@ class Machine(Base, IDMixin, TimestampMixin):
     gpu: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
 
-    site_record: Mapped[Site] = relationship(back_populates="machines")
+    site_record: Mapped[Site] = relationship(back_populates="machines", lazy="joined")
 
     @property
     def site(self) -> str:

@@ -308,6 +308,7 @@ class TestListMachines:
         result = {m.name for m in machines}
 
         assert result == expected_machines
+        assert all("site_record" in machine.__dict__ for machine in machines)
 
     def test_endpoint_successfully_list_machines(self, client):
         expected_machines = {

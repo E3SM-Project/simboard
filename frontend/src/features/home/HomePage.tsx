@@ -38,14 +38,16 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
   const machineCaseCounts = new Map<Machine['id'], number>(
     Object.entries(overview?.machineCounts ?? {}),
   );
-  const machinesBySite = new Map(
-    sites.map((site) => [
-      site.id,
-      machines.filter(
-        (machine) => machine.siteId === site.id || (!machine.siteId && machine.site === site.name),
-      ),
-    ]),
-  );
+  const siteIdByName = new Map(sites.map((site) => [site.name, site.id]));
+  const machinesBySite = new Map<Site['id'], Machine[]>();
+  machines.forEach((machine) => {
+    const siteId = machine.siteId ?? (machine.site ? siteIdByName.get(machine.site) : undefined);
+    if (!siteId) return;
+
+    const siteMachines = machinesBySite.get(siteId) ?? [];
+    siteMachines.push(machine);
+    machinesBySite.set(siteId, siteMachines);
+  });
   const siteMachineRows = sites.flatMap((site): InfrastructureRow[] => {
     const siteMachines = [...(machinesBySite.get(site.id) ?? [])].sort((left, right) =>
       left.name.localeCompare(right.name),
