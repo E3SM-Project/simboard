@@ -166,10 +166,7 @@ def get_catalog_overview(
     total_simulations = db.query(func.count(Simulation.id)).scalar() or 0
     latest_submission = db.query(func.max(Simulation.created_at)).scalar()
     machine_count_rows = (
-        db.query(Case.machine_id, func.count(Simulation.id))
-        .join(Simulation, Simulation.case_id == Case.id)
-        .group_by(Case.machine_id)
-        .all()
+        db.query(Case.machine_id, func.count(Case.id)).group_by(Case.machine_id).all()
     )
     machine_counts: dict[UUID, int] = {
         machine_id: count for machine_id, count in machine_count_rows

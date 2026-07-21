@@ -570,7 +570,7 @@ class TestListCases:
         assert data["totalCases"] == 7
         assert data["totalSimulations"] == 0
         assert data["latestSubmission"] is None
-        assert data["machineCounts"] == {}
+        assert data["machineCounts"] == {str(cases[0].machine_id): 7}
         assert [item["name"] for item in data["recentCases"]] == [
             "overview-6",
             "overview-5",

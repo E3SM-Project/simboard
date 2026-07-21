@@ -19,6 +19,12 @@ interface HomePageProps {
   sites: Site[];
 }
 
+interface InfrastructureRow {
+  key: string;
+  siteName: string;
+  machine?: Machine;
+}
+
 export const HomePage = ({ machines, sites }: HomePageProps) => {
   const { data: overview, error, isLoading, refetch } = useCatalogOverview();
   const totalCases = overview?.totalCases ?? 0;
@@ -29,16 +35,9 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
     hpcUsernameSummary: caseRecord.hpcUsername,
     lastUpdated: caseRecord.updatedAt,
   }));
-  const machineSimulationCounts = new Map<Machine['id'], number>(
+  const machineCaseCounts = new Map<Machine['id'], number>(
     Object.entries(overview?.machineCounts ?? {}),
   );
-  const featuredMachines = [...machines]
-    .sort(
-      (left, right) =>
-        (machineSimulationCounts.get(right.id) ?? 0) - (machineSimulationCounts.get(left.id) ?? 0),
-    )
-    .slice(0, 6);
-  const siteNamesById = new Map(sites.map((site) => [site.id, site.name]));
   const machinesBySite = new Map(
     sites.map((site) => [
       site.id,
@@ -47,6 +46,33 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       ),
     ]),
   );
+  const siteMachineRows = sites.flatMap((site): InfrastructureRow[] => {
+    const siteMachines = [...(machinesBySite.get(site.id) ?? [])].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+
+    if (siteMachines.length === 0) {
+      return [{ key: `site-${site.id}`, siteName: site.name, machine: undefined }];
+    }
+
+    return siteMachines.map((machine) => ({
+      key: machine.id,
+      siteName: site.name,
+      machine,
+    }));
+  });
+  const matchedMachineIds = new Set(
+    siteMachineRows.flatMap((row) => (row.machine ? [row.machine.id] : [])),
+  );
+  const unmatchedMachineRows = machines
+    .filter((machine) => !matchedMachineIds.has(machine.id))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((machine) => ({
+      key: machine.id,
+      siteName: machine.site ?? 'N/A',
+      machine,
+    }));
+  const infrastructureRows = [...siteMachineRows, ...unmatchedMachineRows];
 
   const workflows = [
     {
@@ -245,9 +271,9 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
 
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 space-y-1">
-          <h2 className="text-2xl font-bold">Sites</h2>
+          <h2 className="text-2xl font-bold">Sites and Machines</h2>
           <p className="text-muted-foreground">
-            Facilities hosting machines represented in the SimBoard catalog.
+            Computing facilities and systems represented in the SimBoard catalog.
           </p>
         </div>
         <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
@@ -255,30 +281,30 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <TableHeader>
               <TableRow>
                 <TableHead>Site</TableHead>
-                <TableHead>Machines</TableHead>
-                <TableHead>Machine Count</TableHead>
+                <TableHead>Machine</TableHead>
+                <TableHead>Architecture</TableHead>
+                <TableHead>GPU Support</TableHead>
+                <TableHead>Case Count</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sites.map((site) => {
-                const siteMachines = machinesBySite.get(site.id) ?? [];
-                return (
-                  <TableRow key={site.id}>
-                    <TableCell>{site.name}</TableCell>
-                    <TableCell>
-                      <TableCellText
-                        value={siteMachines.map((machine) => machine.name).join(', ') || 'N/A'}
-                        lines={2}
-                      />
-                    </TableCell>
-                    <TableCell>{siteMachines.length}</TableCell>
-                  </TableRow>
-                );
-              })}
-              {sites.length === 0 ? (
+              {infrastructureRows.map(({ key, siteName, machine }) => (
+                <TableRow key={key}>
+                  <TableCell>{siteName}</TableCell>
+                  <TableCell className="capitalize">{machine?.name ?? 'N/A'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={machine?.architecture ?? 'N/A'} lines={2} />
+                  </TableCell>
+                  <TableCell>{machine ? (machine.gpu ? 'Yes' : 'No') : 'N/A'}</TableCell>
+                  <TableCell>
+                    {machine ? (machineCaseCounts.get(machine.id) ?? 0) : 'N/A'}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {infrastructureRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No sites available.
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    No sites or machines available.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -336,45 +362,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                       </Link>
                     </Button>
                   </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-10 w-full max-w-7xl">
-        <div className="mb-4 space-y-1">
-          <h2 className="text-2xl font-bold">Machines</h2>
-          <p className="text-muted-foreground">
-            Systems used to run simulations represented in the SimBoard catalog.
-          </p>
-        </div>
-        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Architecture</TableHead>
-                <TableHead>GPU Support</TableHead>
-                <TableHead>Simulation Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {featuredMachines.map((machine) => (
-                <TableRow key={machine.id}>
-                  <TableCell>{machine.name}</TableCell>
-                  <TableCell>
-                    {(machine.siteId ? siteNamesById.get(machine.siteId) : undefined) ??
-                      machine.site ??
-                      'N/A'}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={machine.architecture || 'N/A'} lines={2} />
-                  </TableCell>
-                  <TableCell>{machine.gpu ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{machineSimulationCounts.get(machine.id) ?? 0}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
