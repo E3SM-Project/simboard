@@ -394,6 +394,25 @@ class ArchiveSnapshotScan:
     traversal_complete: bool = True
 
 
+@dataclass
+class IngestorRunReport:
+    """Mutable result details exposed to specialized archive runners.
+
+    For example, a targeted archive ingestor uses this to log a summary of
+    discovered cases and ingestion outcomes.
+    """
+
+    scan_completed: bool = False
+    traversal_complete: bool = True
+    scan_results: list[CaseScanResult] = field(default_factory=list)
+    candidates: list[IngestionCandidate] = field(default_factory=list)
+    submission_qualified_case_count: int = 0
+    discovery_stats: DiscoveryStats | None = None
+    case_collection_data: dict[str, CaseCollectionLogData] = field(default_factory=dict)
+    ingestion_success_count: int = 0
+    ingestion_failure_count: int = 0
+
+
 # Entrypoint and Configuration
 # ----------------------------
 
@@ -435,7 +454,11 @@ def main() -> int:
     return exit_code
 
 
-def _build_config_from_env() -> IngestorConfig:
+def _build_config_from_env(
+    *,
+    scan_mode_override: Literal["staging", "archive"] | None = None,
+    archive_year_start_override: str | None = None,
+) -> IngestorConfig:
     """Build and validate runtime config from environment variables.
 
     Returns
@@ -451,7 +474,11 @@ def _build_config_from_env() -> IngestorConfig:
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
 
-    scan_mode = os.getenv("SCAN_MODE", "staging").strip().lower()
+    scan_mode = (
+        scan_mode_override
+        if scan_mode_override is not None
+        else os.getenv("SCAN_MODE", "staging").strip().lower()
+    )
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
@@ -481,7 +508,11 @@ def _build_config_from_env() -> IngestorConfig:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
     archive_year_start = _parse_optional_archive_bound(
-        os.getenv("ARCHIVE_YEAR_START"),
+        (
+            archive_year_start_override
+            if archive_year_start_override is not None
+            else os.getenv("ARCHIVE_YEAR_START")
+        ),
         env_name="ARCHIVE_YEAR_START",
         is_end_bound=False,
     )
@@ -833,6 +864,8 @@ def _scan_archive(
     metadata_locator: Callable[[str], object],
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     completed_snapshot_keys: set[str] | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    run_report: IngestorRunReport | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
@@ -865,7 +898,10 @@ def _scan_archive(
     staging_root_basename = (
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
-    case_path_filter = _build_case_path_filter(config)
+    case_path_filter = _combine_case_path_filters(
+        _build_case_path_filter(config),
+        case_path_filter,
+    )
     snapshot_scan = ArchiveSnapshotScan(archive_name=config.archive_root.name)
     if config.scan_mode == "archive":
         snapshot_scan.eligible_keys = _enumerate_archive_snapshot_keys(config)
@@ -943,6 +979,15 @@ def _scan_archive(
         scan_mode=config.scan_mode,
         staging_root_basename=staging_root_basename,
     )
+
+    if run_report is not None:
+        run_report.scan_completed = True
+        run_report.traversal_complete = snapshot_scan.traversal_complete
+        run_report.scan_results = list(scan_results)
+        run_report.candidates = list(candidates)
+        run_report.submission_qualified_case_count = len(all_candidates)
+        run_report.discovery_stats = discovery_stats.copy()
+        run_report.case_collection_data = dict(case_collection_data)
 
     return (
         scan_results,
@@ -1578,6 +1623,19 @@ def _build_case_path_filter(
         archive_root=config.archive_root,
         archive_start=config.archive_year_start,
         archive_end=config.archive_year_end,
+    )
+
+
+def _combine_case_path_filters(
+    *filters: Callable[[Path], bool] | None,
+) -> Callable[[Path], bool] | None:
+    """Combine optional case predicates without changing unfiltered behavior."""
+    active_filters = tuple(case_filter for case_filter in filters if case_filter)
+    if not active_filters:
+        return None
+
+    return lambda case_path: all(
+        case_filter(case_path) for case_filter in active_filters
     )
 
 
@@ -2231,6 +2289,7 @@ def _handle_ingest_run(
     discovery_stats: DiscoveryStats,
     sleep_fn: Callable[[float], None],
     post_request_fn: Callable[..., IngestionRequestResponse],
+    run_report: IngestorRunReport | None = None,
 ) -> int:
     """Execute candidate ingestion loop and emit completion summaries.
 
@@ -2342,6 +2401,10 @@ def _handle_ingest_run(
         failure_count=failure_count,
         discovery_stats=discovery_stats,
     )
+
+    if run_report is not None:
+        run_report.ingestion_success_count = success_count
+        run_report.ingestion_failure_count = failure_count
 
     return 1 if failure_count else 0
 
