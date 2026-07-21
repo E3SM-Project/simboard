@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { NavBar } from '@/components/layout/NavBar';
 import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
 import { useMachines } from '@/features/machines/hooks/useMachines';
+import { useSites } from '@/features/sites/hooks/useSites';
 import { CaseCompareRoute } from '@/routes/CaseCompareRoute';
 import { AppRoutes } from '@/routes/routes';
 
@@ -15,6 +16,7 @@ const App = () => {
 
   // -------------------- Local State --------------------
   const { data: machines = [] } = useMachines();
+  const { data: sites = [] } = useSites();
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -56,6 +58,7 @@ const App = () => {
       <NavBar />
       <AppRoutes
         machines={machines}
+        sites={sites}
         renderCaseCompareSection={({ onClose }) => (
           <CaseCompareRoute
             onClose={onClose}

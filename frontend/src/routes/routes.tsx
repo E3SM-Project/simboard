@@ -10,9 +10,11 @@ import { homeRoutes } from '@/features/home/routes';
 import { simulationsRoutes } from '@/features/simulations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
+import type { Site } from '@/types/site';
 
 interface RoutesProps {
   machines: Machine[];
+  sites: Site[];
   renderCaseCompareSection?: (options: { onClose: () => void }) => ReactNode;
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
   setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;

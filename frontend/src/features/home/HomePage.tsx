@@ -12,13 +12,14 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
-import type { Machine } from '@/types/index';
+import type { Machine, Site } from '@/types/index';
 
 interface HomePageProps {
   machines: Machine[];
+  sites: Site[];
 }
 
-export const HomePage = ({ machines }: HomePageProps) => {
+export const HomePage = ({ machines, sites }: HomePageProps) => {
   const { data: overview, error, isLoading, refetch } = useCatalogOverview();
   const totalCases = overview?.totalCases ?? 0;
   const latestSubmission = overview?.latestSubmission;
@@ -37,6 +38,15 @@ export const HomePage = ({ machines }: HomePageProps) => {
         (machineSimulationCounts.get(right.id) ?? 0) - (machineSimulationCounts.get(left.id) ?? 0),
     )
     .slice(0, 6);
+  const siteNamesById = new Map(sites.map((site) => [site.id, site.name]));
+  const machinesBySite = new Map(
+    sites.map((site) => [
+      site.id,
+      machines.filter(
+        (machine) => machine.siteId === site.id || (!machine.siteId && machine.site === site.name),
+      ),
+    ]),
+  );
 
   const workflows = [
     {
@@ -146,7 +156,7 @@ export const HomePage = ({ machines }: HomePageProps) => {
             </Button>
           </div>
 
-          <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
               <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Total Cases
@@ -169,6 +179,14 @@ export const HomePage = ({ machines }: HomePageProps) => {
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
                 {machines.length}
+              </p>
+            </div>
+            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
+              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Sites
+              </p>
+              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
+                {sites.length}
               </p>
             </div>
             <div className="flex min-h-28 flex-col gap-4 px-4 py-4">
@@ -222,6 +240,50 @@ export const HomePage = ({ machines }: HomePageProps) => {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="mx-auto mt-10 w-full max-w-7xl">
+        <div className="mb-4 space-y-1">
+          <h2 className="text-2xl font-bold">Sites</h2>
+          <p className="text-muted-foreground">
+            Facilities hosting machines represented in the SimBoard catalog.
+          </p>
+        </div>
+        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Site</TableHead>
+                <TableHead>Machines</TableHead>
+                <TableHead>Machine Count</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sites.map((site) => {
+                const siteMachines = machinesBySite.get(site.id) ?? [];
+                return (
+                  <TableRow key={site.id}>
+                    <TableCell>{site.name}</TableCell>
+                    <TableCell>
+                      <TableCellText
+                        value={siteMachines.map((machine) => machine.name).join(', ') || 'N/A'}
+                        lines={2}
+                      />
+                    </TableCell>
+                    <TableCell>{siteMachines.length}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {sites.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    No sites available.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
         </div>
       </section>
 
@@ -295,7 +357,7 @@ export const HomePage = ({ machines }: HomePageProps) => {
                 <TableHead>Name</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Architecture</TableHead>
-                <TableHead>GPU</TableHead>
+                <TableHead>GPU Support</TableHead>
                 <TableHead>Simulation Count</TableHead>
               </TableRow>
             </TableHeader>
@@ -303,7 +365,11 @@ export const HomePage = ({ machines }: HomePageProps) => {
               {featuredMachines.map((machine) => (
                 <TableRow key={machine.id}>
                   <TableCell>{machine.name}</TableCell>
-                  <TableCell>{machine.site || 'N/A'}</TableCell>
+                  <TableCell>
+                    {(machine.siteId ? siteNamesById.get(machine.siteId) : undefined) ??
+                      machine.site ??
+                      'N/A'}
+                  </TableCell>
                   <TableCell className="align-top">
                     <TableCellText value={machine.architecture || 'N/A'} lines={2} />
                   </TableCell>

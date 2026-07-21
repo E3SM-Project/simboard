@@ -4,6 +4,7 @@
 export interface Machine {
   id: string;
   name: string;
+  siteId?: string;
   site?: string;
   architecture?: string;
   scheduler?: string;
