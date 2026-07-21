@@ -60,6 +60,7 @@ class TestMachineOutSchema:
             "id": uuid4(),
             "name": "Machine B",
             "site": "Site B",
+            "site_id": uuid4(),
             "architecture": "arm64",
             "scheduler": "PBS",
             "gpu": False,
@@ -89,6 +90,7 @@ class TestMachineOutSchema:
             expected_missing_fields = {
                 "architecture",
                 "scheduler",
+                "siteId",
                 "createdAt",
                 "updatedAt",
             }
@@ -99,6 +101,7 @@ class TestMachineOutSchema:
             "id": "not_a_uuid",  # Invalid type
             "name": "Machine B",
             "site": "Site B",
+            "site_id": uuid4(),
             "architecture": "arm64",
             "scheduler": "PBS",
             "gpu": False,

@@ -16,6 +16,7 @@ from app.features.simulation.api import (
     diagnostics_router,
     simulation_router,
 )
+from app.features.site.api import router as site_router
 from app.features.user.api.oauth import auth_router, user_router
 from app.features.user.api.token import router as token_router
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(assistant_router, prefix=API_BASE)
     app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)
+    app.include_router(site_router, prefix=API_BASE)
     app.include_router(pace_router, prefix=API_BASE)
     app.include_router(user_router, prefix=API_BASE)
     app.include_router(auth_router, prefix=API_BASE)

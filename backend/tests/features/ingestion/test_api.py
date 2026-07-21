@@ -57,6 +57,7 @@ from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
+from tests.features.site.utils import get_or_create_site
 
 
 @pytest.fixture(autouse=True)
@@ -588,7 +589,7 @@ class TestGetIngestionStateEndpoint:
 
         machine = Machine(
             name=name,
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -1362,7 +1363,7 @@ class TestIngestFromPathEndpoint:
         if machine is None:
             machine = Machine(
                 name="perlmutter",
-                site="NERSC",
+                site_record=get_or_create_site(db, "NERSC"),
                 architecture="AMD EPYC + NVIDIA A100",
                 scheduler="slurm",
                 gpu=True,

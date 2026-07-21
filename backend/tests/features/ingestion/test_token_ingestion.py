@@ -18,6 +18,7 @@ from app.features.simulation.schemas import SimulationCreate
 from app.features.user.auth.token import generate_token
 from app.features.user.models import ApiToken, User, UserRole
 from tests.conftest import engine
+from tests.features.site.utils import get_or_create_site
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -66,7 +67,7 @@ class TestIngestionWithAPIToken:
 
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -157,7 +158,7 @@ class TestIngestionWithAPIToken:
 
             machine = Machine(
                 name="test-hpc",
-                site="Test Site",
+                site_record=get_or_create_site(db),
                 architecture="x86_64",
                 scheduler="slurm",
                 gpu=False,
@@ -207,7 +208,7 @@ class TestIngestionWithAPIToken:
 
             machine = Machine(
                 name="test-hpc-upload",
-                site="Test Site",
+                site_record=get_or_create_site(db),
                 architecture="x86_64",
                 scheduler="slurm",
                 gpu=False,
@@ -239,7 +240,7 @@ class TestIngestionWithAPIToken:
         """Test that ingestion with invalid token returns 401."""
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -278,7 +279,7 @@ class TestIngestionWithAPIToken:
 
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -304,7 +305,7 @@ class TestIngestionWithAPIToken:
         """Test that ingestion without authentication returns 401."""
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -339,7 +340,7 @@ class TestIngestionWithAPIToken:
 
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -377,7 +378,7 @@ class TestIngestionWithAPIToken:
 
         machine = Machine(
             name="test-hpc",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,

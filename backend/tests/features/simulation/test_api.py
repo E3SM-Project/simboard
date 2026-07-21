@@ -38,6 +38,7 @@ from app.features.user.manager import current_active_user
 from app.features.user.models import ApiToken, User, UserRole
 from app.main import app
 from tests.conftest import TestingSessionLocal, engine
+from tests.features.site.utils import get_or_create_site
 
 
 def use_real_auth(test_func):
@@ -449,14 +450,14 @@ class TestListCases:
     ):
         first_machine = Machine(
             name="z-case-sort-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
         )
         second_machine = Machine(
             name="a-case-sort-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -637,7 +638,7 @@ class TestListCaseNames:
         _create_case(db, "dup_case")
         second_machine = Machine(
             name="dup-case-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -1637,14 +1638,14 @@ class TestListSimulations:
     ):
         first_machine = Machine(
             name="z-simulation-sort-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
         )
         second_machine = Machine(
             name="a-simulation-sort-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -2043,7 +2044,7 @@ class TestListSimulations:
 
         second_machine = Machine(
             name="normalized-case-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -3152,7 +3153,7 @@ class TestLinkCaseDiagnostics:
         if machine is None:
             machine = Machine(
                 name="perlmutter",
-                site="NERSC",
+                site_record=get_or_create_site(db, "NERSC"),
                 architecture="gpu",
                 scheduler="slurm",
                 gpu=True,
