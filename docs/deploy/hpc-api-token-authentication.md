@@ -80,12 +80,49 @@ curl -X POST https://api.simboard.org/api/v1/ingestions/from-path \
 curl -X POST https://api.simboard.org/api/v1/ingestions/from-hpc-upload \
   -H "Authorization: Bearer sbk_xxxxxxxxxxxxxxxxxxxxx" \
   -F "file=@case-a.tar.gz" \
-  -F "machine_name=perlmutter" \
+  -F "machine_name=chrysalis" \
   -F "case_path=/lcrc/group/e3sm/PERF_Chrysalis/performance_archive/case_a" \
   -F "processed_execution_ids=100.1-1" \
   -F "processed_execution_ids=101.1-1" \
   -F "hpc_username=johndoe"
 ```
+
+#### Chrysalis E3SM v3 archive backfill
+
+Run the targeted v3 backfill on Chrysalis because source case directories are
+not mounted in SimBoard's NERSC backend. The runner scans archive snapshots from
+`2024-01`, packages each selected case as a single-case archive, and uploads it
+through `/api/v1/ingestions/from-hpc-upload`.
+
+From `backend/` on Chrysalis, provide an externally reachable SimBoard API URL
+and service-account token, then start with dry run:
+
+```bash
+SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
+SIMBOARD_API_TOKEN=<service-account-token> \
+DRY_RUN=true \
+uv run python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+```
+
+`OLD_PERF_ARCHIVE_ROOT` defaults to the documented Chrysalis archive location
+and may be overridden when site storage is mounted elsewhere. Machine identity
+is fixed to `chrysalis`; archive mode and the `2024-01` lower bound are also
+fixed by the targeted runner.
+
+Review `v3_case_match`, `v3_case_missing`, and `v3_ingestion_summary`. Resolve
+missing targets and transient scan errors before enabling uploads. Then run:
+
+```bash
+SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
+SIMBOARD_API_TOKEN=<service-account-token> \
+DRY_RUN=false \
+uv run python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+```
+
+Repeat dry run after upload to confirm processed execution state prevents
+duplicate submissions. Targeted scans deliberately neither read nor write
+whole-snapshot checkpoints because Chrysalis snapshots may also contain
+non-v3 cases.
 
 #### Browser or Manual Upload
 

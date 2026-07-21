@@ -1,25 +1,4 @@
-"""Scan NERSC archives and trigger SimBoard path-based ingestion.
-
-This script is intended for scheduled execution (for example, a CronJob)
-against a bind-mounted performance archive. Runtime configuration is read
-from environment variables (for example ``SIMBOARD_API_BASE_URL``,
-``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
-
-Each ingest run executes these phases:
-
-    1. Fetch persisted per-case state from SimBoard API.
-    2. In archive mode, fetch completed snapshot checkpoints.
-    3. Discover and collect parseable execution directories grouped by case path.
-    4. Persist discovery results, then submit each changed case with retry/backoff.
-    5. In archive mode, settle and persist completed snapshot checkpoints.
-
-Dry runs stop after discovery and emit a summary. Successful ingestions update
-database state used to keep future runs idempotent.
-
-Structured log metric definitions for this runner live in
-``docs/architecture/metadata-ingestion.md``. This module emits those field names
-verbatim in discovery, selection, and run-summary events.
-"""
+"""Scan NERSC archives and trigger SimBoard path-based ingestion."""
 
 from __future__ import annotations
 
@@ -35,18 +14,24 @@ from app.scripts.ingestion.archive_client import (
     _fetch_ingestion_state,
     _post_ingestion_request,
 )
-from app.scripts.ingestion.archive_discovery import _scan_archive
+from app.scripts.ingestion.archive_discovery import (
+    _new_discovery_stats,  # noqa: F401
+    _scan_archive,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     ArchiveCheckpointPersistenceCallback,
+    CaseCollectionLogData,  # noqa: F401
     CaseSubmissionCallback,
     DiscoveryResultsPersistenceCallback,
     ExecutionDiscoveryResult,
     IngestionRequestError,
     IngestorConfig,
+    IngestorRunReport,  # noqa: F401
     MetadataLocator,
     SleepCallback,
     UnsupportedArchiveLayoutError,
     _build_config_from_env,
+    _fresh_state,  # noqa: F401
     _log_event,
 )
 from app.scripts.ingestion.archive_workflow import (
@@ -61,13 +46,7 @@ from app.scripts.ingestion.archive_workflow import (
 
 
 def main() -> int:
-    """Build runtime configuration and execute the ingestion runner.
-
-    Returns
-    -------
-    int
-        Process exit code (``0`` success, ``1`` failure).
-    """
+    """Build runtime configuration and execute the ingestion runner."""
     try:
         config = _build_config_from_env()
     except ValueError as exc:
@@ -93,7 +72,6 @@ def main() -> int:
             "duration_seconds": round(time.monotonic() - start_time, 3),
         },
     )
-
     return exit_code
 
 
@@ -112,24 +90,8 @@ def _run_ingestor(
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
     checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> int:
-    """Execute one complete archive scan-and-ingest cycle.
-
-    Parameters
-    ----------
-    config : IngestorConfig
-        Runtime configuration values.
-    metadata_locator : Callable[[str], object], optional
-        Validation callable used when scanning execution directories.
-    sleep_fn : Callable[[float], None], optional
-        Sleep function used for retry backoff.
-
-    Returns
-    -------
-    int
-        Process exit code (``0`` success, ``1`` failure).
-    """
+    """Execute one complete archive scan-and-ingest cycle."""
     post_request_fn = _case_submission_callback(post_request_fn)
-
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
     _log_startup_configuration(
@@ -138,7 +100,6 @@ def _run_ingestor(
         state_endpoint_url=state_endpoint_url,
         log_event_fn=_log_event,
     )
-
     if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1
 
@@ -198,10 +159,7 @@ def _run_ingestor(
         _log_event("configuration_error", {"error": str(exc)})
         return 1
     except Exception as exc:
-        _log_event(
-            "archive_scan_failed",
-            {"error": f"{exc.__class__.__name__}: {exc}"},
-        )
+        _log_event("archive_scan_failed", {"error": f"{exc.__class__.__name__}: {exc}"})
         return 1
 
     _log_scan_completed(
@@ -212,7 +170,6 @@ def _run_ingestor(
         discovery_stats,
         log_event_fn=_log_event,
     )
-
     if config.dry_run:
         return _handle_dry_run(
             candidates,
@@ -222,7 +179,6 @@ def _run_ingestor(
             archive_root=config.archive_root,
             log_event_fn=_log_event,
         )
-
     if not _persist_discovery_results(
         new_discovery_results,
         _build_discovery_results_endpoint_url(config),
@@ -231,7 +187,6 @@ def _run_ingestor(
         discovery_post_request_fn,
     ):
         return 1
-
     ingest_exit_code = _handle_ingest_run(
         candidates,
         scan_results,

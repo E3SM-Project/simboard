@@ -27,6 +27,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     ExecutionDiscoveryResult,
     IngestionCandidate,
     IngestorConfig,
+    IngestorRunReport,
     MetadataLocator,
     _build_discovery_results_by_key,
     _case_log_label,
@@ -67,6 +68,8 @@ def _scan_archive(
     metadata_locator: MetadataLocator,
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     completed_snapshot_keys: set[str] | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    run_report: IngestorRunReport | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
@@ -99,7 +102,18 @@ def _scan_archive(
     staging_root_basename = (
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
-    case_path_filter = _build_case_path_filter(config)
+    configured_case_path_filter = _build_case_path_filter(config)
+
+    if case_path_filter is None:
+        case_path_filter = configured_case_path_filter
+    elif configured_case_path_filter is not None:
+        supplied_case_path_filter = case_path_filter
+
+        def combined_case_path_filter(path: Path) -> bool:
+            return configured_case_path_filter(path) and supplied_case_path_filter(path)
+
+        case_path_filter = combined_case_path_filter
+
     snapshot_scan = _initialize_snapshot_scan(config, completed_snapshot_keys)
     selected_snapshot_keys = _selected_snapshot_keys(snapshot_scan)
     walk_dir_filter = _build_walk_dir_filter(
@@ -153,6 +167,15 @@ def _scan_archive(
         scan_mode=config.scan_mode,
         staging_root_basename=staging_root_basename,
     )
+
+    if run_report is not None:
+        run_report.scan_completed = True
+        run_report.traversal_complete = snapshot_scan.traversal_complete
+        run_report.scan_results = scan_results
+        run_report.candidates = candidates
+        run_report.submission_qualified_case_count = len(all_candidates)
+        run_report.discovery_stats = discovery_stats
+        run_report.case_collection_data = case_collection_data
 
     return (
         scan_results,

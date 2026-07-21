@@ -367,6 +367,21 @@ class CaseCollectionLogData:
 
 
 @dataclass
+class IngestorRunReport:
+    """Mutable details from a specialized archive-ingestion run."""
+
+    scan_completed: bool = False
+    traversal_complete: bool = True
+    scan_results: list[CaseScanResult] = field(default_factory=list)
+    candidates: list[IngestionCandidate] = field(default_factory=list)
+    submission_qualified_case_count: int = 0
+    discovery_stats: DiscoveryStats | None = None
+    case_collection_data: dict[str, CaseCollectionLogData] = field(default_factory=dict)
+    ingestion_success_count: int = 0
+    ingestion_failure_count: int = 0
+
+
+@dataclass
 class ArchiveSnapshotScan:
     """Filesystem snapshot units and execution identities scanned in this run."""
 

@@ -25,6 +25,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     IngestionCandidate,
     IngestionRequestError,
     IngestorConfig,
+    IngestorRunReport,
     SleepCallback,
     StructuredLogCallback,
     _case_log_label,
@@ -37,6 +38,7 @@ def _validate_run_preconditions(
     config: IngestorConfig,
     *,
     log_event_fn: StructuredLogCallback | None = None,
+    run_report: IngestorRunReport | None = None,
 ) -> bool:
     """Validate filesystem and authentication requirements for one run."""
     log_event_fn = log_event_fn or _log_event
@@ -250,6 +252,7 @@ def _handle_ingest_run(
         Callable[[IngestionCandidate], AbstractContextManager[CaseSubmissionCallback]]
         | None
     ) = None,
+    run_report: IngestorRunReport | None = None,
 ) -> int:
     """Execute candidate ingestion loop and emit completion summaries."""
     log_event_fn = log_event_fn or _log_event
@@ -343,6 +346,10 @@ def _handle_ingest_run(
         discovery_stats=discovery_stats,
         log_event_fn=log_event_fn,
     )
+
+    if run_report is not None:
+        run_report.ingestion_success_count = success_count
+        run_report.ingestion_failure_count = failure_count
 
     return 1 if failure_count else 0
 
