@@ -4,6 +4,7 @@ from app.features.machine.models import Machine
 from app.features.machine.utils import (
     canonicalize_machine_name,
     normalize_machine_name_for_storage,
+    parse_machine_name,
     resolve_machine_by_name,
 )
 from tests.features.site.utils import get_or_create_site
@@ -14,6 +15,8 @@ class TestCanonicalizeMachineName:
         assert canonicalize_machine_name("pm") == "perlmutter"
         assert canonicalize_machine_name(" pm-cpu ") == "perlmutter"
         assert canonicalize_machine_name("PM-GPU") == "perlmutter"
+        assert canonicalize_machine_name("muller-cpu") == "muller"
+        assert canonicalize_machine_name("ALVAREZ-GPU") == "alvarez"
 
     def test_normalizes_unknown_names(self) -> None:
         assert canonicalize_machine_name(" Frontier ") == "frontier"
@@ -23,6 +26,18 @@ class TestNormalizeMachineNameForStorage:
     def test_lowercases_and_trims_without_alias_expansion(self) -> None:
         assert normalize_machine_name_for_storage(" Machine A ") == "machine a"
         assert normalize_machine_name_for_storage("PM") == "pm"
+
+
+class TestParseMachineName:
+    def test_extracts_compute_type_from_known_aliases(self) -> None:
+        assert parse_machine_name(" pm-cpu ") == ("perlmutter", "cpu")
+        assert parse_machine_name("MULLER-GPU") == ("muller", "gpu")
+        assert parse_machine_name("alvarez-cpu") == ("alvarez", "cpu")
+
+    def test_plain_and_unknown_names_have_no_compute_type(self) -> None:
+        assert parse_machine_name("perlmutter") == ("perlmutter", None)
+        assert parse_machine_name("muller") == ("muller", None)
+        assert parse_machine_name("unknown-gpu") == ("unknown-gpu", None)
 
 
 class TestResolveMachineByName:

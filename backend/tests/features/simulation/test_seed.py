@@ -103,6 +103,7 @@ class TestSeedSimulation:
                 "simulationType": "production",
                 "status": "created",
                 "simulationStartDate": "2023-01-01T00:00:00Z",
+                "computeType": "gpu",
             },
             case=case,
             case_name="seed-case",
@@ -111,3 +112,4 @@ class TestSeedSimulation:
 
         assert simulation.case_id == case.id
         assert simulation.ingestion_id is not None
+        assert simulation.compute_type == "gpu"

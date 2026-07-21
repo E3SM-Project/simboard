@@ -4,6 +4,7 @@ import shlex
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
@@ -14,7 +15,7 @@ from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedSimulation
-from app.features.machine.utils import resolve_machine_by_name
+from app.features.machine.utils import parse_machine_name, resolve_machine_by_name
 from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import ArtifactCreate, SimulationCreate
@@ -81,6 +82,7 @@ class SimulationCreateDraft:
     created_by: UUID | None
     last_updated_by: UUID | None
     case_hash: str | None = None
+    compute_type: Literal["cpu", "gpu"] | None = None
 
 
 def ingest_archive(
@@ -750,6 +752,7 @@ def _build_simulation_create_draft(
     git_repository_url = _normalize_git_url(parsed_simulation.git_repository_url)
     simulation_type = _normalize_simulation_type(None)
     status = _normalize_simulation_status(parsed_simulation.status)
+    _, compute_type = parse_machine_name(parsed_simulation.machine or "")
 
     simulation_draft = SimulationCreateDraft(
         case_id=case_id,
@@ -768,6 +771,7 @@ def _build_simulation_create_draft(
         run_start_date=run_start_date,
         run_end_date=run_end_date,
         compiler=parsed_simulation.compiler,
+        compute_type=compute_type,
         git_repository_url=git_repository_url,
         git_branch=parsed_simulation.git_branch,
         git_tag=parsed_simulation.git_tag,

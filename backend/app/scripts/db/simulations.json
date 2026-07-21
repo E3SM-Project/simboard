@@ -210,8 +210,9 @@
         "experimentType": "amip",
         "initializationType": "coldstart",
         "machine": {
-          "name": "anvil"
+          "name": "muller"
         },
+        "computeType": "cpu",
         "simulationStartDate": "1979-01-01T00:00:00Z",
         "simulationEndDate": "2008-12-31T00:00:00Z",
         "compiler": "gnu",
@@ -257,8 +258,9 @@
         "experimentType": "rcp45",
         "initializationType": "restart",
         "machine": {
-          "name": "anvil"
+          "name": "alvarez"
         },
+        "computeType": "gpu",
         "simulationStartDate": "2006-01-01T00:00:00Z",
         "simulationEndDate": "2100-12-31T00:00:00Z",
         "compiler": "intel",

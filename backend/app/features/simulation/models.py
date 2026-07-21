@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy import (
@@ -90,6 +90,10 @@ class Simulation(Base, IDMixin, TimestampMixin):
             "execution_id",
             name="uq_simulations_case_id_execution_id",
         ),
+        CheckConstraint(
+            "compute_type IS NULL OR compute_type IN ('cpu', 'gpu')",
+            name="compute_type",
+        ),
     )
 
     # Configuration
@@ -143,6 +147,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
     run_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     run_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     compiler: Mapped[str | None] = mapped_column(String(100))
+    compute_type: Mapped[Literal["cpu", "gpu"] | None] = mapped_column(
+        String(3), nullable=True
+    )
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
