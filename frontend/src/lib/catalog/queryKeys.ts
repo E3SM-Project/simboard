@@ -18,4 +18,5 @@ export const catalogQueryKeys = {
     detail: (id: string) => ['simulations', 'detail', id] as const,
   },
   machines: ['machines'] as const,
+  sites: ['sites'] as const,
 };

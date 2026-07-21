@@ -10,6 +10,7 @@ from app.api.version import API_BASE
 from app.features.machine.api import create_machine, get_machine, list_machines
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate
+from tests.features.site.utils import get_or_create_site
 
 
 class TestCreateMachine:
@@ -50,6 +51,66 @@ class TestCreateMachine:
         for key in payload:
             if key != "name":
                 assert data[key] == payload[key]
+        assert data["siteId"]
+
+    def test_endpoint_accepts_site_id(self, client, db: Session):
+        site = get_or_create_site(db, "Site by ID")
+        payload = {
+            "name": "Machine by ID",
+            "siteId": str(site.id),
+            "architecture": "ARM",
+            "scheduler": "SLURM",
+            "gpu": False,
+        }
+
+        response = client.post(f"{API_BASE}/machines", json=payload)
+
+        assert response.status_code == 201
+        assert response.json()["site"] == site.name
+        assert response.json()["siteId"] == str(site.id)
+
+    def test_endpoint_rejects_conflicting_site_references(self, client, db: Session):
+        site = get_or_create_site(db, "Canonical Site")
+        payload = {
+            "name": "Conflicting Site Machine",
+            "site": "Different Site",
+            "siteId": str(site.id),
+            "architecture": "ARM",
+            "scheduler": "SLURM",
+            "gpu": False,
+        }
+
+        response = client.post(f"{API_BASE}/machines", json=payload)
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "site and siteId refer to different sites"
+
+    def test_endpoint_rejects_unknown_site_id(self, client):
+        payload = {
+            "name": "Unknown Site Machine",
+            "siteId": str(uuid4()),
+            "architecture": "ARM",
+            "scheduler": "SLURM",
+            "gpu": False,
+        }
+
+        response = client.post(f"{API_BASE}/machines", json=payload)
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Site not found"
+
+    def test_endpoint_requires_site_name_or_id(self, client):
+        payload = {
+            "name": "Missing Site Machine",
+            "architecture": "ARM",
+            "scheduler": "SLURM",
+            "gpu": False,
+        }
+
+        response = client.post(f"{API_BASE}/machines", json=payload)
+
+        assert response.status_code == 422
+        assert "Either site or siteId is required" in response.text
 
     def test_function_does_not_expand_aliases_on_write(self, db: Session):
         payload = {
@@ -85,7 +146,7 @@ class TestCreateMachine:
         db.add(
             Machine(
                 name="machine b",
-                site="Site B",
+                site_record=get_or_create_site(db, "Site B"),
                 architecture="x86_64",
                 scheduler="PBS",
                 gpu=False,
@@ -113,7 +174,7 @@ class TestCreateMachine:
         db.add(
             Machine(
                 name="machine b",
-                site="Site B",
+                site_record=get_or_create_site(db, "Site B"),
                 architecture="x86_64",
                 scheduler="PBS",
                 gpu=False,
@@ -141,7 +202,7 @@ class TestCreateMachine:
         db.add(
             Machine(
                 name="machine constraint",
-                site="Site A",
+                site_record=get_or_create_site(db, "Site A"),
                 architecture="x86_64",
                 scheduler="SLURM",
                 gpu=False,
@@ -152,7 +213,7 @@ class TestCreateMachine:
         db.add(
             Machine(
                 name="MACHINE CONSTRAINT",
-                site="Site B",
+                site_record=get_or_create_site(db, "Site B"),
                 architecture="ARM",
                 scheduler="PBS",
                 gpu=False,
@@ -168,7 +229,7 @@ class TestCreateMachine:
         db.add(
             Machine(
                 name="Mixed-Case-Machine",
-                site="Site Mixed",
+                site_record=get_or_create_site(db, "Site Mixed"),
                 architecture="x86_64",
                 scheduler="SLURM",
                 gpu=False,
@@ -247,6 +308,7 @@ class TestListMachines:
         result = {m.name for m in machines}
 
         assert result == expected_machines
+        assert all("site_record" in machine.__dict__ for machine in machines)
 
     def test_endpoint_successfully_list_machines(self, client):
         expected_machines = {
@@ -272,7 +334,7 @@ class TestGetMachine:
     def test_function_successfully_gets_machine(self, db: Session):
         expected = Machine(
             name="machine e",
-            site="Site E",
+            site_record=get_or_create_site(db, "Site E"),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=True,
@@ -289,7 +351,7 @@ class TestGetMachine:
     def test_endpoint_successfully_get_machine(self, client, db: Session):
         expected = Machine(
             name="machine e",
-            site="Site E",
+            site_record=get_or_create_site(db, "Site E"),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=True,

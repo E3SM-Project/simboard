@@ -8,13 +8,14 @@ from app.scripts.db.seed import (
     _resolve_seed_case_machine,
     _seed_simulation,
 )
+from tests.features.site.utils import get_or_create_site
 
 
 class TestResolveSeedCaseMachine:
     def test_returns_machine_for_single_machine_case(self, db: Session) -> None:
         machine = Machine(
             name="seed-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,
@@ -38,14 +39,14 @@ class TestResolveSeedCaseMachine:
             [
                 Machine(
                     name="seed-machine-one",
-                    site="Test Site",
+                    site_record=get_or_create_site(db),
                     architecture="x86_64",
                     scheduler="slurm",
                     gpu=False,
                 ),
                 Machine(
                     name="seed-machine-two",
-                    site="Test Site",
+                    site_record=get_or_create_site(db),
                     architecture="x86_64",
                     scheduler="slurm",
                     gpu=False,
@@ -71,7 +72,7 @@ class TestSeedSimulation:
     ) -> None:
         machine = Machine(
             name="seed-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="slurm",
             gpu=False,

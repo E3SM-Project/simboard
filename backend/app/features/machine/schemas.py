@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
@@ -12,7 +12,12 @@ class MachineCreate(CamelInBaseModel):
 
     name: Annotated[str, Field(..., description="The name of the machine")]
     site: Annotated[
-        str, Field(..., description="The site where the machine is located")
+        str | None,
+        Field(None, description="The site where the machine is located"),
+    ]
+    site_id: Annotated[
+        UUID | None,
+        Field(None, description="The identifier of the machine's site"),
     ]
     architecture: Annotated[
         str, Field(..., description="The architecture of the machine")
@@ -25,6 +30,12 @@ class MachineCreate(CamelInBaseModel):
         str | None, Field(None, description="Additional notes about the machine")
     ]
 
+    @model_validator(mode="after")
+    def validate_site_reference(self) -> "MachineCreate":
+        if self.site is None and self.site_id is None:
+            raise ValueError("Either site or siteId is required")
+        return self
+
 
 class MachineOut(CamelOutBaseModel):
     """Schema for representing a Machine object."""
@@ -34,6 +45,9 @@ class MachineOut(CamelOutBaseModel):
     name: Annotated[str, Field(..., description="The name of the machine")]
     site: Annotated[
         str, Field(..., description="The site where the machine is located")
+    ]
+    site_id: Annotated[
+        UUID, Field(..., description="The identifier of the machine's site")
     ]
     architecture: Annotated[
         str, Field(..., description="The architecture of the machine")

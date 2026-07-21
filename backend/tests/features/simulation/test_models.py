@@ -18,8 +18,10 @@ from app.features.simulation.enums import (
     SimulationType,
 )
 from app.features.simulation.models import Case, ExternalLink, Simulation
+from app.features.site.models import Site
 from app.features.user.models import User
 from tests.conftest import engine
+from tests.features.site.utils import get_or_create_site
 
 
 @pytest.fixture
@@ -28,6 +30,7 @@ def simulation_create_all_db() -> Generator[Session, None, None]:
 
     tables = [
         cast(Table, User.__table__),
+        cast(Table, Site.__table__),
         cast(Table, Machine.__table__),
         cast(Table, Ingestion.__table__),
         cast(Table, Case.__table__),
@@ -60,7 +63,7 @@ def simulation_create_all_db() -> Generator[Session, None, None]:
 def _create_machine(db: Session) -> Machine:
     machine = Machine(
         name=f"machine-{datetime.now(timezone.utc).timestamp()}",
-        site="NERSC",
+        site_record=get_or_create_site(db, "NERSC"),
         architecture="x86_64",
         scheduler="SLURM",
         gpu=False,
@@ -110,7 +113,7 @@ def _create_dependencies(session: Session) -> tuple[User, Machine, Ingestion]:
     user = User(email="simulation-model@example.com", is_active=True, is_verified=True)
     machine = Machine(
         name="simulation-model-machine",
-        site="Test Site",
+        site_record=get_or_create_site(session),
         architecture="x86_64",
         scheduler="SLURM",
         gpu=False,

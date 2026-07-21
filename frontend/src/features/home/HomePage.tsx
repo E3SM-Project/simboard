@@ -12,13 +12,20 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
-import type { Machine } from '@/types/index';
+import type { Machine, Site } from '@/types/index';
 
 interface HomePageProps {
   machines: Machine[];
+  sites: Site[];
 }
 
-export const HomePage = ({ machines }: HomePageProps) => {
+interface InfrastructureRow {
+  key: string;
+  siteName: string;
+  machine?: Machine;
+}
+
+export const HomePage = ({ machines, sites }: HomePageProps) => {
   const { data: overview, error, isLoading, refetch } = useCatalogOverview();
   const totalCases = overview?.totalCases ?? 0;
   const latestSubmission = overview?.latestSubmission;
@@ -28,15 +35,46 @@ export const HomePage = ({ machines }: HomePageProps) => {
     hpcUsernameSummary: caseRecord.hpcUsername,
     lastUpdated: caseRecord.updatedAt,
   }));
-  const machineSimulationCounts = new Map<Machine['id'], number>(
+  const machineCaseCounts = new Map<Machine['id'], number>(
     Object.entries(overview?.machineCounts ?? {}),
   );
-  const featuredMachines = [...machines]
-    .sort(
-      (left, right) =>
-        (machineSimulationCounts.get(right.id) ?? 0) - (machineSimulationCounts.get(left.id) ?? 0),
-    )
-    .slice(0, 6);
+  const siteIdByName = new Map(sites.map((site) => [site.name, site.id]));
+  const machinesBySite = new Map<Site['id'], Machine[]>();
+  machines.forEach((machine) => {
+    const siteId = machine.siteId ?? (machine.site ? siteIdByName.get(machine.site) : undefined);
+    if (!siteId) return;
+
+    const siteMachines = machinesBySite.get(siteId) ?? [];
+    siteMachines.push(machine);
+    machinesBySite.set(siteId, siteMachines);
+  });
+  const siteMachineRows = sites.flatMap((site): InfrastructureRow[] => {
+    const siteMachines = [...(machinesBySite.get(site.id) ?? [])].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+
+    if (siteMachines.length === 0) {
+      return [{ key: `site-${site.id}`, siteName: site.name, machine: undefined }];
+    }
+
+    return siteMachines.map((machine) => ({
+      key: machine.id,
+      siteName: site.name,
+      machine,
+    }));
+  });
+  const matchedMachineIds = new Set(
+    siteMachineRows.flatMap((row) => (row.machine ? [row.machine.id] : [])),
+  );
+  const unmatchedMachineRows = machines
+    .filter((machine) => !matchedMachineIds.has(machine.id))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((machine) => ({
+      key: machine.id,
+      siteName: machine.site ?? 'N/A',
+      machine,
+    }));
+  const infrastructureRows = [...siteMachineRows, ...unmatchedMachineRows];
 
   const workflows = [
     {
@@ -146,7 +184,7 @@ export const HomePage = ({ machines }: HomePageProps) => {
             </Button>
           </div>
 
-          <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
               <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Total Cases
@@ -169,6 +207,14 @@ export const HomePage = ({ machines }: HomePageProps) => {
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
                 {machines.length}
+              </p>
+            </div>
+            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
+              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Sites
+              </p>
+              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
+                {sites.length}
               </p>
             </div>
             <div className="flex min-h-28 flex-col gap-4 px-4 py-4">
@@ -226,6 +272,50 @@ export const HomePage = ({ machines }: HomePageProps) => {
       </section>
 
       <section className="mx-auto mt-10 w-full max-w-7xl">
+        <div className="mb-4 space-y-1">
+          <h2 className="text-2xl font-bold">Sites and Machines</h2>
+          <p className="text-muted-foreground">
+            Computing facilities and systems represented in the SimBoard catalog.
+          </p>
+        </div>
+        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Site</TableHead>
+                <TableHead>Machine</TableHead>
+                <TableHead>Architecture</TableHead>
+                <TableHead>GPU Support</TableHead>
+                <TableHead>Case Count</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {infrastructureRows.map(({ key, siteName, machine }) => (
+                <TableRow key={key}>
+                  <TableCell>{siteName}</TableCell>
+                  <TableCell className="capitalize">{machine?.name ?? 'N/A'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={machine?.architecture ?? 'N/A'} lines={2} />
+                  </TableCell>
+                  <TableCell>{machine ? (machine.gpu ? 'Yes' : 'No') : 'N/A'}</TableCell>
+                  <TableCell>
+                    {machine ? (machineCaseCounts.get(machine.id) ?? 0) : 'N/A'}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {infrastructureRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    No sites or machines available.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+
+      <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recent Cases</h2>
@@ -274,41 +364,6 @@ export const HomePage = ({ machines }: HomePageProps) => {
                       </Link>
                     </Button>
                   </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-10 w-full max-w-7xl">
-        <div className="mb-4 space-y-1">
-          <h2 className="text-2xl font-bold">Machines</h2>
-          <p className="text-muted-foreground">
-            Systems used to run simulations represented in the SimBoard catalog.
-          </p>
-        </div>
-        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Architecture</TableHead>
-                <TableHead>GPU</TableHead>
-                <TableHead>Simulation Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {featuredMachines.map((machine) => (
-                <TableRow key={machine.id}>
-                  <TableCell>{machine.name}</TableCell>
-                  <TableCell>{machine.site || 'N/A'}</TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={machine.architecture || 'N/A'} lines={2} />
-                  </TableCell>
-                  <TableCell>{machine.gpu ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{machineSimulationCounts.get(machine.id) ?? 0}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

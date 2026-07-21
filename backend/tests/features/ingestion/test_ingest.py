@@ -33,6 +33,7 @@ from app.features.simulation.enums import ArtifactKind, SimulationStatus, Simula
 from app.features.simulation.models import Case, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.models import User
+from tests.features.site.utils import get_or_create_site
 
 
 def _parsed_simulations_from_mapping(
@@ -127,7 +128,7 @@ class TestIngestArchive:
         """Create a test machine in the database."""
         machine = Machine(
             name=name,
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,
@@ -1386,7 +1387,7 @@ class TestNormalizeGitUrl:
         """Create a test machine in the database."""
         machine = Machine(
             name=name,
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,
@@ -1405,7 +1406,7 @@ class TestCaseHashIngestion:
         """Create a test machine in the database."""
         machine = Machine(
             name=name,
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,
@@ -2561,7 +2562,7 @@ class TestIngestHelpers:
     ) -> None:
         machine = Machine(
             name="artifact-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,
@@ -2623,7 +2624,7 @@ class TestIngestHelpers:
     ) -> None:
         machine = Machine(
             name="metadata-only-artifact-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,
@@ -2674,7 +2675,7 @@ class TestIngestHelpers:
     ) -> None:
         machine = Machine(
             name="missing-artifact-machine",
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,

@@ -6,6 +6,7 @@ from app.features.machine.utils import (
     normalize_machine_name_for_storage,
     resolve_machine_by_name,
 )
+from tests.features.site.utils import get_or_create_site
 
 
 class TestCanonicalizeMachineName:
@@ -29,7 +30,7 @@ class TestResolveMachineByName:
     def _create_machine(db: Session, name: str) -> Machine:
         machine = Machine(
             name=name,
-            site="Test Site",
+            site_record=get_or_create_site(db),
             architecture="x86_64",
             scheduler="SLURM",
             gpu=False,

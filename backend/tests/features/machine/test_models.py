@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.common.models.base import Base
 from app.features.machine.models import Machine
+from app.features.site.models import Site
 from tests.conftest import engine
+from tests.features.site.utils import get_or_create_site
 
 
 @pytest.fixture
@@ -21,7 +23,7 @@ def machine_create_all_db() -> Generator[Session, None, None]:
         connection.execute(text(f'SET search_path TO "{schema_name}"'))
         Base.metadata.create_all(
             bind=connection,
-            tables=[cast(Table, Machine.__table__)],
+            tables=[cast(Table, Site.__table__), cast(Table, Machine.__table__)],
         )
         connection.commit()
 
@@ -49,7 +51,7 @@ class TestMachineModelCreateAllSchema:
         machine_create_all_db.add(
             Machine(
                 name="machine constraint",
-                site="Site A",
+                site_record=get_or_create_site(machine_create_all_db, "Site A"),
                 architecture="x86_64",
                 scheduler="SLURM",
                 gpu=False,
@@ -60,7 +62,7 @@ class TestMachineModelCreateAllSchema:
         machine_create_all_db.add(
             Machine(
                 name="MACHINE CONSTRAINT",
-                site="Site B",
+                site_record=get_or_create_site(machine_create_all_db, "Site B"),
                 architecture="ARM",
                 scheduler="PBS",
                 gpu=False,
@@ -78,7 +80,7 @@ class TestMachineModelCreateAllSchema:
         machine_create_all_db.add(
             Machine(
                 name="Mixed-Case-Machine",
-                site="Site Mixed",
+                site_record=get_or_create_site(machine_create_all_db, "Site Mixed"),
                 architecture="x86_64",
                 scheduler="SLURM",
                 gpu=False,

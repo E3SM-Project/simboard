@@ -8,6 +8,7 @@ from app.core.database import transaction
 from app.features.machine.models import Machine
 from app.features.machine.schemas import MachineCreate, MachineOut
 from app.features.machine.utils import normalize_machine_name_for_storage
+from app.features.site.models import Site
 
 router = APIRouter(prefix="/machines", tags=["Machines"])
 
@@ -57,11 +58,29 @@ def create_machine(payload: MachineCreate, db: Session = Depends(get_database_se
             detail="Machine with this name already exists",
         )
 
-    machine_data = payload.model_dump()
+    site_record = None
+    if payload.site_id is not None:
+        site_record = db.query(Site).filter(Site.id == payload.site_id).first()
+        if site_record is None:
+            raise HTTPException(status_code=404, detail="Site not found")
+        if payload.site is not None and payload.site != site_record.name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="site and siteId refer to different sites",
+            )
+    elif payload.site is not None:
+        site_record = db.query(Site).filter(Site.name == payload.site).first()
+
+    machine_data = payload.model_dump(exclude={"site", "site_id"})
     machine_data["name"] = normalized_name
     new_machine = Machine(**machine_data)
 
     with transaction(db):
+        if site_record is None:
+            site_record = Site(name=payload.site)
+            db.add(site_record)
+            db.flush()
+        new_machine.site_record = site_record
         db.add(new_machine)
         db.flush()
 
