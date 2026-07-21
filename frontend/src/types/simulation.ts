@@ -17,6 +17,7 @@ export type SimulationStatusValue =
   | 'running'
   | 'failed'
   | 'completed';
+export type ComputeType = 'cpu' | 'gpu';
 
 export type SummaryCitationSourceType =
   | 'simulation_field'
@@ -143,6 +144,7 @@ export interface SimulationSummaryOut {
   id: string;
   executionId: string;
   caseHash: string | null;
+  computeType: ComputeType | null;
   status: string;
   simulationStartDate: string;
   simulationEndDate: string | null;
@@ -179,6 +181,7 @@ export interface SimulationCreate {
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;
+  computeType?: ComputeType | null;
 
   // Metadata & audit
   // ~~~~~~~~~~~~~~~~~
@@ -247,6 +250,7 @@ export interface SimulationOut extends SimulationCreate {
   id: string;
   caseName: string;
   caseGroup: string | null;
+  computeType: ComputeType | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -291,6 +295,7 @@ export interface SimulationListItemOut {
   runStartDate: string | null;
   runEndDate: string | null;
   compiler: string | null;
+  computeType: ComputeType | null;
   gitBranch: string | null;
   gitTag: string | null;
   gitCommitHash: string | null;
