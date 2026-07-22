@@ -41,6 +41,7 @@ import { useSimulationFilterOptions } from '@/lib/catalog/hooks/useSimulationFil
 import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
 import type { SimulationListItemOut } from '@/types/index';
+import { formatModelDate } from '@/utils/utils';
 
 // -------------------- Types & Interfaces --------------------
 // -------------------- Pure Helpers --------------------
@@ -243,7 +244,7 @@ export const SimulationsPage = () => {
         id: 'modelDates',
         header: 'Simulation Dates',
         accessorFn: (r) =>
-          `${formatDate(r.simulationStartDate ?? undefined)} → ${formatDate(r.simulationEndDate ?? undefined)}`,
+          `${formatModelDate(r.simulationStartDate)} → ${formatModelDate(r.simulationEndDate)}`,
         cell: ({ getValue }) => <TableCellText value={getValue() as string} />,
         size: 220,
       },

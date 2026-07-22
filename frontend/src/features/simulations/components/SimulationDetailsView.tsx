@@ -67,7 +67,7 @@ import type {
 } from '@/types';
 import { SIMULATION_EDITABLE_FIELDS } from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
-import { formatDate, getSimulationDuration } from '@/utils/utils';
+import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
 interface SimulationDetailsViewProps {
@@ -188,7 +188,9 @@ const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[
 const toInheritedCaseLinks = (simulation: SimulationOut) =>
   simulation.links.filter((link) => link.ownerType === 'case');
 
-const groupLinksByKind = (links: ExternalLinkOut[]): Record<ExternalLinkKind, ExternalLinkOut[]> => ({
+const groupLinksByKind = (
+  links: ExternalLinkOut[],
+): Record<ExternalLinkKind, ExternalLinkOut[]> => ({
   diagnostic: links.filter((link) => link.kind === 'diagnostic'),
   performance: links.filter((link) => link.kind === 'performance'),
   docs: links.filter((link) => link.kind === 'docs'),
@@ -231,7 +233,9 @@ const ExternalResourceLinkRow = ({
       >
         {label}
       </a>
-      {label !== href ? <div className="mt-0.5 break-all text-xs text-muted-foreground">{href}</div> : null}
+      {label !== href ? (
+        <div className="mt-0.5 break-all text-xs text-muted-foreground">{href}</div>
+      ) : null}
     </div>
     <div className="flex shrink-0 items-center gap-2">
       <ExternalResourceSourceBadge source={source} />
@@ -1148,21 +1152,21 @@ export const SimulationDetailsView = ({
                     <FieldRow label="Simulation Start Date">
                       <span className="text-sm">
                         {simulation.simulationStartDate
-                          ? formatDate(simulation.simulationStartDate)
+                          ? formatModelDate(simulation.simulationStartDate)
                           : '—'}
                       </span>
                     </FieldRow>
                     <FieldRow label="Simulation End Date">
                       <span className="text-sm">
                         {simulation.simulationEndDate
-                          ? formatDate(simulation.simulationEndDate)
+                          ? formatModelDate(simulation.simulationEndDate)
                           : '—'}
                       </span>
                     </FieldRow>
                     <FieldRow label="Total Duration">
                       <span className="text-sm">
                         {simulation.simulationStartDate && simulation.simulationEndDate
-                          ? getSimulationDuration(
+                          ? getModelDateDuration(
                               simulation.simulationStartDate,
                               simulation.simulationEndDate,
                             )
@@ -1405,8 +1409,8 @@ export const SimulationDetailsView = ({
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
                           <div className="font-medium">Inherited case links</div>
                           <div className="mt-1 text-muted-foreground">
-                            These links come from case-level diagnostics. They stay visible here
-                            but are not changed by simulation save.
+                            These links come from case-level diagnostics. They stay visible here but
+                            are not changed by simulation save.
                           </div>
                           <ul className="mt-3 space-y-2">
                             {inheritedCaseLinks.map((link) => (
@@ -1458,7 +1462,8 @@ export const SimulationDetailsView = ({
                             {externalResourceKinds.map((kind) => {
                               const simulationLinksForKind = groupedSimulationOwnedLinks[kind];
                               const caseLinksForKind = groupedInheritedCaseLinks[kind];
-                              const showDerivedPaceLink = kind === 'performance' && Boolean(paceLink);
+                              const showDerivedPaceLink =
+                                kind === 'performance' && Boolean(paceLink);
 
                               if (
                                 simulationLinksForKind.length === 0 &&
@@ -1469,10 +1474,7 @@ export const SimulationDetailsView = ({
                               }
 
                               return (
-                                <ExternalResourceGroup
-                                  key={kind}
-                                  title={formatLinkKindLabel(kind)}
-                                >
+                                <ExternalResourceGroup key={kind} title={formatLinkKindLabel(kind)}>
                                   {simulationLinksForKind.map((link) => (
                                     <ExternalResourceLinkRow
                                       key={link.id}

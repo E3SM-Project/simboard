@@ -14,6 +14,7 @@ import { suppressNextBrowseInteraction } from '@/features/browse/components/Simu
 import { useSimulation } from '@/lib/catalog/hooks/useSimulation';
 import { getArtifactsByKind } from '@/types/artifact';
 import type { SimulationListItemOut } from '@/types/index';
+import { formatModelDate } from '@/utils/utils';
 
 interface SimulationBrowseDetailsDialogProps {
   simulation: SimulationListItemOut;
@@ -31,10 +32,12 @@ export const SimulationBrowseDetailsDialog = ({
   triggerClassName,
 }: SimulationBrowseDetailsDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { data: simulationDetail, error, isFetching, refetch } = useSimulation(
-    listSimulation.id,
-    isOpen,
-  );
+  const {
+    data: simulationDetail,
+    error,
+    isFetching,
+    refetch,
+  } = useSimulation(listSimulation.id, isOpen);
   const handleTriggerInteraction = (event: React.SyntheticEvent) => {
     event.stopPropagation();
   };
@@ -82,10 +85,10 @@ export const SimulationBrowseDetailsDialog = ({
   const simulation = simulationDetail;
 
   const startStr = simulation.simulationStartDate
-    ? new Date(simulation.simulationStartDate).toISOString().slice(0, 10)
+    ? formatModelDate(simulation.simulationStartDate)
     : 'N/A';
   const endStr = simulation.simulationEndDate
-    ? new Date(simulation.simulationEndDate).toISOString().slice(0, 10)
+    ? formatModelDate(simulation.simulationEndDate)
     : 'N/A';
   const runStartStr = simulation.runStartDate
     ? new Date(simulation.runStartDate).toISOString().slice(0, 10)

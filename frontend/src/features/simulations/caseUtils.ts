@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 
 import type { SimulationSummaryOut } from '@/types';
+import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
 
@@ -29,7 +30,7 @@ export const formatCaseDate = (value?: string | null) => {
 };
 
 export const formatSimulationDateRange = (simulation: SimulationSummaryOut) =>
-  `${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(simulation.simulationEndDate)}`;
+  `${formatModelDate(simulation.simulationStartDate)} → ${formatModelDate(simulation.simulationEndDate)}`;
 
 export const getSimulationSummaryDateWindow = (
   simulations: SimulationSummaryOut[],
@@ -44,8 +45,7 @@ export const getSimulationSummaryDateWindow = (
   for (const simulation of simulations) {
     if (
       earliestSimulation == null ||
-      new Date(simulation.simulationStartDate).getTime() <
-        new Date(earliestSimulation.simulationStartDate).getTime()
+      compareModelDates(simulation.simulationStartDate, earliestSimulation.simulationStartDate) < 0
     ) {
       earliestSimulation = simulation;
     }
@@ -56,7 +56,7 @@ export const getSimulationSummaryDateWindow = (
 
     if (
       latestSimulation == null ||
-      new Date(simulationEndDate).getTime() > new Date(latestEndDate ?? simulationEndDate).getTime()
+      compareModelDates(simulationEndDate, latestEndDate ?? simulationEndDate) > 0
     ) {
       latestSimulation = simulation;
     }
@@ -64,15 +64,13 @@ export const getSimulationSummaryDateWindow = (
 
   return {
     startDate: earliestSimulation?.simulationStartDate ?? null,
-    endDate:
-      latestSimulation?.simulationEndDate ?? latestSimulation?.simulationStartDate ?? null,
+    endDate: latestSimulation?.simulationEndDate ?? latestSimulation?.simulationStartDate ?? null,
   };
 };
 
 export const sortSimulationSummaries = (simulations: SimulationSummaryOut[]) =>
-  [...simulations].sort(
-    (left, right) =>
-      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime(),
+  [...simulations].sort((left, right) =>
+    compareModelDates(right.simulationStartDate, left.simulationStartDate),
   );
 
 export const formatCaseHashLabel = (caseHash: string | null, maxLength = 18) => {
@@ -91,22 +89,23 @@ export const groupSimulationSummaries = (
   const groups = new Map<
     string,
     SimulationSummaryGroup & {
-      latestSimulationStartTime: number;
+      latestSimulationStartTime: string;
     }
   >();
 
   for (const simulation of sortSimulationSummaries(simulations)) {
     const isFallback = simulation.caseHash == null;
     const key = simulation.caseHash ?? '__missing_case_hash__';
-    const latestSimulationStartTime = new Date(simulation.simulationStartDate).getTime();
+    const latestSimulationStartTime = simulation.simulationStartDate;
     const existingGroup = groups.get(key);
 
     if (existingGroup) {
       existingGroup.simulations.push(simulation);
-      existingGroup.latestSimulationStartTime = Math.max(
-        existingGroup.latestSimulationStartTime,
-        latestSimulationStartTime,
-      );
+      if (
+        compareModelDates(latestSimulationStartTime, existingGroup.latestSimulationStartTime) > 0
+      ) {
+        existingGroup.latestSimulationStartTime = latestSimulationStartTime;
+      }
       continue;
     }
 
@@ -127,7 +126,7 @@ export const groupSimulationSummaries = (
       }
 
       if (left.latestSimulationStartTime !== right.latestSimulationStartTime) {
-        return right.latestSimulationStartTime - left.latestSimulationStartTime;
+        return compareModelDates(right.latestSimulationStartTime, left.latestSimulationStartTime);
       }
 
       if (left.simulations.length !== right.simulations.length) {
@@ -149,7 +148,9 @@ export const getDefaultExpandedGroupKeys = <T extends { key: string }>(groups: T
   return groups.slice(0, 1).map((group) => group.key);
 };
 
-export const matchesSimulationGroupFilter = <T extends { isFallback: boolean; simulations: unknown[] }>(
+export const matchesSimulationGroupFilter = <
+  T extends { isFallback: boolean; simulations: unknown[] },
+>(
   group: T,
   filterMode: SimulationSummaryGroupFilter,
 ) => {

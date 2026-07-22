@@ -28,6 +28,7 @@ import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
 import { cn } from '@/lib/utils';
 import type { CaseListItemOut, SimulationListItemOut } from '@/types';
+import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 type ActiveFilterKey =
   | 'caseName'
@@ -75,9 +76,8 @@ const createEmptySimulationFilters = (): CaseSimulationFilters => ({
 });
 
 const sortCaseSimulations = (caseSimulations: SimulationListItemOut[]) =>
-  [...caseSimulations].sort(
-    (left, right) =>
-      new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime(),
+  [...caseSimulations].sort((left, right) =>
+    compareModelDates(right.simulationStartDate, left.simulationStartDate),
   );
 
 const CASE_SORT_FIELDS: Record<string, string> = {
@@ -540,7 +540,7 @@ export const CasesPage = () => {
                       </span>
                     </TableCell>
                     <TableCell className="align-top">
-                      {`${formatCaseDate(simulation.simulationStartDate)} → ${formatCaseDate(
+                      {`${formatModelDate(simulation.simulationStartDate)} → ${formatModelDate(
                         simulation.simulationEndDate ?? null,
                       )}`}
                     </TableCell>
