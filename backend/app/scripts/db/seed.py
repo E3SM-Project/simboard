@@ -11,7 +11,7 @@ Usage:
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from pydantic import AnyUrl, HttpUrl
@@ -196,6 +196,11 @@ def _parse_datetime(value):
         return None
 
 
+def _parse_date(value) -> date | None:
+    parsed = _parse_datetime(value)
+    return parsed.date() if parsed is not None else None
+
+
 def _resolve_seed_case_machine(
     db: Session, simulations_data: list[dict], case_name: str
 ) -> Machine:
@@ -273,10 +278,8 @@ def _seed_simulation(
         **{
             **seed_payload,
             "caseId": case.id,
-            "simulationStartDate": _parse_datetime(
-                sim_entry.get("simulationStartDate")
-            ),
-            "simulationEndDate": _parse_datetime(sim_entry.get("simulationEndDate")),
+            "simulationStartDate": _parse_date(sim_entry.get("simulationStartDate")),
+            "simulationEndDate": _parse_date(sim_entry.get("simulationEndDate")),
             "runStartDate": _parse_datetime(sim_entry.get("runStartDate")),
             "runEndDate": _parse_datetime(sim_entry.get("runEndDate")),
             "createdBy": user_id,

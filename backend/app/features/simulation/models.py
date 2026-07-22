@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -140,10 +141,8 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Model timeline
     # ~~~~~~~~~~~~~~
-    simulation_start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    simulation_end_date: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
+    simulation_start_date: Mapped[date] = mapped_column(Date)
+    simulation_end_date: Mapped[date | None] = mapped_column(Date)
     run_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     run_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     compiler: Mapped[str | None] = mapped_column(String(100))

@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -312,7 +312,7 @@ class TestListCases:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            simulation_start_date="2023-01-01T00:00:00Z",
+            simulation_start_date=date(2023, 1, 1),
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
@@ -708,7 +708,7 @@ class TestGetCase:
             initialization_type="startup",
             simulation_type="experimental",
             status="created",
-            simulation_start_date="2023-01-01T00:00:00Z",
+            simulation_start_date=date(2023, 1, 1),
             compute_type="gpu",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
@@ -732,6 +732,7 @@ class TestGetCase:
         assert data["notesMarkdown"] == "## Shared notes"
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
+        assert data["simulations"][0]["simulationStartDate"] == "2023-01-01"
         assert data["links"] == []
 
     def test_endpoint_includes_case_level_diagnostic_links(

@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -113,3 +115,4 @@ class TestSeedSimulation:
         assert simulation.case_id == case.id
         assert simulation.ingestion_id is not None
         assert simulation.compute_type == "gpu"
+        assert simulation.simulation_start_date == date(2023, 1, 1)

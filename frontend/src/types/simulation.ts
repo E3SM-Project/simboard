@@ -176,8 +176,8 @@ export interface SimulationCreate {
 
   // Model timeline
   // ~~~~~~~~~~~~~~
-  simulationStartDate: string; // ISO datetime
-  simulationEndDate?: string | null;
+  simulationStartDate: string; // ISO date (YYYY-MM-DD)
+  simulationEndDate?: string | null; // ISO date (YYYY-MM-DD)
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;

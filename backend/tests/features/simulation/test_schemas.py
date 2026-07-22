@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -46,7 +46,7 @@ class TestSimulationCreateSchema:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
+            "simulationStartDate": date(2023, 1, 1),
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
         }
@@ -67,12 +67,12 @@ class TestSimulationCreateSchema:
             "initializationType": "startup",
             "simulationType": "experimental",
             "status": "created",
-            "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
+            "simulationStartDate": date(2023, 1, 1),
             "gitTag": "v1.0",
             "gitCommitHash": "abc123",
             "campaign": "campaign1",
             "experimentType": "exp1",
-            "simulationEndDate": datetime(2023, 12, 31, 0, 0, 0),
+            "simulationEndDate": date(2023, 12, 31),
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
@@ -129,6 +129,41 @@ class TestSimulationCreateSchema:
                 status="created",
                 simulationStartDate=datetime(2023, 1, 1),
                 computeType="tpu",
+            )
+
+    @pytest.mark.parametrize("value", ["2019-08-01", "2019-08-01T00:00:00Z"])
+    def test_normalizes_supported_model_date_inputs(self, value: str):
+        simulation = SimulationCreate(
+            caseId=uuid4(),
+            executionId="1081156.251218-200923",
+            compset="AQUAPLANET",
+            compsetAlias="QPC4",
+            gridName="f19_f19",
+            gridResolution="1.9x2.5",
+            initializationType="startup",
+            simulationType="experimental",
+            status="created",
+            simulationStartDate=value,
+        )
+
+        assert simulation.simulation_start_date == date(2019, 8, 1)
+        assert (
+            simulation.model_dump(mode="json")["simulation_start_date"] == "2019-08-01"
+        )
+
+    def test_rejects_non_midnight_model_datetime(self):
+        with pytest.raises(ValidationError):
+            SimulationCreate(
+                caseId=uuid4(),
+                executionId="1081156.251218-200923",
+                compset="AQUAPLANET",
+                compsetAlias="QPC4",
+                gridName="f19_f19",
+                gridResolution="1.9x2.5",
+                initializationType="startup",
+                simulationType="experimental",
+                status="created",
+                simulationStartDate="2019-08-01T01:00:00Z",
             )
 
 
@@ -483,7 +518,7 @@ class TestSimulationOutSchema:
             "simulation_type": "experimental",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "simulation_start_date": date(2023, 1, 1),
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -567,7 +602,7 @@ class TestSimulationOutSchema:
             "simulation_type": "experimental",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "simulation_start_date": date(2023, 1, 1),
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -600,7 +635,7 @@ class TestSimulationOutSchema:
             "campaign": "campaign1",
             "experiment_type": "exp1",
             "case_group": "group1",
-            "simulation_end_date": datetime(2023, 12, 31, 0, 0, 0),
+            "simulation_end_date": date(2023, 12, 31),
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
@@ -663,7 +698,7 @@ class TestSimulationOutSchema:
             simulation_type="experimental",
             status="created",
             machine_id=uuid4(),
-            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_start_date=date(2023, 1, 1),
             created_by=uuid4(),
             created_by_user=UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -737,7 +772,7 @@ class TestSimulationOutSchema:
             simulation_type="experimental",
             status="created",
             machine_id=uuid4(),
-            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_start_date=date(2023, 1, 1),
             created_by=uuid4(),
             created_by_user=UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -818,7 +853,7 @@ class TestSimulationSummaryOutSchema:
             execution_id="1081156.251218-200923",
             case_hash=None,
             status="created",
-            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            simulation_start_date=date(2023, 1, 1),
             simulation_end_date=None,
         )
         assert summary.case_hash is None
@@ -830,11 +865,11 @@ class TestSimulationSummaryOutSchema:
             execution_id="1081290.251218-211543",
             case_hash="hash-2",
             status="completed",
-            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
-            simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+            simulation_start_date=date(2023, 1, 1),
+            simulation_end_date=date(2023, 12, 31),
         )
         assert summary.case_hash == "hash-2"
-        assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
+        assert summary.simulation_end_date == date(2023, 12, 31)
 
 
 class TestCaseSchemas:
@@ -850,15 +885,15 @@ class TestCaseSchemas:
                     execution_id="1081156.251218-200923",
                     case_hash="hash-1",
                     status="completed",
-                    simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
-                    simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
+                    simulation_start_date=date(2023, 1, 1),
+                    simulation_end_date=date(2023, 12, 31),
                 ),
                 SimulationSummaryOut(
                     id=uuid4(),
                     execution_id="1081290.251218-211543",
                     case_hash="hash-2",
                     status="completed",
-                    simulation_start_date=datetime(2023, 2, 1, 0, 0, 0),
+                    simulation_start_date=date(2023, 2, 1),
                     simulation_end_date=None,
                 ),
             ],

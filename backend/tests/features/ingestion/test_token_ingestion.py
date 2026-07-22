@@ -1,6 +1,6 @@
 """Integration tests for ingestion with API token authentication."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -413,7 +413,7 @@ class TestIngestionWithAPIToken:
                 simulationType=SimulationType.PRODUCTION,
                 status=SimulationStatus.RUNNING,
                 initializationType="cold",
-                simulationStartDate=datetime.now(timezone.utc),
+                simulationStartDate=date.today(),
             )
 
             mock_result = MagicMock()

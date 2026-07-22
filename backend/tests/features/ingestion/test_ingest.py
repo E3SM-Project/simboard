@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Mapping
 from unittest.mock import MagicMock, patch
@@ -349,20 +349,18 @@ class TestIngestArchive:
         assert ingest_result.errors[0]["error_type"] == "LookupError"
         assert "nonexistent-machine" in ingest_result.errors[0]["error"]
 
-    def test_parses_various_datetime_formats_through_public_api(
-        self, db: Session
-    ) -> None:
-        """Test datetime parsing with various formats through public API.
+    def test_parses_various_date_formats_through_public_api(self, db: Session) -> None:
+        """Test model-date parsing with various formats through public API.
 
-        This test verifies the _parse_datetime_field behavior by using it
+        This test verifies date-only normalization by using it
         through the public ingest_archive API.
         """
         machine = self._create_machine(db, "test-machine")
 
         test_cases = [
             "2020-01-01",
-            "2020-01-01 12:30:45",
-            "2020-01-01T12:30:45",
+            "2020-01-01 00:00:00",
+            "2020-01-01T00:00:00Z",
             "01/01/2020",
             "Jan 1, 2020",
         ]
@@ -404,8 +402,68 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.simulations) == 1
-        assert isinstance(ingest_result.simulations[0].simulation_start_date, datetime)
-        assert ingest_result.simulations[0].simulation_start_date.tzinfo is not None
+        assert ingest_result.simulations[0].simulation_start_date == date(2020, 1, 1)
+
+    def test_preserves_env_run_calendar_date(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+        mock_simulations = {
+            "/path/to/1082000.251218-200900": {
+                "execution_id": "1082000.251218-200900",
+                "case_name": "timezone-regression",
+                "compset": "test",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2019-08-01",
+                "initialization_type": "startup",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert ingest_result.simulations[0].simulation_start_date == date(2019, 8, 1)
+        assert (
+            ingest_result.simulations[0].model_dump(mode="json")[
+                "simulation_start_date"
+            ]
+            == "2019-08-01"
+        )
+
+    def test_rejects_non_midnight_model_datetime(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+        mock_simulations = {
+            "/path/to/1082000.251218-200900": {
+                "execution_id": "1082000.251218-200900",
+                "case_name": "invalid-model-date",
+                "compset": "test",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2019-08-01T01:00:00Z",
+                "initialization_type": "startup",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "ValidationError"
+        assert db.query(Case).filter(Case.name == "invalid-model-date").first() is None
 
     def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
         """Test that missing required fields are captured as errors."""
@@ -674,8 +732,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             )
 
             assert len(ingest_result.simulations) == 1
-            # All datetime fields should be timezone-aware
-            assert ingest_result.simulations[0].simulation_start_date.tzinfo is not None
+            assert ingest_result.simulations[0].simulation_start_date == date(
+                2020, 1, 1
+            )
+            # Run fields remain timezone-aware timestamps.
             if ingest_result.simulations[0].run_start_date:
                 assert ingest_result.simulations[0].run_start_date.tzinfo is not None
             if ingest_result.simulations[0].run_end_date:

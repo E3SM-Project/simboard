@@ -69,6 +69,7 @@ import type {
   SimulationListItemOut,
   SimulationSummaryOut,
 } from '@/types';
+import { formatModelDate } from '@/utils/utils';
 
 const DetailField = ({
   label,
@@ -118,7 +119,7 @@ const formatRunDateRange = (startDate?: string | null, endDate?: string | null) 
 const formatGroupSimulationWindow = (simulations: SimulationSummaryOut[]) => {
   const { startDate, endDate } = getSimulationSummaryDateWindow(simulations);
 
-  return `${formatCaseDate(startDate)} → ${formatCaseDate(endDate)}`;
+  return `${formatModelDate(startDate)} → ${formatModelDate(endDate)}`;
 };
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`) =>

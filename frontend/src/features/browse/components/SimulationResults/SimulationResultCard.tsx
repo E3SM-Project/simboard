@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationListItemOut } from '@/types/index';
+import { formatModelDate } from '@/utils/utils';
 
 interface SimulationResultCard {
   simulation: SimulationListItemOut;
@@ -43,18 +44,16 @@ export const SimulationResultCard = ({
 
   // -------------------- Derived Data --------------------
   const startStr = simulation.simulationStartDate
-    ? new Date(simulation.simulationStartDate).toISOString().slice(0, 10)
+    ? formatModelDate(simulation.simulationStartDate)
     : 'N/A';
   const endStr = simulation.simulationEndDate
-    ? new Date(simulation.simulationEndDate).toISOString().slice(0, 10)
+    ? formatModelDate(simulation.simulationEndDate)
     : 'N/A';
 
   return (
     <Card
       className={`flex h-full w-full flex-col rounded-2xl border bg-white p-0 shadow-sm transition-shadow ${
-        selected
-          ? 'border-slate-300 ring-1 ring-slate-200'
-          : 'border-slate-200 hover:shadow-md'
+        selected ? 'border-slate-300 ring-1 ring-slate-200' : 'border-slate-200 hover:shadow-md'
       } ${isSelectionDisabled ? 'cursor-default' : 'cursor-pointer'}`}
       onClick={(event) => {
         if (shouldIgnoreSelection(event.target)) {

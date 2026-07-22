@@ -21,7 +21,7 @@ import { norm, renderCellValue } from '@/features/compare/utils';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
-import { formatDate, getSimulationDuration } from '@/utils/utils';
+import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
 
 interface ComparePageProps {
   selectedCaseSimulationIdsByCase: Record<string, string[]>;
@@ -194,7 +194,7 @@ export const CompareWorkspace = ({
   const formatSectionLabel = (sectionKey: string) =>
     sectionKey.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
 
-  const formatCompareDate = (date: string | null | undefined) => (date ? formatDate(date) : '—');
+  const formatCompareDate = (date: string | null | undefined) => formatModelDate(date);
 
   const formatDateRange = (start: string | null | undefined, end: string | null | undefined) => {
     const startLabel = formatCompareDate(start);
@@ -278,14 +278,14 @@ export const CompareWorkspace = ({
         label: 'Model Start',
         values: selectedSimulationIds.map((id) => {
           const date = getSimProp(id, 'simulationStartDate', '');
-          return date ? formatDate(date as string) : '—';
+          return formatModelDate(date as string);
         }),
       },
       {
         label: 'Model End',
         values: selectedSimulationIds.map((id) => {
           const date = getSimProp(id, 'simulationEndDate', '');
-          return date ? formatDate(date as string) : '—';
+          return formatModelDate(date as string);
         }),
       },
       {
@@ -295,7 +295,7 @@ export const CompareWorkspace = ({
           const end = getSimProp(id, 'simulationEndDate', '');
           if (start && end) {
             try {
-              return getSimulationDuration(start as string, end as string);
+              return getModelDateDuration(start as string, end as string);
             } catch {
               return '—';
             }
