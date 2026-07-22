@@ -89,22 +89,22 @@ export const groupSimulationSummaries = (
   const groups = new Map<
     string,
     SimulationSummaryGroup & {
-      latestSimulationStartTime: string;
+      latestSimulationStartDate: string;
     }
   >();
 
   for (const simulation of sortSimulationSummaries(simulations)) {
     const isFallback = simulation.caseHash == null;
     const key = simulation.caseHash ?? '__missing_case_hash__';
-    const latestSimulationStartTime = simulation.simulationStartDate;
+    const latestSimulationStartDate = simulation.simulationStartDate;
     const existingGroup = groups.get(key);
 
     if (existingGroup) {
       existingGroup.simulations.push(simulation);
       if (
-        compareModelDates(latestSimulationStartTime, existingGroup.latestSimulationStartTime) > 0
+        compareModelDates(latestSimulationStartDate, existingGroup.latestSimulationStartDate) > 0
       ) {
-        existingGroup.latestSimulationStartTime = latestSimulationStartTime;
+        existingGroup.latestSimulationStartDate = latestSimulationStartDate;
       }
       continue;
     }
@@ -115,7 +115,7 @@ export const groupSimulationSummaries = (
       label: isFallback ? MISSING_CASE_HASH_LABEL : formatCaseHashLabel(simulation.caseHash),
       isFallback,
       simulations: [simulation],
-      latestSimulationStartTime,
+      latestSimulationStartDate,
     });
   }
 
@@ -125,8 +125,8 @@ export const groupSimulationSummaries = (
         return left.isFallback ? 1 : -1;
       }
 
-      if (left.latestSimulationStartTime !== right.latestSimulationStartTime) {
-        return compareModelDates(right.latestSimulationStartTime, left.latestSimulationStartTime);
+      if (left.latestSimulationStartDate !== right.latestSimulationStartDate) {
+        return compareModelDates(right.latestSimulationStartDate, left.latestSimulationStartDate);
       }
 
       if (left.simulations.length !== right.simulations.length) {

@@ -2,7 +2,7 @@
 
 import shlex
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -867,11 +867,18 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
 
 
 def _parse_date_field(value: str | None) -> date | None:
-    """Parse a calendar date without applying timezone conversion."""
+    """Parse a calendar date, rejecting values not at midnight UTC."""
     if not value:
         return None
     try:
-        return dateutil_parser.parse(value).date()
+        parsed = dateutil_parser.parse(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+        if parsed.time() != time.min:
+            raise ValueError("Model date datetime must represent midnight UTC")
+
+        return parsed.date()
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
 

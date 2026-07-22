@@ -359,8 +359,8 @@ class TestIngestArchive:
 
         test_cases = [
             "2020-01-01",
-            "2020-01-01 12:30:45",
-            "2020-01-01T12:30:45",
+            "2020-01-01 00:00:00",
+            "2020-01-01T00:00:00Z",
             "01/01/2020",
             "Jan 1, 2020",
         ]
@@ -435,6 +435,35 @@ class TestIngestArchive:
             ]
             == "2019-08-01"
         )
+
+    def test_rejects_non_midnight_model_datetime(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+        mock_simulations = {
+            "/path/to/1082000.251218-200900": {
+                "execution_id": "1082000.251218-200900",
+                "case_name": "invalid-model-date",
+                "compset": "test",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine.name,
+                "simulation_start_date": "2019-08-01T01:00:00Z",
+                "initialization_type": "startup",
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert ingest_result.simulations == []
+        assert len(ingest_result.errors) == 1
+        assert ingest_result.errors[0]["error_type"] == "ValidationError"
+        assert db.query(Case).filter(Case.name == "invalid-model-date").first() is None
 
     def test_missing_required_fields_raise_validation_error(self, db: Session) -> None:
         """Test that missing required fields are captured as errors."""
