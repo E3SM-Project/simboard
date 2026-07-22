@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -155,7 +155,7 @@ def _create_simulation(
         simulation_type=SimulationType.EXPERIMENTAL,
         status=SimulationStatus.CREATED,
         initialization_type="startup",
-        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        simulation_start_date=date(2023, 1, 1),
         created_by=user_id,
         last_updated_by=user_id,
         ingestion_id=ingestion_id,

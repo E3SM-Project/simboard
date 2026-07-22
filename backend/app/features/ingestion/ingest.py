@@ -2,7 +2,7 @@
 
 import shlex
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -23,6 +23,7 @@ from app.features.simulation.schemas import ArtifactCreate, SimulationCreate
 logger = _setup_custom_logger(__name__)
 
 _STRING_ADAPTER = TypeAdapter(str)
+_DATE_ADAPTER = TypeAdapter(date)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 CaseIdentity = tuple[str, UUID, str]
@@ -70,8 +71,8 @@ class SimulationCreateDraft:
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None
-    simulation_start_date: datetime | None
-    simulation_end_date: datetime | None
+    simulation_start_date: date | None
+    simulation_end_date: date | None
     run_start_date: datetime | None
     run_end_date: datetime | None
     compiler: str | None
@@ -522,7 +523,7 @@ def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
     ):
         _STRING_ADAPTER.validate_python(getattr(draft, field_name))
 
-    _DATETIME_ADAPTER.validate_python(draft.simulation_start_date)
+    _DATE_ADAPTER.validate_python(draft.simulation_start_date)
 
     if draft.git_repository_url is not None:
         _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
@@ -740,11 +741,8 @@ def _build_simulation_create_draft(
     SimulationCreateDraft
         Typed ingest draft ready for schema validation.
     """
-    # Parse datetime fields using the shared utility function.
-    simulation_start_date = _parse_datetime_field(
-        parsed_simulation.simulation_start_date
-    )
-    simulation_end_date = _parse_datetime_field(parsed_simulation.simulation_end_date)
+    simulation_start_date = _parse_date_field(parsed_simulation.simulation_start_date)
+    simulation_end_date = _parse_date_field(parsed_simulation.simulation_end_date)
 
     run_start_date = _parse_datetime_field(parsed_simulation.run_start_date)
     run_end_date = _parse_datetime_field(parsed_simulation.run_end_date)
@@ -862,6 +860,18 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
             dt = dt.replace(tzinfo=timezone.utc)
 
         return dt
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Could not parse date '{value}': {e}")
+
+        return None
+
+
+def _parse_date_field(value: str | None) -> date | None:
+    """Parse a calendar date without applying timezone conversion."""
+    if not value:
+        return None
+    try:
+        return dateutil_parser.parse(value).date()
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
 

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
@@ -221,7 +221,7 @@ class TestSnapshotHelpers:
             simulation_type=SimulationType.EXPERIMENTAL,
             status=SimulationStatus.COMPLETED,
             initialization_type="startup",
-            simulation_start_date=datetime(2024, 1, 1, tzinfo=UTC),
+            simulation_start_date=date(2024, 1, 1),
             created_by=uuid4(),
             last_updated_by=uuid4(),
             ingestion_id=uuid4(),

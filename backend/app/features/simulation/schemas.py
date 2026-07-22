@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -337,10 +337,10 @@ class SimulationCreate(CamelInBaseModel):
     # Model timeline
     # --------------
     simulation_start_date: Annotated[
-        datetime, Field(..., description="Start date of the simulation")
+        date, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        datetime | None, Field(None, description="Optional end date of the simulation")
+        date | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,
@@ -578,10 +578,10 @@ class SimulationSummaryOut(CamelOutBaseModel):
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
     simulation_start_date: Annotated[
-        datetime, Field(..., description="Start date of the simulation")
+        date, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        datetime | None, Field(None, description="Optional end date of the simulation")
+        date | None, Field(None, description="Optional end date of the simulation")
     ]
 
 
@@ -670,8 +670,8 @@ class SimulationListItemOut(CamelOutBaseModel):
     grid_name: str
     grid_resolution: str
     initialization_type: str
-    simulation_start_date: datetime
-    simulation_end_date: datetime | None = None
+    simulation_start_date: date
+    simulation_end_date: date | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
@@ -950,10 +950,10 @@ class SimulationOut(CamelOutBaseModel):
         ),
     ]
     simulation_start_date: Annotated[
-        datetime, Field(..., description="Start date of the simulation")
+        date, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        datetime | None, Field(None, description="Optional end date of the simulation")
+        date | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,

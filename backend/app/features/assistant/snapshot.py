@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
@@ -26,7 +26,7 @@ def _enum_value(value: object) -> str | None:
     return str(value)
 
 
-def _isoformat(value: datetime | None) -> str | None:
+def _isoformat(value: date | datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat()
