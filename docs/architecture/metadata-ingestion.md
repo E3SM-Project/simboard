@@ -174,6 +174,7 @@ Example NERSC path for `COMPLETED` status cases:
 Automated HPC collection reaches SimBoard ingestion through two site-side submission modes. Both use database-backed stored known execution IDs, but they submit submission-qualified cases through different routes:
 
 - `nersc_archive_ingestor.py` for local path submission on NERSC / Perlmutter
+- `chrysalis_v3_archive_ingestor.py` for the targeted Chrysalis E3SM v3 remote-upload backfill
 - `hpc_upload_archive_ingestor.py` for remote automated archive upload from LCRC and other DOE sites
 
 | Mode                            | Script / entry point             | Access pattern                                                                                                         | Route                                | Use when                                        | Examples                          |
@@ -181,6 +182,21 @@ Automated HPC collection reaches SimBoard ingestion through two site-side submis
 | Local path submission           | `nersc_archive_ingestor.py`      | Site-side collection submits a mounted case directory path inside `PERF_ARCHIVE_DIR` (mounted at `PERF_ARCHIVE_ROOT`). | `/api/v1/ingestions/from-path`       | Source archive is readable from NERSC Spin.     | NERSC / Perlmutter                |
 | Remote automated archive upload | `hpc_upload_archive_ingestor.py` | Site job uploads one submission-qualified case archive over HTTPS.                                                     | `/api/v1/ingestions/from-hpc-upload` | Source archive is not readable from NERSC Spin. | LCRC / Chrysalis; other DOE sites |
 | Browser/manual upload           | N/A                              | User uploads an archive through the browser.                                                                           | `/api/v1/ingestions/from-upload`     | Manual, test, or ad hoc ingestion is needed.    | User workstation                  |
+
+The v3 backfill is a specialization of remote automated archive upload, not
+another API mode. It runs on Chrysalis, statically defines simulations from the
+E3SM v3 data table, converts grouped table values to archive leaf case names,
+and exact-matches those names while scanning Chrysalis archive snapshots from
+`2024-01`. Each submission-qualified case is packaged and sent to
+`/api/v1/ingestions/from-hpc-upload`. Reconciliation logs map every expected
+simulation to matching case directories and report missing, accepted, already
+processed, incomplete, invalid, transient, deferred, and submission outcomes.
+
+Targeted v3 scans do not read or write archive snapshot checkpoints. Snapshot
+checkpoints describe completion of every execution in a snapshot, so a
+case-filtered scan must not mark a mixed snapshot complete or let prior general
+checkpoints hide targets. The runner still reads processed execution state and
+immutable discovery results, preserving submission idempotency.
 
 ### Automated Submission-State Flow
 
@@ -213,6 +229,10 @@ already recorded execution directory does not make that execution eligible
 again. Completed archive snapshots are skipped before their contents are
 walked. Dry runs compute and log proposed results but never persist discovery,
 processed state, or archive checkpoints.
+
+The targeted v3 runner is the exception to completed-snapshot pruning: it scans
+all eligible snapshots within its fixed lower bound because checkpoint state is
+intentionally disabled for filtered reconciliation.
 
 Remote automated uploads must contain exactly one case directory per request. The submitted `case_path` is used as the stable case identifier for that uploaded case.
 

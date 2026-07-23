@@ -27,6 +27,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    IngestorRunReport,
     _build_archive_checkpoints_endpoint_url,
     _build_config_from_env,
     _build_discovery_results_endpoint_url,
@@ -83,6 +84,9 @@ def _run_ingestor(  # noqa: C901
     post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
     discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
     checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    archive_checkpointing: bool = True,
+    run_report: IngestorRunReport | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     if post_request_fn is None:
@@ -108,7 +112,7 @@ def _run_ingestor(  # noqa: C901
         return 1
 
     completed_snapshot_keys: set[str] = set()
-    if config.scan_mode == "archive":
+    if config.scan_mode == "archive" and archive_checkpointing:
         try:
             completed_snapshot_keys = _fetch_archive_checkpoints(
                 _build_archive_checkpoints_endpoint_url(config),
@@ -158,6 +162,8 @@ def _run_ingestor(  # noqa: C901
             metadata_locator=metadata_locator,
             discovery_results=new_discovery_results,
             completed_snapshot_keys=completed_snapshot_keys,
+            case_path_filter=case_path_filter,
+            run_report=run_report,
         )
     except Exception as exc:
         _log_event(
@@ -225,8 +231,9 @@ def _run_ingestor(  # noqa: C901
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
+        run_report=run_report,
     )
-    if config.scan_mode != "archive":
+    if config.scan_mode != "archive" or not archive_checkpointing:
         return ingest_exit_code
 
     settled_snapshot_keys = _settled_archive_snapshot_keys(
