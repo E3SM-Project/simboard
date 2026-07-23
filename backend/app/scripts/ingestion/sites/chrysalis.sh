@@ -15,11 +15,11 @@ fi
 : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set before running this script.}"
 : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set before running this script.}"
 
-export MACHINE_NAME="${MACHINE_NAME:-perlmutter}"
+export MACHINE_NAME="${MACHINE_NAME:-chrysalis}"
 export SCAN_MODE="${SCAN_MODE:-staging}"
 export DRY_RUN="${DRY_RUN:-true}"
-export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/performance_archive}"
-export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/global/cfs/projectdirs/e3sm/OLD_PERF}"
+export PERF_ARCHIVE_ROOT="${PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/performance_archive}"
+export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF}"
 
 if [[ "${SCAN_MODE}" == "archive" ]]; then
   export ARCHIVE_YEAR_START="${ARCHIVE_YEAR_START:-2025-01}"
@@ -28,6 +28,5 @@ elif [[ "${SCAN_MODE}" != "staging" ]]; then
   exit 1
 fi
 
-
 cd "${BACKEND_DIR}"
-exec "${PYTHON_BIN}" -m app.scripts.ingestion.nersc_archive_ingestor "$@"
+exec "${PYTHON_BIN}" -m app.scripts.ingestion.hpc_upload_archive_ingestor

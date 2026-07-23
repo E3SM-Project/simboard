@@ -281,8 +281,10 @@ They also support these tuning options:
 
 `SCAN_MODE` selects whether a runner scans staging or archive roots. In archive
 mode, runners traverse only top-level `YYYY-MM` buckets under the configured
-archive root. Year-range filters apply only to archive mode and are intended
-for targeted backfills, not for normal staging collection.
+archive root. Year-range filters apply only to archive mode. Direct Python
+entrypoints leave both bounds unset; the NERSC and Chrysalis site wrappers
+default `ARCHIVE_YEAR_START=2025-01` and leave `ARCHIVE_YEAR_END` unset. Callers
+may override either bound for a differently scoped archive scan.
 
 `MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
 operation when runners should submit every submission-qualified case they find.
