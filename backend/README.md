@@ -5,7 +5,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 ## Responsibilities
 
 - archive ingestion and validation
-- case, simulation, machine, and ingestion persistence
+- case, execution, machine, and ingestion persistence
 - GitHub OAuth and API-token authentication
 - managed-content authorization for human editors and service accounts
 - PACE execution lookup
@@ -16,7 +16,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 ```text
 backend/app/main.py                 FastAPI app and router registration
 backend/app/features/ingestion/     ingestion endpoints and parser integration
-backend/app/features/simulation/    cases, simulations, schemas, delta logic
+backend/app/features/simulation/    cases, executions, schemas, delta logic
 backend/app/features/machine/       machine models and API
 backend/app/features/user/          auth, tokens, user models
 backend/app/core/                   config, DB setup, exceptions, logging
@@ -45,7 +45,7 @@ For repo-wide setup, assistant LLM configuration, and contributor workflow, see 
 
 ## Authorization Notes
 
-- Authenticated read access to simulations remains broad.
+- Authenticated read access to executions remains broad.
 - Managed content edits must reuse `app.features.user.manager.can_edit_managed_content`.
 - Policy shape: `admin` always allowed, `user` allowed only with verified E3SM GitHub org membership, `service_account` denied for human UI-managed edits.
 - Routes that enforce this policy should preserve `401` for unauthenticated requests and return `403` for authenticated users who lack edit permission.

@@ -151,12 +151,12 @@ export const CaseCompareRoute = ({
   const canOpenGlobalCompare = globalCompareCandidateIds.length >= 2;
 
   if (renderableSelectedSimulationIds.length < 2) {
-    let message = 'Select at least two runs from this case to compare.';
+    let message = 'Select at least two executions from this case to compare.';
 
     if (excludedSimulationCount > 0) {
-      message = `Ignored ${excludedSimulationCount} stored run${excludedSimulationCount === 1 ? '' : 's'} that no longer belong to this case.`;
+      message = `Ignored ${excludedSimulationCount} stored execution${excludedSimulationCount === 1 ? '' : 's'} that no longer belong to this case.`;
     } else if (missingSimulationCount > 0) {
-      message = 'Selected case runs are not available in the current compare dataset.';
+      message = 'Selected case executions are not available in the current compare dataset.';
     }
 
     return (
@@ -164,7 +164,9 @@ export const CaseCompareRoute = ({
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-slate-950">Case Compare Needs More Runs</h1>
+            <h1 className="text-2xl font-semibold text-slate-950">
+              Case Compare Needs More Executions
+            </h1>
             <p className="mt-2 text-sm text-slate-700">{message}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {onClose ? (
@@ -173,7 +175,7 @@ export const CaseCompareRoute = ({
                 </Button>
               ) : (
                 <Button asChild variant="outline">
-                  <Link to={caseDetailsHref}>Back to Simulations</Link>
+                  <Link to={caseDetailsHref}>Back to Executions</Link>
                 </Button>
               )}
               {canOpenGlobalCompare ? (
@@ -195,14 +197,14 @@ export const CaseCompareRoute = ({
           <div className="space-y-1">
             {excludedSimulationCount > 0 ? (
               <p>
-                Ignored {excludedSimulationCount} selected run
+                Ignored {excludedSimulationCount} selected execution
                 {excludedSimulationCount === 1 ? '' : 's'} from outside this case.
               </p>
             ) : null}
             {missingSimulationCount > 0 ? (
               <p>
-                Skipped {missingSimulationCount} case run
-                {missingSimulationCount === 1 ? '' : 's'} missing from loaded simulation details.
+                Skipped {missingSimulationCount} case execution
+                {missingSimulationCount === 1 ? '' : 's'} missing from loaded execution details.
               </p>
             ) : null}
           </div>

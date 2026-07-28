@@ -16,7 +16,7 @@ const MAX_SELECTION = 5;
 export const BrowseToolbar = ({
   simulations,
   buttonText,
-  helperText = 'Select runs across cases, then open cross-case compare.',
+  helperText = 'Select executions across cases, then open cross-case compare.',
   onCompareButtonClick,
   selectedSimulationIds,
   setSelectedSimulationIds,
@@ -74,9 +74,7 @@ export const BrowseToolbar = ({
                   className="ml-1 shrink-0 rounded-sm text-slate-400 transition-colors hover:text-destructive focus:outline-none"
                   aria-label={`Remove ${row.executionId}`}
                   onClick={() =>
-                    setSelectedSimulationIds(
-                      selectedSimulationIds.filter((rowId) => rowId !== id),
-                    )
+                    setSelectedSimulationIds(selectedSimulationIds.filter((rowId) => rowId !== id))
                   }
                 >
                   ×

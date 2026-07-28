@@ -177,7 +177,10 @@ export const BrowsePage = ({
       page,
       pageSize,
       ...Object.fromEntries(
-        FILTER_KEYS.map((key) => [key, appliedFilters[key].length ? appliedFilters[key] : undefined]),
+        FILTER_KEYS.map((key) => [
+          key,
+          appliedFilters[key].length ? appliedFilters[key] : undefined,
+        ]),
       ),
       sortBy: primarySort ? BROWSE_SORT_FIELDS[primarySort.id] : 'created_at',
       sortOrder: primarySort?.desc === false ? ('asc' as const) : ('desc' as const),
@@ -349,7 +352,7 @@ export const BrowsePage = ({
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-slate-500">
-        Loading runs…
+        Loading executions…
       </div>
     );
   }
@@ -358,7 +361,7 @@ export const BrowsePage = ({
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-6">
         <div className="space-y-3 text-center">
-          <p className="text-red-600">Could not load runs: {error}</p>
+          <p className="text-red-600">Could not load executions: {error}</p>
           <Button type="button" variant="outline" onClick={() => void refetch()}>
             Retry
           </Button>
@@ -373,7 +376,7 @@ export const BrowsePage = ({
       <div className="mx-auto w-full max-w-[2200px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         {error ? (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            <span>Could not refresh runs: {error}</span>
+            <span>Could not refresh executions: {error}</span>
             <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
               Retry
             </Button>
@@ -397,11 +400,13 @@ export const BrowsePage = ({
             <div className="flex min-w-0 flex-col">
               <header className="mb-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">Runs</h1>
+                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-slate-950">
+                    Executions
+                  </h1>
                   <p className="max-w-4xl text-[15px] leading-7 text-slate-600 sm:text-base">
-                    Explore and filter individual runs using the panel on the left. This is the
-                    advanced execution-level workspace for drilling into details and setting up
-                    cross-case compare across runs.
+                    Explore and filter individual executions using the panel on the left. This is
+                    the advanced execution-level workspace for drilling into details and setting up
+                    cross-case compare across executions.
                   </p>
                 </div>
                 <div className="xl:min-w-[360px]">
@@ -410,9 +415,7 @@ export const BrowsePage = ({
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
                         <div>
                           <span className="font-medium text-slate-500">Results</span>{' '}
-                          <span className="font-semibold text-slate-950">
-                            {totalItems}
-                          </span>
+                          <span className="font-semibold text-slate-950">{totalItems}</span>
                         </div>
                         <div>
                           <span className="font-medium text-slate-500">View</span>{' '}
@@ -469,7 +472,7 @@ export const BrowsePage = ({
                                 <Table size={24} strokeWidth={2} />
                               </button>
                             </TooltipTrigger>
-                            <TooltipContent>Show simulations in a table</TooltipContent>
+                            <TooltipContent>Show executions in a table</TooltipContent>
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -485,7 +488,7 @@ export const BrowsePage = ({
                                 <LayoutGrid size={24} strokeWidth={2} />
                               </button>
                             </TooltipTrigger>
-                            <TooltipContent>Show simulations as cards</TooltipContent>
+                            <TooltipContent>Show executions as cards</TooltipContent>
                           </Tooltip>
                         </div>
                       </div>

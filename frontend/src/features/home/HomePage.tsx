@@ -80,22 +80,22 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
     {
       title: 'Browse Cases',
       description:
-        'Browse grouped simulation work, scan related runs, and open deeper case details.',
+        'Browse grouped execution work, scan related executions, and open deeper case details.',
       to: '/cases',
       action: 'Open Cases',
       icon: FolderOpen,
     },
     {
-      title: 'Explore Runs',
+      title: 'Explore Executions',
       description:
-        'Use the advanced run browser when you need detailed filters, selection, and compare setup.',
+        'Use the advanced execution browser when you need detailed filters, selection, and compare setup.',
       to: '/browse',
-      action: 'Open Runs',
+      action: 'Open Executions',
       icon: Search,
     },
     {
-      title: 'Compare Simulations',
-      description: 'Inspect selected runs side by side to review differences in metadata.',
+      title: 'Compare Executions',
+      description: 'Inspect selected executions side by side to review differences in metadata.',
       to: '/compare',
       action: 'Open Compare',
       icon: GitCompareArrows,
@@ -145,26 +145,26 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
-              Explore E3SM Simulations
+              Explore E3SM Executions
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
               SimBoard is a public-facing interface for browsing, comparing, and sharing cataloged
-              E3SM simulations. Start with a broad view of the catalog, then drill into cases and
-              runs when you want more detail.
+              E3SM executions. Start with a broad view of the catalog, then drill into cases and
+              executions when you want more detail.
             </p>
           </div>
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Browse simulation collections, open case pages, and inspect the runs connected to
+              Browse execution collections, open case pages, and inspect the executions connected to
               them.
             </li>
             <li>
-              Jump into run-level views when you need machine, version, user, or date-specific
+              Jump into execution-level views when you need machine, version, user, or date-specific
               context.
             </li>
             <li>
-              Compare simulations side by side and share specific case or run pages with
+              Compare executions side by side and share specific case or execution pages with
               collaborators.
             </li>
           </ul>
@@ -174,13 +174,13 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               <Link to="/cases">Browse Cases</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/browse">Open Runs</Link>
+              <Link to="/browse">Open Executions</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link to="/compare">Compare</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/upload">Upload Simulation</Link>
+              <Link to="/upload">Upload Execution</Link>
             </Button>
           </div>
 
@@ -195,7 +195,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             </div>
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
               <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Total Simulations
+                Total Executions
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
                 {overview?.totalSimulations ?? 0}
@@ -237,7 +237,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             />
           </div>
           <p className="text-center text-sm leading-6 text-muted-foreground">
-            SimBoard surfaces curated simulations and catalog activity from the E3SM project.
+            SimBoard surfaces curated executions and catalog activity from the E3SM project.
           </p>
         </div>
       </section>
@@ -320,7 +320,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recent Cases</h2>
             <p className="text-muted-foreground">
-              Open recently active case pages and move from grouped simulation context into run
+              Open recently active case pages and move from grouped execution context into execution
               details.
             </p>
           </div>
@@ -335,7 +335,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                 <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
                 <TableHead>HPC Username</TableHead>
                 <TableHead>Machines</TableHead>
-                <TableHead>Runs</TableHead>
+                <TableHead>Executions</TableHead>
                 <TableHead>Case Group</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead>Details</TableHead>
@@ -370,7 +370,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           </Table>
         </div>
       </section>
-
       <footer className="mx-auto mt-12 w-full max-w-7xl border-t border-muted pt-6">
         <div className="flex flex-col gap-6 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -380,7 +379,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               className="h-10 w-auto object-contain"
               loading="lazy"
             />
-            <p>Public interface for browsing, comparing, and sharing cataloged E3SM simulations.</p>
+            <p>Public interface for browsing, comparing, and sharing cataloged E3SM executions.</p>
           </div>
           <div className="flex flex-wrap items-center gap-6">
             <a

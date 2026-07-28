@@ -6,6 +6,20 @@ Browser/manual uploads are supported separately and are not part of automated HP
 
 ## Terminology
 
+### Domain terms
+
+SimBoard uses `Case -> Execution` as its canonical object hierarchy. A case is
+the top-level CIME case identity, and each child execution is identified within
+that case by an execution ID derived from a CIME LID.
+
+| Term       | Definition                                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Case       | Top-level CIME case identity represented by one SimBoard case record.                                                                    |
+| Execution  | One case child identified by a case-scoped execution ID derived from a CIME LID.                                                         |
+| Run        | An action or time interval, including CIME `case.run`, a collection-runner invocation, and run start/end timestamps. Not an entity name. |
+| Job        | A scheduler or CIME workflow job. A job is not assumed to map one-to-one to an execution.                                                |
+| Simulation | Scientific model configuration or simulated-time metadata, such as simulation type and simulation start/end dates. Not an entity name.   |
+
 ### Process terms
 
 | Term       | Definition                                                                                                                                                                                                        |
@@ -296,7 +310,7 @@ Set it when operators need to limit one invocation's submission volume, such as:
 
 ### Stored Results
 
-After ingestion, SimBoard stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. Simulation rows preserve parsed `CASE_HASH` values so the frontend can group related executions inside a case without assigning persistent reference runs. The frontend reads the resulting catalog data through `/api/v1` endpoints.
+After ingestion, SimBoard stores normalized cases, executions, machines, artifacts, links, and audit records in PostgreSQL. Execution records preserve parsed `CASE_HASH` values so the frontend can group related executions inside a case without assigning a persistent reference execution. The frontend reads the resulting catalog data through `/api/v1` endpoints.
 
 > **Note**
 >

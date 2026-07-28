@@ -33,8 +33,8 @@ flowchart LR
 | Component            | Role                                                                                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend             | Provides browse, detail, compare, authentication, and upload views. Calls the backend over HTTPS through `frontend/src/api/api.ts` with credentials enabled for cookie auth. |
-| Backend              | Parses ingested archives, validates metadata, persists normalized records including per-run `CASE_HASH` grouping metadata, and exposes `/api/v1` endpoints.                  |
-| PostgreSQL           | Stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.                                                                                 |
+| Backend              | Parses ingested archives, validates metadata, persists normalized records including per-execution `CASE_HASH` grouping metadata, and exposes `/api/v1` endpoints.            |
+| PostgreSQL           | Stores cases, executions, machines, users, tokens, artifacts, links, and ingestion records.                                                                                  |
 | Automated collection | Runs on supported HPC sites, scans E3SM staging performance directories, and submits changed case metadata to SimBoard ingestion routes.                                     |
 | External services    | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |
 
@@ -126,7 +126,7 @@ For token-based ingestion and service-account details, see [docs/hpc_api_token_a
 
 ### Assistant LLM Setup
 
-SimBoard can generate LLM-backed summaries on the simulation details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
+SimBoard can generate LLM-backed summaries on the execution details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
 
 See [Assistant LLM Setup](assistant-llm-setup.md) for Ollama and LivAI configuration, model choices, token-budget guidance, and fallback troubleshooting.
 

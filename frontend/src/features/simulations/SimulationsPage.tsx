@@ -328,7 +328,7 @@ export const SimulationsPage = () => {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
-        Loading simulations…
+        Loading executions…
       </div>
     );
   }
@@ -337,7 +337,7 @@ export const SimulationsPage = () => {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-6">
         <div className="space-y-3 text-center">
-          <p className="text-red-600">Could not load simulations: {error}</p>
+          <p className="text-red-600">Could not load executions: {error}</p>
           <Button type="button" variant="outline" onClick={() => void refetch()}>
             Retry
           </Button>
@@ -359,7 +359,7 @@ export const SimulationsPage = () => {
     <div className="mx-auto w-full max-w-[1600px] px-8 py-8 space-y-6">
       {error ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <span>Could not refresh simulations: {error}</span>
+          <span>Could not refresh executions: {error}</span>
           <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
             Retry
           </Button>
@@ -369,9 +369,9 @@ export const SimulationsPage = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">All Simulations</h1>
+          <h1 className="text-2xl font-bold">All Executions</h1>
           <p className="text-gray-600 text-sm">
-            Complete catalog. Use search, filters, and sorting to locate specific runs.
+            Complete catalog. Use search, filters, and sorting to locate specific executions.
           </p>
         </div>
         <div className="flex items-center gap-3">

@@ -54,7 +54,7 @@ const getUpdateError = (error: unknown): SimulationSaveError => {
 
       if (validationDetails.length > 0) {
         return {
-          message: 'One or more fields need attention before this simulation can be saved.',
+          message: 'One or more fields need attention before this execution can be saved.',
           validationDetails,
         };
       }
@@ -62,7 +62,7 @@ const getUpdateError = (error: unknown): SimulationSaveError => {
   }
 
   return {
-    message: error instanceof Error ? error.message : 'Failed to update simulation.',
+    message: error instanceof Error ? error.message : 'Failed to update execution.',
     validationDetails: [],
   };
 };
@@ -90,9 +90,7 @@ export const SimulationDetailsPage = ({
     ? 'Back to Case'
     : normalizedBackHref === '/cases'
       ? 'Back to Cases'
-      : normalizedBackHref.startsWith('/simulations')
-        ? 'Back to Simulations'
-        : 'Back to Runs';
+      : 'Back to Executions';
   const canEdit = !authLoading && user?.can_edit_managed_content === true;
   const currentSimulation = simulation?.id === id ? simulation : null;
   const executionId = currentSimulation?.executionId?.trim() ?? '';
@@ -184,7 +182,7 @@ export const SimulationDetailsPage = ({
     if (selectedSimulationIds.length >= MAX_COMPARE_SELECTION) {
       toast({
         title: 'Compare list full',
-        description: `You can compare up to ${MAX_COMPARE_SELECTION} runs at a time.`,
+        description: `You can compare up to ${MAX_COMPARE_SELECTION} executions at a time.`,
         variant: 'destructive',
       });
       return;
@@ -200,7 +198,7 @@ export const SimulationDetailsPage = ({
   if (!id) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Invalid simulation ID</div>
+        <div className="text-center text-gray-500">Invalid execution ID</div>
       </div>
     );
   }
@@ -208,7 +206,7 @@ export const SimulationDetailsPage = ({
   if (loading || (simulation !== null && currentSimulation === null)) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Loading simulation details…</div>
+        <div className="text-center text-gray-500">Loading execution details…</div>
       </div>
     );
   }
@@ -224,7 +222,7 @@ export const SimulationDetailsPage = ({
   if (!currentSimulation) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Simulation not found</div>
+        <div className="text-center text-gray-500">Execution not found</div>
       </div>
     );
   }

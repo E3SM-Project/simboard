@@ -41,7 +41,7 @@ const CompareToolbar = ({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <h2 className="mt-1 text-xl font-semibold text-slate-950">
-            Comparing {simulationCount} simulation{simulationCount === 1 ? '' : 's'}
+            Comparing {simulationCount} execution{simulationCount === 1 ? '' : 's'}
           </h2>
           {toolbarDescription ? (
             <p className="mt-1 max-w-2xl text-sm text-slate-600">{toolbarDescription}</p>
@@ -61,7 +61,11 @@ const CompareToolbar = ({
 
         <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[24rem]">
           <div className="flex flex-wrap gap-2">
-            {onBackToBrowse ? <Button variant="outline" onClick={onBackToBrowse}>{backLabel}</Button> : null}
+            {onBackToBrowse ? (
+              <Button variant="outline" onClick={onBackToBrowse}>
+                {backLabel}
+              </Button>
+            ) : null}
             {(summaryExpanded || summaryHighlightCount > 0) && (
               <Button variant="outline" onClick={onSummaryToggle}>
                 <ChevronRight
@@ -99,7 +103,7 @@ const CompareToolbar = ({
 
           {!canCompareDifferences && (
             <p className="text-xs text-slate-500">
-              Unhide or add another simulation to compare differences.
+              Unhide or add another execution to compare differences.
             </p>
           )}
         </div>

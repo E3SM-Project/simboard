@@ -5,7 +5,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 ## Responsibilities
 
 - archive ingestion and validation
-- case, simulation, machine, and ingestion persistence
+- case, execution, machine, and ingestion persistence
 - GitHub OAuth and API-token authentication
 - PACE execution lookup
 - API schemas and routing
@@ -15,7 +15,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 ```text
 backend/app/main.py                 FastAPI app and router registration
 backend/app/features/ingestion/     ingestion endpoints and parser integration
-backend/app/features/simulation/    cases, simulations, schemas, delta logic
+backend/app/features/simulation/    cases, executions, schemas, delta logic
 backend/app/features/machine/       machine models and API
 backend/app/features/user/          auth, tokens, user models
 backend/app/core/                   config, DB setup, exceptions, logging

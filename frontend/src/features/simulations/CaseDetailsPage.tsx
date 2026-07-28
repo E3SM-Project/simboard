@@ -171,7 +171,7 @@ const CASE_HASH_GROUPING_TOOLTIP =
   'Case name is human-readable label. Case hash identifies specific CIME case instance. Multiple hashes under one case name usually mean case was recreated or cloned.';
 const GROUP_FILTER_OPTIONS: Array<{ value: SimulationSummaryGroupFilter; label: string }> = [
   { value: 'all', label: 'All' },
-  { value: 'multiRun', label: 'Multi-run' },
+  { value: 'multiRun', label: 'Multi-execution' },
   { value: 'missing', label: 'Missing hash' },
 ];
 
@@ -714,7 +714,7 @@ export const CaseDetailsPage = ({
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-6">
         <div className="space-y-3 text-center">
-          <p className="text-red-600">Could not load case simulations: {simulationsError}</p>
+          <p className="text-red-600">Could not load case executions: {simulationsError}</p>
           <Button type="button" variant="outline" onClick={() => void refetchSimulations()}>
             Retry
           </Button>
@@ -751,14 +751,13 @@ export const CaseDetailsPage = ({
   const filteredExecutionCount = filteredFlatSimulations.length;
   const activeSimulationCount =
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
-  const totalSimulationCount =
-    viewMode === 'grouped' ? simulationGroups.length : simulationTotal;
+  const totalSimulationCount = viewMode === 'grouped' ? simulationGroups.length : simulationTotal;
   const summaryHeadline =
     caseRecord.simulations.length === 0
-      ? '0 runs'
+      ? '0 executions'
       : allRunsMissingCaseHash
-        ? `${caseRecord.simulations.length} runs, all without Case Hash`
-        : `${caseRecord.simulations.length} runs in ${caseHashGroupCount} Case Hash ${
+        ? `${caseRecord.simulations.length} executions, all without Case Hash`
+        : `${caseRecord.simulations.length} executions in ${caseHashGroupCount} Case Hash ${
             caseHashGroupCount === 1 ? 'group' : 'groups'
           }`;
   const simulationsIntro = allRunsMissingCaseHash
@@ -898,7 +897,7 @@ export const CaseDetailsPage = ({
 
             <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-3">
               <div className="min-w-[7rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
-                <DetailField label="Runs" value={caseRecord.simulations.length} />
+                <DetailField label="Executions" value={caseRecord.simulations.length} />
               </div>
               <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
                 <DetailField label="Case Hash groups" value={caseHashGroupCount} />
@@ -940,7 +939,7 @@ export const CaseDetailsPage = ({
                 {isEditing ? (
                   <EditableExternalLinkList
                     title="Case-level external links"
-                    description="Add, relabel, or remove links shared across runs in this case."
+                    description="Add, relabel, or remove links shared across executions in this case."
                     items={linkRows}
                     valuePlaceholder="https://example.com/resource"
                     addLabel="Add link"
@@ -969,7 +968,7 @@ export const CaseDetailsPage = ({
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
                 <p className="text-sm text-muted-foreground">
-                  Shared notes for this case identity. Applies across runs in this case.
+                  Shared notes for this case identity. Applies across executions in this case.
                 </p>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -1077,7 +1076,7 @@ export const CaseDetailsPage = ({
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Simulations</h2>
+              <h2 className="text-xl font-semibold">Executions</h2>
               <p className="max-w-3xl text-sm text-muted-foreground">{simulationsIntro}</p>
             </div>
           </div>
@@ -1161,7 +1160,7 @@ export const CaseDetailsPage = ({
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-                          Selected case runs{' '}
+                          Selected case executions{' '}
                           <span className="font-semibold text-slate-950">
                             {caseSelectedSimulationCount}
                           </span>{' '}
@@ -1183,7 +1182,7 @@ export const CaseDetailsPage = ({
                           }}
                           disabled={isCompareButtonDisabled}
                         >
-                          {shouldRenderCompare ? 'Jump to Compare' : 'Compare Case Runs'}
+                          {shouldRenderCompare ? 'Jump to Compare' : 'Compare Case Executions'}
                         </Button>
                         {shouldRenderCompare ? (
                           <Button
@@ -1250,8 +1249,9 @@ export const CaseDetailsPage = ({
 
               {hiddenSelectedCount > 0 ? (
                 <div className="mt-3 text-xs text-slate-500">
-                  {hiddenSelectedCount} selected {hiddenSelectedCount === 1 ? 'run is' : 'runs are'}{' '}
-                  in filtered-out groups.
+                  {hiddenSelectedCount} selected{' '}
+                  {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
+                  groups.
                 </div>
               ) : null}
             </div>
@@ -1392,7 +1392,7 @@ export const CaseDetailsPage = ({
                                 </TooltipProvider>
                               </div>
                             </TableHead>
-                            <TableHead className="w-24 bg-slate-50">Runs</TableHead>
+                            <TableHead className="w-24 bg-slate-50">Executions</TableHead>
                             <TableHead className="bg-slate-50">Simulation window</TableHead>
                             <TableHead className="bg-slate-50">Initialization</TableHead>
                             <TableHead className="bg-slate-50">Run dates</TableHead>
@@ -1468,7 +1468,7 @@ export const CaseDetailsPage = ({
                                   </TableCell>
                                   <TableCell className="align-top">
                                     <Badge variant="outline">
-                                      {pluralize(group.simulations.length, 'run')}
+                                      {pluralize(group.simulations.length, 'execution')}
                                     </Badge>
                                   </TableCell>
                                   <TableCell className="align-top text-sm text-slate-700">
@@ -1610,7 +1610,7 @@ export const CaseDetailsPage = ({
 
           {simulationsError ? (
             <div className="flex items-center justify-between gap-3 border-t border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-              <span>Could not load more simulation metadata: {simulationsError}</span>
+              <span>Could not load more execution metadata: {simulationsError}</span>
               <Button
                 type="button"
                 variant="outline"
@@ -1625,8 +1625,8 @@ export const CaseDetailsPage = ({
           {hasNextPage ? (
             <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
               <p className="text-sm text-slate-600">
-                Loaded metadata for {allSimulations.length} of {simulationTotal} runs. Search and
-                grouping include all case runs.
+                Loaded metadata for {allSimulations.length} of {simulationTotal} executions. Search
+                and grouping include all case executions.
               </p>
               <Button
                 type="button"

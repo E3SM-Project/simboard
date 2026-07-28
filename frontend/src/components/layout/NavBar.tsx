@@ -18,9 +18,17 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
-  { label: 'Cases', href: '/cases', description: 'Primary case-centric discovery and detail pages' },
-  { label: 'Runs', href: '/browse', description: 'Advanced execution-level discovery workspace' },
-  { label: 'Upload', href: '/upload', description: 'Add a new simulation to the catalog' },
+  {
+    label: 'Cases',
+    href: '/cases',
+    description: 'Primary case-centric discovery and detail pages',
+  },
+  {
+    label: 'Executions',
+    href: '/browse',
+    description: 'Advanced execution-level discovery workspace',
+  },
+  { label: 'Upload', href: '/upload', description: 'Add a new execution to the catalog' },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];
 

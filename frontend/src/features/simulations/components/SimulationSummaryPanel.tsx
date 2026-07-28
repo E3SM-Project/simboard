@@ -109,30 +109,25 @@ const getSummaryStatusClasses = (status: string) => {
   }
 };
 
-const getSummaryTitle = (
-  llmSummaryAvailable = false,
-  showLoginForAiSummary = false,
-) => (llmSummaryAvailable && !showLoginForAiSummary ? 'AI Summary' : 'Summary');
+const getSummaryTitle = (llmSummaryAvailable = false, showLoginForAiSummary = false) =>
+  llmSummaryAvailable && !showLoginForAiSummary ? 'AI Summary' : 'Summary';
 
-const getSummaryDescription = (
-  llmSummaryAvailable = false,
-  showLoginForAiSummary = false,
-) =>
+const getSummaryDescription = (llmSummaryAvailable = false, showLoginForAiSummary = false) =>
   llmSummaryAvailable && !showLoginForAiSummary
     ? 'Read-only AI summary grounded in metadata already recorded in SimBoard.'
     : showLoginForAiSummary
-      ? 'Read-only metadata-based summary available now. Log in to use AI summary for this simulation.'
-    : 'Read-only metadata-based summary. This deployment currently provides metadata-based summaries only.';
+      ? 'Read-only metadata-based summary available now. Log in to use AI summary for this execution.'
+      : 'Read-only metadata-based summary. This deployment currently provides metadata-based summaries only.';
 
 const getSummaryLauncherDescription = (
   llmSummaryAvailable = false,
   showLoginForAiSummary = false,
 ) =>
   llmSummaryAvailable && !showLoginForAiSummary
-    ? 'Open the AI summary drawer without moving the simulation metadata.'
+    ? 'Open the AI summary drawer without moving the execution metadata.'
     : showLoginForAiSummary
       ? 'Open the metadata-based summary drawer, or log in to use AI summary.'
-    : 'Open the metadata-based summary drawer without moving the simulation metadata.';
+      : 'Open the metadata-based summary drawer without moving the execution metadata.';
 
 const SummaryTextBlock = ({ value, className }: { value: string; className?: string }) => (
   <div
@@ -210,7 +205,11 @@ const SummarySectionAccordion = ({
   }
 
   return (
-    <Accordion type="multiple" defaultValue={defaultValue} className="rounded-md border bg-white px-4">
+    <Accordion
+      type="multiple"
+      defaultValue={defaultValue}
+      className="rounded-md border bg-white px-4"
+    >
       {sections.map((section) => (
         <AccordionItem
           key={section.value}
@@ -332,9 +331,9 @@ const SummaryPanelBody = ({
   const summaryGenerationMode = summary?.generationMode ?? 'deterministic';
   const summaryFallbackUsed = summary?.fallbackUsed ?? false;
   const summaryGenerationProvider =
-    summaryGenerationMode === 'llm' ? summary?.generationProvider ?? null : null;
+    summaryGenerationMode === 'llm' ? (summary?.generationProvider ?? null) : null;
   const summaryGenerationModel =
-    summaryGenerationMode === 'llm' ? summary?.generationModel ?? null : null;
+    summaryGenerationMode === 'llm' ? (summary?.generationModel ?? null) : null;
 
   return (
     <div
@@ -348,13 +347,13 @@ const SummaryPanelBody = ({
         <div className="flex min-h-[220px] items-center rounded-md border border-dashed border-blue-200 bg-white/80 px-4 py-5 text-sm text-muted-foreground">
           {canGenerateSummary
             ? showLoginForAiSummary
-              ? 'Generate a read-only, metadata-based summary now, or log in to use AI summary for this simulation.'
+              ? 'Generate a read-only, metadata-based summary now, or log in to use AI summary for this execution.'
               : llmSummaryAvailable
-              ? 'Generate a read-only AI summary grounded in metadata already stored in SimBoard. It will not change this simulation record.'
-              : 'Generate a read-only summary grounded only in metadata already stored in SimBoard. This deployment currently provides metadata-based summaries only. It will not change this simulation record.'
+                ? 'Generate a read-only AI summary grounded in metadata already stored in SimBoard. It will not change this execution record.'
+                : 'Generate a read-only summary grounded only in metadata already stored in SimBoard. This deployment currently provides metadata-based summaries only. It will not change this execution record.'
             : llmSummaryAvailable
-              ? 'Log in with GitHub to generate a read-only AI summary for this simulation.'
-              : 'Log in with GitHub to generate a read-only, metadata-based summary for this simulation. This deployment currently provides metadata-based summaries only.'}
+              ? 'Log in with GitHub to generate a read-only AI summary for this execution.'
+              : 'Log in with GitHub to generate a read-only, metadata-based summary for this execution. This deployment currently provides metadata-based summaries only.'}
         </div>
       )}
 
@@ -559,11 +558,11 @@ export const SimulationSummaryLauncher = ({
                     ? showLoginForAiSummary
                       ? 'Generate a metadata-based summary now, or log in to use AI summary.'
                       : llmSummaryAvailable
-                      ? 'Generate an AI summary when you need a quick overview.'
-                      : 'Generate a metadata-based summary when you need a quick overview.'
+                        ? 'Generate an AI summary when you need a quick overview.'
+                        : 'Generate a metadata-based summary when you need a quick overview.'
                     : llmSummaryAvailable
-                      ? 'Log in to generate an AI summary for this run.'
-                      : 'Log in to generate a metadata-based summary for this run.'}
+                      ? 'Log in to generate an AI summary for this execution.'
+                      : 'Log in to generate a metadata-based summary for this execution.'}
           </p>
           <div className="flex shrink-0 items-center gap-2">
             <Button

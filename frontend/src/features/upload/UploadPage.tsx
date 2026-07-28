@@ -279,8 +279,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         title: 'Archive ingested',
         description:
           response.created_count > 0
-            ? `${response.created_count} simulation(s) created and ${response.duplicate_count} duplicate(s) skipped.`
-            : `No new simulations were created. ${response.duplicate_count} duplicate(s) were skipped.`,
+            ? `${response.created_count} execution(s) created and ${response.duplicate_count} duplicate(s) skipped.`
+            : `No new executions were created. ${response.duplicate_count} duplicate(s) were skipped.`,
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -324,7 +324,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold">Upload a Case or Run</h1>
+          <h1 className="text-2xl font-bold">Upload a Case or Execution</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Upload either a full E3SM performance case archive or a single execution directory
             packaged as
@@ -557,7 +557,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-gray-50/60 px-4 py-3">
                   <div>
                     <p className="font-medium text-gray-900">
-                      Created simulations ({createdSimulations.length})
+                      Created executions ({createdSimulations.length})
                     </p>
                     {createdCaseSummary ? (
                       <p className="mt-1 text-sm text-gray-700" title={createdCaseSummary.name}>
@@ -650,8 +650,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 └── env_run.xml.001.gz`}
               </pre>
               <p className="mt-2 text-xs text-gray-500">
-                A full case archive includes the case directory above. A single-run archive can
-                start directly at
+                A full case archive includes the case directory above. A single-execution archive
+                can start directly at
                 <code className="mx-1 rounded bg-gray-100 px-1 py-0.5">1081156.251218-200923/</code>
                 .
               </p>

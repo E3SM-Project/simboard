@@ -20,10 +20,10 @@ SimBoard exists so researchers and maintainers do not have to reconstruct simula
 
 ## Current Capabilities
 
-- Ingest packaged simulation archives into normalized case and simulation records
-- Browse runs and cases from the UI
-- View case details, simulation details, artifacts, and external links
-- Compare selected simulations side by side
+- Ingest packaged simulation archives into normalized case and execution records
+- Browse executions and cases from the UI
+- View case details, execution details, artifacts, and external links
+- Compare selected executions side by side
 - Preserve provenance such as machine, Git metadata, HPC username, artifacts, and external links
 - Resolve PACE experiment links from execution IDs
 - Support browser-based GitHub auth and service-account token auth for privileged automation
@@ -41,10 +41,10 @@ frontend origin. The route prefix is `/api/v1` (`API_BASE` in
 `backend/app/api/version.py`). The frontend resolves the API origin from the
 `VITE_API_BASE_URL` build variable.
 
-| Environment | API base URL | Notes |
-| --- | --- | --- |
-| Dev | `https://simboard-dev-api.e3sm.org/api/v1` | Frontend: `https://simboard-dev.e3sm.org/` |
-| Prod | `https://simboard-api.e3sm.org/api/v1` | Frontend: `https://simboard.e3sm.org/` |
+| Environment | API base URL                               | Notes                                      |
+| ----------- | ------------------------------------------ | ------------------------------------------ |
+| Dev         | `https://simboard-dev-api.e3sm.org/api/v1` | Frontend: `https://simboard-dev.e3sm.org/` |
+| Prod        | `https://simboard-api.e3sm.org/api/v1`     | Frontend: `https://simboard.e3sm.org/`     |
 
 - OpenAPI schema: `/openapi.json` (e.g. `https://simboard-dev-api.e3sm.org/openapi.json`)
 - Interactive docs (Swagger UI): `/docs`

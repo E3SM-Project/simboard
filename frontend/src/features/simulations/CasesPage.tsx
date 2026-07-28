@@ -367,7 +367,7 @@ export const CasesPage = () => {
               size="icon"
               type="button"
               className="h-8 w-8"
-              aria-label={isExpanded ? 'Collapse simulations' : 'Expand simulations'}
+              aria-label={isExpanded ? 'Collapse executions' : 'Expand executions'}
               onClick={(event) => {
                 event.stopPropagation();
                 setExpandedCaseId((current) =>
@@ -413,7 +413,7 @@ export const CasesPage = () => {
       },
       {
         id: 'simulationCount',
-        header: 'Total Simulations',
+        header: 'Total Executions',
         accessorFn: (caseRecord) => caseRecord.simulationCount,
         cell: ({ row }) => {
           return <Badge variant="secondary">{row.original.simulationCount}</Badge>;
@@ -495,11 +495,11 @@ export const CasesPage = () => {
       <div className="space-y-3 bg-muted/20 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">Simulation Summaries</p>
+            <p className="text-sm font-medium">Execution Summaries</p>
             <p className="text-xs text-muted-foreground">
               {hasActiveSimulationFilters
-                ? `${expandedSimulationTotal} runs match the current filters.`
-                : 'Open the case page to organize runs by Case Hash and launch compare.'}
+                ? `${expandedSimulationTotal} executions match the current filters.`
+                : 'Open the case page to organize executions by Case Hash and launch compare.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
@@ -558,7 +558,7 @@ export const CasesPage = () => {
               disabled={expandedSimulationPage <= 1}
               onClick={() => setExpandedSimulationPage((page) => Math.max(1, page - 1))}
             >
-              Previous runs
+              Previous executions
             </Button>
             <span>
               Page {expandedSimulationPage} of {expandedSimulationPageCount}
@@ -571,7 +571,7 @@ export const CasesPage = () => {
                 setExpandedSimulationPage((page) => Math.min(expandedSimulationPageCount, page + 1))
               }
             >
-              Next runs
+              Next executions
             </Button>
           </div>
         )}
@@ -604,8 +604,8 @@ export const CasesPage = () => {
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                  Find the cases behind your runs. Start with HPC username or machine, then refine
-                  by campaign, version context, and case metadata.
+                  Find the cases behind your executions. Start with HPC username or machine, then
+                  refine by campaign, version context, and case metadata.
                 </p>
               </div>
             </div>
@@ -624,12 +624,12 @@ export const CasesPage = () => {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Runs on page
+                  Executions on page
                 </p>
                 <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
                   {visibleRunCount}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">total runs across visible cases</p>
+                <p className="mt-1 text-xs text-slate-500">total executions across visible cases</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
@@ -722,9 +722,9 @@ export const CasesPage = () => {
                   <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Run context</p>
+                        <p className="text-sm font-medium text-slate-900">Execution context</p>
                         <p className="text-xs text-slate-500">
-                          Filter cases by the metadata attached to the runs inside them.
+                          Filter cases by the metadata attached to the executions inside them.
                         </p>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
