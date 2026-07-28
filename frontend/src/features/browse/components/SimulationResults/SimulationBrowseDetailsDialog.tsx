@@ -66,10 +66,10 @@ export const SimulationBrowseDetailsDialog = ({
             <DialogTitle>{listSimulation.executionId}</DialogTitle>
             <DialogDescription>
               {error
-                ? `Could not load simulation details: ${error}`
+                ? `Could not load execution details: ${error}`
                 : isFetching
-                  ? 'Loading simulation details…'
-                  : 'Simulation details are unavailable.'}
+                  ? 'Loading execution details…'
+                  : 'Execution details are unavailable.'}
             </DialogDescription>
           </DialogHeader>
           {error ? (

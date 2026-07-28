@@ -18,25 +18,25 @@ const styles: Record<
   production: {
     className: 'text-xs px-2 py-1 bg-green-600 text-white',
     style: { backgroundColor: '#16a34a', color: '#fff' },
-    label: 'Production Run',
+    label: 'Production',
     Icon: BadgeCheck,
   },
   master: {
     className: 'text-xs px-2 py-1 bg-blue-600 text-white',
     style: { backgroundColor: '#2563eb', color: '#fff' },
-    label: 'Master Run',
+    label: 'Master',
     Icon: GitBranch,
   },
   experimental: {
     className: 'text-xs px-2 py-1 bg-yellow-400 text-black',
     style: { backgroundColor: '#facc15', color: '#000' },
-    label: 'Experimental Run',
+    label: 'Experimental',
     Icon: FlaskConical,
   },
   test: {
     className: 'text-xs px-2 py-1 bg-purple-500 text-white',
     style: { backgroundColor: '#9333ea', color: '#fff' },
-    label: 'Test Run',
+    label: 'Test',
     Icon: FlaskRound,
   },
   unknown: {

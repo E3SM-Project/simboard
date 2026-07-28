@@ -204,15 +204,15 @@ export const SimulationResultCard = ({
               >
                 {simulation.simulationType === 'production' ? (
                   <>
-                    <BadgeCheck className="w-4 h-4 mr-1" /> Production Run
+                    <BadgeCheck className="w-4 h-4 mr-1" /> Production
                   </>
                 ) : simulation.simulationType === 'master' ? (
                   <>
-                    <GitBranch className="w-4 h-4 mr-1" /> Master Run
+                    <GitBranch className="w-4 h-4 mr-1" /> Master
                   </>
                 ) : (
                   <>
-                    <FlaskConical className="w-4 h-4 mr-1" /> Experimental Run
+                    <FlaskConical className="w-4 h-4 mr-1" /> Experimental
                   </>
                 )}
               </Badge>

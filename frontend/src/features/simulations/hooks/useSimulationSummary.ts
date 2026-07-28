@@ -80,7 +80,7 @@ export const useSimulationSummary = (
       }
       setData(null);
       if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) {
-        setError('Log in to generate a summary for this simulation.');
+        setError('Log in to generate a summary for this execution.');
       } else {
         setError(e instanceof Error ? e.message : 'Failed to generate summary.');
       }

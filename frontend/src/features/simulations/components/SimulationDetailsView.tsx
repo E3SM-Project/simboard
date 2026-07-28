@@ -200,7 +200,7 @@ const groupLinksByKind = (
 type ExternalResourceSource = 'simulation' | 'case' | 'derived';
 
 const EXTERNAL_RESOURCE_SOURCE_LABELS: Record<ExternalResourceSource, string> = {
-  simulation: 'Simulation',
+  simulation: 'Execution',
   case: 'Case',
   derived: 'Derived',
 };
@@ -248,7 +248,7 @@ const ExternalResourceLegend = () => (
   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
     <div className="flex items-center gap-2">
       <ExternalResourceSourceBadge source="simulation" />
-      <span>saved on this run</span>
+      <span>saved on this execution</span>
     </div>
     <div className="flex items-center gap-2">
       <ExternalResourceSourceBadge source="case" />
@@ -600,7 +600,7 @@ export const SimulationDetailsView = ({
   isSaving = false,
   saveError = null,
   backHref = '/browse',
-  backLabel = 'Back to Runs',
+  backLabel = 'Back to Executions',
   paceLink = null,
   onToggleCompare,
   onSave,
@@ -811,11 +811,11 @@ export const SimulationDetailsView = ({
     !isCompareSelected && compareSelectionCount >= maxCompareSelection;
   const compareActionLabel = isCompareSelected ? 'Remove from Comparison' : 'Add to Comparison';
   const compareActionTooltip = isCompareActionDisabled
-    ? `Compare list is full. Remove one of the ${maxCompareSelection} selected runs first.`
+    ? `Compare list is full. Remove one of the ${maxCompareSelection} selected executions first.`
     : undefined;
   const editAccessMessage = isAuthenticated
     ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
-    : 'Log in with GitHub to edit simulation metadata.';
+    : 'Log in with GitHub to edit execution metadata.';
 
   const addComment = () => {
     if (!newComment.trim()) return;
@@ -1134,8 +1134,8 @@ export const SimulationDetailsView = ({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Use case details to select runs from one Case Hash subgroup, then open compare
-                    for side-by-side review.
+                    Use case details to select executions from one Case Hash subgroup, then open
+                    compare for side-by-side review.
                   </p>
                   <Button variant="outline" asChild>
                     <Link to={`/cases/${simulation.caseId}`}>Open Case Details</Link>
@@ -1216,7 +1216,7 @@ export const SimulationDetailsView = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Simulation UUID:
+                        Execution UUID:
                       </Label>
                       <ReadonlyInput value={simulation.id} />
                       {simulation.id && (
@@ -1225,7 +1225,7 @@ export const SimulationDetailsView = ({
                           size="sm"
                           type="button"
                           onClick={() => navigator.clipboard.writeText(simulation.id)}
-                          title="Copy full Simulation ID"
+                          title="Copy full Execution ID"
                         >
                           Copy
                         </Button>
@@ -1392,8 +1392,8 @@ export const SimulationDetailsView = ({
                   {isEditing ? (
                     <div className="space-y-4">
                       <EditableExternalLinkList
-                        title="Simulation-specific external links"
-                        description="Add, relabel, or remove links saved directly on this simulation."
+                        title="Execution-specific external links"
+                        description="Add, relabel, or remove links saved directly on this execution."
                         items={linkRows}
                         valueLabel="URL"
                         valuePlaceholder="https://example.com/resource"
@@ -1410,7 +1410,7 @@ export const SimulationDetailsView = ({
                           <div className="font-medium">Inherited case links</div>
                           <div className="mt-1 text-muted-foreground">
                             These links come from case-level diagnostics. They stay visible here but
-                            are not changed by simulation save.
+                            are not changed by execution save.
                           </div>
                           <ul className="mt-3 space-y-2">
                             {inheritedCaseLinks.map((link) => (
@@ -1440,7 +1440,7 @@ export const SimulationDetailsView = ({
                           <div className="font-medium">PACE helper link</div>
                           <div className="mt-1 text-muted-foreground">
                             This derived link is shown for convenience and is not saved with the
-                            simulation.
+                            execution.
                           </div>
                           <a
                             className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline"
@@ -1533,7 +1533,7 @@ export const SimulationDetailsView = ({
                                                 </TooltipTrigger>
                                                 <TooltipContent>
                                                   Direct PACE experiment link not found. Search
-                                                  results may still contain this run.
+                                                  results may still contain this execution.
                                                 </TooltipContent>
                                               </Tooltip>
                                             </TooltipProvider>
@@ -1576,8 +1576,8 @@ export const SimulationDetailsView = ({
                   {!canEdit && (
                     <p className="text-xs text-muted-foreground">
                       {isAuthenticated
-                        ? 'You are signed in, but this simulation is read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
-                        : 'Log in with GitHub to edit simulation metadata. This page stays read-only while signed out.'}
+                        ? 'You are signed in, but this execution is read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
+                        : 'Log in with GitHub to edit execution metadata. This page stays read-only while signed out.'}
                     </p>
                   )}
                   {canEdit && isEditing && (
@@ -1712,14 +1712,14 @@ export const SimulationDetailsView = ({
               <SimulationPathCard
                 kind="output"
                 title="Output Paths"
-                description="These are the primary output files generated by the simulation."
+                description="These are the primary output files generated by the execution."
                 paths={outputArtifacts}
                 emptyText="No output paths available."
               />
               <SimulationPathCard
                 kind="archive"
                 title="Archive Paths"
-                description="These paths contain archived data files from the simulation."
+                description="These paths contain archived data files from the execution."
                 paths={archiveArtifacts}
                 emptyText="No archive artifacts available."
               />

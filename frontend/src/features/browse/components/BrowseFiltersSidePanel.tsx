@@ -47,7 +47,8 @@ export const BrowseFiltersSidePanel = ({
       <div>
         <label className={filterLabelClassName}>Case</label>
         <p className="mb-2 text-xs leading-5 text-slate-500">
-          Select one or more cases to narrow the run workspace without leaving cross-case browsing.
+          Select one or more cases to narrow the execution workspace without leaving cross-case
+          browsing.
         </p>
       </div>
       <MultiSelect
@@ -149,7 +150,7 @@ export const BrowseFiltersSidePanel = ({
 
       <CollapsibleGroup
         title="Execution Details"
-        description="Filter by run status or time information."
+        description="Filter by execution status or run time information."
       >
         <MultiSelectCheckboxGroup
           label="Machine"
@@ -180,7 +181,6 @@ export const BrowseFiltersSidePanel = ({
               : option.label
           }
         />
-
       </CollapsibleGroup>
 
       {/* Provenance*/}

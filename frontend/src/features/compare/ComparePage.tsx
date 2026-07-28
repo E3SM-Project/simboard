@@ -82,7 +82,7 @@ const arraysEqual = <T,>(left: T[], right: T[]) =>
 export const CompareWorkspace = ({
   backLabel = 'Back to Browse',
   contextNotice,
-  description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove simulations, and expand sections for detailed metrics.',
+  description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove executions, and expand sections for detailed metrics.',
   embedded = false,
   emptyStateActionHref = '/browse',
   emptyStateActionLabel = 'Go to Browse Page',
@@ -646,7 +646,7 @@ export const CompareWorkspace = ({
                     Change Summary
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Compact diff summary for the highest-signal fields across selected simulations.
+                    Compact diff summary for the highest-signal fields across selected executions.
                   </p>
                 </div>
                 <Badge
@@ -659,12 +659,12 @@ export const CompareWorkspace = ({
 
               {visibleOrder.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-600">
-                  All selected simulations are hidden. Unhide one or more simulations to review
+                  All selected executions are hidden. Unhide one or more executions to review
                   changes.
                 </p>
               ) : summaryCards.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-600">
-                  No high-signal differences across visible simulations.
+                  No high-signal differences across visible executions.
                 </p>
               ) : (
                 <div className="mt-3 overflow-x-auto">
@@ -732,7 +732,7 @@ export const CompareWorkspace = ({
 
         {/* Show Hidden Simulations  */}
         <section
-          aria-label="Show hidden simulations"
+          aria-label="Show hidden executions"
           className={`mb-2 mt-4 flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2${
             hidden.length === 0 ? ' invisible' : ''
           }`}
@@ -740,7 +740,7 @@ export const CompareWorkspace = ({
         >
           {hidden.length > 0 && (
             <>
-              <span className="text-sm font-medium text-slate-600">Hidden simulations:</span>
+              <span className="text-sm font-medium text-slate-600">Hidden executions:</span>
               {hidden.map((hiddenId) => {
                 const idx = selectedSimulationIds.indexOf(hiddenId);
                 const headerName = headers[idx] ?? hiddenId;
@@ -888,7 +888,7 @@ export const CompareWorkspace = ({
                   className="shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500"
                   style={{ width: visibleValueWidth }}
                 >
-                  Unhide a simulation to restore compare columns.
+                  Unhide an execution to restore compare columns.
                 </div>
               )}
             </div>
@@ -974,7 +974,7 @@ export const CompareWorkspace = ({
                             className="px-4 py-3 text-sm text-slate-500"
                             style={{ width: visibleValueWidth }}
                           >
-                            No changed rows in this section for the currently visible simulations.
+                            No changed rows in this section for the currently visible executions.
                           </div>
                         </div>
                       ) : (
