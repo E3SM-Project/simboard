@@ -145,11 +145,11 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
-              Explore E3SM Executions
+              Explore E3SM Simulations
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
               SimBoard is a public-facing interface for browsing, comparing, and sharing cataloged
-              E3SM executions. Start with a broad view of the catalog, then drill into cases and
+              E3SM simulations. Start with a broad view of the catalog, then drill into cases and
               executions when you want more detail.
             </p>
           </div>

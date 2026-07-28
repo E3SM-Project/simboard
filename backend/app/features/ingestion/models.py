@@ -28,7 +28,7 @@ from app.features.ingestion.enums import (
 )
 
 if TYPE_CHECKING:
-    from app.features.simulation.models import Execution
+    from app.features.catalog.models import Execution
 
 
 class Ingestion(Base):

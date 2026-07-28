@@ -30,35 +30,35 @@ from app.features.assistant.snapshot import (
     SnapshotBudgetExceededError,
     build_execution_snapshot,
 )
-from app.features.simulation.models import Execution
+from app.features.catalog.models import Execution
 
 _SNAPSHOT_PATH_ACCESSORS = {
-    "simulation.id": lambda snapshot: snapshot.execution.id,
-    "simulation.execution_id": lambda snapshot: snapshot.execution.execution_id,
-    "simulation.description": lambda snapshot: snapshot.execution.description,
-    "simulation.compset": lambda snapshot: snapshot.execution.compset,
-    "simulation.compset_alias": lambda snapshot: snapshot.execution.compset_alias,
-    "simulation.grid_name": lambda snapshot: snapshot.execution.grid_name,
-    "simulation.grid_resolution": lambda snapshot: snapshot.execution.grid_resolution,
-    "simulation.simulation_type": lambda snapshot: snapshot.execution.simulation_type,
-    "simulation.status": lambda snapshot: snapshot.execution.status,
-    "simulation.campaign": lambda snapshot: snapshot.execution.campaign,
-    "simulation.experiment_type": lambda snapshot: snapshot.execution.experiment_type,
-    "simulation.initialization_type": lambda snapshot: snapshot.execution.initialization_type,
-    "simulation.simulation_start_date": lambda snapshot: snapshot.execution.simulation_start_date,
-    "simulation.simulation_end_date": lambda snapshot: snapshot.execution.simulation_end_date,
-    "simulation.run_start_date": lambda snapshot: snapshot.execution.run_start_date,
-    "simulation.run_end_date": lambda snapshot: snapshot.execution.run_end_date,
-    "simulation.compiler": lambda snapshot: snapshot.execution.compiler,
-    "simulation.key_features": lambda snapshot: snapshot.execution.key_features,
-    "simulation.known_issues": lambda snapshot: snapshot.execution.known_issues,
-    "simulation.notes_markdown": lambda snapshot: snapshot.execution.notes_markdown,
-    "simulation.git_repository_url": lambda snapshot: snapshot.execution.git_repository_url,
-    "simulation.git_branch": lambda snapshot: snapshot.execution.git_branch,
-    "simulation.git_tag": lambda snapshot: snapshot.execution.git_tag,
-    "simulation.git_commit_hash": lambda snapshot: snapshot.execution.git_commit_hash,
-    "simulation.case_hash": lambda snapshot: snapshot.execution.case_hash,
-    "simulation.extra": lambda snapshot: snapshot.execution.extra,
+    "execution.id": lambda snapshot: snapshot.execution.id,
+    "execution.execution_id": lambda snapshot: snapshot.execution.execution_id,
+    "execution.description": lambda snapshot: snapshot.execution.description,
+    "execution.compset": lambda snapshot: snapshot.execution.compset,
+    "execution.compset_alias": lambda snapshot: snapshot.execution.compset_alias,
+    "execution.grid_name": lambda snapshot: snapshot.execution.grid_name,
+    "execution.grid_resolution": lambda snapshot: snapshot.execution.grid_resolution,
+    "execution.simulation_type": lambda snapshot: snapshot.execution.simulation_type,
+    "execution.status": lambda snapshot: snapshot.execution.status,
+    "execution.campaign": lambda snapshot: snapshot.execution.campaign,
+    "execution.experiment_type": lambda snapshot: snapshot.execution.experiment_type,
+    "execution.initialization_type": lambda snapshot: snapshot.execution.initialization_type,
+    "execution.simulation_start_date": lambda snapshot: snapshot.execution.simulation_start_date,
+    "execution.simulation_end_date": lambda snapshot: snapshot.execution.simulation_end_date,
+    "execution.run_start_date": lambda snapshot: snapshot.execution.run_start_date,
+    "execution.run_end_date": lambda snapshot: snapshot.execution.run_end_date,
+    "execution.compiler": lambda snapshot: snapshot.execution.compiler,
+    "execution.key_features": lambda snapshot: snapshot.execution.key_features,
+    "execution.known_issues": lambda snapshot: snapshot.execution.known_issues,
+    "execution.notes_markdown": lambda snapshot: snapshot.execution.notes_markdown,
+    "execution.git_repository_url": lambda snapshot: snapshot.execution.git_repository_url,
+    "execution.git_branch": lambda snapshot: snapshot.execution.git_branch,
+    "execution.git_tag": lambda snapshot: snapshot.execution.git_tag,
+    "execution.git_commit_hash": lambda snapshot: snapshot.execution.git_commit_hash,
+    "execution.case_hash": lambda snapshot: snapshot.execution.case_hash,
+    "execution.extra": lambda snapshot: snapshot.execution.extra,
     "case.name": lambda snapshot: snapshot.case.name,
     "case.case_group": lambda snapshot: snapshot.case.case_group,
     "machine.name": lambda snapshot: snapshot.machine.name
@@ -67,7 +67,7 @@ _SNAPSHOT_PATH_ACCESSORS = {
 }
 
 _INLINE_CITATION_RE = re.compile(
-    r"\s*\[(?:simulation|case|machine|artifacts|links)[^\]]+\]"
+    r"\s*\[(?:execution|case|machine|artifacts|links)[^\]]+\]"
 )
 _MULTISPACE_RE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.;:])")

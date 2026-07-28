@@ -10,10 +10,10 @@ from app.api.version import API_BASE
 from app.core.config import settings
 from app.features.assistant import api as assistant_api
 from app.features.assistant.schemas import ExecutionSummaryResponse
+from app.features.catalog.models import Case, Execution
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Case, Execution
 from app.features.user.manager import current_active_user, optional_current_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -92,7 +92,7 @@ async def _create_execution(
     return execution
 
 
-class TestSummarizeSimulationEndpoint:
+class TestSummarizeExecutionEndpoint:
     @pytest.fixture(autouse=True)
     def _force_deterministic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "assistant_llm_enabled", False)
@@ -105,20 +105,20 @@ class TestSummarizeSimulationEndpoint:
         normal_user,
         admin_user,
     ) -> None:
-        simulation = await _create_execution(
+        execution = await _create_execution(
             async_db,
             normal_user,
             admin_user,
         )
 
         response = await authenticated_client.post(
-            f"{API_BASE}/executions/{simulation.id}/summary"
+            f"{API_BASE}/executions/{execution.id}/summary"
         )
 
         assert response.status_code == 200
         data = response.json()
         assert (
-            "Simulation assistant-api-exec-1 belongs to case assistant_api_case."
+            "Execution assistant-api-exec-1 belongs to case assistant_api_case."
             in data["answer"]
         )
         assert isinstance(data["citations"], list)
@@ -147,14 +147,14 @@ class TestSummarizeSimulationEndpoint:
         normal_user,
         admin_user,
     ) -> None:
-        simulation = await _create_execution(
+        execution = await _create_execution(
             async_db,
             normal_user,
             admin_user,
         )
 
         response = await async_client.post(
-            f"{API_BASE}/simulations/{simulation.id}/summary"
+            f"{API_BASE}/executions/{execution.id}/summary"
         )
 
         assert response.status_code == 200
@@ -172,7 +172,7 @@ class TestSummarizeSimulationEndpoint:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(settings, "assistant_llm_enabled", True)
-        simulation = await _create_execution(
+        execution = await _create_execution(
             async_db,
             normal_user,
             admin_user,
@@ -180,7 +180,7 @@ class TestSummarizeSimulationEndpoint:
         )
 
         response = await async_client.post(
-            f"{API_BASE}/simulations/{simulation.id}/summary"
+            f"{API_BASE}/executions/{execution.id}/summary"
         )
 
         assert response.status_code == 200
@@ -189,15 +189,15 @@ class TestSummarizeSimulationEndpoint:
         assert data["fallbackUsed"] is False
 
     @pytest.mark.asyncio
-    async def test_unknown_simulation_returns_404(
+    async def test_unknown_execution_returns_404(
         self, authenticated_client: AsyncClient
     ) -> None:
         response = await authenticated_client.post(
-            f"{API_BASE}/simulations/{uuid4()}/summary"
+            f"{API_BASE}/executions/{uuid4()}/summary"
         )
 
         assert response.status_code == 404
-        assert response.json() == {"detail": "Simulation not found"}
+        assert response.json() == {"detail": "Execution not found"}
 
     @pytest.mark.asyncio
     async def test_unknown_execution_returns_canonical_404(
@@ -212,39 +212,39 @@ class TestSummarizeSimulationEndpoint:
 
 
 class _FakeScalarResult:
-    def __init__(self, simulation) -> None:
-        self._simulation = simulation
+    def __init__(self, execution) -> None:
+        self._execution = execution
 
     def unique(self):
         return self
 
     def one_or_none(self):
-        return self._simulation
+        return self._execution
 
 
 class _FakeExecuteResult:
-    def __init__(self, simulation) -> None:
-        self._simulation = simulation
+    def __init__(self, execution) -> None:
+        self._execution = execution
 
     def scalars(self):
-        return _FakeScalarResult(self._simulation)
+        return _FakeScalarResult(self._execution)
 
 
 class _FakeAsyncSession:
-    def __init__(self, simulation) -> None:
-        self._simulation = simulation
+    def __init__(self, execution) -> None:
+        self._execution = execution
 
     async def execute(self, stmt):
         self.statement = stmt
-        return _FakeExecuteResult(self._simulation)
+        return _FakeExecuteResult(self._execution)
 
 
-class TestSummarizeSimulationUnit:
+class TestSummarizeExecutionUnit:
     @pytest.mark.asyncio
-    async def test_summarize_simulation_returns_generation_summary(
+    async def test_summarize_execution_returns_generation_summary(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        sim_id = uuid4()
+        execution_id = uuid4()
         trace_id = uuid4()
         user = User(
             id=uuid4(),
@@ -255,7 +255,7 @@ class TestSummarizeSimulationUnit:
         )
         db = cast(
             AsyncSession,
-            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+            _FakeAsyncSession(type("ExecutionStub", (), {"id": execution_id})()),
         )
         summary = ExecutionSummaryResponse(
             answer="Deterministic assistant summary.",
@@ -271,8 +271,8 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation, *, allow_llm=True):
-            assert simulation.id == sim_id
+        async def fake_generate(execution, *, allow_llm=True):
+            assert execution.id == execution_id
             assert allow_llm is True
             return type(
                 "GenerationResult",
@@ -294,7 +294,9 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+        response = await assistant_api.summarize_execution(
+            execution_id, db=db, user=user
+        )
 
         assert response.answer == "Deterministic assistant summary."
         assert response.fallback_used is False
@@ -304,16 +306,16 @@ class TestSummarizeSimulationUnit:
         assert "llm_success=%s" in logged[0][0]
         assert "fallback_used=%s" in logged[0][0]
         assert logged[0][1][0] == trace_id
-        assert logged[0][1][1] == sim_id
+        assert logged[0][1][1] == execution_id
         assert logged[0][1][2] == user.id
         assert logged[0][1][3] == "false"
         assert logged[0][1][4] == "false"
 
     @pytest.mark.asyncio
-    async def test_summarize_simulation_logs_true_fallback_when_llm_attempt_fails(
+    async def test_summarize_execution_logs_true_fallback_when_llm_attempt_fails(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        sim_id = uuid4()
+        execution_id = uuid4()
         trace_id = uuid4()
         user = User(
             id=uuid4(),
@@ -324,7 +326,7 @@ class TestSummarizeSimulationUnit:
         )
         db = cast(
             AsyncSession,
-            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+            _FakeAsyncSession(type("ExecutionStub", (), {"id": execution_id})()),
         )
         summary = ExecutionSummaryResponse(
             answer="Deterministic fallback summary.",
@@ -340,8 +342,8 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation, *, allow_llm=True):
-            assert simulation.id == sim_id
+        async def fake_generate(execution, *, allow_llm=True):
+            assert execution.id == execution_id
             assert allow_llm is True
             return type(
                 "GenerationResult",
@@ -363,7 +365,9 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+        response = await assistant_api.summarize_execution(
+            execution_id, db=db, user=user
+        )
 
         assert response.answer == "Deterministic fallback summary."
         assert response.fallback_used is True
@@ -376,10 +380,10 @@ class TestSummarizeSimulationUnit:
         assert logged[0][1][4] == "true"
 
     @pytest.mark.asyncio
-    async def test_summarize_simulation_returns_ollama_generation_metadata(
+    async def test_summarize_execution_returns_ollama_generation_metadata(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        sim_id = uuid4()
+        execution_id = uuid4()
         trace_id = uuid4()
         user = User(
             id=uuid4(),
@@ -390,7 +394,7 @@ class TestSummarizeSimulationUnit:
         )
         db = cast(
             AsyncSession,
-            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+            _FakeAsyncSession(type("ExecutionStub", (), {"id": execution_id})()),
         )
         summary = ExecutionSummaryResponse(
             answer="LLM assistant summary.",
@@ -406,8 +410,8 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation, *, allow_llm=True):
-            assert simulation.id == sim_id
+        async def fake_generate(execution, *, allow_llm=True):
+            assert execution.id == execution_id
             assert allow_llm is True
             return type(
                 "GenerationResult",
@@ -429,7 +433,9 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+        response = await assistant_api.summarize_execution(
+            execution_id, db=db, user=user
+        )
 
         assert response.generation_mode == "llm"
         assert response.fallback_used is False
@@ -443,10 +449,10 @@ class TestSummarizeSimulationUnit:
         assert logged[0][1][4] == "false"
 
     @pytest.mark.asyncio
-    async def test_summarize_simulation_raises_404_for_missing_simulation(
+    async def test_summarize_execution_raises_404_for_missing_execution(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        sim_id = uuid4()
+        execution_id = uuid4()
         trace_id = uuid4()
         user = User(
             id=uuid4(),
@@ -466,26 +472,26 @@ class TestSummarizeSimulationUnit:
         )
 
         with pytest.raises(assistant_api.HTTPException) as exc_info:
-            await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+            await assistant_api.summarize_execution(execution_id, db=db, user=user)
 
         assert exc_info.value.status_code == 404
-        assert exc_info.value.detail == "Simulation not found"
+        assert exc_info.value.detail == "Execution not found"
         assert logged
         assert "status=not_found" in logged[0][0]
         assert "llm_success=false" in logged[0][0]
         assert "fallback_used=false" in logged[0][0]
         assert logged[0][1][0] == trace_id
-        assert logged[0][1][1] == sim_id
+        assert logged[0][1][1] == execution_id
 
     @pytest.mark.asyncio
-    async def test_summarize_simulation_logs_null_user_for_anonymous_request(
+    async def test_summarize_execution_logs_null_user_for_anonymous_request(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        sim_id = uuid4()
+        execution_id = uuid4()
         trace_id = uuid4()
         db = cast(
             AsyncSession,
-            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+            _FakeAsyncSession(type("ExecutionStub", (), {"id": execution_id})()),
         )
         summary = ExecutionSummaryResponse(
             answer="Deterministic anonymous summary.",
@@ -501,8 +507,8 @@ class TestSummarizeSimulationUnit:
         )
         logged: list[tuple[str, tuple[object, ...]]] = []
 
-        async def fake_generate(simulation, *, allow_llm=True):
-            assert simulation.id == sim_id
+        async def fake_generate(execution, *, allow_llm=True):
+            assert execution.id == execution_id
             assert allow_llm is False
             return type(
                 "GenerationResult",
@@ -524,7 +530,9 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=None)
+        response = await assistant_api.summarize_execution(
+            execution_id, db=db, user=None
+        )
 
         assert response.answer == "Deterministic anonymous summary."
         assert response.fallback_used is False

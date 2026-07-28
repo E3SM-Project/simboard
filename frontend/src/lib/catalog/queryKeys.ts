@@ -19,8 +19,6 @@ export const catalogQueryKeys = {
     detail: (id: string) => ['cases', 'detail', id] as const,
   },
   executions: executionQueryKeys,
-  /** @deprecated Use executions. */
-  simulations: executionQueryKeys,
   machines: ['machines'] as const,
   sites: ['sites'] as const,
 };

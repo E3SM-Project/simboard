@@ -7,8 +7,8 @@ import { Link } from 'react-router-dom';
 import {
   ArchiveUploadValidationDetail,
   ArchiveUploadValidationError,
-  IngestionUploadSimulationSummary,
-  uploadSimulationArchive,
+  IngestionUploadExecutionSummary,
+  uploadExecutionArchive,
 } from '@/features/upload/api/api';
 import { toast } from '@/hooks/use-toast';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
@@ -154,7 +154,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [archiveFileError, setArchiveFileError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
-  const [createdSimulations, setCreatedSimulations] = useState<IngestionUploadSimulationSummary[]>(
+  const [createdExecutions, setCreatedExecutions] = useState<IngestionUploadExecutionSummary[]>(
     [],
   );
   const [validationErrors, setValidationErrors] = useState<ArchiveUploadValidationError[]>([]);
@@ -167,13 +167,13 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     [machines, selectedMachineId],
   );
   const createdCaseSummary = useMemo(() => {
-    if (createdSimulations.length === 0) {
+    if (createdExecutions.length === 0) {
       return null;
     }
 
-    const firstSimulation = createdSimulations[0];
-    const allSameCase = createdSimulations.every(
-      (simulation) => simulation.case_id === firstSimulation.case_id,
+    const firstExecution = createdExecutions[0];
+    const allSameCase = createdExecutions.every(
+      (execution) => execution.case_id === firstExecution.case_id,
     );
 
     if (!allSameCase) {
@@ -181,10 +181,10 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     }
 
     return {
-      id: firstSimulation.case_id,
-      name: firstSimulation.case_name,
+      id: firstExecution.case_id,
+      name: firstExecution.case_name,
     };
-  }, [createdSimulations]);
+  }, [createdExecutions]);
   const validationErrorGroups = useMemo(() => {
     const groups = new Map<string, ArchiveUploadValidationError[]>();
 
@@ -225,7 +225,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     setArchiveFile(nextFile);
     setArchiveFileError(nextError);
     setUploadStatus(null);
-    setCreatedSimulations([]);
+    setCreatedExecutions([]);
     setValidationErrors([]);
   };
 
@@ -244,7 +244,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     }
 
     if (!selectedMachine) {
-      setCreatedSimulations([]);
+      setCreatedExecutions([]);
       setUploadStatus({
         tone: 'error',
         title: 'Machine required',
@@ -260,18 +260,18 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       description:
         'The archive is being uploaded, extracted, and checked against the required file specs.',
     });
-    setCreatedSimulations([]);
+    setCreatedExecutions([]);
     setValidationErrors([]);
 
     try {
-      const response = await uploadSimulationArchive({
+      const response = await uploadExecutionArchive({
         file: fileToUpload,
         machineName: selectedMachine.name,
         hpcUsername: hpcUsername.trim() || undefined,
       });
 
       resetFileSelection();
-      setCreatedSimulations(response.executions);
+      setCreatedExecutions(response.executions);
       await invalidateCatalog(queryClient);
 
       setUploadStatus({
@@ -287,14 +287,14 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         const detail = error.response?.data?.detail;
 
         if (isArchiveUploadValidationDetail(detail)) {
-          setCreatedSimulations([]);
+          setCreatedExecutions([]);
           setValidationErrors(detail.errors);
           setUploadStatus(null);
           return;
         }
 
         if (typeof detail === 'string') {
-          setCreatedSimulations([]);
+          setCreatedExecutions([]);
           setUploadStatus({
             tone: 'error',
             title: 'Upload failed',
@@ -304,7 +304,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         }
       }
 
-      setCreatedSimulations([]);
+      setCreatedExecutions([]);
       setUploadStatus({
         tone: 'error',
         title: 'Upload failed',
@@ -552,12 +552,12 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               </div>
             ) : null}
 
-            {createdSimulations.length > 0 ? (
+            {createdExecutions.length > 0 ? (
               <div className="mt-5 rounded-md border border-gray-200 bg-white text-sm">
                 <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-gray-50/60 px-4 py-3">
                   <div>
                     <p className="font-medium text-gray-900">
-                      Created executions ({createdSimulations.length})
+                      Created executions ({createdExecutions.length})
                     </p>
                     {createdCaseSummary ? (
                       <p className="mt-1 text-sm text-gray-700" title={createdCaseSummary.name}>
@@ -584,29 +584,29 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
-                      {createdSimulations.map((simulation) => (
-                        <tr className="hover:bg-gray-50" key={simulation.id}>
+                      {createdExecutions.map((execution) => (
+                        <tr className="hover:bg-gray-50" key={execution.id}>
                           <td className="px-4 py-4">
                             <Link
                               className="block truncate font-medium text-blue-700 hover:underline"
-                              title={simulation.execution_id}
-                              to={`/executions/${simulation.id}`}
+                              title={execution.execution_id}
+                              to={`/executions/${execution.id}`}
                             >
-                              {simulation.execution_id}
+                              {execution.execution_id}
                             </Link>
                           </td>
                           <td className="px-4 py-4 text-right text-sm">
                             <div className="flex justify-end gap-3">
                               <Link
                                 className="text-blue-700 hover:underline"
-                                to={`/executions/${simulation.id}`}
+                                to={`/executions/${execution.id}`}
                               >
                                 Open
                               </Link>
                               {!createdCaseSummary ? (
                                 <Link
                                   className="text-blue-700 hover:underline"
-                                  to={`/cases/${simulation.case_id}`}
+                                  to={`/cases/${execution.case_id}`}
                                 >
                                   View case
                                 </Link>

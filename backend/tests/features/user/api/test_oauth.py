@@ -62,7 +62,7 @@ class TestAuthRoutes:
     async def test_github_oauth_authorize_embeds_return_to_in_state(
         self, async_client: AsyncClient
     ) -> None:
-        return_to = "https://127.0.0.1:5173/simulations/test-run?tab=summary"
+        return_to = "https://127.0.0.1:5173/executions/test-run?tab=summary"
 
         response = await async_client.get(
             f"{API_BASE}/auth/github/authorize",
@@ -224,7 +224,7 @@ class TestAuthRoutes:
     async def test_github_oauth_callback_logs_in_and_redirects(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        return_to = "https://127.0.0.1:5173/simulations/test-run?tab=summary"
+        return_to = "https://127.0.0.1:5173/executions/test-run?tab=summary"
         monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
             "get_id_email",
@@ -259,7 +259,7 @@ class TestAuthRoutes:
 
         assert response.status_code == status.HTTP_302_FOUND
         assert response.headers["location"].endswith(
-            "auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fsimulations%2Ftest-run%3Ftab%3Dsummary"
+            "auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fexecutions%2Ftest-run%3Ftab%3Dsummary"
         )
         user_manager.refresh_github_org_membership.assert_awaited_once()
         user_manager.on_after_login.assert_awaited_once_with(user, ANY, response)

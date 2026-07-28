@@ -109,7 +109,7 @@ export const BrowseFiltersSidePanel = ({
       {/* Simulation Context */}
       <CollapsibleGroup
         title="Simulation Context"
-        description="Refine results based on the technical setup of the simulation."
+        description="Refine results based on the technical setup of the execution."
       >
         <label className={filterLabelClassName}>Compset</label>
         <MultiSelect

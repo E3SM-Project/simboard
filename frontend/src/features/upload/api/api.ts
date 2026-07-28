@@ -17,31 +17,27 @@ export interface IngestionUploadResponse {
   created_count: number;
   duplicate_count: number;
   executions: IngestionUploadExecutionSummary[];
-  /** @deprecated Use executions. */
-  simulations: IngestionUploadSimulationSummary[];
   errors: Record<string, string>[];
 }
 
-export interface IngestionUploadSimulationSummary {
+export interface IngestionUploadExecutionSummary {
   id: string;
   case_id: string;
   case_name: string;
   execution_id: string;
 }
 
-export type IngestionUploadExecutionSummary = IngestionUploadSimulationSummary;
-
-interface UploadSimulationArchiveParams {
+interface UploadExecutionArchiveParams {
   file: File;
   machineName: string;
   hpcUsername?: string;
 }
 
-export const uploadSimulationArchive = async ({
+export const uploadExecutionArchive = async ({
   file,
   machineName,
   hpcUsername,
-}: UploadSimulationArchiveParams): Promise<IngestionUploadResponse> => {
+}: UploadExecutionArchiveParams): Promise<IngestionUploadResponse> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('machine_name', machineName);

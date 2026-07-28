@@ -36,8 +36,6 @@ const toQueryParams = (params: PageParams) => {
 };
 
 export const EXECUTIONS_URL = '/executions';
-/** @deprecated Use EXECUTIONS_URL. */
-export const SIMULATIONS_URL = EXECUTIONS_URL;
 export const CASES_URL = '/cases';
 export const PACE_URL = '/pace';
 const SUMMARY_REQUEST_TIMEOUT_MS = 120_000;
@@ -136,17 +134,6 @@ export const updateCase = async (id: string, data: CaseUpdate): Promise<CaseDeta
   const res = await api.patch<CaseDetailOut>(`${CASES_URL}/${id}`, data);
 
   return res.data;
-};
-
-// Phase 3 compatibility exports. Remove after remaining callers use canonical
-// execution symbols.
-export {
-  createExecution as createSimulation,
-  generateExecutionSummary as generateSimulationSummary,
-  getExecutionById as getSimulationById,
-  getExecutionFilterOptions as getSimulationFilterOptions,
-  listExecutions as listSimulations,
-  updateExecution as updateSimulation,
 };
 
 export const listCaseNames = async (): Promise<string[]> => {

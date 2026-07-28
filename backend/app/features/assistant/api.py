@@ -11,27 +11,18 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.features.assistant.orchestrator import generate_execution_summary
-from app.features.assistant.schemas import (
-    ExecutionApiSummaryResponse,
-    ExecutionSummaryResponse,
-    SimulationSummaryResponse,
-)
-from app.features.simulation.models import Case, Execution
+from app.features.assistant.schemas import ExecutionSummaryResponse
+from app.features.catalog.models import Case, Execution
 from app.features.user.manager import optional_current_user
 from app.features.user.models import User
 
 execution_router = APIRouter(prefix="/executions", tags=["Execution Assistant"])
-simulation_router = APIRouter(
-    prefix="/simulations",
-    tags=["Simulation Assistant"],
-    deprecated=True,
-)
 logger = _setup_custom_logger(__name__)
 
 
 @execution_router.post(
     "/{execution_id}/summary",
-    response_model=ExecutionApiSummaryResponse,
+    response_model=ExecutionSummaryResponse,
     responses={
         200: {"description": "Execution summary generated successfully."},
         401: {"description": "Unauthorized."},
@@ -42,52 +33,8 @@ async def summarize_execution(
     execution_id: UUID,
     db: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_current_user),
-) -> ExecutionApiSummaryResponse:
-    """Generate a metadata-grounded read-only summary for one execution."""
-    try:
-        summary = await summarize_simulation(execution_id, db, user)
-    except HTTPException as exc:
-        if exc.status_code == 404:
-            raise HTTPException(
-                status_code=404,
-                detail="Execution not found",
-            ) from exc
-        raise
-    payload = summary.model_dump()
-    payload["citations"] = [
-        {
-            **citation,
-            "source_type": (
-                "execution_field"
-                if citation["source_type"] == "simulation_field"
-                else citation["source_type"]
-            ),
-            "path": (
-                citation["path"].replace("simulation.", "execution.", 1)
-                if citation["path"].startswith("simulation.")
-                else citation["path"]
-            ),
-        }
-        for citation in payload["citations"]
-    ]
-    return ExecutionApiSummaryResponse.model_validate(payload)
-
-
-@simulation_router.post(
-    "/{sim_id}/summary",
-    response_model=SimulationSummaryResponse,
-    responses={
-        200: {"description": "Simulation summary generated successfully."},
-        401: {"description": "Unauthorized."},
-        404: {"description": "Simulation not found."},
-    },
-)
-async def summarize_simulation(
-    sim_id: UUID,
-    db: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_current_user),
 ) -> ExecutionSummaryResponse:
-    """Generate a metadata-grounded read-only summary for one simulation."""
+    """Generate a metadata-grounded read-only summary for one execution."""
 
     start = perf_counter()
     trace_id = uuid4()
@@ -100,7 +47,7 @@ async def summarize_simulation(
             selectinload(Execution.artifacts),
             selectinload(Execution.links),
         )
-        .where(Execution.id == sim_id)
+        .where(Execution.id == execution_id)
     )
     result = await db.execute(stmt)
     execution = result.scalars().unique().one_or_none()
@@ -109,21 +56,21 @@ async def summarize_simulation(
         duration_ms = (perf_counter() - start) * 1000
         user_id = user.id if user is not None else "null"
         logger.info(
-            "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=false "
-            "status=not_found llm_success=false fallback_used=false latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
-            "generation_provider=%s generation_model=%s fallback_reason=%s "
-            "citation_count=0 caveat_count=0",
+            "execution_summary trace_id=%s execution_id=%s user_id=%s success=false "
+            "status=not_found llm_success=false fallback_used=false latency_ms=%.2f "
+            "llm_latency_ms=%.2f generation_mode=%s generation_provider=%s "
+            "generation_model=%s fallback_reason=%s citation_count=0 caveat_count=0",
             trace_id,
-            sim_id,
+            execution_id,
             user_id,
             duration_ms,
             0.0,
             "deterministic",
             "null",
             "null",
-            "simulation_not_found",
+            "execution_not_found",
         )
-        raise HTTPException(status_code=404, detail="Simulation not found")
+        raise HTTPException(status_code=404, detail="Execution not found")
 
     generation = await generate_execution_summary(execution, allow_llm=user is not None)
     llm_success = generation.summary.generation_mode == "llm"
@@ -142,9 +89,10 @@ async def summarize_simulation(
     duration_ms = (perf_counter() - start) * 1000
     user_id = user.id if user is not None else "null"
     logger.info(
-        "simulation_summary trace_id=%s simulation_id=%s user_id=%s success=true "
-        "llm_success=%s fallback_used=%s latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
-        "generation_provider=%s generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
+        "execution_summary trace_id=%s execution_id=%s user_id=%s success=true "
+        "llm_success=%s fallback_used=%s latency_ms=%.2f llm_latency_ms=%.2f "
+        "generation_mode=%s generation_provider=%s generation_model=%s "
+        "fallback_reason=%s citation_count=%d caveat_count=%d",
         trace_id,
         execution.id,
         user_id,
@@ -161,7 +109,3 @@ async def summarize_simulation(
     )
 
     return summary
-
-
-# Compatibility import used by existing application wiring.
-router = simulation_router

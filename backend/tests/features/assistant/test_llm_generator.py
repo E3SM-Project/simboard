@@ -18,7 +18,7 @@ from app.features.assistant.snapshot import (
 def _make_snapshot() -> ExecutionSnapshot:
     return ExecutionSnapshot(
         execution=SnapshotExecutionFields(
-            id="simulation-1",
+            id="execution-1",
             execution_id="assistant-llm-exec",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -166,7 +166,7 @@ class TestSummaryLLMGenerator:
         )._build_user_prompt(_make_snapshot())
 
         assert "assistant-llm-exec" in prompt
-        assert "simulation.execution_id (simulation_field)" in prompt
+        assert "execution.execution_id (execution_field)" in prompt
         assert "case.name (case_field)" in prompt
 
     def test_summary_system_prompt_enforces_short_natural_answer_shape(self) -> None:
@@ -184,7 +184,7 @@ class TestSummaryLLMGenerator:
             in (llm_generator.SUMMARY_SYSTEM_PROMPT)
         )
         assert (
-            "use `simulation.status`, `case.name`, and `machine.name`, not `status` or `name`."
+            "use `execution.status`, `case.name`, and `machine.name`, not `status` or `name`."
             in llm_generator.SUMMARY_SYSTEM_PROMPT
         )
         assert "`suggested_followups` must contain at least one concrete item." in (
@@ -230,9 +230,9 @@ class TestSummaryLLMGenerator:
             answer="Generated summary.",
             citations=[
                 SummaryCitationOut(
-                    source_type="simulation_field",
-                    path="simulation.execution_id",
-                    label="Simulation ID",
+                    source_type="execution_field",
+                    path="execution.execution_id",
+                    label="Execution ID",
                 )
             ],
             assumptions=[],
@@ -288,9 +288,9 @@ class TestSummaryLLMGenerator:
             answer="Generated summary.",
             citations=[
                 SummaryCitationOut(
-                    source_type="simulation_field",
-                    path="simulation.execution_id",
-                    label="Simulation ID",
+                    source_type="execution_field",
+                    path="execution.execution_id",
+                    label="Execution ID",
                 )
             ],
             assumptions=[],

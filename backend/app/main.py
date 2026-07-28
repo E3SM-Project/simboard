@@ -10,18 +10,10 @@ from app.core.logger import _setup_root_logger
 from app.features.assistant.api import (
     execution_router as execution_assistant_router,
 )
-from app.features.assistant.api import (
-    simulation_router as simulation_assistant_router,
-)
+from app.features.catalog.api import case_router, diagnostics_router, execution_router
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.pace.api import router as pace_router
-from app.features.simulation.api import (
-    case_router,
-    diagnostics_router,
-    execution_router,
-    simulation_router,
-)
 from app.features.site.api import router as site_router
 from app.features.user.api.oauth import auth_router, user_router
 from app.features.user.api.token import router as token_router
@@ -47,10 +39,8 @@ def create_app() -> FastAPI:
 
     # Register routers.
     app.include_router(execution_router, prefix=API_BASE)
-    app.include_router(simulation_router, prefix=API_BASE)
     app.include_router(diagnostics_router, prefix=API_BASE)
     app.include_router(execution_assistant_router, prefix=API_BASE)
-    app.include_router(simulation_assistant_router, prefix=API_BASE)
     app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)
     app.include_router(site_router, prefix=API_BASE)

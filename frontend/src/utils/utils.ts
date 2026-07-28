@@ -103,8 +103,8 @@ export const compareModelDates = (left: string, right: string): number =>
  * Calculates the duration between two dates and returns it as a human-readable string.
  * The duration is expressed in years, months, days, hours, or minutes, depending on the difference.
  *
- * @param simulationStartDate - The start date of the simulation. Can be a string, number, or Date object.
- * @param simulationEndDate - The end date of the simulation. Can be a string, number, or Date object.
+ * @param simulationStartDate - The execution's simulation start date field. Can be a string, number, or Date object.
+ * @param simulationEndDate - The execution's simulation end date field. Can be a string, number, or Date object.
  * @returns A string representing the duration between the two dates in the largest appropriate unit.
  *
  * @example

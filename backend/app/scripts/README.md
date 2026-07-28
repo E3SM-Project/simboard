@@ -19,7 +19,7 @@ scripts/
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
-│   └── simulations.json
+│   └── catalog.json
 └── users/
     ├── create_admin_account.py
     └── provision_service_account.py

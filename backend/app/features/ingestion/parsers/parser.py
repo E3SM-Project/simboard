@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
+from app.features.catalog.enums import ExecutionStatus
 from app.features.ingestion.parsers.case_docs import (
     _substitute_path_variables,
     parse_env_build,
@@ -44,7 +45,6 @@ from app.features.ingestion.parsers.git_info import (
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
 from app.features.ingestion.parsers.types import ParsedExecution
-from app.features.simulation.enums import ExecutionStatus
 
 ExecutionFiles = dict[str, str | None]
 
@@ -170,7 +170,7 @@ def main_parser(
     Returns
     -------
     tuple[list[ParsedExecution], int]
-        Parsed simulations in deterministic execution-directory order and the
+        Parsed executions in deterministic execution-directory order and the
         count of skipped incomplete runs. Only directories that contain all
         required metadata files and a timing-file LID are included.
     """

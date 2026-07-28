@@ -15,18 +15,18 @@ from app.features.assistant.snapshot import (
     SnapshotMachineFields,
     _SnapshotSizeBudget,
 )
-from app.features.simulation.enums import (
+from app.features.catalog.enums import (
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
 )
-from app.features.simulation.models import Case, Execution, ExternalLink
+from app.features.catalog.models import Case, Execution, ExternalLink
 
 
 def _make_snapshot() -> ExecutionSnapshot:
     return ExecutionSnapshot(
         execution=SnapshotExecutionFields(
-            id="simulation-1",
+            id="execution-1",
             execution_id="assistant-snapshot-exec",
             description="Description " * 5,
             compset="AQUAPLANET",
@@ -209,7 +209,7 @@ class TestSnapshotHelpers:
             hpc_username="snapshot-user",
             case_group="snapshot-group",
         )
-        simulation = Execution(
+        execution = Execution(
             id=uuid4(),
             case=case,
             case_id=case.id,
@@ -243,20 +243,20 @@ class TestSnapshotHelpers:
                 label="Case shared",
             ),
         ]
-        simulation.links = [
+        execution.links = [
             ExternalLink(
-                execution=simulation,
-                execution_id=simulation.id,
+                execution=execution,
+                execution_id=execution.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/shared",
-                label="Simulation shared",
+                label="Execution shared",
             )
         ]
-        simulation.artifacts = []
+        execution.artifacts = []
 
-        snapshot = snapshot_module.build_execution_snapshot(simulation)
+        snapshot = snapshot_module.build_execution_snapshot(execution)
 
         assert [(link.url, link.label) for link in snapshot.links] == [
             ("https://example.com/case-only", "Case only"),
-            ("https://example.com/shared", "Simulation shared"),
+            ("https://example.com/shared", "Execution shared"),
         ]

@@ -20,7 +20,7 @@ from app.features.assistant.schemas import (
 from app.features.assistant.snapshot import ExecutionSnapshot
 
 SUMMARY_SYSTEM_PROMPT = """
-You generate structured SimBoard simulation summaries from provided metadata only.
+You generate structured SimBoard execution summaries from provided metadata only.
 
 Rules:
 - Use only snapshot metadata supplied in prompt.
@@ -30,7 +30,7 @@ Rules:
 - Keep claims grounded in citations.
 - Use only allowed citation paths and source types provided in prompt.
 - Every `citations.path` value must exactly match one allowed path string.
-- Never shorten or rewrite citation paths. For example, use `simulation.status`, `case.name`, and `machine.name`, not `status` or `name`.
+- Never shorten or rewrite citation paths. For example, use `execution.status`, `case.name`, and `machine.name`, not `status` or `name`.
 - If you cannot cite a claim with an exact allowed path, omit that claim instead of inventing a citation path.
 - Produce concise, factual output for all structured fields.
 - Return every structured field required by schema, even when brief.
@@ -38,7 +38,7 @@ Rules:
 - Keep `answer` to 2-4 short sentences and under 120 words.
 - Prioritize the few most decision-useful facts: status, case/campaign, configuration, machine, and notable provenance or timing only when material.
 - Do not enumerate every available field.
-- Do not repeat raw citation paths or add inline bracketed citations such as `[simulation.status]` inside the answer text.
+- Do not repeat raw citation paths or add inline bracketed citations such as `[execution.status]` inside the answer text.
 - Put evidence only in the structured `citations` field, not inline in prose.
 - Prefer natural language over field-by-field narration.
 """.strip()
@@ -63,18 +63,18 @@ class SummaryLLMGenerator:
 
     async def generate(self, snapshot: ExecutionSnapshot) -> ExecutionSummaryContent:
         """
-        Generates a simulation summary from the given snapshot using the
+        Generates a execution summary from the given snapshot using the
         configured LLM provider.
 
         Parameters
         ----------
         snapshot : ExecutionSnapshot
-            The simulation snapshot containing metadata to summarize.
+            The execution snapshot containing metadata to summarize.
 
         Returns
         -------
         ExecutionSummaryContent
-            The generated simulation summary content.
+            The generated execution summary content.
         """
         async with AsyncClient(timeout=self.config.timeout_seconds) as http_client:
             model = self._build_model(http_client)
@@ -173,7 +173,7 @@ class SummaryLLMGenerator:
         snapshot_json = snapshot.model_dump_json(indent=2, exclude_none=True)
 
         return (
-            "Simulation metadata snapshot:\n"
+            "Execution metadata snapshot:\n"
             f"{snapshot_json}\n\n"
             "Allowed citation paths:\n"
             f"{allowed_citations}\n"

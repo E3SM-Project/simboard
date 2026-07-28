@@ -267,7 +267,7 @@ class ApiToken(Base):
 - `UserRole` enum extended with `SERVICE_ACCOUNT`
 - API tokens are associated only with users whose role is `SERVICE_ACCOUNT`
 
-### Simulation Model Updates
+### Case Model Updates
 
 - Added `hpc_username: str | None` field
 
@@ -282,7 +282,7 @@ make backend-upgrade
 This will:
 
 1. Add `SERVICE_ACCOUNT` enum value to `user_role` type
-2. Add `hpc_username` column to `simulations` table
+2. Add `hpc_username` column to the `cases` table
 3. Create `api_tokens` table with proper indexes and constraints
 
 ## Testing

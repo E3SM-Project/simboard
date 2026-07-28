@@ -1,6 +1,6 @@
 # Assistant LLM Setup
 
-Configure `.envs/local/backend.env` to enable LLM-backed summaries on the simulation details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
+Configure `.envs/local/backend.env` to enable LLM-backed summaries on the execution details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
 
 ## Required Settings
 

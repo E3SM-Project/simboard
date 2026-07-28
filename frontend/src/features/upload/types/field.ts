@@ -1,4 +1,4 @@
-import { SimulationCreateForm } from '@/types/simulation';
+import { ExecutionCreateForm } from '@/types/catalog';
 
 export type FieldType =
   | 'select'
@@ -16,7 +16,7 @@ export interface FieldOption {
 }
 
 export type RenderableField<TRender = React.ReactNode> = {
-  name: keyof SimulationCreateForm;
+  name: keyof ExecutionCreateForm;
   label: string;
   type: FieldType;
   placeholder?: string;

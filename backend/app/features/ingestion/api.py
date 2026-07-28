@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
+from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
+from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
 from app.features.ingestion.models import (
     ArchiveScanCheckpoint,
@@ -42,15 +44,13 @@ from app.features.ingestion.schemas import (
     IngestFromHpcUploadRequest,
     IngestFromPathRequest,
     IngestionCreate,
+    IngestionExecutionSummary,
     IngestionResponse,
-    IngestionSimulationSummary,
     IngestionStateCase,
     IngestionStateResponse,
     IngestionStatus,
 )
 from app.features.machine.utils import resolve_machine_by_name
-from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
-from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
@@ -800,7 +800,7 @@ def _validate_single_case_upload_ingest_result(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=(
             "Automated HPC upload archives must contain exactly one case. "
-            f"Received created simulations for multiple cases under '{case_path}'."
+            f"Received created executions for multiple cases under '{case_path}'."
         ),
     )
 
@@ -881,7 +881,7 @@ def _process_ingestion(
     return IngestionResponse(
         created_count=ingest_result.created_count,
         duplicate_count=ingest_result.duplicate_count,
-        simulations=_build_ingestion_execution_summaries(created_executions, db),
+        executions=_build_ingestion_execution_summaries(created_executions, db),
         errors=ingest_result.errors,
     )
 
@@ -970,7 +970,7 @@ def _persist_executions(
 
 def _build_ingestion_execution_summaries(
     created_executions: list[Execution], db: Session
-) -> list[IngestionSimulationSummary]:
+) -> list[IngestionExecutionSummary]:
     if not created_executions:
         return []
 
@@ -980,7 +980,7 @@ def _build_ingestion_execution_summaries(
     }
 
     return [
-        IngestionSimulationSummary(
+        IngestionExecutionSummary(
             id=execution.id,
             case_id=execution.case_id,
             case_name=cases[execution.case_id].name,

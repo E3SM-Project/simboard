@@ -3,65 +3,65 @@ import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { getSimulationById } from '@/api/catalog';
-import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
+import { getExecutionById } from '@/api/catalog';
+import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
 import { Button } from '@/components/ui/button';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
 import { useCase } from '@/lib/catalog/hooks/useCase';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
-import type { SimulationOut } from '@/types';
+import type { ExecutionOut } from '@/types';
 
 interface CaseCompareRouteProps {
   onClose?: () => void;
-  selectedCaseSimulationIdsByCase: Record<string, string[]>;
-  setSelectedCaseSimulationIdsForCase: (caseId: string, ids: string[]) => void;
-  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedCaseExecutionIdsByCase: Record<string, string[]>;
+  setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
+  setSelectedExecutionIds: (ids: string[]) => void;
 }
 
-const EMPTY_SELECTED_SIMULATION_IDS: string[] = [];
+const EMPTY_SELECTED_EXECUTION_IDS: string[] = [];
 
 export const CaseCompareRoute = ({
   onClose,
-  selectedCaseSimulationIdsByCase,
-  setSelectedCaseSimulationIdsForCase,
-  setSelectedSimulationIds,
+  selectedCaseExecutionIdsByCase,
+  setSelectedCaseExecutionIdsForCase,
+  setSelectedExecutionIds,
 }: CaseCompareRouteProps) => {
   const navigate = useNavigate();
   const { id: caseId } = useParams<{ id: string }>();
 
   const { data: caseRecord, error, loading } = useCase(caseId ?? '');
 
-  const caseSimulationIdSet = useMemo(
+  const caseExecutionIdSet = useMemo(
     () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
     [caseRecord],
   );
 
-  const rawCaseSelectedSimulationIds = caseId
-    ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[caseId] ?? [])
-    : EMPTY_SELECTED_SIMULATION_IDS;
-  const caseSelectedSimulationIds = useMemo(
+  const rawCaseSelectedExecutionIds = caseId
+    ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[caseId] ?? [])
+    : EMPTY_SELECTED_EXECUTION_IDS;
+  const caseSelectedExecutionIds = useMemo(
     () =>
-      rawCaseSelectedSimulationIds.filter((simulationId) => caseSimulationIdSet.has(simulationId)),
-    [caseSimulationIdSet, rawCaseSelectedSimulationIds],
+      rawCaseSelectedExecutionIds.filter((executionId) => caseExecutionIdSet.has(executionId)),
+    [caseExecutionIdSet, rawCaseSelectedExecutionIds],
   );
   const detailQueries = useQueries({
-    queries: caseSelectedSimulationIds.map((simulationId) => ({
-      queryKey: catalogQueryKeys.executions.detail(simulationId),
-      queryFn: () => getSimulationById(simulationId),
+    queries: caseSelectedExecutionIds.map((executionId) => ({
+      queryKey: catalogQueryKeys.executions.detail(executionId),
+      queryFn: () => getExecutionById(executionId),
     })),
   });
-  const simulationById = useMemo(
+  const executionById = useMemo(
     () =>
       new Map(
         detailQueries
           .map((query) => query.data)
-          .filter((simulation): simulation is SimulationOut => simulation != null)
-          .map((simulation) => [simulation.id, simulation]),
+          .filter((execution): execution is ExecutionOut => execution != null)
+          .map((execution) => [execution.id, execution]),
       ),
     [detailQueries],
   );
-  const excludedSimulationCount =
-    rawCaseSelectedSimulationIds.length - caseSelectedSimulationIds.length;
+  const excludedExecutionCount =
+    rawCaseSelectedExecutionIds.length - caseSelectedExecutionIds.length;
 
   useEffect(() => {
     if (!caseId || loading || !caseRecord) {
@@ -69,41 +69,41 @@ export const CaseCompareRoute = ({
     }
 
     const hasSelectionDrift =
-      rawCaseSelectedSimulationIds.length !== caseSelectedSimulationIds.length ||
-      rawCaseSelectedSimulationIds.some(
-        (simulationId, index) => simulationId !== caseSelectedSimulationIds[index],
+      rawCaseSelectedExecutionIds.length !== caseSelectedExecutionIds.length ||
+      rawCaseSelectedExecutionIds.some(
+        (executionId, index) => executionId !== caseSelectedExecutionIds[index],
       );
 
     if (hasSelectionDrift) {
-      setSelectedCaseSimulationIdsForCase(caseId, caseSelectedSimulationIds);
+      setSelectedCaseExecutionIdsForCase(caseId, caseSelectedExecutionIds);
     }
   }, [
     caseRecord,
     caseId,
-    caseSelectedSimulationIds,
+    caseSelectedExecutionIds,
     loading,
-    rawCaseSelectedSimulationIds,
-    setSelectedCaseSimulationIdsForCase,
+    rawCaseSelectedExecutionIds,
+    setSelectedCaseExecutionIdsForCase,
   ]);
 
-  const renderableSelectedSimulations = caseSelectedSimulationIds
-    .map((simulationId) => simulationById.get(simulationId))
-    .filter((simulation): simulation is SimulationOut => simulation != null);
-  const renderableSelectedSimulationIds = renderableSelectedSimulations.map(
-    (simulation) => simulation.id,
+  const renderableSelectedExecutions = caseSelectedExecutionIds
+    .map((executionId) => executionById.get(executionId))
+    .filter((execution): execution is ExecutionOut => execution != null);
+  const renderableSelectedExecutionIds = renderableSelectedExecutions.map(
+    (execution) => execution.id,
   );
-  const missingSimulationCount =
-    caseSelectedSimulationIds.length - renderableSelectedSimulationIds.length;
-  const globalCompareCandidateIds = caseSelectedSimulationIds;
+  const missingExecutionCount =
+    caseSelectedExecutionIds.length - renderableSelectedExecutionIds.length;
+  const globalCompareCandidateIds = caseSelectedExecutionIds;
 
   const openGlobalCompare = (ids: string[]) => {
-    const nextIds = normalizeSelectedSimulationIds(ids);
-    setSelectedSimulationIds(nextIds);
+    const nextIds = normalizeSelectedExecutionIds(ids);
+    setSelectedExecutionIds(nextIds);
     navigate('/compare', {
       state: {
-        selectedSimulationIds: nextIds,
-        selectedSimulations: renderableSelectedSimulations.filter((simulation) =>
-          nextIds.includes(simulation.id),
+        selectedExecutionIds: nextIds,
+        selectedExecutions: renderableSelectedExecutions.filter((execution) =>
+          nextIds.includes(execution.id),
         ),
       },
     });
@@ -111,7 +111,7 @@ export const CaseCompareRoute = ({
 
   const handleCaseSelectionChange = (ids: string[]) => {
     if (caseId) {
-      setSelectedCaseSimulationIdsForCase(caseId, ids);
+      setSelectedCaseExecutionIdsForCase(caseId, ids);
     }
   };
 
@@ -150,12 +150,12 @@ export const CaseCompareRoute = ({
   const caseDetailsHref = `/cases/${caseId}`;
   const canOpenGlobalCompare = globalCompareCandidateIds.length >= 2;
 
-  if (renderableSelectedSimulationIds.length < 2) {
+  if (renderableSelectedExecutionIds.length < 2) {
     let message = 'Select at least two executions from this case to compare.';
 
-    if (excludedSimulationCount > 0) {
-      message = `Ignored ${excludedSimulationCount} stored execution${excludedSimulationCount === 1 ? '' : 's'} that no longer belong to this case.`;
-    } else if (missingSimulationCount > 0) {
+    if (excludedExecutionCount > 0) {
+      message = `Ignored ${excludedExecutionCount} stored execution${excludedExecutionCount === 1 ? '' : 's'} that no longer belong to this case.`;
+    } else if (missingExecutionCount > 0) {
       message = 'Selected case executions are not available in the current compare dataset.';
     }
 
@@ -191,24 +191,24 @@ export const CaseCompareRoute = ({
   }
 
   const contextNotice =
-    excludedSimulationCount > 0 || missingSimulationCount > 0 ? (
+    excludedExecutionCount > 0 || missingExecutionCount > 0 ? (
       <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            {excludedSimulationCount > 0 ? (
+            {excludedExecutionCount > 0 ? (
               <p>
-                Ignored {excludedSimulationCount} selected execution
-                {excludedSimulationCount === 1 ? '' : 's'} from outside this case.
+                Ignored {excludedExecutionCount} selected execution
+                {excludedExecutionCount === 1 ? '' : 's'} from outside this case.
               </p>
             ) : null}
-            {missingSimulationCount > 0 ? (
+            {missingExecutionCount > 0 ? (
               <p>
-                Skipped {missingSimulationCount} case execution
-                {missingSimulationCount === 1 ? '' : 's'} missing from loaded execution details.
+                Skipped {missingExecutionCount} case execution
+                {missingExecutionCount === 1 ? '' : 's'} missing from loaded execution details.
               </p>
             ) : null}
           </div>
-          {excludedSimulationCount > 0 ? (
+          {excludedExecutionCount > 0 ? (
             <Button
               type="button"
               variant="outline"
@@ -232,9 +232,9 @@ export const CaseCompareRoute = ({
       emptyStateMessage="No case executions selected for comparison."
       hiddenStorageKey={`case_compare_hidden_cols:${caseId}`}
       labelColumnWidth={320}
-      selectedSimulationIds={renderableSelectedSimulationIds}
-      selectedSimulations={renderableSelectedSimulations}
-      setSelectedSimulationIds={handleCaseSelectionChange}
+      selectedExecutionIds={renderableSelectedExecutionIds}
+      selectedExecutions={renderableSelectedExecutions}
+      setSelectedExecutionIds={handleCaseSelectionChange}
       showHeader={false}
       title={`Compare Case Executions: ${caseRecord.name}`}
     />
