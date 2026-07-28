@@ -24,7 +24,13 @@ from app.features.catalog.enums import (
     ExternalLinkKind,
     SimulationType,
 )
-from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
+from app.features.catalog.models import (
+    Artifact,
+    Case,
+    Execution,
+    ExternalLink,
+    MetadataChange,
+)
 from app.features.catalog.schemas import (
     CaseUpdate,
     ExecutionCreate,
@@ -978,6 +984,7 @@ class TestUpdateCase:
             "description": "Updated case description",
             "keyFeatures": "Updated case features",
             "notesMarkdown": "Updated case notes",
+            "editReason": "Clarify shared case metadata",
         }
 
         res = client.patch(f"{API_BASE}/cases/{case.id}", json=payload)
@@ -997,6 +1004,87 @@ class TestUpdateCase:
         assert updated_case.known_issues == "Original case issues"
         assert updated_case.notes_markdown == payload["notesMarkdown"]
         assert updated_case.updated_at > original_updated_at
+
+        history = (
+            db.query(MetadataChange)
+            .filter(
+                MetadataChange.entity_type == "case",
+                MetadataChange.entity_id == case.id,
+            )
+            .all()
+        )
+        assert {entry.field_name for entry in history} == {
+            "description",
+            "key_features",
+            "notes_markdown",
+        }
+        description_change = next(
+            entry for entry in history if entry.field_name == "description"
+        )
+        assert description_change.old_value == "Original case description"
+        assert description_change.new_value == "Updated case description"
+        assert description_change.editor_id == normal_user_sync["id"]
+        assert description_change.reason == "Clarify shared case metadata"
+
+        history_res = client.get(f"{API_BASE}/cases/{case.id}/history")
+        assert history_res.status_code == 200
+        history_data = history_res.json()
+        assert {entry["fieldName"] for entry in history_data} == {
+            "description",
+            "key_features",
+            "notes_markdown",
+        }
+        assert {entry["editor"]["email"] for entry in history_data} == {
+            normal_user_sync["email"]
+        }
+
+    def test_endpoint_skips_history_for_unchanged_values(self, client, db: Session):
+        case = _create_case(db, "test_case_metadata_noop")
+        case.description = "Unchanged"
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Unchanged", "editReason": "No effective change"},
+        )
+
+        assert res.status_code == 200
+        assert (
+            db.query(MetadataChange)
+            .filter(
+                MetadataChange.entity_type == "case",
+                MetadataChange.entity_id == case.id,
+            )
+            .count()
+            == 0
+        )
+
+    def test_history_is_reverse_chronological(self, client, db: Session):
+        case = _create_case(db, "test_case_metadata_history_order")
+        case.description = "First"
+        db.commit()
+
+        first_res = client.patch(
+            f"{API_BASE}/cases/{case.id}", json={"description": "Second"}
+        )
+        second_res = client.patch(
+            f"{API_BASE}/cases/{case.id}", json={"description": "Third"}
+        )
+
+        assert first_res.status_code == 200
+        assert second_res.status_code == 200
+        history_res = client.get(f"{API_BASE}/cases/{case.id}/history")
+        assert history_res.status_code == 200
+        assert [entry["newValue"] for entry in history_res.json()] == [
+            "Third",
+            "Second",
+        ]
+
+    def test_history_returns_404_for_missing_case(self, client):
+        res = client.get(f"{API_BASE}/cases/{uuid4()}/history")
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
 
     def test_endpoint_adds_case_links(self, client, db: Session):
         case = _create_case(db, "test_case_link_add")
@@ -2576,6 +2664,7 @@ class TestUpdateExecution:
             "description": "Updated description",
             "campaign": "campaign-updated",
             "notesMarkdown": "Updated notes",
+            "editReason": "Record corrected execution metadata",
         }
 
         res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
@@ -2609,6 +2698,33 @@ class TestUpdateExecution:
         assert updated_execution.git_tag == "v1.0"
         assert updated_execution.last_updated_by == normal_user_sync["id"]
         assert updated_execution.updated_at > original_updated_at
+
+        history = (
+            db.query(MetadataChange)
+            .filter(
+                MetadataChange.entity_type == "execution",
+                MetadataChange.entity_id == execution.id,
+            )
+            .all()
+        )
+        assert {entry.field_name for entry in history} == {
+            "simulation_type",
+            "status",
+            "description",
+            "campaign",
+            "notes_markdown",
+        }
+        assert {entry.reason for entry in history} == {
+            "Record corrected execution metadata"
+        }
+        assert {entry.editor_id for entry in history} == {normal_user_sync["id"]}
+
+        history_res = client.get(f"{API_BASE}/executions/{execution.id}/history")
+        assert history_res.status_code == 200
+        assert len(history_res.json()) == 5
+        assert {entry["editor"]["email"] for entry in history_res.json()} == {
+            normal_user_sync["email"]
+        }
 
     def test_endpoint_replaces_artifacts_and_links(
         self, client, db: Session, normal_user_sync
@@ -2725,6 +2841,17 @@ class TestUpdateExecution:
             .count()
             == 2
         )
+        history = (
+            db.query(MetadataChange)
+            .filter(MetadataChange.entity_id == execution.id)
+            .order_by(MetadataChange.field_name)
+            .all()
+        )
+        assert [entry.field_name for entry in history] == ["artifacts", "links"]
+        assert history[0].old_value[0]["uri"] == "/tmp/output-old"
+        assert history[0].new_value[0]["uri"] == "/tmp/output-new"
+        assert history[1].old_value[0]["url"].endswith("diagnostic-old")
+        assert history[1].new_value[0]["url"].endswith("diagnostic-new")
 
     def test_endpoint_can_clear_artifacts_and_links(
         self, client, db: Session, normal_user_sync
@@ -2979,6 +3106,12 @@ class TestUpdateExecution:
             f"{API_BASE}/executions/{uuid4()}",
             json={"description": "Missing execution"},
         )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Execution not found"}
+
+    def test_history_returns_404_when_execution_not_found(self, client):
+        res = client.get(f"{API_BASE}/executions/{uuid4()}/history")
 
         assert res.status_code == 404
         assert res.json() == {"detail": "Execution not found"}

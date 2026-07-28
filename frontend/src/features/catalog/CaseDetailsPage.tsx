@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type ExecutionSummaryGroupFilter,
@@ -45,6 +46,7 @@ import {
 } from '@/features/catalog/caseUtils';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
+import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
 import {
   areResourceListsEqual,
   createEmptyRowErrors,
@@ -57,6 +59,7 @@ import {
   toEditableLinkRows,
   type ValidationDetail,
 } from '@/features/catalog/externalLinkEditing';
+import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
 import { toast } from '@/hooks/use-toast';
 import { useCase } from '@/lib/catalog/hooks/useCase';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
@@ -357,12 +360,14 @@ export const CaseDetailsPage = ({
   const [caseHashQuery, setCaseHashQuery] = useState('');
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
+  const history = useMetadataHistory('case', id ?? '');
   const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
   const [formState, setFormState] = useState<EditableFormState | null>(null);
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<CaseSaveError | null>(null);
+  const [editReason, setEditReason] = useState('');
   const [serverLinkRowErrors, setServerLinkRowErrors] = useState<ResourceRowFieldErrors[]>([]);
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const [isCompareVisible, setIsCompareVisible] = useState(false);
@@ -498,6 +503,7 @@ export const CaseDetailsPage = ({
       setCaseRecord(fetchedCaseRecord);
       setFormState(toEditableFormState(fetchedCaseRecord));
       setLinkRows(toEditableLinkRows(fetchedCaseRecord.links, 'case'));
+      setEditReason('');
       setIsEditing(false);
       setSaveError(null);
       return;
@@ -507,6 +513,7 @@ export const CaseDetailsPage = ({
       setCaseRecord(null);
       setFormState(null);
       setLinkRows([]);
+      setEditReason('');
       setIsEditing(false);
       setSaveError(null);
     }
@@ -520,6 +527,7 @@ export const CaseDetailsPage = ({
     if (!authLoading && user?.can_edit_managed_content !== true) {
       setFormState(toEditableFormState(caseRecord));
       setLinkRows(toEditableLinkRows(caseRecord.links, 'case'));
+      setEditReason('');
       setIsEditing(false);
     }
   }, [authLoading, caseRecord, user?.can_edit_managed_content]);
@@ -652,6 +660,7 @@ export const CaseDetailsPage = ({
     setSaveError(null);
     setFormState(toEditableFormState(caseRecord));
     setLinkRows(toEditableLinkRows(caseRecord.links, 'case'));
+    setEditReason('');
     setIsEditing(false);
   };
 
@@ -668,6 +677,10 @@ export const CaseDetailsPage = ({
       setIsEditing(false);
       return;
     }
+    const normalizedReason = editReason.trim();
+    if (normalizedReason) {
+      payload.editReason = normalizedReason;
+    }
 
     setIsSaving(true);
     setSaveError(null);
@@ -677,8 +690,10 @@ export const CaseDetailsPage = ({
       setCaseRecord(updatedCaseRecord);
       setFormState(toEditableFormState(updatedCaseRecord));
       setLinkRows(toEditableLinkRows(updatedCaseRecord.links, 'case'));
+      setEditReason('');
       setIsEditing(false);
       await invalidateCatalog(queryClient);
+      await history.refetch();
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));
     } finally {
@@ -1055,6 +1070,21 @@ export const CaseDetailsPage = ({
                   )}
                 </div>
 
+                {isEditing ? (
+                  <div>
+                    <Label htmlFor="case-edit-reason" className="mb-1 block text-xs">
+                      Edit reason (optional)
+                    </Label>
+                    <Textarea
+                      id="case-edit-reason"
+                      value={editReason}
+                      onChange={(event) => setEditReason(event.target.value)}
+                      placeholder="Why are these metadata changes needed?"
+                      className="min-h-20"
+                    />
+                  </div>
+                ) : null}
+
                 {isEditing && summaryErrorMessage ? (
                   <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                     <div className="flex items-start gap-2">
@@ -1070,6 +1100,10 @@ export const CaseDetailsPage = ({
             ) : null}
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <MetadataHistory entries={history.data} loading={history.loading} error={history.error} />
       </section>
 
       <section className="space-y-4">

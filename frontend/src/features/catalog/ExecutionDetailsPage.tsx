@@ -10,6 +10,7 @@ import {
   type ExecutionSaveError,
 } from '@/features/catalog/components/ExecutionDetailsView';
 import { useExecutionSummary } from '@/features/catalog/hooks/useExecutionSummary';
+import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
 import { toast } from '@/hooks/use-toast';
 import { useExecution } from '@/lib/catalog/hooks/useExecution';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
@@ -75,6 +76,7 @@ export const ExecutionDetailsPage = ({
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { data: fetchedExecution, loading, error } = useExecution(id ?? '');
+  const history = useMetadataHistory('execution', id ?? '');
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [execution, setExecution] = useState<ExecutionOut | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -160,6 +162,7 @@ export const ExecutionDetailsPage = ({
       const updatedExecution = await updateExecution(id, payload);
       setExecution(updatedExecution);
       await invalidateCatalog(queryClient);
+      await history.refetch();
       return true;
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));
@@ -271,6 +274,9 @@ export const ExecutionDetailsPage = ({
       showLoginForAiSummary={showLoginForAiSummary}
       isCheckingAuth={authLoading && llmSummaryAvailable}
       onLoginForSummary={loginWithGithub}
+      historyEntries={history.data}
+      historyLoading={history.loading}
+      historyError={history.error}
     />
   );
 };

@@ -15,8 +15,15 @@ from app.features.catalog.enums import (
     ExternalLinkKind,
     SimulationType,
 )
+from app.features.catalog.history import EntityType, changed_metadata, snapshot_metadata
 from app.features.catalog.link_utils import merge_execution_and_case_links
-from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
+from app.features.catalog.models import (
+    Artifact,
+    Case,
+    Execution,
+    ExternalLink,
+    MetadataChange,
+)
 from app.features.catalog.schemas import (
     CaseDetailOut,
     CaseFilterOptionsOut,
@@ -36,6 +43,7 @@ from app.features.catalog.schemas import (
     ExecutionSummaryOut,
     ExecutionUpdate,
     FilterOptionOut,
+    MetadataChangeOut,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
@@ -311,6 +319,24 @@ def get_case(
     return resp
 
 
+@case_router.get(
+    "/{case_id}/history",
+    response_model=list[MetadataChangeOut],
+    responses={
+        200: {"description": "Case metadata history found."},
+        404: {"description": "Case not found."},
+    },
+)
+def get_case_history(
+    case_id: UUID, db: Session = Depends(get_database_session)
+) -> list[MetadataChange]:
+    """Return reverse-chronological managed metadata history for one case."""
+    if db.query(Case.id).filter(Case.id == case_id).first() is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return _get_metadata_history(db, entity_type="case", entity_id=case_id)
+
+
 @case_router.patch(
     "/{case_id}",
     response_model=CaseDetailOut,
@@ -353,7 +379,10 @@ def update_case(
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
+    audit_fields = set(payload.model_fields_set) - {"edit_reason"}
+    previous_metadata = snapshot_metadata(case, audit_fields)
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    updates.pop("edit_reason", None)
     updates.pop("links", None)
     for field, value in updates.items():
         setattr(case, field, value)
@@ -361,10 +390,28 @@ def update_case(
     if "links" in payload.model_fields_set:
         _replace_case_links(case, payload.links or [])
 
-    case.updated_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    case.updated_at = now
+    current_metadata = snapshot_metadata(case, audit_fields)
+    history_rows = [
+        MetadataChange(
+            entity_type="case",
+            entity_id=case.id,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+            editor_id=user.id,
+            changed_at=now,
+            reason=payload.edit_reason,
+        )
+        for field_name, old_value, new_value in changed_metadata(
+            previous_metadata, current_metadata
+        )
+    ]
 
     with transaction(db):
         db.add(case)
+        db.add_all(history_rows)
         db.flush()
 
     db.expire_all()
@@ -626,6 +673,24 @@ def get_execution(
     return _execution_to_out(execution)
 
 
+@execution_router.get(
+    "/{execution_id}/history",
+    response_model=list[MetadataChangeOut],
+    responses={
+        200: {"description": "Execution metadata history found."},
+        404: {"description": "Execution not found."},
+    },
+)
+def get_execution_history(
+    execution_id: UUID, db: Session = Depends(get_database_session)
+) -> list[MetadataChange]:
+    """Return reverse-chronological managed metadata history for one execution."""
+    if db.query(Execution.id).filter(Execution.id == execution_id).first() is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    return _get_metadata_history(db, entity_type="execution", entity_id=execution_id)
+
+
 def _list_executions(  # noqa: C901
     db: Session,
     page: int = Query(1, ge=1),
@@ -865,7 +930,10 @@ def _update_execution(
         )
 
     now = datetime.now(timezone.utc)
+    audit_fields = set(payload.model_fields_set) - {"edit_reason"}
+    previous_metadata = snapshot_metadata(execution, audit_fields)
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
+    updates.pop("edit_reason", None)
     updates.pop("artifacts", None)
     updates.pop("links", None)
 
@@ -882,9 +950,26 @@ def _update_execution(
 
     execution.last_updated_by = user.id
     execution.updated_at = now
+    current_metadata = snapshot_metadata(execution, audit_fields)
+    history_rows = [
+        MetadataChange(
+            entity_type="execution",
+            entity_id=execution.id,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+            editor_id=user.id,
+            changed_at=now,
+            reason=payload.edit_reason,
+        )
+        for field_name, old_value, new_value in changed_metadata(
+            previous_metadata, current_metadata
+        )
+    ]
 
     with transaction(db):
         db.add(execution)
+        db.add_all(history_rows)
         db.flush()
 
     db.expire_all()
@@ -1084,6 +1169,20 @@ def _creator_filter_options(db: Session) -> list[FilterOptionOut]:
         .all()
     )
     return [FilterOptionOut(value=str(user_id), label=email) for user_id, email in rows]
+
+
+def _get_metadata_history(
+    db: Session, *, entity_type: EntityType, entity_id: UUID
+) -> list[MetadataChange]:
+    return (
+        db.query(MetadataChange)
+        .filter(
+            MetadataChange.entity_type == entity_type,
+            MetadataChange.entity_id == entity_id,
+        )
+        .order_by(desc(MetadataChange.changed_at), desc(MetadataChange.id))
+        .all()
+    )
 
 
 def _case_to_detail_out(case: Case) -> CaseDetailOut:

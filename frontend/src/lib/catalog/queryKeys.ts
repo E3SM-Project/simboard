@@ -7,6 +7,7 @@ const executionQueryKeys = {
     ['executions', 'case', caseId, 'infinite', params] as const,
   options: ['executions', 'filter-options'] as const,
   detail: (id: string) => ['executions', 'detail', id] as const,
+  history: (id: string) => ['executions', 'detail', id, 'history'] as const,
 };
 
 export const catalogQueryKeys = {
@@ -17,6 +18,7 @@ export const catalogQueryKeys = {
     page: (params: object) => ['cases', 'page', params] as const,
     options: ['cases', 'filter-options'] as const,
     detail: (id: string) => ['cases', 'detail', id] as const,
+    history: (id: string) => ['cases', 'detail', id, 'history'] as const,
   },
   executions: executionQueryKeys,
   machines: ['machines'] as const,
