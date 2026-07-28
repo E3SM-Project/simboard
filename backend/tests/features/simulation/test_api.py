@@ -186,7 +186,7 @@ def _create_matching_simulation(
     return case, simulation
 
 
-def test_phase_two_preserves_legacy_simulation_openapi_contract(client) -> None:
+def test_phase_three_adds_canonical_execution_openapi_contract(client) -> None:
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -207,9 +207,39 @@ def test_phase_two_preserves_legacy_simulation_openapi_contract(client) -> None:
     }
 
     assert expected_components <= components.keys()
-    assert "ExecutionStatus" not in components
+    assert {
+        "ExecutionCreate",
+        "ExecutionFilterOptionsOut",
+        "ExecutionListItemOut",
+        "ExecutionOut",
+        "ExecutionPageOut",
+        "ExecutionStatus",
+        "ExecutionUpdate",
+    } <= components.keys()
+    assert f"{API_BASE}/executions" in schema["paths"]
+    assert f"{API_BASE}/executions/{{execution_id}}" in schema["paths"]
     assert f"{API_BASE}/simulations" in schema["paths"]
     assert f"{API_BASE}/simulations/{{sim_id}}" in schema["paths"]
+    assert schema["paths"][f"{API_BASE}/simulations"]["get"]["deprecated"] is True
+    assert schema["paths"][f"{API_BASE}/simulations"]["post"]["deprecated"] is True
+    assert (
+        schema["paths"][f"{API_BASE}/simulations/{{sim_id}}"]["get"]["deprecated"]
+        is True
+    )
+    assert (
+        schema["paths"][f"{API_BASE}/simulations/{{sim_id}}"]["patch"]["deprecated"]
+        is True
+    )
+    deprecated_properties = {
+        "CaseDetailOut": {"simulations"},
+        "CaseListItemOut": {"simulationCount"},
+        "CatalogOverviewOut": {"totalSimulations"},
+        "IngestionResponse": {"simulations"},
+    }
+    for component_name, property_names in deprecated_properties.items():
+        properties = components[component_name]["properties"]
+        assert all(properties[name]["deprecated"] is True for name in property_names)
+
     expected_descriptions = {
         "SimulationCreate": "Schema for creating a new Simulation.",
         "SimulationFilterOptionsOut": (
@@ -261,8 +291,7 @@ def test_phase_two_preserves_legacy_simulation_openapi_contract(client) -> None:
         f"{API_BASE}/ingestions/from-hpc-upload",
     ):
         description = schema["paths"][path]["post"]["description"]
-        assert "created Simulation records" in description
-        assert "created Execution records" not in description
+        assert "created Execution records" in description
 
 
 def _create_ingestion(
@@ -429,6 +458,7 @@ class TestListCases:
         assert case_data["machineName"] == machine.name
         assert case_data["hpcUsername"] == "test-user"
         assert case_data["simulationCount"] == 2
+        assert case_data["executionCount"] == 2
         assert "description" not in case_data
         assert "keyFeatures" not in case_data
         assert "knownIssues" not in case_data
@@ -648,6 +678,7 @@ class TestListCases:
         data = client.get(f"{API_BASE}/cases/overview").json()
         assert data["totalCases"] == 7
         assert data["totalSimulations"] == 0
+        assert data["totalExecutions"] == 0
         assert data["latestSubmission"] is None
         assert data["machineCounts"] == {str(cases[0].machine_id): 7}
         assert [item["name"] for item in data["recentCases"]] == [
@@ -802,6 +833,7 @@ class TestGetCase:
         data = res.json()
         assert data["name"] == "test_case_detail"
         assert len(data["simulations"]) == 1
+        assert data["executions"] == data["simulations"]
         assert data["machineNames"] == [machine.name]
         assert data["hpcUsernames"] == ["case-user"]
         assert data["description"] == "Shared case description"
@@ -923,7 +955,7 @@ class TestCreateSimulation:
             ],
         }
 
-        res = client.post(f"{API_BASE}/simulations", json=payload)
+        res = client.post(f"{API_BASE}/executions", json=payload)
         assert res.status_code == 201
         data = res.json()
         assert data["caseId"] == str(case.id)
@@ -935,6 +967,7 @@ class TestCreateSimulation:
         assert data["hpcUsername"] == case.hpc_username
         assert len(data["artifacts"]) == 1
         assert len(data["links"]) == 1
+        assert data["links"][0]["ownerType"] == "execution"
 
     def test_endpoint_returns_400_when_case_not_found(
         self, client, db: Session
@@ -1591,11 +1624,11 @@ class TestListSimulations:
             )
         db.commit()
 
-        data = client.get(
-            f"{API_BASE}/simulations", params={"case_id": str(first_case.id)}
-        ).json()
+        params = {"case_id": str(first_case.id)}
+        data = client.get(f"{API_BASE}/executions", params=params).json()
         assert data["total"] == 1
         assert [item["executionId"] for item in data["items"]] == ["exact-a"]
+        assert client.get(f"{API_BASE}/simulations", params=params).json() == data
 
         empty = client.get(
             f"{API_BASE}/simulations",
@@ -1885,7 +1918,13 @@ class TestListSimulations:
         )
         db.commit()
 
-        data = client.get(f"{API_BASE}/simulations/filter-options").json()
+        legacy_response = client.get(f"{API_BASE}/simulations/filter-options")
+        canonical_response = client.get(f"{API_BASE}/executions/filter-options")
+
+        assert legacy_response.status_code == 200
+        assert canonical_response.status_code == 200
+        data = legacy_response.json()
+        assert canonical_response.json() == data
         assert data["caseNames"] == ["filter-option-case"]
         assert data["compsets"] == ["AQUAPLANET"]
         assert data["statuses"] == ["created"]
@@ -2381,7 +2420,7 @@ class TestGetSimulation:
         db.commit()
         db.refresh(sim)
 
-        res = client.get(f"{API_BASE}/simulations/{sim.id}")
+        res = client.get(f"{API_BASE}/executions/{sim.id}")
         assert res.status_code == 200
         data = res.json()
         assert data["caseName"] == "test_case_get"
@@ -2573,7 +2612,7 @@ class TestUpdateSimulation:
             "notesMarkdown": "Updated notes",
         }
 
-        res = client.patch(f"{API_BASE}/simulations/{sim.id}", json=payload)
+        res = client.patch(f"{API_BASE}/executions/{sim.id}", json=payload)
 
         assert res.status_code == 200
         data = res.json()

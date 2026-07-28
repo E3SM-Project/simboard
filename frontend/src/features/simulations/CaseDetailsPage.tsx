@@ -374,8 +374,8 @@ export const CaseDetailsPage = ({
     [allSimulations],
   );
   const rawSimulationGroups = useMemo(
-    () => groupSimulationSummaries(caseRecord?.simulations ?? []),
-    [caseRecord?.simulations],
+    () => groupSimulationSummaries(caseRecord?.executions ?? []),
+    [caseRecord?.executions],
   );
   const simulationGroups = useMemo(
     () =>
@@ -429,7 +429,7 @@ export const CaseDetailsPage = ({
     rawSimulationGroups.find((group) => group.isFallback)?.simulations.length ?? 0;
   const allRunsMissingCaseHash =
     caseRecord != null &&
-    caseRecord.simulations.length > 0 &&
+    caseRecord.executions.length > 0 &&
     caseHashGroupCount === 0 &&
     missingCaseHashCount > 0;
   const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
@@ -461,8 +461,8 @@ export const CaseDetailsPage = ({
     [filteredFlatSimulations],
   );
   const caseSimulationIdSet = useMemo(
-    () => new Set(caseRecord?.simulations.map((simulation) => simulation.id) ?? []),
-    [caseRecord?.simulations],
+    () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
+    [caseRecord?.executions],
   );
   const rawCaseSelectedSimulationIds = id
     ? normalizeSelectedSimulationIds(selectedCaseSimulationIdsByCase[id] ?? [])
@@ -753,11 +753,11 @@ export const CaseDetailsPage = ({
     viewMode === 'grouped' ? filteredSimulationGroups.length : filteredExecutionCount;
   const totalSimulationCount = viewMode === 'grouped' ? simulationGroups.length : simulationTotal;
   const summaryHeadline =
-    caseRecord.simulations.length === 0
+    caseRecord.executions.length === 0
       ? '0 executions'
       : allRunsMissingCaseHash
-        ? `${caseRecord.simulations.length} executions, all without Case Hash`
-        : `${caseRecord.simulations.length} executions in ${caseHashGroupCount} Case Hash ${
+        ? `${caseRecord.executions.length} executions, all without Case Hash`
+        : `${caseRecord.executions.length} executions in ${caseHashGroupCount} Case Hash ${
             caseHashGroupCount === 1 ? 'group' : 'groups'
           }`;
   const simulationsIntro = allRunsMissingCaseHash
@@ -897,7 +897,7 @@ export const CaseDetailsPage = ({
 
             <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-3">
               <div className="min-w-[7rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
-                <DetailField label="Executions" value={caseRecord.simulations.length} />
+                <DetailField label="Executions" value={caseRecord.executions.length} />
               </div>
               <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
                 <DetailField label="Case Hash groups" value={caseHashGroupCount} />
@@ -1322,7 +1322,7 @@ export const CaseDetailsPage = ({
                               </TableCell>
                               <TableCell className="align-top">
                                 <Link
-                                  to={`/simulations/${summary.id}`}
+                                  to={`/executions/${summary.id}`}
                                   state={{ from: currentPath }}
                                   className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                 >
@@ -1547,7 +1547,7 @@ export const CaseDetailsPage = ({
                                                     </TableCell>
                                                     <TableCell className="align-top">
                                                       <Link
-                                                        to={`/simulations/${summary.id}`}
+                                                        to={`/executions/${summary.id}`}
                                                         state={{ from: currentPath }}
                                                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                                       >

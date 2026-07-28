@@ -244,7 +244,7 @@ export const CompareWorkspace = ({
       caseName: simulation?.caseName || '—',
       colIdx,
       executionHeader: headers[colIdx],
-      simulationHref: `/simulations/${simulationId}`,
+      simulationHref: `/executions/${simulationId}`,
       simulationId,
     };
   });
@@ -1066,7 +1066,7 @@ export const ComparePage = ({
       : selectedSimulationIds;
   const detailQueries = useQueries({
     queries: effectiveSelectedSimulationIds.map((simulationId) => ({
-      queryKey: catalogQueryKeys.simulations.detail(simulationId),
+      queryKey: catalogQueryKeys.executions.detail(simulationId),
       queryFn: () => getSimulationById(simulationId),
       initialData: routedSelectedSimulations.find((simulation) => simulation.id === simulationId),
     })),

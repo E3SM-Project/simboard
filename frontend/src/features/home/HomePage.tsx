@@ -198,7 +198,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                 Total Executions
               </p>
               <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {overview?.totalSimulations ?? 0}
+                {overview?.totalExecutions ?? 0}
               </p>
             </div>
             <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
@@ -353,7 +353,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.machineSummary} lines={1} />
                   </TableCell>
-                  <TableCell>{caseRecord.simulationCount}</TableCell>
+                  <TableCell>{caseRecord.executionCount}</TableCell>
                   <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
                   <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>

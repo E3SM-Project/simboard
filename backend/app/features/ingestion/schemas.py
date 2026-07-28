@@ -2,7 +2,14 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.features.ingestion.enums import (
     ExecutionDiscoveryOutcome,
@@ -87,22 +94,34 @@ class IngestFromHpcUploadRequest(BaseModel):
 
 
 class IngestionResponse(BaseModel):
-    """Response payload for ingesting and persisting simulations."""
+    """Response payload for ingesting and persisting executions."""
 
     created_count: Annotated[
-        int, Field(..., description="Number of new simulations created")
+        int, Field(..., description="Number of new executions created")
     ]
     duplicate_count: Annotated[
         int, Field(..., description="Number of duplicate simulations detected")
     ]
     simulations: Annotated[
         list[IngestionSimulationSummary],
-        Field(..., description="List of created simulation summaries"),
+        Field(
+            ...,
+            description="List of created simulation summaries",
+            deprecated=True,
+        ),
     ]
     errors: Annotated[
         list[dict[str, str]],
         Field(..., description="List of errors encountered during ingestion"),
     ]
+
+    @computed_field
+    def executions(self) -> list[IngestionExecutionSummary]:
+        """Canonical alias retained alongside deprecated simulations."""
+        return [
+            IngestionExecutionSummary.model_validate(summary.model_dump())
+            for summary in self.__dict__["simulations"]
+        ]
 
 
 class IngestionStateCase(BaseModel):

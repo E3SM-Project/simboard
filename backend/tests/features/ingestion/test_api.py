@@ -1220,6 +1220,7 @@ class TestIngestFromPathEndpoint:
             "test_case_errors",
             "case2_errors",
         }
+        assert data["executions"] == data["simulations"]
 
     def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""

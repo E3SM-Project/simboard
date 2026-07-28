@@ -74,7 +74,7 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate(`/simulations/${info.row.original.id}`)}
+          onClick={() => navigate(`/executions/${info.row.original.id}`)}
           aria-label="Details"
           className="h-8 w-8 p-0 text-muted-foreground"
         >

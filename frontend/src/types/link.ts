@@ -1,5 +1,5 @@
 export type ExternalLinkKind = 'diagnostic' | 'performance' | 'docs' | 'other';
-export type ExternalLinkOwnerType = 'simulation' | 'case';
+export type ExternalLinkOwnerType = 'execution' | 'simulation' | 'case';
 
 /**
  * Represents a link to an external diagnostic, documentation, or related resource.

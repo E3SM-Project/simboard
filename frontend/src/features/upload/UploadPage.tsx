@@ -271,7 +271,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
       });
 
       resetFileSelection();
-      setCreatedSimulations(response.simulations);
+      setCreatedSimulations(response.executions);
       await invalidateCatalog(queryClient);
 
       setUploadStatus({
@@ -590,7 +590,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                             <Link
                               className="block truncate font-medium text-blue-700 hover:underline"
                               title={simulation.execution_id}
-                              to={`/simulations/${simulation.id}`}
+                              to={`/executions/${simulation.id}`}
                             >
                               {simulation.execution_id}
                             </Link>
@@ -599,7 +599,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                             <div className="flex justify-end gap-3">
                               <Link
                                 className="text-blue-700 hover:underline"
-                                to={`/simulations/${simulation.id}`}
+                                to={`/executions/${simulation.id}`}
                               >
                                 Open
                               </Link>

@@ -122,7 +122,7 @@ export const SimulationsPage = () => {
   const location = useLocation();
   const currentPath = `${location.pathname}${location.search}`;
   const navigateToSimulationDetails = (simulationId: string) => {
-    navigate(`/simulations/${simulationId}`, { state: { from: currentPath } });
+    navigate(`/executions/${simulationId}`, { state: { from: currentPath } });
   };
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -171,7 +171,7 @@ export const SimulationsPage = () => {
         header: 'Execution ID',
         cell: ({ row }) => (
           <Link
-            to={`/simulations/${row.original.id}`}
+            to={`/executions/${row.original.id}`}
             state={{ from: currentPath }}
             className="block max-w-full truncate font-mono text-xs text-blue-600 hover:underline"
             title={row.original.executionId}

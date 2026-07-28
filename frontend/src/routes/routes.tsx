@@ -7,7 +7,7 @@ import { browseRoutes } from '@/features/browse/routes';
 import { compareRoutes } from '@/features/compare/routes';
 import { docsRoutes } from '@/features/docs/routes';
 import { homeRoutes } from '@/features/home/routes';
-import { simulationsRoutes } from '@/features/simulations/routes';
+import { executionRoutes } from '@/features/simulations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
 import type { Site } from '@/types/site';
@@ -26,7 +26,7 @@ export const AppRoutes = (props: RoutesProps) => {
   const routes = [
     ...homeRoutes(props),
     ...browseRoutes(props),
-    ...simulationsRoutes(props),
+    ...executionRoutes(props),
     ...compareRoutes(props),
     ...docsRoutes(),
 

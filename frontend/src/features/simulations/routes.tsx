@@ -3,6 +3,7 @@ import type { RouteObject } from 'react-router-dom';
 
 import { CaseDetailsPage } from '@/features/simulations/CaseDetailsPage';
 import { CasesPage } from '@/features/simulations/CasesPage';
+import { LegacyExecutionRedirect } from '@/features/simulations/LegacyExecutionRedirect';
 import { SimulationDetailsPage } from '@/features/simulations/SimulationDetailsPage';
 import { SimulationsPage } from '@/features/simulations/SimulationsPage';
 
@@ -14,7 +15,7 @@ interface SimulationRoutesProps {
   setSelectedSimulationIds: (ids: string[]) => void;
 }
 
-export const simulationsRoutes = ({
+export const executionRoutes = ({
   renderCaseCompareSection,
   selectedCaseSimulationIdsByCase,
   setSelectedCaseSimulationIdsForCase,
@@ -36,11 +37,11 @@ export const simulationsRoutes = ({
     ),
   },
   {
-    path: '/simulations',
+    path: '/executions',
     element: <SimulationsPage />,
   },
   {
-    path: '/simulations/:id',
+    path: '/executions/:id',
     element: (
       <SimulationDetailsPage
         selectedSimulationIds={selectedSimulationIds}
@@ -48,4 +49,15 @@ export const simulationsRoutes = ({
       />
     ),
   },
+  {
+    path: '/simulations',
+    element: <LegacyExecutionRedirect />,
+  },
+  {
+    path: '/simulations/:id',
+    element: <LegacyExecutionRedirect />,
+  },
 ];
+
+/** @deprecated Use executionRoutes. */
+export const simulationsRoutes = executionRoutes;

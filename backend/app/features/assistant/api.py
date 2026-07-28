@@ -12,6 +12,7 @@ from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
 from app.features.assistant.orchestrator import generate_execution_summary
 from app.features.assistant.schemas import (
+    ExecutionApiSummaryResponse,
     ExecutionSummaryResponse,
     SimulationSummaryResponse,
 )
@@ -19,11 +20,60 @@ from app.features.simulation.models import Case, Execution
 from app.features.user.manager import optional_current_user
 from app.features.user.models import User
 
-router = APIRouter(prefix="/simulations", tags=["Simulation Assistant"])
+execution_router = APIRouter(prefix="/executions", tags=["Execution Assistant"])
+simulation_router = APIRouter(
+    prefix="/simulations",
+    tags=["Simulation Assistant"],
+    deprecated=True,
+)
 logger = _setup_custom_logger(__name__)
 
 
-@router.post(
+@execution_router.post(
+    "/{execution_id}/summary",
+    response_model=ExecutionApiSummaryResponse,
+    responses={
+        200: {"description": "Execution summary generated successfully."},
+        401: {"description": "Unauthorized."},
+        404: {"description": "Execution not found."},
+    },
+)
+async def summarize_execution(
+    execution_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User | None = Depends(optional_current_user),
+) -> ExecutionApiSummaryResponse:
+    """Generate a metadata-grounded read-only summary for one execution."""
+    try:
+        summary = await summarize_simulation(execution_id, db, user)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail="Execution not found",
+            ) from exc
+        raise
+    payload = summary.model_dump()
+    payload["citations"] = [
+        {
+            **citation,
+            "source_type": (
+                "execution_field"
+                if citation["source_type"] == "simulation_field"
+                else citation["source_type"]
+            ),
+            "path": (
+                citation["path"].replace("simulation.", "execution.", 1)
+                if citation["path"].startswith("simulation.")
+                else citation["path"]
+            ),
+        }
+        for citation in payload["citations"]
+    ]
+    return ExecutionApiSummaryResponse.model_validate(payload)
+
+
+@simulation_router.post(
     "/{sim_id}/summary",
     response_model=SimulationSummaryResponse,
     responses={
@@ -111,3 +161,7 @@ async def summarize_simulation(
     )
 
     return summary
+
+
+# Compatibility import used by existing application wiring.
+router = simulation_router

@@ -100,7 +100,7 @@ const SimulationTableActions = ({ simulation }: { simulation: SimulationListItem
         className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
         onClick={(event) => {
           event.stopPropagation();
-          navigate(`/simulations/${simulation.id}`, { state: { from: currentPath } });
+          navigate(`/executions/${simulation.id}`, { state: { from: currentPath } });
         }}
       >
         All Details

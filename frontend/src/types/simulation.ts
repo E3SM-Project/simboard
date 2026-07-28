@@ -21,6 +21,7 @@ export type ComputeType = 'cpu' | 'gpu';
 
 export type SummaryCitationSourceType =
   | 'simulation_field'
+  | 'execution_field'
   | 'case_field'
   | 'machine_field'
   | 'artifact'
@@ -58,6 +59,8 @@ export interface CaseSummaryOut {
   id: string;
   name: string;
   caseGroup: string | null;
+  executions: ExecutionSummaryOut[];
+  /** @deprecated Use executions. */
   simulations: SimulationSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
@@ -81,6 +84,7 @@ export interface CaseListItemOut {
   machineName: string;
   hpcUsername: string;
   simulationCount: number;
+  executionCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -101,6 +105,8 @@ export interface FilterOptionOut {
 
 export interface CatalogOverviewOut {
   totalCases: number;
+  totalExecutions: number;
+  /** @deprecated Use totalExecutions. */
   totalSimulations: number;
   latestSubmission: string | null;
   machineCounts: Record<string, number>;
@@ -329,3 +335,20 @@ export interface SimulationFilterOptionsOut {
   createdByIds: string[];
   creators: FilterOptionOut[];
 }
+
+// Canonical execution entity contracts. Scientific simulation metadata names
+// remain unchanged; Simulation* aliases stay available until Phase 5.
+export type ExecutionUserPreview = SimulationUserPreview;
+export type ExecutionStatusValue = SimulationStatusValue;
+export type ExecutionSummaryCitationOut = SimulationSummaryCitationOut;
+export type ExecutionSummaryResponseOut = SimulationSummaryResponseOut;
+export type ExecutionSummaryCapabilitiesOut = SimulationSummaryCapabilitiesOut;
+export type ExecutionSummaryOut = SimulationSummaryOut;
+export type ExecutionCreate = SimulationCreate;
+export type ExecutionEditableField = SimulationEditableField;
+export type ExecutionUpdate = SimulationUpdate;
+export type ExecutionCreateForm = SimulationCreateForm;
+export type ExecutionOut = SimulationOut;
+export type ExecutionListItemOut = SimulationListItemOut;
+export type ExecutionPageOut = SimulationPageOut;
+export type ExecutionFilterOptionsOut = SimulationFilterOptionsOut;

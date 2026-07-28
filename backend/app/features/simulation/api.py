@@ -31,6 +31,14 @@ from app.features.simulation.schemas import (
     CaseUpdate,
     CatalogOverviewOut,
     DiagnosticsLinkRequest,
+    ExecutionCreate,
+    ExecutionExternalLinkOut,
+    ExecutionFilterOptionsOut,
+    ExecutionListItemOut,
+    ExecutionOut,
+    ExecutionPageOut,
+    ExecutionSummaryCapabilitiesOut,
+    ExecutionUpdate,
     FilterOptionOut,
     SimulationCreate,
     SimulationFilterOptionsOut,
@@ -44,7 +52,12 @@ from app.features.simulation.schemas import (
 from app.features.user.manager import can_edit_managed_content, current_active_user
 from app.features.user.models import User, UserRole
 
-simulation_router = APIRouter(prefix="/simulations", tags=["Simulations"])
+execution_router = APIRouter(prefix="/executions", tags=["Executions"])
+simulation_router = APIRouter(
+    prefix="/simulations",
+    tags=["Simulations"],
+    deprecated=True,
+)
 case_router = APIRouter(prefix="/cases", tags=["Cases"])
 diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
 
@@ -78,7 +91,7 @@ def list_cases(  # noqa: C901
         "updated_at",
         pattern=(
             "^(updated_at|created_at|name|case_group|machine_name|hpc_username|"
-            "simulation_count)$"
+            "simulation_count|execution_count)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -144,6 +157,7 @@ def list_cases(  # noqa: C901
         "machine_name": Machine.name,
         "hpc_username": Case.hpc_username,
         "simulation_count": simulation_count,
+        "execution_count": simulation_count,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
     rows = (
@@ -388,6 +402,33 @@ def update_case(
     return _case_to_detail_out(case_loaded)
 
 
+@execution_router.post(
+    "",
+    response_model=ExecutionOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Execution created successfully."},
+        400: {"description": "Invalid input."},
+        401: {"description": "Unauthorized."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
+def create_execution(
+    payload: ExecutionCreate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> ExecutionOut:
+    """Create a new execution record."""
+    execution = _create_execution(
+        payload,
+        db,
+        user,
+        entity_label="execution",
+    )
+    return _execution_to_out(execution)
+
+
 @simulation_router.post(
     "",
     response_model=SimulationOut,
@@ -406,6 +447,23 @@ def create_simulation(
     user: User = Depends(current_active_user),
 ):
     """Create a new simulation record in the database."""
+    execution = _create_execution(
+        payload,
+        db,
+        user,
+        entity_label="simulation",
+    )
+    return _execution_to_legacy_out(execution)
+
+
+def _create_execution(
+    payload: ExecutionCreate,
+    db: Session,
+    user: User,
+    *,
+    entity_label: str,
+) -> Execution:
+    """Persist one execution for canonical and compatibility routes."""
     now = datetime.now(timezone.utc)
 
     # Verify the case exists
@@ -432,7 +490,7 @@ def create_simulation(
 
     ingestion = Ingestion(
         source_type=IngestionSourceType.BROWSER_UPLOAD,
-        source_reference="manual_simulation_create",
+        source_reference=f"manual_{entity_label}_create",
         machine_id=case.machine_id,
         triggered_by=user.id,
         status=IngestionStatus.SUCCESS,
@@ -463,12 +521,10 @@ def create_simulation(
     if sim_loaded is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load newly created simulation.",
+            detail=f"Failed to load newly created {entity_label}.",
         )
 
-    result = _execution_to_legacy_out(sim_loaded)
-
-    return result
+    return sim_loaded
 
 
 @diagnostics_router.post(
@@ -505,6 +561,124 @@ def link_case_diagnostics(
         case_id=case_id,
         diagnostics=payload.diagnostics,
     )
+
+
+@execution_router.get(
+    "",
+    response_model=ExecutionPageOut,
+    responses={
+        200: {"description": "List all executions."},
+        401: {"description": "Unauthorized."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_executions(  # noqa: C901
+    db: Session = Depends(get_database_session),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None),
+    case_id: UUID | None = Query(None),
+    case_name: list[str] | None = Query(
+        None,
+        description="Filter executions by exact case name.",
+    ),
+    case_group: list[str] | None = Query(
+        None,
+        description="Filter executions by exact case group.",
+    ),
+    status_filter: list[ExecutionStatus] | None = Query(None, alias="status"),
+    simulation_type: list[SimulationType] | None = Query(None),
+    machine_id: list[UUID] | None = Query(None),
+    hpc_username: list[str] | None = Query(None),
+    campaign: list[str] | None = Query(None),
+    experiment_type: list[str] | None = Query(None),
+    compset: list[str] | None = Query(None),
+    grid_name: list[str] | None = Query(None),
+    grid_resolution: list[str] | None = Query(None),
+    initialization_type: list[str] | None = Query(None),
+    compiler: list[str] | None = Query(None),
+    git_tag: list[str] | None = Query(None),
+    created_by: list[UUID] | None = Query(None),
+    sort_by: str = Query(
+        "created_at",
+        pattern=(
+            "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
+            "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "grid_resolution|compset|grid_name|machine_name)$"
+        ),
+    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+) -> ExecutionPageOut:
+    """Return one lightweight, server-filtered execution page."""
+    legacy_page = list_simulations(
+        db=db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        case_id=case_id,
+        case_name=case_name,
+        case_group=case_group,
+        status_filter=(
+            [SimulationStatus(value.value) for value in status_filter]
+            if status_filter
+            else None
+        ),
+        simulation_type=simulation_type,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+        campaign=campaign,
+        experiment_type=experiment_type,
+        compset=compset,
+        grid_name=grid_name,
+        grid_resolution=grid_resolution,
+        initialization_type=initialization_type,
+        compiler=compiler,
+        git_tag=git_tag,
+        created_by=created_by,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    return ExecutionPageOut(
+        items=[
+            ExecutionListItemOut.model_validate(item.model_dump())
+            for item in legacy_page.items
+        ],
+        total=legacy_page.total,
+        page=legacy_page.page,
+        page_size=legacy_page.page_size,
+    )
+
+
+@execution_router.get(
+    "/filter-options",
+    response_model=ExecutionFilterOptionsOut,
+)
+def get_execution_filter_options(
+    db: Session = Depends(get_database_session),
+) -> ExecutionFilterOptionsOut:
+    """Return distinct scalar execution filter values."""
+    legacy_options = get_simulation_filter_options(db)
+    return ExecutionFilterOptionsOut.model_validate(legacy_options.model_dump())
+
+
+@execution_router.get(
+    "/{execution_id}",
+    response_model=ExecutionOut,
+    responses={
+        200: {"description": "Execution found."},
+        401: {"description": "Unauthorized."},
+        404: {"description": "Execution not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def get_execution(
+    execution_id: UUID,
+    db: Session = Depends(get_database_session),
+) -> ExecutionOut:
+    """Retrieve an execution by its unique identifier."""
+    execution = _get_execution(execution_id, db, entity_label="execution")
+    return _execution_to_out(execution)
 
 
 @simulation_router.get(
@@ -706,6 +880,35 @@ def get_simulation_filter_options(
     )
 
 
+@execution_router.patch(
+    "/{execution_id}",
+    response_model=ExecutionOut,
+    responses={
+        200: {"description": "Execution updated successfully."},
+        401: {"description": "Unauthorized."},
+        403: {"description": "Forbidden."},
+        404: {"description": "Execution not found."},
+        422: {"description": "Validation error."},
+        500: {"description": "Internal server error."},
+    },
+)
+def update_execution(
+    execution_id: UUID,
+    payload: ExecutionUpdate,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> ExecutionOut:
+    """Partially update allowed user-managed execution fields."""
+    execution = _update_execution(
+        execution_id,
+        payload,
+        db,
+        user,
+        entity_label="execution",
+    )
+    return _execution_to_out(execution)
+
+
 @simulation_router.patch(
     "/{sim_id}",
     response_model=SimulationOut,
@@ -725,19 +928,41 @@ def update_simulation(
     user: User = Depends(current_active_user),
 ) -> SimulationOut:
     """Partially update allowed user-managed simulation fields."""
+    execution = _update_execution(
+        sim_id,
+        payload,
+        db,
+        user,
+        entity_label="simulation",
+    )
+    return _execution_to_legacy_out(execution)
+
+
+def _update_execution(
+    execution_id: UUID,
+    payload: ExecutionUpdate,
+    db: Session,
+    user: User,
+    *,
+    entity_label: str,
+) -> Execution:
+    """Update one execution for canonical and compatibility routes."""
     if not can_edit_managed_content(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Editing simulation metadata requires SimBoard admin access or "
+                f"Editing {entity_label} metadata requires SimBoard admin access or "
                 "verified E3SM GitHub organization membership."
             ),
         )
 
-    sim = db.query(Execution).filter(Execution.id == sim_id).one_or_none()
+    sim = db.query(Execution).filter(Execution.id == execution_id).one_or_none()
 
     if sim is None:
-        raise HTTPException(status_code=404, detail="Simulation not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"{entity_label.capitalize()} not found",
+        )
 
     now = datetime.now(timezone.utc)
     updates = payload.model_dump(by_alias=False, exclude_unset=True)
@@ -764,16 +989,16 @@ def update_simulation(
 
     db.expire_all()
     sim_loaded = (
-        _execution_detail_query(db).filter(Execution.id == sim_id).one_or_none()
+        _execution_detail_query(db).filter(Execution.id == execution_id).one_or_none()
     )
 
     if sim_loaded is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load updated simulation.",
+            detail=f"Failed to load updated {entity_label}.",
         )
 
-    return _execution_to_legacy_out(sim_loaded)
+    return sim_loaded
 
 
 def _resolve_case_id_for_diagnostics_link(
@@ -877,12 +1102,27 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     HTTPException
         If the simulation with the given ID is not found, raises a 404 HTTP exception.
     """
-    sim = _execution_detail_query(db).filter(Execution.id == sim_id).one_or_none()
+    execution = _get_execution(sim_id, db, entity_label="simulation")
+    return _execution_to_legacy_out(execution)
 
-    if not sim:
-        raise HTTPException(status_code=404, detail="Simulation not found")
 
-    return _execution_to_legacy_out(sim)
+def _get_execution(
+    execution_id: UUID,
+    db: Session,
+    *,
+    entity_label: str,
+) -> Execution:
+    execution = (
+        _execution_detail_query(db).filter(Execution.id == execution_id).one_or_none()
+    )
+
+    if execution is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{entity_label.capitalize()} not found",
+        )
+
+    return execution
 
 
 def _build_case_summary(case: Case) -> dict:
@@ -1056,6 +1296,45 @@ def _execution_detail_query(db: Session):
         joinedload(Execution.case).selectinload(Case.links),
         selectinload(Execution.artifacts),
         selectinload(Execution.links),
+    )
+
+
+def _execution_to_out(execution: Execution) -> ExecutionOut:
+    """Convert an Execution ORM instance to the canonical response schema."""
+    case = execution.case
+    llm_available = is_summary_llm_available()
+    merged_links = merge_execution_and_case_links(execution.links, case.links)
+    serialized_links = [
+        ExecutionExternalLinkOut.model_validate(
+            {
+                **_external_link_to_out(link),
+                "owner_type": (
+                    "execution" if link.simulation_id is not None else "case"
+                ),
+            }
+        )
+        for link in merged_links
+    ]
+
+    return ExecutionOut.model_validate(
+        {
+            **{
+                key: value
+                for key, value in execution.__dict__.items()
+                if not key.startswith("_")
+            },
+            "case_name": case.name,
+            "case_group": case.case_group,
+            "machine_id": case.machine_id,
+            "hpc_username": case.hpc_username,
+            "machine": case.machine,
+            "links": serialized_links,
+            "summary_capabilities": ExecutionSummaryCapabilitiesOut(
+                llm_available=llm_available,
+                auto_generate_deterministic_on_load=not llm_available,
+            ),
+        },
+        from_attributes=True,
     )
 
 

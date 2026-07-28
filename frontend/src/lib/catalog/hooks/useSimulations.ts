@@ -1,15 +1,15 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { listSimulations, type PageParams } from '@/api/catalog';
+import { listExecutions, type PageParams } from '@/api/catalog';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useSimulations = (params: PageParams = {}, enabled = true) => {
   const queryKey = params.caseId
-    ? catalogQueryKeys.simulations.casePage(String(params.caseId), params)
-    : catalogQueryKeys.simulations.page(params);
+    ? catalogQueryKeys.executions.casePage(String(params.caseId), params)
+    : catalogQueryKeys.executions.page(params);
   const query = useQuery({
     queryKey,
-    queryFn: () => listSimulations(params),
+    queryFn: () => listExecutions(params),
     placeholderData: keepPreviousData,
     enabled,
   });

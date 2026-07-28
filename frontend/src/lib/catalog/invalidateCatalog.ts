@@ -7,7 +7,7 @@ export const invalidateCatalog = async (queryClient: QueryClient) => {
     queryClient.invalidateQueries({ queryKey: catalogQueryKeys.overview }),
     queryClient.invalidateQueries({ queryKey: catalogQueryKeys.cases.all }),
     queryClient.invalidateQueries({ queryKey: catalogQueryKeys.cases.options }),
-    queryClient.invalidateQueries({ queryKey: catalogQueryKeys.simulations.all }),
-    queryClient.invalidateQueries({ queryKey: catalogQueryKeys.simulations.options }),
+    queryClient.invalidateQueries({ queryKey: catalogQueryKeys.executions.all }),
+    queryClient.invalidateQueries({ queryKey: catalogQueryKeys.executions.options }),
   ]);
 };

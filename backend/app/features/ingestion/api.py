@@ -236,7 +236,7 @@ def persist_execution_discovery_results(
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
-        201: {"description": "Ingestion successful, simulations created."},
+        201: {"description": "Ingestion successful, executions created."},
         400: {"description": "Invalid input or archive file."},
         403: {"description": "Forbidden: only administrators can ingest from paths."},
         404: {"description": "Machine not found."},
@@ -249,7 +249,7 @@ def ingest_from_path(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
-    """Ingest an archive from a filesystem path and persist simulations.
+    """Ingest an archive from a filesystem path and persist executions.
 
     NOTE: Arbitrary filesystem paths are currently permitted to support HPC
     ingestion workflows (e.g., NERSC). This endpoint is restricted to users with
@@ -276,7 +276,7 @@ def ingest_from_path(
     -------
     IngestionResponse
         Response model summarizing ingestion results, including counts,
-        created simulations, and any recorded errors.
+        created executions, and any recorded errors.
     """
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
@@ -317,7 +317,7 @@ def ingest_from_path(
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
-        201: {"description": "Ingestion successful, simulations created."},
+        201: {"description": "Ingestion successful, executions created."},
         400: {"description": "Invalid input or upload file."},
         404: {"description": "Machine not found."},
         409: {"description": "Conflict: ingestion error."},
@@ -332,7 +332,7 @@ def ingest_from_upload(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
-    """Ingest an archive via file upload and persist simulations.
+    """Ingest an archive via file upload and persist executions.
 
     Path artifacts parsed from uploaded archives are treated as opaque remote
     provenance metadata. SimBoard stores the filesystem paths exactly as
@@ -347,7 +347,7 @@ def ingest_from_upload(
         corresponding Machine record in the database.
     hpc_username : str, optional
         HPC username for provenance (trusted, informational only), included in
-        the created Simulation records if provided.
+        the created Execution records if provided.
     db : Session
         Active SQLAlchemy database session used for persistence.
     user : User
@@ -358,7 +358,7 @@ def ingest_from_upload(
     -------
     IngestionResponse
         Response model summarizing ingestion results, including counts,
-        created simulations, and any recorded errors.
+        created executions, and any recorded errors.
     """
     machine = _resolve_request_machine(db, machine_name)
 
@@ -445,7 +445,7 @@ def ingest_from_hpc_upload(
         is created from the archive.
     hpc_username : str, optional
         HPC username for provenance (trusted, informational only), included in
-        the created Simulation records if provided.
+        the created Execution records if provided.
     processed_execution_ids : list[str], optional
         Full discovered execution IDs for this uploaded case. Scheduler jobs send
         this repeated form field so SimBoard can persist dedupe state even when
@@ -849,7 +849,7 @@ def _process_ingestion(
     -------
     IngestionResponse
         Response model summarizing ingestion results, including counts,
-        created simulations, and any recorded errors.
+        created executions, and any recorded errors.
     """
     error_count = len(ingest_result.errors)
     status_value = _resolve_ingestion_status(ingest_result.created_count, error_count)
