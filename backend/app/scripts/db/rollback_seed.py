@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.features.ingestion.models import Ingestion
-from app.features.simulation.models import (
+from app.features.catalog.models import (
     Artifact,
     Case,
     Execution,
     ExternalLink,
 )
+from app.features.ingestion.models import Ingestion
 from app.features.user.models import OAuthAccount, User
 
 DEV_EMAIL = f"simboard-dev@{settings.domain}"

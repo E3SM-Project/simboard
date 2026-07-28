@@ -1,0 +1,3695 @@
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, nullcontext
+from datetime import date, datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
+
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy import delete, event
+from sqlalchemy.orm import Session
+
+from app.api.version import API_BASE
+from app.common.dependencies import get_database_session
+from app.core.config import settings
+from app.features.catalog.api import (
+    _case_to_summary_out,
+    create_execution,
+    update_case,
+    update_execution,
+)
+from app.features.catalog.enums import (
+    ExecutionStatus,
+    ExternalLinkKind,
+    SimulationType,
+)
+from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
+from app.features.catalog.schemas import (
+    CaseUpdate,
+    ExecutionCreate,
+    ExecutionUpdate,
+)
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
+from app.features.user.auth.token import generate_token
+from app.features.user.manager import current_active_user
+from app.features.user.models import ApiToken, User, UserRole
+from app.main import app
+from tests.conftest import TestingSessionLocal, engine
+from tests.features.site.utils import get_or_create_site
+
+
+def use_real_auth(test_func):
+    """Flag tests that should bypass the default auth override."""
+    test_func._use_real_auth = True
+    return test_func
+
+
+@pytest.fixture(autouse=True)
+def override_auth_dependency(request, normal_user_sync):
+    """Auto-login a test user for endpoints requiring authentication."""
+    if getattr(request.node.function, "_use_real_auth", False):
+        yield
+        app.dependency_overrides.clear()
+        return
+
+    def fake_current_user():
+        return User(
+            id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+    app.dependency_overrides[current_active_user] = fake_current_user
+
+    yield
+    app.dependency_overrides.clear()
+
+
+def _override_current_user(
+    *, user_id, email: str, role: UserRole, has_membership: bool
+):
+    def fake_current_user():
+        return User(
+            id=user_id,
+            email=email,
+            is_active=True,
+            is_verified=True,
+            role=role,
+            has_verified_e3sm_membership=has_membership,
+        )
+
+    app.dependency_overrides[current_active_user] = fake_current_user
+
+
+def _create_case(
+    db: Session,
+    name: str = "test_case",
+    *,
+    machine_id=None,
+    hpc_username: str = "test-user",
+) -> Case:
+    """Helper to create a Case."""
+    machine = (
+        db.query(Machine).filter(Machine.id == machine_id).one_or_none()
+        if machine_id is not None
+        else db.query(Machine).first()
+    )
+    assert machine is not None
+
+    case = Case(name=name, machine_id=machine.id, hpc_username=hpc_username)
+
+    db.add(case)
+    db.flush()
+
+    return case
+
+
+def _create_service_account_token(
+    db: Session,
+    *,
+    email: str | None = None,
+) -> tuple[User, str]:
+    user = User(
+        email=email or f"svc-{uuid4()}@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.SERVICE_ACCOUNT,
+    )
+    db.add(user)
+    db.flush()
+
+    raw_token, token_hash = generate_token()
+    db.add(
+        ApiToken(
+            name="Diagnostics Link Token",
+            token_hash=token_hash,
+            user_id=user.id,
+            created_at=datetime.now(timezone.utc),
+            revoked=False,
+        )
+    )
+    db.commit()
+    db.refresh(user)
+
+    return user, raw_token
+
+
+def _create_matching_execution(
+    db: Session,
+    *,
+    case_name: str,
+    machine_id,
+    machine_name: str,
+    user_id,
+    execution_id: str,
+    hpc_username: str,
+    source_reference: str,
+) -> tuple[Case, Execution]:
+    case = _create_case(
+        db,
+        case_name,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+    )
+    ingestion = _create_ingestion(
+        db,
+        machine_id,
+        user_id,
+        source_reference=source_reference,
+    )
+
+    execution = Execution(
+        case_id=case.id,
+        execution_id=execution_id,
+        compset="AQUAPLANET",
+        compset_alias="QPC4",
+        grid_name="f19_f19",
+        grid_resolution="1.9x2.5",
+        initialization_type="startup",
+        simulation_type=SimulationType.EXPERIMENTAL,
+        status=ExecutionStatus.CREATED,
+        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        created_by=user_id,
+        last_updated_by=user_id,
+        ingestion_id=ingestion.id,
+        extra={"machineName": machine_name},
+    )
+    db.add(execution)
+    db.commit()
+
+    return case, execution
+
+
+def test_openapi_exposes_only_canonical_execution_contract(client) -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    expected_components = {
+        "ExecutionCreate",
+        "ExecutionFilterOptionsOut",
+        "ExecutionListItemOut",
+        "ExecutionOut",
+        "ExecutionPageOut",
+        "ExecutionStatus",
+        "ExecutionSummaryCapabilitiesOut",
+        "ExecutionSummaryOut",
+        "ExecutionSummaryResponse",
+        "SimulationType",
+        "ExecutionUpdate",
+    }
+
+    assert expected_components <= components.keys()
+    assert f"{API_BASE}/executions" in schema["paths"]
+    assert f"{API_BASE}/executions/{{execution_id}}" in schema["paths"]
+    assert f"{API_BASE}/simulations" not in schema["paths"]
+    assert f"{API_BASE}/simulations/{{sim_id}}" not in schema["paths"]
+    assert {
+        "SimulationCreate",
+        "SimulationFilterOptionsOut",
+        "SimulationListItemOut",
+        "SimulationOut",
+        "SimulationPageOut",
+        "SimulationStatus",
+        "SimulationSummaryCapabilitiesOut",
+        "SimulationSummaryOut",
+        "SimulationSummaryResponse",
+        "SimulationUpdate",
+    }.isdisjoint(components)
+
+    execution_collection = schema["paths"][f"{API_BASE}/executions"]
+    execution_detail = schema["paths"][f"{API_BASE}/executions/{{execution_id}}"]
+    assert execution_collection["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]["$ref"].endswith("/ExecutionCreate")
+    assert execution_collection["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"].endswith("/ExecutionPageOut")
+    assert execution_detail["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"].endswith("/ExecutionOut")
+
+    assert set(components["CaseDetailOut"]["properties"]) >= {"executions"}
+    assert "simulations" not in components["CaseDetailOut"]["properties"]
+    assert set(components["CatalogOverviewOut"]["properties"]) >= {"totalExecutions"}
+    assert "totalSimulations" not in components["CatalogOverviewOut"]["properties"]
+    assert set(components["IngestionResponse"]["properties"]) >= {"executions"}
+    assert "simulations" not in components["IngestionResponse"]["properties"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", f"{API_BASE}/simulations"),
+        ("POST", f"{API_BASE}/simulations"),
+        ("GET", f"{API_BASE}/simulations/{uuid4()}"),
+        ("PATCH", f"{API_BASE}/simulations/{uuid4()}"),
+        ("POST", f"{API_BASE}/simulations/{uuid4()}/summary"),
+    ],
+)
+def test_removed_simulation_routes_return_not_found(
+    client, method: str, path: str
+) -> None:
+    response = client.request(method, path, json={})
+
+    assert response.status_code == 404
+
+
+def _create_ingestion(
+    db: Session,
+    machine_id,
+    user_id,
+    source_reference: str = "test_execution_ingestion",
+) -> Ingestion:
+    ingestion = Ingestion(
+        source_type=IngestionSourceType.BROWSER_UPLOAD,
+        source_reference=source_reference,
+        machine_id=machine_id,
+        triggered_by=user_id,
+        status=IngestionStatus.SUCCESS,
+        created_count=1,
+        duplicate_count=0,
+        error_count=0,
+    )
+    db.add(ingestion)
+    db.flush()
+
+    return ingestion
+
+
+def _create_execution_record(
+    db: Session,
+    *,
+    case: Case,
+    machine_id=None,
+    ingestion_id,
+    created_by,
+    last_updated_by,
+    execution_id: str = "patch-test-exec-1",
+    description: str | None = "Original description",
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
+    campaign: str | None = "campaign-original",
+    compiler: str | None = "gcc",
+    execution_status: ExecutionStatus = ExecutionStatus.CREATED,
+) -> Execution:
+    execution = Execution(
+        case_id=case.id,
+        execution_id=execution_id,
+        description=description,
+        compset="AQUAPLANET",
+        compset_alias="QPC4",
+        grid_name="f19_f19",
+        grid_resolution="1.9x2.5",
+        initialization_type="startup",
+        simulation_type="experimental",
+        status=execution_status,
+        campaign=campaign,
+        experiment_type="historical",
+        simulation_start_date="2023-01-01T00:00:00Z",
+        compiler=compiler,
+        key_features="Original features",
+        known_issues="Original issues",
+        notes_markdown="Original notes",
+        git_repository_url="https://example.com/original",
+        git_branch="main",
+        git_tag="v1.0",
+        git_commit_hash="abc123",
+        created_by=created_by,
+        last_updated_by=last_updated_by,
+        ingestion_id=ingestion_id,
+        created_at=created_at,
+        updated_at=updated_at or datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    db.add(execution)
+    db.flush()
+
+    return execution
+
+
+@contextmanager
+def _capture_select_statements():
+    statements: list[str] = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+
+class TestListCases:
+    def test_endpoint_returns_empty_list(self, client):
+        res = client.get(f"{API_BASE}/cases")
+        assert res.status_code == 200
+        assert res.json() == {"items": [], "total": 0, "page": 1, "pageSize": 25}
+
+    def test_endpoint_returns_cases_with_nested_executions(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_nested")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_nested",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        # Create two executions under the same case
+        sim1 = Execution(
+            case_id=case.id,
+            execution_id="case-nested-exec-1",
+            case_hash="nested-hash-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date=date(2023, 1, 1),
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        sim2 = Execution(
+            case_id=case.id,
+            execution_id="case-nested-exec-2",
+            case_hash="nested-hash-2",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-02-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(sim1)
+        db.flush()
+        db.add(sim2)
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases")
+        assert res.status_code == 200
+        page = res.json()
+        data = page["items"]
+        assert page["total"] == 1
+        assert len(data) == 1
+
+        case_data = data[0]
+        assert case_data["name"] == "test_case_nested"
+        assert case_data["machineName"] == machine.name
+        assert case_data["hpcUsername"] == "test-user"
+        assert case_data["executionCount"] == 2
+        assert case_data["executionCount"] == 2
+        assert "description" not in case_data
+        assert "keyFeatures" not in case_data
+        assert "knownIssues" not in case_data
+        assert "notesMarkdown" not in case_data
+
+        assert "executions" not in case_data
+        assert "links" not in case_data
+
+    def test_pagination_defaults_limits_totals_and_empty_pages(
+        self, client, db: Session
+    ):
+        for index in range(30):
+            _create_case(db, f"page-case-{index:02d}")
+        db.commit()
+
+        first = client.get(f"{API_BASE}/cases").json()
+        assert first["page"] == 1
+        assert first["pageSize"] == 25
+        assert first["total"] == 30
+        assert len(first["items"]) == 25
+
+        empty = client.get(
+            f"{API_BASE}/cases", params={"page": 4, "page_size": 10}
+        ).json()
+        assert empty == {"items": [], "total": 30, "page": 4, "pageSize": 10}
+        assert (
+            client.get(f"{API_BASE}/cases", params={"page_size": 101}).status_code
+            == 422
+        )
+
+    def test_combined_execution_filters_must_match_one_execution(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        split_case = _create_case(db, "split-filter-case")
+        matching_case = _create_case(
+            db, "matching-filter-case", hpc_username="matching-user"
+        )
+        matching_case.case_group = "matching-group"
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for case, execution_id, campaign, compiler in (
+            (split_case, "split-campaign", "campaign-a", "intel"),
+            (split_case, "split-compiler", "campaign-b", "gcc"),
+            (matching_case, "combined-match", "campaign-a", "gcc"),
+        ):
+            _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=execution_id,
+                campaign=campaign,
+                compiler=compiler,
+            )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/cases",
+            params={
+                "name": matching_case.name,
+                "case_group": matching_case.case_group,
+                "machine_id": str(machine.id),
+                "hpc_username": matching_case.hpc_username,
+                "execution_id": "combined-match",
+                "status": ExecutionStatus.CREATED.value,
+                "simulation_type": SimulationType.EXPERIMENTAL.value,
+                "campaign": "campaign-a",
+                "compiler": "gcc",
+            },
+        ).json()
+
+        assert data["total"] == 1
+        assert [item["name"] for item in data["items"]] == ["matching-filter-case"]
+
+    def test_list_uses_fixed_two_select_queries(self, client, db: Session):
+        for index in range(3):
+            _create_case(db, f"query-count-case-{index}")
+        db.commit()
+
+        for page_size in (1, 100):
+            with _capture_select_statements() as statements:
+                response = client.get(
+                    f"{API_BASE}/cases",
+                    params={
+                        "page_size": page_size,
+                        "search": "query-count-case",
+                        "sort_by": "machine_name",
+                    },
+                )
+
+            assert response.status_code == 200
+            assert len(statements) == 2
+
+    def test_supported_case_sort_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        first_machine = Machine(
+            name="z-case-sort-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        second_machine = Machine(
+            name="a-case-sort-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add_all([first_machine, second_machine])
+        db.flush()
+        first = _create_case(
+            db,
+            "z-case-sort",
+            machine_id=first_machine.id,
+            hpc_username="z-user",
+        )
+        second = _create_case(
+            db,
+            "a-case-sort",
+            machine_id=second_machine.id,
+            hpc_username="a-user",
+        )
+        first.case_group = "z-group"
+        second.case_group = "a-group"
+        first.created_at = first.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        second.created_at = second.updated_at = datetime(
+            2026, 1, 1, tzinfo=timezone.utc
+        )
+        first_ingestion = _create_ingestion(
+            db, first_machine.id, normal_user_sync["id"]
+        )
+        second_ingestion = _create_ingestion(
+            db, second_machine.id, normal_user_sync["id"]
+        )
+        for index in range(2):
+            _create_execution_record(
+                db,
+                case=first,
+                ingestion_id=first_ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"z-case-sort-{index}",
+            )
+        _create_execution_record(
+            db,
+            case=second,
+            ingestion_id=second_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="a-case-sort-0",
+        )
+        db.commit()
+
+        for sort_by in (
+            "updated_at",
+            "created_at",
+            "name",
+            "case_group",
+            "machine_name",
+            "hpc_username",
+            "execution_count",
+        ):
+            data = client.get(
+                f"{API_BASE}/cases",
+                params={"sort_by": sort_by, "sort_order": "asc"},
+            ).json()
+            assert [item["name"] for item in data["items"]] == [
+                "a-case-sort",
+                "z-case-sort",
+            ]
+
+        assert (
+            client.get(f"{API_BASE}/cases", params={"sort_by": "invalid"}).status_code
+            == 422
+        )
+
+    def test_filter_options_include_complete_values_and_display_labels(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "case-option-name")
+        case.case_group = "case-option-group"
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            campaign="case-option-campaign",
+        )
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/filter-options").json()
+
+        assert data["caseGroups"] == ["case-option-group"]
+        assert data["campaigns"] == ["case-option-campaign"]
+        assert data["machines"] == [{"value": str(machine.id), "label": machine.name}]
+        assert data["creators"] == [
+            {
+                "value": str(normal_user_sync["id"]),
+                "label": normal_user_sync["email"],
+            }
+        ]
+
+    def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
+        cases = [_create_case(db, f"overview-{index}") for index in range(7)]
+        for index, case in enumerate(cases):
+            case.updated_at = datetime(2026, 1, index + 1, tzinfo=timezone.utc)
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/overview").json()
+        assert data["totalCases"] == 7
+        assert data["totalExecutions"] == 0
+        assert data["totalExecutions"] == 0
+        assert data["latestSubmission"] is None
+        assert data["machineCounts"] == {str(cases[0].machine_id): 7}
+        assert [item["name"] for item in data["recentCases"]] == [
+            "overview-6",
+            "overview-5",
+            "overview-4",
+            "overview-3",
+            "overview-2",
+            "overview-1",
+        ]
+
+    def test_overview_orders_by_latest_execution_activity(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        active_case = _create_case(db, "old-case-with-new-run")
+        inactive_case = _create_case(db, "newer-inactive-case")
+        active_case.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        inactive_case.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        _create_execution_record(
+            db,
+            case=active_case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="new-activity",
+            created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        )
+        db.commit()
+
+        data = client.get(f"{API_BASE}/cases/overview").json()
+
+        assert [item["name"] for item in data["recentCases"][:2]] == [
+            "old-case-with-new-run",
+            "newer-inactive-case",
+        ]
+        assert data["recentCases"][0]["updatedAt"] == "2026-03-01T00:00:00Z"
+
+
+class TestListCaseNames:
+    def test_endpoint_returns_empty_list(self, client):
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == []
+
+    def test_endpoint_returns_case_names_sorted_alphabetically(
+        self, client, db: Session
+    ):
+        _create_case(db, "zeta_case")
+        _create_case(db, "alpha_case")
+        _create_case(db, "beta_case")
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == ["alpha_case", "beta_case", "zeta_case"]
+
+    def test_endpoint_returns_distinct_case_names_when_name_repeats(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        _create_case(db, "dup_case")
+        second_machine = Machine(
+            name="dup-case-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.flush()
+        db.add(
+            Case(
+                name="dup_case",
+                machine_id=second_machine.id,
+                hpc_username="other-user",
+            )
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/names")
+        assert res.status_code == 200
+        assert res.json() == ["dup_case"]
+
+
+class TestGetCase:
+    def test_case_summary_conversion(self, db: Session):
+        case = _create_case(db, "summary-conversion-case")
+        db.commit()
+
+        result = _case_to_summary_out(case)
+
+        assert result.id == case.id
+        assert result.name == case.name
+        assert result.executions == []
+
+    def test_endpoint_returns_case_detail_with_metadata(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_detail")
+        case.hpc_username = "case-user"
+        case.description = "Shared case description"
+        case.key_features = "Shared key features"
+        case.known_issues = "Shared known issues"
+        case.notes_markdown = "## Shared notes"
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_detail",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="case-detail-exec-1",
+            case_hash="detail-hash-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date=date(2023, 1, 1),
+            compute_type="gpu",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.flush()
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/{case.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["name"] == "test_case_detail"
+        assert len(data["executions"]) == 1
+        assert data["executions"] == data["executions"]
+        assert data["machineNames"] == [machine.name]
+        assert data["hpcUsernames"] == ["case-user"]
+        assert data["description"] == "Shared case description"
+        assert data["keyFeatures"] == "Shared key features"
+        assert data["knownIssues"] == "Shared known issues"
+        assert data["executions"][0]["computeType"] == "gpu"
+        assert data["notesMarkdown"] == "## Shared notes"
+        assert data["executions"][0]["executionId"] == "case-detail-exec-1"
+        assert data["executions"][0]["caseHash"] == "detail-hash-1"
+        assert data["executions"][0]["simulationStartDate"] == "2023-01-01"
+        assert data["links"] == []
+
+    def test_endpoint_includes_case_level_diagnostic_links(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_detail_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_detail_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add(
+            Execution(
+                case_id=case.id,
+                execution_id="case-detail-links-exec-1",
+                case_hash="detail-links-hash-1",
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                simulation_type="experimental",
+                status="created",
+                simulation_start_date="2023-01-01T00:00:00Z",
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.flush()
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/cases/{case.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["links"] == [
+            {
+                "id": data["links"][0]["id"],
+                "kind": "diagnostic",
+                "url": "https://example.com/case-diagnostic",
+                "label": "Case diagnostic",
+                "ownerType": "case",
+                "createdAt": data["links"][0]["createdAt"],
+                "updatedAt": data["links"][0]["updatedAt"],
+            }
+        ]
+
+    def test_endpoint_raises_404_if_case_not_found(self, client):
+        res = client.get(f"{API_BASE}/cases/{uuid4()}")
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
+
+
+class TestCreateExecution:
+    def test_endpoint_succeeds_with_valid_payload(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_create")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "gitTag": "v1.0",
+            "gitCommitHash": "abc123",
+            "artifacts": [
+                {
+                    "kind": "output",
+                    "uri": "http://example.com/artifact2",
+                    "label": "artifact2",
+                }
+            ],
+            "links": [
+                {
+                    "kind": "diagnostic",
+                    "url": "http://example.com/link2",
+                    "label": "link2",
+                }
+            ],
+        }
+
+        res = client.post(f"{API_BASE}/executions", json=payload)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["caseId"] == str(case.id)
+        assert data["caseName"] == "test_case_create"
+        assert data["executionId"] == "1081156.251218-200923"
+        assert data["createdBy"] == str(normal_user_sync["id"])
+        assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
+        assert data["machineId"] == str(case.machine_id)
+        assert data["hpcUsername"] == case.hpc_username
+        assert len(data["artifacts"]) == 1
+        assert len(data["links"]) == 1
+        assert data["links"][0]["ownerType"] == "execution"
+
+    def test_endpoint_returns_400_when_case_not_found(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        payload = {
+            "caseId": str(uuid4()),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        res = client.post(f"{API_BASE}/executions", json=payload)
+        assert res.status_code == 400
+        assert res.json() == {"detail": f"Case '{payload['caseId']}' not found."}
+
+
+class TestUpdateCase:
+    def test_endpoint_updates_case_metadata(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "test_case_metadata_patch")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
+        case.updated_at = original_updated_at
+        db.commit()
+
+        payload = {
+            "description": "Updated case description",
+            "keyFeatures": "Updated case features",
+            "notesMarkdown": "Updated case notes",
+        }
+
+        res = client.patch(f"{API_BASE}/cases/{case.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] == payload["description"]
+        assert data["keyFeatures"] == payload["keyFeatures"]
+        assert data["knownIssues"] == "Original case issues"
+        assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["updatedAt"] != original_updated_at.isoformat()
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description == payload["description"]
+        assert updated_case.key_features == payload["keyFeatures"]
+        assert updated_case.known_issues == "Original case issues"
+        assert updated_case.notes_markdown == payload["notesMarkdown"]
+        assert updated_case.updated_at > original_updated_at
+
+    def test_endpoint_adds_case_links(self, client, db: Session):
+        case = _create_case(db, "test_case_link_add")
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/case-docs",
+                        "label": "Case docs",
+                    },
+                    {
+                        "kind": "performance",
+                        "url": "https://example.com/case-performance",
+                        "label": "Case performance",
+                    },
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert {(link["kind"], link["url"]) for link in data["links"]} == {
+            ("docs", "https://example.com/case-docs"),
+            ("performance", "https://example.com/case-performance"),
+        }
+        assert {link["ownerType"] for link in data["links"]} == {"case"}
+
+        db.expire_all()
+        case_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind.value, link.url, link.label) for link in case_links] == [
+            ("docs", "https://example.com/case-docs", "Case docs"),
+            (
+                "performance",
+                "https://example.com/case-performance",
+                "Case performance",
+            ),
+        ]
+
+    def test_endpoint_replaces_case_links(self, client, db: Session):
+        case = _create_case(db, "test_case_link_replace")
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/old-diagnostic",
+                label="Old diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "other",
+                        "url": "https://example.com/new-resource",
+                        "label": "New resource",
+                    }
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert [(link["kind"], link["url"]) for link in data["links"]] == [
+            ("other", "https://example.com/new-resource")
+        ]
+
+        db.expire_all()
+        case_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind.value, link.url) for link in case_links] == [
+            ("other", "https://example.com/new-resource")
+        ]
+
+    def test_endpoint_updates_existing_case_link_in_place(self, client, db: Session):
+        case = _create_case(db, "test_case_link_update_in_place")
+        existing_link = ExternalLink(
+            case_id=case.id,
+            kind=ExternalLinkKind.DOCS,
+            url="https://example.com/case-docs",
+            label="Old docs label",
+        )
+        db.add(existing_link)
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/case-docs",
+                        "label": "Updated docs label",
+                    },
+                    {
+                        "kind": "performance",
+                        "url": "https://example.com/case-performance",
+                        "label": "Case performance",
+                    },
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert {
+            (link["kind"], link["url"], link["label"]) for link in data["links"]
+        } == {
+            ("docs", "https://example.com/case-docs", "Updated docs label"),
+            (
+                "performance",
+                "https://example.com/case-performance",
+                "Case performance",
+            ),
+        }
+
+        db.expire_all()
+        case_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert len(case_links) == 2
+        assert existing_link.id in {link.id for link in case_links}
+        assert [(link.kind.value, link.url, link.label) for link in case_links] == [
+            ("docs", "https://example.com/case-docs", "Updated docs label"),
+            (
+                "performance",
+                "https://example.com/case-performance",
+                "Case performance",
+            ),
+        ]
+
+    def test_endpoint_clears_case_links_with_empty_list(self, client, db: Session):
+        case = _create_case(db, "test_case_link_clear")
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/diagnostic",
+                label="Diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/cases/{case.id}", json={"links": []})
+
+        assert res.status_code == 200
+        assert res.json()["links"] == []
+
+        db.expire_all()
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 0
+        )
+
+    def test_endpoint_preserves_case_links_when_links_omitted(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_link_preserve")
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url="https://example.com/diagnostic",
+                label="Diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Updated without touching links"},
+        )
+
+        assert res.status_code == 200
+        assert [(link["kind"], link["url"]) for link in res.json()["links"]] == [
+            ("diagnostic", "https://example.com/diagnostic")
+        ]
+
+        db.expire_all()
+        case_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind.value, link.url) for link in case_links] == [
+            ("diagnostic", "https://example.com/diagnostic")
+        ]
+
+    def test_endpoint_distinguishes_omitted_null_and_blank_values(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_metadata_normalization")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "description": None,
+                "knownIssues": "   ",
+                "notesMarkdown": "Updated case notes",
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] is None
+        assert data["keyFeatures"] == "Original case features"
+        assert data["knownIssues"] is None
+        assert data["notesMarkdown"] == "Updated case notes"
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description is None
+        assert updated_case.key_features == "Original case features"
+        assert updated_case.known_issues is None
+        assert updated_case.notes_markdown == "Updated case notes"
+
+    def test_endpoint_rejects_duplicate_case_links(self, client, db: Session):
+        case = _create_case(db, "test_case_link_duplicate")
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/case-docs",
+                        "label": "Case docs",
+                    },
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/case-docs",
+                        "label": "Duplicate case docs",
+                    },
+                ]
+            },
+        )
+
+        assert res.status_code == 422
+        assert "Duplicate docs url values are not allowed." in str(res.json()["detail"])
+
+    def test_endpoint_rejects_invalid_case_link_url(self, client, db: Session):
+        case = _create_case(db, "test_case_link_invalid_url")
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "not-a-url",
+                        "label": "Broken docs",
+                    }
+                ]
+            },
+        )
+
+        assert res.status_code == 422
+        assert "links" in str(res.json()["detail"])
+
+    def test_endpoint_rejects_null_case_links(self, client, db: Session):
+        case = _create_case(db, "test_case_link_null")
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/cases/{case.id}", json={"links": None})
+
+        assert res.status_code == 422
+        assert "Field may be omitted for PATCH requests, but cannot be null." in str(
+            res.json()["detail"]
+        )
+
+    def test_endpoint_returns_404_when_case_not_found(self, client):
+        res = client.patch(
+            f"{API_BASE}/cases/{uuid4()}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
+
+    def test_endpoint_returns_401_without_authentication(self, client, db: Session):
+        case = _create_case(db, "test_case_metadata_unauth")
+        db.commit()
+
+        app.dependency_overrides.pop(current_active_user, None)
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 401
+
+    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+        case = _create_case(db, "test_case_metadata_forbidden")
+        db.commit()
+
+        _override_current_user(
+            user_id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            role=UserRole.USER,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 403
+        assert "verified E3SM GitHub organization membership" in res.json()["detail"]
+
+    def test_update_case_raises_500_when_reload_fails(self) -> None:
+        case_id = uuid4()
+        user_id = uuid4()
+
+        payload = CaseUpdate.model_validate({"description": "Updated"})
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+        case = MagicMock()
+        case_query = MagicMock()
+        case_query.options.return_value.filter.return_value.one_or_none.side_effect = [
+            case,
+            None,
+        ]
+
+        db = MagicMock(spec=Session)
+        db.query.return_value = case_query
+
+        with patch(
+            "app.features.catalog.api.transaction",
+            return_value=nullcontext(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                update_case(
+                    case_id=case_id,
+                    payload=payload,
+                    db=db,
+                    user=user,
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load updated case."
+
+    def test_manual_create_returns_generic_execution_payload(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_first_manual_reference")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        res = client.post(f"{API_BASE}/executions", json=payload)
+        assert res.status_code == 201
+        data = res.json()
+
+        db.refresh(case)
+        assert data["caseId"] == str(case.id)
+        assert data["caseName"] == case.name
+        assert "isReference" not in data
+        assert "changeCount" not in data
+        assert "runConfigDeltas" not in data
+
+    def test_endpoint_rejects_removed_case_identity_fields(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+        case = _create_case(db, "test_case_create_matching_hpc")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200924",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+            "machineId": str(machine.id),
+            "hpcUsername": "test-user",
+        }
+
+        res = client.post(f"{API_BASE}/executions", json=payload)
+
+        assert res.status_code == 422
+
+    def test_same_execution_id_in_different_case_succeeds(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case_one = _create_case(db, "test_case_exec_scope_one")
+        case_two = _create_case(db, "test_case_exec_scope_two")
+        db.commit()
+
+        payload = {
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        first_response = client.post(
+            f"{API_BASE}/executions",
+            json={**payload, "caseId": str(case_one.id)},
+        )
+        second_response = client.post(
+            f"{API_BASE}/executions",
+            json={**payload, "caseId": str(case_two.id)},
+        )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201
+        assert second_response.json()["caseId"] == str(case_two.id)
+        assert second_response.json()["executionId"] == payload["executionId"]
+
+    def test_same_execution_id_in_same_case_returns_409(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_exec_scope_conflict")
+        db.commit()
+
+        payload = {
+            "caseId": str(case.id),
+            "executionId": "1081156.251218-200923",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "simulationType": "experimental",
+            "status": "created",
+            "simulationStartDate": "2023-01-01T00:00:00Z",
+        }
+
+        first_response = client.post(f"{API_BASE}/executions", json=payload)
+        second_response = client.post(f"{API_BASE}/executions", json=payload)
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 409
+        assert second_response.json()["detail"] == (
+            "Constraint violation while writing to the database."
+        )
+
+    def test_create_execution_raises_500_when_reload_fails(self) -> None:
+        case_id = uuid4()
+        machine_id = uuid4()
+        user_id = uuid4()
+
+        payload = ExecutionCreate.model_validate(
+            {
+                "caseId": str(case_id),
+                "executionId": "reload-missing-exec-1",
+                "compset": "AQUAPLANET",
+                "compsetAlias": "QPC4",
+                "gridName": "f19_f19",
+                "gridResolution": "1.9x2.5",
+                "initializationType": "startup",
+                "simulationType": "experimental",
+                "status": "created",
+                "simulationStartDate": "2023-01-01T00:00:00Z",
+            }
+        )
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+
+        case = Case(
+            id=case_id,
+            name="reload_fail_case",
+            machine_id=machine_id,
+            hpc_username="test-user",
+        )
+
+        db = MagicMock(spec=Session)
+        case_query = MagicMock()
+        case_query.filter.return_value.first.return_value = case
+
+        sim_query = MagicMock()
+        sim_query.options.return_value.filter.return_value.one_or_none.return_value = (
+            None
+        )
+
+        db.query.side_effect = [case_query, sim_query]
+
+        with patch("app.features.catalog.api.transaction", return_value=nullcontext()):
+            with pytest.raises(HTTPException) as exc_info:
+                create_execution(payload=payload, db=db, user=user)
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load newly created execution."
+
+
+class TestListExecutions:
+    def test_endpoint_returns_empty_list(self, client):
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        assert res.json() == {"items": [], "total": 0, "page": 1, "pageSize": 25}
+
+    def test_exact_case_id_filter_and_empty_page(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        first_case = _create_case(db, "exact-case-a")
+        second_case = _create_case(db, "exact-case-b")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for case, execution_id in (
+            (first_case, "exact-a"),
+            (second_case, "exact-b"),
+        ):
+            db.add(
+                Execution(
+                    case_id=case.id,
+                    execution_id=execution_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        params = {"case_id": str(first_case.id)}
+        data = client.get(f"{API_BASE}/executions", params=params).json()
+        assert data["total"] == 1
+        assert [item["executionId"] for item in data["items"]] == ["exact-a"]
+        assert client.get(f"{API_BASE}/executions", params=params).json() == data
+
+        empty = client.get(
+            f"{API_BASE}/executions",
+            params={"case_id": str(first_case.id), "page": 2},
+        ).json()
+        assert empty["items"] == []
+        assert empty["total"] == 1
+
+    def test_multi_value_filters_use_or_within_and_between_categories(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "multi-filter-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for execution_id, campaign, execution_status in (
+            ("campaign-a-created", "campaign-a", ExecutionStatus.CREATED),
+            ("campaign-b-running", "campaign-b", ExecutionStatus.RUNNING),
+            ("campaign-c-created", "campaign-c", ExecutionStatus.CREATED),
+        ):
+            _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=execution_id,
+                campaign=campaign,
+                execution_status=execution_status,
+            )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/executions",
+            params=[
+                ("campaign", "campaign-a"),
+                ("campaign", "campaign-b"),
+                ("status", "created"),
+                ("simulation_type", "experimental"),
+                ("machine_id", str(machine.id)),
+                ("hpc_username", case.hpc_username),
+            ],
+        ).json()
+
+        assert data["total"] == 1
+        assert [item["executionId"] for item in data["items"]] == ["campaign-a-created"]
+
+    def test_list_uses_fixed_two_select_queries(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "execution-query-count")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for index in range(3):
+            _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"query-count-{index}",
+            )
+        db.commit()
+
+        for page_size in (1, 100):
+            with _capture_select_statements() as statements:
+                response = client.get(
+                    f"{API_BASE}/executions",
+                    params={
+                        "page_size": page_size,
+                        "search": "execution-query-count",
+                        "sort_by": "machine_name",
+                    },
+                )
+
+            assert response.status_code == 200
+            assert len(statements) == 2
+
+    def test_search_covers_advertised_execution_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "unique-search-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        execution = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="unique-search-execution",
+        )
+        execution.git_branch = "unique-search-branch"
+        execution.git_tag = "unique-search-tag"
+        execution.git_commit_hash = "unique-search-commit"
+        execution.grid_name = "unique-search-grid"
+        execution.grid_resolution = "unique-search-resolution"
+        execution.compset = "unique-search-compset"
+        execution.compset_alias = "unique-search-alias"
+        db.commit()
+
+        for term in (
+            "unique-search-case",
+            "unique-search-execution",
+            "unique-search-branch",
+            "unique-search-tag",
+            "unique-search-commit",
+            "unique-search-grid",
+            "unique-search-resolution",
+            "unique-search-compset",
+            "unique-search-alias",
+            machine.name,
+        ):
+            data = client.get(f"{API_BASE}/executions", params={"search": term}).json()
+            assert data["total"] == 1
+            assert data["items"][0]["id"] == str(execution.id)
+
+    def test_supported_execution_sort_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        first_machine = Machine(
+            name="z-execution-sort-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        second_machine = Machine(
+            name="a-execution-sort-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add_all([first_machine, second_machine])
+        db.flush()
+        first_case = _create_case(
+            db, "z-execution-sort-case", machine_id=first_machine.id
+        )
+        second_case = _create_case(
+            db, "a-execution-sort-case", machine_id=second_machine.id
+        )
+        first_case.case_group = "z-group"
+        second_case.case_group = "a-group"
+        first_ingestion = _create_ingestion(
+            db, first_machine.id, normal_user_sync["id"]
+        )
+        second_ingestion = _create_ingestion(
+            db, second_machine.id, normal_user_sync["id"]
+        )
+        first = _create_execution_record(
+            db,
+            case=first_case,
+            ingestion_id=first_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="z-execution-sort",
+            campaign="z-campaign",
+            execution_status=ExecutionStatus.RUNNING,
+        )
+        second = _create_execution_record(
+            db,
+            case=second_case,
+            ingestion_id=second_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="a-execution-sort",
+            campaign="a-campaign",
+            execution_status=ExecutionStatus.CREATED,
+        )
+        early = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        late = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        for execution, prefix, timestamp, simulation_type in (
+            (first, "z", late, SimulationType.PRODUCTION),
+            (second, "a", early, SimulationType.EXPERIMENTAL),
+        ):
+            execution.case_hash = f"{prefix}-hash"
+            execution.experiment_type = f"{prefix}-experiment"
+            execution.simulation_type = simulation_type
+            execution.git_branch = f"{prefix}-branch"
+            execution.git_tag = f"{prefix}-tag"
+            execution.git_commit_hash = f"{prefix}-commit"
+            execution.simulation_start_date = timestamp
+            execution.simulation_end_date = timestamp
+            execution.run_start_date = timestamp
+            execution.grid_resolution = f"{prefix}-resolution"
+            execution.compset = f"{prefix}-compset"
+            execution.grid_name = f"{prefix}-grid"
+            execution.created_at = timestamp
+            execution.updated_at = timestamp
+        db.commit()
+
+        for sort_by in (
+            "created_at",
+            "updated_at",
+            "execution_id",
+            "case_name",
+            "case_group",
+            "case_hash",
+            "campaign",
+            "experiment_type",
+            "simulation_type",
+            "status",
+            "git_branch",
+            "git_tag",
+            "git_commit_hash",
+            "simulation_start_date",
+            "simulation_end_date",
+            "run_start_date",
+            "grid_resolution",
+            "compset",
+            "grid_name",
+            "machine_name",
+        ):
+            data = client.get(
+                f"{API_BASE}/executions",
+                params={"sort_by": sort_by, "sort_order": "asc"},
+            ).json()
+            assert [item["executionId"] for item in data["items"]] == [
+                "a-execution-sort",
+                "z-execution-sort",
+            ]
+
+        assert (
+            client.get(
+                f"{API_BASE}/executions", params={"sort_by": "invalid"}
+            ).status_code
+            == 422
+        )
+
+    def test_case_scoped_results_continue_after_one_hundred(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "large-expanded-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for index in range(101):
+            _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"large-case-{index:03d}",
+            )
+        db.commit()
+
+        first = client.get(
+            f"{API_BASE}/executions",
+            params={"case_id": str(case.id), "page_size": 100},
+        ).json()
+        second = client.get(
+            f"{API_BASE}/executions",
+            params={"case_id": str(case.id), "page_size": 100, "page": 2},
+        ).json()
+
+        assert first["total"] == 101
+        assert len(first["items"]) == 100
+        assert len(second["items"]) == 1
+
+    def test_filter_options_return_distinct_scalars(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "filter-option-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        db.add(
+            Execution(
+                case_id=case.id,
+                execution_id="filter-options",
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                simulation_type="experimental",
+                status="created",
+                simulation_start_date="2023-01-01T00:00:00Z",
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+        )
+        db.commit()
+
+        legacy_response = client.get(f"{API_BASE}/executions/filter-options")
+        canonical_response = client.get(f"{API_BASE}/executions/filter-options")
+
+        assert legacy_response.status_code == 200
+        assert canonical_response.status_code == 200
+        data = legacy_response.json()
+        assert canonical_response.json() == data
+        assert data["caseNames"] == ["filter-option-case"]
+        assert data["compsets"] == ["AQUAPLANET"]
+        assert data["statuses"] == ["created"]
+        assert data["machines"] == [{"value": str(machine.id), "label": machine.name}]
+        assert data["creators"] == [
+            {
+                "value": str(normal_user_sync["id"]),
+                "label": normal_user_sync["email"],
+            }
+        ]
+
+    def test_endpoint_returns_executions_with_data(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_list")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_execution_list",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="list-test-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            git_tag="v1.0",
+            git_commit_hash="abc123",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.commit()
+        db.refresh(execution)
+
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        assert data[0]["caseName"] == "test_case_list"
+        assert data[0]["executionId"] == "list-test-exec-1"
+        for heavy_field in (
+            "artifacts",
+            "links",
+            "groupedArtifacts",
+            "groupedLinks",
+            "extra",
+            "createdByUser",
+            "lastUpdatedByUser",
+            "summaryCapabilities",
+        ):
+            assert heavy_field not in data[0]
+
+    def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", True)
+        monkeypatch.setattr(settings, "assistant_llm_provider", "ollama")
+        monkeypatch.setattr(settings, "assistant_ollama_model", None)
+        monkeypatch.setattr(
+            settings, "assistant_ollama_base_url", "http://localhost:11434"
+        )
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_list_misconfigured")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_execution_list_misconfigured",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="list-test-exec-misconfigured",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.commit()
+
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert "summaryCapabilities" not in data[0]
+
+    def test_filter_by_case_name(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case_a = _create_case(db, "case_alpha")
+        case_b = _create_case(db, "case_beta")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_case_name",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for case, exec_id in [(case_a, "exec-a"), (case_b, "exec-b")]:
+            db.add(
+                Execution(
+                    case_id=case.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        # No filter returns both
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        assert res.json()["total"] == 2
+
+        # Filter by case_name=case_alpha returns only one
+        res = client.get(f"{API_BASE}/executions", params={"case_name": "case_alpha"})
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        assert data[0]["caseName"] == "case_alpha"
+
+        # Non-matching filter returns empty
+        res = client.get(f"{API_BASE}/executions", params={"case_name": "nonexistent"})
+        assert res.status_code == 200
+        assert res.json()["items"] == []
+
+    def test_filter_by_case_group(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case_g1 = _create_case(db, "case_group1")
+        case_g1.case_group = "ensemble_A"
+        case_g2 = _create_case(db, "case_group2")
+        case_g2.case_group = "ensemble_B"
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_case_group",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for case, exec_id in [(case_g1, "exec-g1"), (case_g2, "exec-g2")]:
+            db.add(
+                Execution(
+                    case_id=case.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/executions", params={"case_group": "ensemble_A"})
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        assert data[0]["caseGroup"] == "ensemble_A"
+
+    def test_filter_by_case_name_returns_executions_across_normalized_cases(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        second_machine = Machine(
+            name="normalized-case-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.flush()
+
+        first_case = _create_case(db, "normalized_case")
+        second_case = Case(
+            name="normalized_case",
+            machine_id=second_machine.id,
+            hpc_username="other-user",
+        )
+        db.add(second_case)
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_normalized_case_name",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        db.add_all(
+            [
+                Execution(
+                    case_id=first_case.id,
+                    execution_id="normalized-exec-1",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                ),
+                Execution(
+                    case_id=second_case.id,
+                    execution_id="normalized-exec-2",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-02T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                ),
+            ]
+        )
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/executions", params={"case_name": "normalized_case"}
+        )
+        assert res.status_code == 200
+        assert {execution["executionId"] for execution in res.json()["items"]} == {
+            "normalized-exec-1",
+            "normalized-exec-2",
+        }
+
+    def test_filter_by_case_name_and_case_group(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "combo_case")
+        case.case_group = "combo_group"
+        case_other = _create_case(db, "other_case")
+        case_other.case_group = "combo_group"
+        db.flush()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_filter_combo",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=2,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        for c, exec_id in [(case, "exec-combo"), (case_other, "exec-other")]:
+            db.add(
+                Execution(
+                    case_id=c.id,
+                    execution_id=exec_id,
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    initialization_type="startup",
+                    simulation_type="experimental",
+                    status="created",
+                    simulation_start_date="2023-01-01T00:00:00Z",
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    ingestion_id=ingestion.id,
+                )
+            )
+        db.commit()
+
+        # Both share same group, but filtering by both narrows to one
+        res = client.get(
+            f"{API_BASE}/executions",
+            params={"case_name": "combo_case", "case_group": "combo_group"},
+        )
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        assert data[0]["caseName"] == "combo_case"
+        assert data[0]["caseGroup"] == "combo_group"
+
+    def test_list_merges_case_owned_diagnostic_links_without_duplicates(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_list_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_case_list_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="list-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            compute_type="gpu",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-only-diagnostic",
+                    label="Case-only diagnostic",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Case shared diagnostic",
+                ),
+                ExternalLink(
+                    execution_id=execution.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic",
+                    label="Execution shared diagnostic",
+                ),
+            ]
+        )
+        db.commit()
+
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        assert "links" not in data[0]
+        assert "groupedLinks" not in data[0]
+        assert data[0]["computeType"] == "gpu"
+
+
+class TestGetExecution:
+    def test_endpoint_succeeds_with_valid_id(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", True)
+        monkeypatch.setattr(settings, "assistant_llm_provider", "ollama")
+        monkeypatch.setattr(settings, "assistant_ollama_model", "gemma4:26b")
+        monkeypatch.setattr(
+            settings, "assistant_ollama_base_url", "http://localhost:11434"
+        )
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_get")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_execution_get",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="get-test-exec-1",
+            case_hash="abc123casehash",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            compute_type="cpu",
+            git_tag="v1.0",
+            git_commit_hash="abc123",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.commit()
+        db.refresh(execution)
+
+        res = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["caseName"] == "test_case_get"
+        assert data["executionId"] == "get-test-exec-1"
+        assert data["summaryCapabilities"] == {
+            "llmAvailable": True,
+            "autoGenerateDeterministicOnLoad": False,
+        }
+        assert data["caseHash"] == "abc123casehash"
+        assert data["computeType"] == "cpu"
+
+    def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", True)
+        monkeypatch.setattr(settings, "assistant_llm_provider", "ollama")
+        monkeypatch.setattr(settings, "assistant_ollama_model", None)
+        monkeypatch.setattr(
+            settings, "assistant_ollama_base_url", "http://localhost:11434"
+        )
+        machine = db.query(Machine).first()
+        assert machine is not None, "No machine found in the database"
+
+        case = _create_case(db, "test_case_get_misconfigured")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_execution_get_misconfigured",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="get-test-exec-misconfigured",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.commit()
+        db.refresh(execution)
+
+        res = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["summaryCapabilities"] == {
+            "llmAvailable": False,
+            "autoGenerateDeterministicOnLoad": True,
+        }
+
+    def test_endpoint_raises_404_if_execution_not_found(self, client):
+        res = client.get(f"{API_BASE}/executions/{uuid4()}")
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Execution not found"}
+
+    def test_endpoint_merges_case_owned_diagnostic_links_with_execution_precedence(
+        self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "assistant_llm_enabled", False)
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_get_links")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_execution_get_links",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="get-links-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.flush()
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/case-diagnostic-only",
+                    label="Case diagnostic only",
+                ),
+                ExternalLink(
+                    case_id=case.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Case duplicate",
+                ),
+                ExternalLink(
+                    execution_id=execution.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/shared-diagnostic-detail",
+                    label="Execution duplicate",
+                ),
+            ]
+        )
+        db.commit()
+        db.refresh(execution)
+
+        res = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert res.status_code == 200
+        data = res.json()
+
+        links_by_url = {link["url"]: link for link in data["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-diagnostic-only",
+            "https://example.com/shared-diagnostic-detail",
+        }
+        assert (
+            links_by_url["https://example.com/case-diagnostic-only"]["ownerType"]
+            == "case"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic-detail"]["label"]
+            == "Execution duplicate"
+        )
+        assert (
+            links_by_url["https://example.com/shared-diagnostic-detail"]["ownerType"]
+            == "execution"
+        )
+
+
+class TestUpdateExecution:
+    def test_endpoint_updates_sparse_metadata_and_audit_fields(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch",
+        )
+        original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            updated_at=original_updated_at,
+        )
+        db.commit()
+
+        payload = {
+            "simulationType": "production",
+            "status": "completed",
+            "description": "Updated description",
+            "campaign": "campaign-updated",
+            "notesMarkdown": "Updated notes",
+        }
+
+        res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["simulationType"] == payload["simulationType"]
+        assert data["status"] == payload["status"]
+        assert data["description"] == payload["description"]
+        assert data["campaign"] == payload["campaign"]
+        assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["compiler"] == "gcc"
+        assert data["gitRepositoryUrl"] == "https://example.com/original"
+        assert data["gitTag"] == "v1.0"
+        assert data["hpcUsername"] == "test-user"
+        assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
+        assert data["lastUpdatedByUser"]["email"] == normal_user_sync["email"]
+        assert data["updatedAt"] != original_updated_at.isoformat()
+
+        db.expire_all()
+        updated_execution = (
+            db.query(Execution).filter(Execution.id == execution.id).one()
+        )
+        assert updated_execution.simulation_type == payload["simulationType"]
+        assert updated_execution.status == payload["status"]
+        assert updated_execution.description == payload["description"]
+        assert updated_execution.campaign == payload["campaign"]
+        assert updated_execution.notes_markdown == payload["notesMarkdown"]
+        assert updated_execution.compiler == "gcc"
+        assert updated_execution.git_repository_url == "https://example.com/original"
+        assert updated_execution.git_tag == "v1.0"
+        assert updated_execution.last_updated_by == normal_user_sync["id"]
+        assert updated_execution.updated_at > original_updated_at
+
+    def test_endpoint_replaces_artifacts_and_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_resources",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-resources",
+        )
+        execution.artifacts.extend(
+            [
+                Artifact(kind="output", uri="/tmp/output-old", label="Old output"),
+                Artifact(kind="archive", uri="/tmp/archive-old", label="Old archive"),
+            ]
+        )
+        execution.links.extend(
+            [
+                ExternalLink(
+                    kind="diagnostic",
+                    url="https://example.com/diagnostic-old",
+                    label="Old diagnostic",
+                ),
+                ExternalLink(
+                    kind="performance",
+                    url="https://example.com/performance-old",
+                    label="Old performance",
+                ),
+            ]
+        )
+        db.commit()
+
+        payload = {
+            "artifacts": [
+                {
+                    "kind": "output",
+                    "uri": "  /tmp/output-new  ",
+                    "label": "  New output  ",
+                },
+                {
+                    "kind": "run_script",
+                    "uri": "s3://bucket/run.sh",
+                    "label": "Run script",
+                },
+            ],
+            "links": [
+                {
+                    "kind": "diagnostic",
+                    "url": "https://example.com/diagnostic-new",
+                    "label": "Updated diagnostics",
+                },
+                {
+                    "kind": "docs",
+                    "url": "https://example.com/docs/new",
+                    "label": "Docs",
+                },
+            ],
+        }
+
+        res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert {artifact["uri"] for artifact in data["artifacts"]} == {
+            "/tmp/output-new",
+            "s3://bucket/run.sh",
+        }
+        assert {artifact["kind"] for artifact in data["artifacts"]} == {
+            "output",
+            "run_script",
+        }
+        assert data["groupedArtifacts"]["output"][0]["label"] == "New output"
+        assert (
+            data["groupedLinks"]["diagnostic"][0]["url"]
+            == "https://example.com/diagnostic-new"
+        )
+        assert data["groupedLinks"]["docs"][0]["label"] == "Docs"
+
+        db.expire_all()
+        updated_execution = (
+            db.query(Execution).filter(Execution.id == execution.id).one()
+        )
+        assert {
+            (artifact.kind.value, artifact.uri)
+            for artifact in updated_execution.artifacts
+        } == {
+            ("output", "/tmp/output-new"),
+            ("run_script", "s3://bucket/run.sh"),
+        }
+        assert {(link.kind.value, link.url) for link in updated_execution.links} == {
+            ("diagnostic", "https://example.com/diagnostic-new"),
+            ("docs", "https://example.com/docs/new"),
+        }
+        assert (
+            db.query(Artifact).filter(Artifact.execution_id == execution.id).count()
+            == 2
+        )
+        assert (
+            db.query(ExternalLink)
+            .filter(ExternalLink.execution_id == execution.id)
+            .count()
+            == 2
+        )
+
+    def test_endpoint_can_clear_artifacts_and_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_clear_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_clear_resources",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-clear-resources",
+        )
+        execution.artifacts.append(
+            Artifact(kind="output", uri="/tmp/output-old", label="Old output")
+        )
+        execution.links.append(
+            ExternalLink(
+                kind="diagnostic",
+                url="https://example.com/diagnostic-old",
+                label="Old diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={"artifacts": [], "links": []},
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["artifacts"] == []
+        assert data["links"] == []
+        assert data["groupedArtifacts"] == {}
+        assert data["groupedLinks"] == {}
+
+        db.expire_all()
+        assert (
+            db.query(Artifact).filter(Artifact.execution_id == execution.id).count()
+            == 0
+        )
+        assert (
+            db.query(ExternalLink)
+            .filter(ExternalLink.execution_id == execution.id)
+            .count()
+            == 0
+        )
+
+    def test_endpoint_replaces_only_execution_owned_links(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_preserves_case_links")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_preserves_case_links",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-preserve-case-links",
+        )
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                kind="diagnostic",
+                url="https://example.com/case-diagnostic",
+                label="Case diagnostic",
+            )
+        )
+        execution.links.append(
+            ExternalLink(
+                kind="diagnostic",
+                url="https://example.com/execution-diagnostic-old",
+                label="Old execution diagnostic",
+            )
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/execution-docs-new",
+                        "label": "Execution docs",
+                    }
+                ]
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        links_by_url = {link["url"]: link for link in data["links"]}
+        assert set(links_by_url) == {
+            "https://example.com/case-diagnostic",
+            "https://example.com/execution-docs-new",
+        }
+        assert (
+            links_by_url["https://example.com/case-diagnostic"]["ownerType"] == "case"
+        )
+        assert (
+            links_by_url["https://example.com/execution-docs-new"]["ownerType"]
+            == "execution"
+        )
+
+        db.expire_all()
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 1
+        )
+        execution_links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.execution_id == execution.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind.value, link.url) for link in execution_links] == [
+            ("docs", "https://example.com/execution-docs-new")
+        ]
+
+    def test_endpoint_returns_401_without_authentication(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_unauth")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_unauth",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-unauth",
+        )
+        db.commit()
+
+        app.dependency_overrides.pop(current_active_user, None)
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 401
+
+    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_forbidden_user")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_forbidden_user",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-forbidden-user",
+        )
+        db.commit()
+
+        _override_current_user(
+            user_id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            role=UserRole.USER,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 403
+        assert "verified E3SM GitHub organization membership" in res.json()["detail"]
+
+    def test_admin_can_patch_without_org_membership(
+        self, client, db: Session, admin_user_sync, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_admin")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_admin",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-admin",
+        )
+        db.commit()
+
+        _override_current_user(
+            user_id=admin_user_sync["id"],
+            email=admin_user_sync["email"],
+            role=UserRole.ADMIN,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={"description": "Admin update"},
+        )
+
+        assert res.status_code == 200
+        assert res.json()["description"] == "Admin update"
+
+    def test_endpoint_returns_404_when_execution_not_found(self, client):
+        res = client.patch(
+            f"{API_BASE}/executions/{uuid4()}",
+            json={"description": "Missing execution"},
+        )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Execution not found"}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"compiler": "intel"},
+            {"gitRepositoryUrl": "https://example.com/updated"},
+            {"gitBranch": "feature/test"},
+            {"gitTag": "v2.0"},
+            {"gitCommitHash": "deadbeef"},
+        ],
+    )
+    def test_endpoint_rejects_out_of_scope_fields(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_scope")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_scope",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-scope",
+        )
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
+
+        assert res.status_code == 422
+
+        db.expire_all()
+        unchanged_execution = (
+            db.query(Execution).filter(Execution.id == execution.id).one()
+        )
+        assert unchanged_execution.description == "Original description"
+        assert unchanged_execution.compiler == "gcc"
+        assert unchanged_execution.case_id == case.id
+
+    @pytest.mark.parametrize("payload", [{"status": None}, {"simulationType": None}])
+    def test_endpoint_rejects_explicit_null_for_enum_fields(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_null_enum")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_null_enum",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-null-enum",
+        )
+        db.commit()
+
+        original_updated_at = execution.updated_at
+
+        res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
+
+        assert res.status_code == 422
+
+        db.expire_all()
+        unchanged_execution = (
+            db.query(Execution).filter(Execution.id == execution.id).one()
+        )
+        assert unchanged_execution.status == ExecutionStatus.CREATED
+        assert unchanged_execution.simulation_type == SimulationType.EXPERIMENTAL
+        assert unchanged_execution.updated_at == original_updated_at
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"links": [{"kind": "diagnostic", "url": "not-a-url", "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": "   ", "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": None, "label": "Bad"}]},
+            {"artifacts": [{"kind": "output", "uri": 123, "label": "Bad"}]},
+            {
+                "links": [
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "One",
+                    },
+                    {
+                        "kind": "docs",
+                        "url": "https://example.com/docs",
+                        "label": "Two",
+                    },
+                ]
+            },
+        ],
+    )
+    def test_endpoint_rejects_invalid_resource_payloads(
+        self, client, db: Session, normal_user_sync, payload
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_invalid_resources")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_invalid_resources",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-invalid-resources",
+        )
+        db.commit()
+
+        res = client.patch(f"{API_BASE}/executions/{execution.id}", json=payload)
+
+        assert res.status_code == 422
+
+    def test_endpoint_rejects_hpc_username_update_field(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_patch_hpc_identity")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_execution_patch_hpc_identity",
+        )
+        execution = _create_execution_record(
+            db,
+            case=case,
+            machine_id=machine.id,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=normal_user_sync["id"],
+            execution_id="patch-test-hpc-identity",
+        )
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/executions/{execution.id}",
+            json={"hpcUsername": "other-user"},
+        )
+
+        assert res.status_code == 422
+
+        db.expire_all()
+        unchanged_execution = (
+            db.query(Execution).filter(Execution.id == execution.id).one()
+        )
+        assert unchanged_execution.case_id == case.id
+
+    def test_update_execution_raises_500_when_reload_fails(self) -> None:
+        execution_id = uuid4()
+        user_id = uuid4()
+
+        payload = ExecutionUpdate.model_validate({"description": "Updated"})
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+        execution = MagicMock()
+        sim_query = MagicMock()
+        sim_query.filter.return_value.one_or_none.return_value = execution
+
+        detail_query = MagicMock()
+        detail_query.filter.return_value.one_or_none.return_value = None
+
+        db = MagicMock(spec=Session)
+        db.query.return_value = sim_query
+
+        with patch(
+            "app.features.catalog.api._execution_detail_query",
+            return_value=detail_query,
+        ):
+            with patch(
+                "app.features.catalog.api.transaction",
+                return_value=nullcontext(),
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    update_execution(
+                        execution_id=execution_id,
+                        payload=payload,
+                        db=db,
+                        user=user,
+                    )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load updated execution."
+
+
+class TestExecutionBrowserIncludesCaseMetadata:
+    def test_execution_list_includes_case_name_and_id(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        """The flat /executions endpoint includes case metadata on each row."""
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        case = _create_case(db, "test_case_browser")
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.BROWSER_UPLOAD,
+            source_reference="test_sim_browser",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        db.add(ingestion)
+        db.flush()
+
+        execution = Execution(
+            case_id=case.id,
+            execution_id="browser-exec-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="experimental",
+            status="created",
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+        )
+        db.add(execution)
+        db.commit()
+
+        res = client.get(f"{API_BASE}/executions")
+        assert res.status_code == 200
+        data = res.json()["items"]
+        assert len(data) == 1
+        # Verify case metadata is present on the flat execution row
+        assert data[0]["caseId"] == str(case.id)
+        assert data[0]["caseName"] == "test_case_browser"
+        assert data[0]["executionId"] == "browser-exec-1"
+
+
+class TestLinkCaseDiagnostics:
+    @pytest.mark.parametrize(
+        "machine_input",
+        ["pm", "pm-cpu", "pm-gpu", "Perlmutter"],
+    )
+    @use_real_auth
+    def test_endpoint_resolves_machine_aliases(
+        self, client, db: Session, machine_input: str
+    ) -> None:
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").one_or_none()
+        if machine is None:
+            machine = Machine(
+                name="perlmutter",
+                site_record=get_or_create_site(db, "NERSC"),
+                architecture="gpu",
+                scheduler="slurm",
+                gpu=True,
+            )
+            db.add(machine)
+            db.commit()
+            db.refresh(machine)
+
+        service_user, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-machine-alias-{uuid4()}"
+        case, _ = _create_matching_execution(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-machine-alias-{uuid4()}",
+            hpc_username="alias-user",
+            source_reference=f"diag-machine-alias-source-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine_input,
+                "hpcUsername": "alias-user",
+                "diagnostics": [
+                    {
+                        "name": f"Diagnostics via {machine_input}",
+                        "url": f"https://example.com/diag/{uuid4()}",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        links = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).all()
+        assert len(links) == 1
+
+    @use_real_auth
+    def test_endpoint_creates_case_scoped_diagnostic_links(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        _, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-case-{uuid4()}"
+        case, _ = _create_matching_execution(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=db.query(User)
+            .filter(User.role == UserRole.SERVICE_ACCOUNT)
+            .one()
+            .id,
+            execution_id=f"diag-exec-{uuid4()}",
+            hpc_username="diag-user",
+            source_reference=f"diag-source-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Atmosphere diagnostics",
+                        "url": "https://example.com/diag/atmosphere",
+                    },
+                    {
+                        "name": "Ocean diagnostics",
+                        "url": "https://example.com/diag/ocean",
+                    },
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        links = (
+            db.query(ExternalLink)
+            .filter(ExternalLink.case_id == case.id)
+            .order_by(ExternalLink.url.asc())
+            .all()
+        )
+        assert [(link.kind, link.label, link.url) for link in links] == [
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Atmosphere diagnostics",
+                "https://example.com/diag/atmosphere",
+            ),
+            (
+                ExternalLinkKind.DIAGNOSTIC,
+                "Ocean diagnostics",
+                "https://example.com/diag/ocean",
+            ),
+        ]
+
+    @use_real_auth
+    def test_duplicate_request_remains_idempotent(self, client, db: Session) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        service_user, raw_token = _create_service_account_token(db)
+        case, _ = _create_matching_execution(
+            db,
+            case_name=f"diagnostics-idempotent-{uuid4()}",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-idempotent-exec-{uuid4()}",
+            hpc_username="idempotent-user",
+            source_reference=f"diag-idempotent-source-{uuid4()}",
+        )
+        payload = {
+            "caseName": case.name,
+            "machine": machine.name,
+            "hpcUsername": "idempotent-user",
+            "diagnostics": [
+                {
+                    "name": "Shared diagnostics",
+                    "url": "https://example.com/diag/shared",
+                }
+            ],
+        }
+
+        first = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        second = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert first.status_code == 204
+        assert second.status_code == 204
+        links = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).all()
+        assert len(links) == 1
+        assert links[0].label == "Shared diagnostics"
+
+    @use_real_auth
+    def test_concurrent_duplicate_request_remains_idempotent(self) -> None:
+        SessionFactory = TestingSessionLocal
+        seed_session = SessionFactory(bind=engine.connect())
+        cleanup_session = None
+        service_user: User | None = None
+        app.dependency_overrides.pop(current_active_user, None)
+
+        def override_get_database_session():
+            session = SessionFactory(bind=engine.connect())
+            try:
+                yield session
+            finally:
+                session.close()
+
+        app.dependency_overrides[get_database_session] = override_get_database_session
+
+        try:
+            machine = seed_session.query(Machine).first()
+            assert machine is not None
+
+            service_user, raw_token = _create_service_account_token(seed_session)
+            case_name = f"diagnostics-concurrent-{uuid4()}"
+            execution_id = f"diag-concurrent-exec-{uuid4()}"
+            source_reference = f"diag-concurrent-source-{uuid4()}"
+            case, _ = _create_matching_execution(
+                seed_session,
+                case_name=case_name,
+                machine_id=machine.id,
+                machine_name=machine.name,
+                user_id=service_user.id,
+                execution_id=execution_id,
+                hpc_username="concurrent-user",
+                source_reference=source_reference,
+            )
+
+            payload = {
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "concurrent-user",
+                "diagnostics": [
+                    {
+                        "name": "Concurrent diagnostics",
+                        "url": "https://example.com/diag/concurrent",
+                    }
+                ],
+            }
+
+            with TestClient(app) as local_client:
+
+                def send_request() -> int:
+                    response = local_client.post(
+                        f"{API_BASE}/diagnostics/link",
+                        json=payload,
+                        headers={"Authorization": f"Bearer {raw_token}"},
+                    )
+                    return response.status_code
+
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    statuses = list(executor.map(lambda _: send_request(), range(2)))
+
+            assert statuses == [204, 204]
+
+            cleanup_session = SessionFactory(bind=engine.connect())
+            links = (
+                cleanup_session.query(ExternalLink)
+                .filter(ExternalLink.case_id == case.id)
+                .all()
+            )
+            assert len(links) == 1
+        finally:
+            app.dependency_overrides.pop(get_database_session, None)
+            if cleanup_session is None:
+                cleanup_session = SessionFactory(bind=engine.connect())
+            cleanup_session.execute(
+                delete(ExternalLink).where(
+                    ExternalLink.url == "https://example.com/diag/concurrent"
+                )
+            )
+            cleanup_session.execute(
+                delete(Execution).where(
+                    Execution.execution_id == locals().get("execution_id")
+                )
+            )
+            cleanup_session.execute(
+                delete(Ingestion).where(
+                    Ingestion.source_reference == locals().get("source_reference")
+                )
+            )
+            cleanup_session.execute(
+                delete(Case).where(Case.name == locals().get("case_name"))
+            )
+            if service_user is not None:
+                cleanup_session.execute(
+                    delete(ApiToken).where(ApiToken.user_id == service_user.id)
+                )
+                cleanup_session.execute(
+                    delete(User).where(User.email == service_user.email)
+                )
+            cleanup_session.commit()
+            cleanup_session.close()
+            seed_session.close()
+
+    @use_real_auth
+    def test_endpoint_requires_authentication(self, client) -> None:
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-auth-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing auth",
+                        "url": "https://example.com/diag/auth",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_endpoint_rejects_non_admin_non_service_account(self, client) -> None:
+        def fake_non_admin_user():
+            return User(
+                id=uuid4(),
+                email="forbidden@example.com",
+                is_active=True,
+                is_verified=True,
+                role=UserRole.USER,
+            )
+
+        app.dependency_overrides[current_active_user] = fake_non_admin_user
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "forbidden-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Forbidden diagnostics",
+                        "url": "https://example.com/diag/forbidden",
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Only administrators and service accounts may link diagnostics."
+        )
+
+    @use_real_auth
+    def test_endpoint_returns_404_when_case_match_is_missing(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing case diagnostics",
+                        "url": "https://example.com/diag/missing-case",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 404
+
+    @use_real_auth
+    def test_endpoint_returns_404_for_unknown_machine(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "missing-machine-case",
+                "machine": "unknown-machine",
+                "hpcUsername": "diag-user",
+                "diagnostics": [
+                    {
+                        "name": "Missing machine diagnostics",
+                        "url": "https://example.com/diag/missing-machine",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 404
+
+    @use_real_auth
+    def test_endpoint_resolves_duplicate_case_name_by_hpc_username(
+        self, client, db: Session
+    ) -> None:
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        service_user, raw_token = _create_service_account_token(db)
+        case_name = f"diagnostics-shared-name-{uuid4()}"
+        first_case, _ = _create_matching_execution(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-a-{uuid4()}",
+            hpc_username="diag-user-a",
+            source_reference=f"diag-shared-source-a-{uuid4()}",
+        )
+        second_case, _ = _create_matching_execution(
+            db,
+            case_name=case_name,
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=service_user.id,
+            execution_id=f"diag-shared-b-{uuid4()}",
+            hpc_username="diag-user-b",
+            source_reference=f"diag-shared-source-b-{uuid4()}",
+        )
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": case_name,
+                "machine": machine.name,
+                "hpcUsername": "diag-user-b",
+                "diagnostics": [
+                    {
+                        "name": "Selected diagnostics",
+                        "url": "https://example.com/diag/selected",
+                    }
+                ],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 204
+        assert (
+            db.query(ExternalLink).filter(ExternalLink.case_id == first_case.id).count()
+            == 0
+        )
+        links = (
+            db.query(ExternalLink).filter(ExternalLink.case_id == second_case.id).all()
+        )
+        assert len(links) == 1
+        assert links[0].label == "Selected diagnostics"
+
+    @use_real_auth
+    def test_endpoint_returns_422_for_invalid_payload(
+        self, client, db: Session
+    ) -> None:
+        _, raw_token = _create_service_account_token(db)
+
+        response = client.post(
+            f"{API_BASE}/diagnostics/link",
+            json={
+                "caseName": "invalid-payload-case",
+                "machine": "perlmutter",
+                "hpcUsername": "diag-user",
+                "diagnostics": [{"name": "Broken diagnostics", "url": "not-a-url"}],
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+
+        assert response.status_code == 422

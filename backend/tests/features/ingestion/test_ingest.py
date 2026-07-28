@@ -8,6 +8,9 @@ import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
+from app.features.catalog.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.catalog.models import Case, Execution
+from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.ingest import (
     ExecutionCreateDraft,
     _build_execution_create_draft,
@@ -29,9 +32,6 @@ from app.features.ingestion.models import (
 )
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
-from app.features.simulation.enums import ArtifactKind, ExecutionStatus, SimulationType
-from app.features.simulation.models import Case, Execution
-from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.models import User
 from tests.features.site.utils import get_or_create_site
 
@@ -86,7 +86,7 @@ def _require_execution_id(
     execution_id = metadata.get("execution_id")
     if not execution_id:
         raise AssertionError(
-            f"Mocked ParsedSimulation for '{execution_dir}' must define execution_id"
+            f"Mocked ParsedExecution for '{execution_dir}' must define execution_id"
         )
 
     return execution_id
@@ -114,10 +114,10 @@ def _create_case(
 class TestIngestArchive:
     """Tests for the ingest_archive public API.
 
-    Tests cover all aspects of simulation ingestion including:
+    Tests cover all aspects of execution ingestion including:
     - Datetime parsing with various formats and timezone awareness
     - Machine lookup and validation
-    - Simulation key extraction for deduplication
+    - Execution key extraction for deduplication
     - Metadata schema mapping validation
     - Archive parsing integration
     - Error handling and propagation
@@ -142,7 +142,7 @@ class TestIngestArchive:
         """Test that ingest_archive returns list of ExecutionCreate objects."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations: dict[str, dict[str, str | None]] = {
+        mock_executions: dict[str, dict[str, str | None]] = {
             "/path/to/1081156.251218-200923": {
                 "execution_id": "1081156.251218-200923",
                 "case_name": "case1",
@@ -171,7 +171,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -187,10 +187,10 @@ class TestIngestArchive:
         assert ingest_result.executions[0].case_id == case.id
 
     def test_handles_multiple_executions(self, db: Session) -> None:
-        """Test ingesting archive with multiple simulations."""
+        """Test ingesting archive with multiple executions."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations: dict[str, dict[str, str | None]] = {
+        mock_executions: dict[str, dict[str, str | None]] = {
             "/path/to/1081157.251218-200924": {
                 "execution_id": "1081157.251218-200924",
                 "case_name": "case1",
@@ -243,7 +243,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -267,7 +267,7 @@ class TestIngestArchive:
         """Test that archive_path and output_dir accept strings."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081159.251218-200926": {
                 "execution_id": "1081159.251218-200926",
                 "case_name": "case1",
@@ -296,7 +296,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ) as mock_main_parser:
             ingest_result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
@@ -309,7 +309,7 @@ class TestIngestArchive:
 
     def test_propagates_mapping_errors(self, db: Session) -> None:
         """Test that mapping errors are collected and ingestion continues."""
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081160.251218-200927": {
                 "execution_id": "1081160.251218-200927",
                 "case_name": "case1",
@@ -338,7 +338,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -366,7 +366,7 @@ class TestIngestArchive:
         ]
 
         for idx, date_str in enumerate(test_cases):
-            mock_simulations = {
+            mock_executions = {
                 f"/path/to/108200{idx}.251218-200900": {
                     "execution_id": f"108200{idx}.251218-200900",
                     "case_name": f"case1_{date_str}",
@@ -395,7 +395,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -406,7 +406,7 @@ class TestIngestArchive:
 
     def test_preserves_env_run_calendar_date(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "timezone-regression",
@@ -422,7 +422,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -436,7 +436,7 @@ class TestIngestArchive:
 
     def test_rejects_non_midnight_model_datetime(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "invalid-model-date",
@@ -452,7 +452,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -467,7 +467,7 @@ class TestIngestArchive:
         """Test that missing required fields are captured as errors."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081170.251218-200930": {
                 "execution_id": "1081170.251218-200930",
                 "case_name": None,
@@ -496,7 +496,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -517,7 +517,7 @@ class TestIngestArchive:
         """
         machine = self._create_machine(db, "valid-machine")
 
-        # Create valid simulation
+        # Create valid execution
         valid_mock = {
             "/path/to/1081171.251218-200931": {
                 "execution_id": "1081171.251218-200931",
@@ -623,7 +623,7 @@ class TestIngestArchive:
         if machine is None:
             machine = self._create_machine(db, canonical_name)
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "case1",
@@ -652,7 +652,7 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -694,7 +694,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081173.251218-200933": {
                 "execution_id": "1081173.251218-200933",
                 "case_name": "case1",
@@ -723,7 +723,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -745,7 +745,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081174.251218-200934": {
                 "execution_id": "1081174.251218-200934",
                 "case_name": "case1",
@@ -775,7 +775,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -799,11 +799,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert case.case_group == "test_group"
 
     def test_skips_duplicate_executions(self, db: Session) -> None:
-        """Test that duplicate simulations are skipped during ingestion.
+        """Test that duplicate executions are skipped during ingestion.
 
         This test verifies the deduplication logic by:
-        1. Creating a simulation directly in the database with a case/execution pair
-        2. Attempting to ingest a simulation with the same case/execution pair
+        1. Creating a execution directly in the database with a case/execution pair
+        2. Attempting to ingest a execution with the same case/execution pair
         3. Verifying it's skipped and not returned
         """
         machine = self._create_machine(db, "test-machine")
@@ -828,7 +828,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(ingestion)
         db.flush()
 
-        # Create a Case and Simulation directly in the database
+        # Create a Case and Execution directly in the database
         case = _create_case(db, name="existing_case", machine=machine)
 
         existing_sim = Execution(
@@ -849,8 +849,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(existing_sim)
         db.commit()
 
-        # Try to ingest a simulation with the same case/execution pair
-        mock_simulations = {
+        # Try to ingest a execution with the same case/execution pair
+        mock_executions = {
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "existing_case",
@@ -879,7 +879,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -894,7 +894,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
     def test_validation_error_does_not_persist_empty_case(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081175.251218-200940": {
                 "execution_id": "1081175.251218-200940",
                 "case_name": "orphan_case_validation",
@@ -923,7 +923,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -980,7 +980,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(existing_sim)
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081175.251218-200941": {
                 "execution_id": "1081175.251218-200941",
                 "case_name": "orphan_case_duplicate",
@@ -1009,7 +1009,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1025,7 +1025,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         assert ingest_result.executions[0].case_id == new_case.id
 
     def test_ingest_archive_counts(self, db: Session) -> None:
-        """Test that summary counts reflect created and duplicate simulations."""
+        """Test that summary counts reflect created and duplicate executions."""
         machine = self._create_machine(db, "test-machine")
 
         user = User(
@@ -1067,7 +1067,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         db.add(existing_sim)
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081176.251218-200936": {
                 "execution_id": "1081176.251218-200936",
                 "case_name": "existing_case",
@@ -1120,7 +1120,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1135,7 +1135,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.executions[0].case_id == new_case.id
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
-        """Test summary counts when the archive contains no simulations."""
+        """Test summary counts when the archive contains no executions."""
         with patch("app.features.ingestion.ingest.main_parser", return_value=([], 0)):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1153,9 +1153,9 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """
         machine = self._create_machine(db, "test-machine")
 
-        # Create a simulation with an invalid run_start_date
+        # Create a execution with an invalid run_start_date
         # This will be parsed but not raise an error
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081178.251218-200938": {
                 "execution_id": "1081178.251218-200938",
                 "case_name": "case1",
@@ -1184,7 +1184,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1205,7 +1205,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         # Mock dateutil_parser.parse to raise an exception for specific inputs
         # This ensures we exercise the except block in _parse_datetime_field
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081179.251218-200939": {
                 "execution_id": "1081179.251218-200939",
                 "case_name": "case1",
@@ -1243,7 +1243,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_executions), 0),
             ),
             patch(
                 "app.features.ingestion.ingest.dateutil_parser.parse",
@@ -1260,7 +1260,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
     def test_missing_machine_name_in_metadata(self, db: Session) -> None:
         """Test error handling when machine name is missing from metadata."""
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081180.251218-200940": {
                 "execution_id": "1081180.251218-200940",
                 "case_name": "case1",
@@ -1289,7 +1289,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1304,7 +1304,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         """Test error when simulation_start_date cannot be parsed."""
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081181.251218-200941": {
                 "execution_id": "1081181.251218-200941",
                 "case_name": "case1",
@@ -1333,7 +1333,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1413,7 +1413,7 @@ class TestNormalizeGitUrl:
         machine = self._create_machine(db, "test-machine")
 
         # SSH URL in metadata
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081182.251218-200942": {
                 "execution_id": "1081182.251218-200942",
                 "case_name": "case1",
@@ -1442,7 +1442,7 @@ class TestNormalizeGitUrl:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1496,7 +1496,7 @@ class TestCaseHashIngestion:
         simulation_start_date: str = "2020-01-01",
         **overrides: str | None,
     ) -> dict[str, str | None]:
-        """Build a complete simulation metadata dict with sensible defaults."""
+        """Build a complete execution metadata dict with sensible defaults."""
         base: dict[str, str | None] = {
             "execution_id": execution_id,
             "case_name": case_name,
@@ -1529,7 +1529,7 @@ class TestCaseHashIngestion:
         """Runs with different case_names create separate cases."""
         self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081189.251218-200949": self._make_metadata(
                 execution_id="1081189.251218-200949",
                 case_name="case_alpha",
@@ -1542,7 +1542,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1559,7 +1559,7 @@ class TestCaseHashIngestion:
         """Re-ingesting the same archive does not create duplicates."""
         machine = self._create_machine(db, "test-machine")
 
-        # First: create a simulation in the DB to simulate prior ingestion
+        # First: create a execution in the DB to simulate prior ingestion
         user = User(
             email="test@example.com",
             is_active=True,
@@ -1580,7 +1580,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1595,11 +1595,11 @@ class TestCaseHashIngestion:
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
         )
-        db.add(sim)
+        db.add(execution)
         db.commit()
 
         # Now re-ingest with the same case/execution pair
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
@@ -1608,7 +1608,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1643,7 +1643,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1658,10 +1658,10 @@ class TestCaseHashIngestion:
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
         )
-        db.add(sim)
+        db.add(execution)
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
@@ -1672,7 +1672,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1706,7 +1706,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1721,10 +1721,10 @@ class TestCaseHashIngestion:
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
         )
-        db.add(sim)
+        db.add(execution)
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
@@ -1734,7 +1734,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1748,7 +1748,7 @@ class TestCaseHashIngestion:
         """A new run under an existing case stays grouped by case name."""
         machine = self._create_machine(db, "test-machine")
 
-        # Pre-populate DB with a reference simulation
+        # Pre-populate DB with a reference execution
         user = User(
             email="test@example.com",
             is_active=True,
@@ -1769,7 +1769,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
             compset="FHIST",
@@ -1785,12 +1785,12 @@ class TestCaseHashIngestion:
             ingestion_id=ingestion.id,
             compiler="gcc-11",
         )
-        db.add(sim)
+        db.add(execution)
         db.flush()
 
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081192.251218-200952": self._make_metadata(
                 execution_id="1081192.251218-200952",
                 simulation_start_date="2020-01-01",
@@ -1805,7 +1805,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1842,7 +1842,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200953",
             compset="FHIST",
@@ -1858,12 +1858,12 @@ class TestCaseHashIngestion:
             ingestion_id=ingestion.id,
             git_repository_url="https://github.com/E3SM-Project/E3SM.git",
         )
-        db.add(sim)
+        db.add(execution)
         db.flush()
 
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081194.251218-200956": self._make_metadata(
                 execution_id="1081194.251218-200956",
                 simulation_start_date="2020-06-01",
@@ -1873,7 +1873,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1910,7 +1910,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200954",
             case_hash="existing-hash",
@@ -1926,12 +1926,12 @@ class TestCaseHashIngestion:
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
         )
-        db.add(sim)
+        db.add(execution)
         db.flush()
 
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081194.251218-200954": self._make_metadata(
                 execution_id="1081194.251218-200954",
                 simulation_start_date="2020-01-01",
@@ -1945,7 +1945,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1959,7 +1959,7 @@ class TestCaseHashIngestion:
         """Runs with the same case_name belong to the same Case without CASE_HASH."""
         self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081195.251218-200955": self._make_metadata(
                 execution_id="1081195.251218-200955",
                 case_name="case1",
@@ -1973,12 +1973,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        # Both simulations must share the same case_id
+        # Both executions must share the same case_id
         case_ids = {s.case_id for s in result.executions}
         assert len(case_ids) == 1
         # Case was created with the shared name
@@ -1988,7 +1988,7 @@ class TestCaseHashIngestion:
     def test_same_case_name_and_same_identity_reuses_case(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081195.251218-200955": self._make_metadata(
                 execution_id="1081195.251218-200955",
                 case_name="case1",
@@ -2006,19 +2006,19 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.executions}) == 1
+        assert len({execution.case_id for execution in result.executions}) == 1
 
     def test_same_case_name_and_different_hpc_username_splits_case(
         self, db: Session
     ) -> None:
         machine = self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081195.251218-200955": self._make_metadata(
                 execution_id="1081195.251218-200955",
                 case_name="case1",
@@ -2036,12 +2036,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.executions}) == 2
+        assert len({execution.case_id for execution in result.executions}) == 2
         assert db.query(Case).filter(Case.name == "case1").count() == 2
 
     def test_same_case_name_and_different_machine_splits_case(
@@ -2050,7 +2050,7 @@ class TestCaseHashIngestion:
         first_machine = self._create_machine(db, "test-machine")
         second_machine = self._create_machine(db, "other-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081195.251218-200955": self._make_metadata(
                 execution_id="1081195.251218-200955",
                 case_name="case1",
@@ -2068,19 +2068,19 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.executions}) == 2
+        assert len({execution.case_id for execution in result.executions}) == 2
         assert db.query(Case).filter(Case.name == "case1").count() == 2
 
     def test_case_hash_is_persisted_on_created_execution(self, db: Session) -> None:
-        """Parsed CASE_HASH should be preserved on created simulations."""
+        """Parsed CASE_HASH should be preserved on created executions."""
         self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081196.251218-200956": self._make_metadata(
                 execution_id="1081196.251218-200956",
                 case_name="case1",
@@ -2090,7 +2090,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -2125,7 +2125,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Execution(
+        execution = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
             case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
@@ -2141,12 +2141,12 @@ class TestCaseHashIngestion:
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
         )
-        db.add(sim)
+        db.add(execution)
         db.flush()
 
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081193.251218-200953": self._make_metadata(
                 execution_id="1081193.251218-200953",
                 case_name="case1",
@@ -2158,7 +2158,7 @@ class TestCaseHashIngestion:
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_executions), 0),
             ),
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
@@ -2226,7 +2226,7 @@ class TestCaseHashIngestion:
         )
         db.commit()
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081193.251218-200953": self._make_metadata(
                 execution_id="1081193.251218-200953",
                 case_name="case1",
@@ -2240,7 +2240,7 @@ class TestCaseHashIngestion:
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_executions), 0),
             ),
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
@@ -2258,7 +2258,7 @@ class TestCaseHashIngestion:
         """Runs with different case_name values create separate Cases."""
         self._create_machine(db, "test-machine")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1081197.251218-200957": self._make_metadata(
                 execution_id="1081197.251218-200957",
                 case_name="case_X",
@@ -2271,7 +2271,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -2652,7 +2652,7 @@ class TestIngestHelpers:
         post_script = tmp_path / "post.sh"
         post_script.write_text("#!/bin/sh\n")
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
@@ -2673,17 +2673,17 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
         assert len(ingest_result.executions) == 1
-        simulation = ingest_result.executions[0]
-        assert len(simulation.artifacts) == 4
+        execution = ingest_result.executions[0]
+        assert len(execution.artifacts) == 4
 
-        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        by_kind = {artifact.kind: artifact.uri for artifact in execution.artifacts}
         assert by_kind[ArtifactKind.OUTPUT] == str(output_path)
         assert by_kind[ArtifactKind.ARCHIVE] == str(archive_path)
         assert by_kind[ArtifactKind.RUN_SCRIPT] == str(run_script)
@@ -2703,7 +2703,7 @@ class TestIngestHelpers:
         db.commit()
         db.refresh(machine)
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
@@ -2724,7 +2724,7 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -2754,7 +2754,7 @@ class TestIngestHelpers:
         db.commit()
         db.refresh(machine)
 
-        mock_simulations = {
+        mock_executions = {
             "/path/to/1082011.260305-120011": {
                 "execution_id": "1082011.260305-120011",
                 "case_name": "case-missing-artifacts",
@@ -2775,7 +2775,7 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_executions), 0),
         ):
             with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
                 ingest_result = ingest_archive(

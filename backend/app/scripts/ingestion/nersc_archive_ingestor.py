@@ -2611,7 +2611,7 @@ def _ingest_case_with_retries(
     api_token : str
         Bearer token used for API authentication.
     machine_name : str
-        Machine label attached to ingested simulations.
+        Machine label attached to ingested executions.
     max_attempts : int
         Maximum number of attempts for the case request.
     timeout_seconds : int
@@ -2708,7 +2708,7 @@ def _post_ingestion_request(
     archive_path : str
         Case directory path under the mounted archive.
     machine_name : str
-        Machine label attached to ingested simulations.
+        Machine label attached to ingested executions.
     timeout_seconds : int
         HTTP request timeout in seconds.
 

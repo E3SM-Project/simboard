@@ -1,5 +1,5 @@
 /**
- * Represents an HPC machine on which simulations are run.
+ * Represents an HPC machine on which executions are run.
  */
 export interface Machine {
   id: string;

@@ -8,11 +8,11 @@ from app.features.assistant.snapshot import (
     SnapshotCaseFields,
     SnapshotExecutionFields,
 )
+from app.features.catalog.enums import ArtifactKind, ExternalLinkKind
+from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.enums import ArtifactKind, ExternalLinkKind
-from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
 
 
 def _create_case(db: Session, name: str = "assistant_case") -> Case:
@@ -57,7 +57,7 @@ def _create_execution(
     execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
-        description="Control simulation for deterministic summary."
+        description="Control execution for deterministic summary."
         if with_optional_metadata
         else None,
         compset="AQUAPLANET",
@@ -118,17 +118,17 @@ class TestBuildExecutionSummary:
     def test_complete_metadata_produces_stable_summary_and_citations(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_execution(
+        execution = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
             execution_id="assistant-complete",
         )
 
-        summary = build_execution_summary(simulation)
+        summary = build_execution_summary(execution)
 
         assert (
-            "Simulation assistant-complete belongs to case assistant_case."
+            "Execution assistant-complete belongs to case assistant_case."
             in summary.answer
         )
         assert (
@@ -137,16 +137,16 @@ class TestBuildExecutionSummary:
         )
         assert "SimBoard records 1 diagnostic link(s) for this run" in summary.answer
         assert {citation.path for citation in summary.citations} >= {
-            "simulation.execution_id",
+            "execution.execution_id",
             "case.name",
-            "simulation.git_tag",
+            "execution.git_tag",
             "links[kind=diagnostic]",
         }
 
     def test_missing_optional_metadata_yields_caveats_not_fabrication(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_execution(
+        execution = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -155,24 +155,22 @@ class TestBuildExecutionSummary:
             with_optional_metadata=False,
         )
 
-        summary = build_execution_summary(simulation)
+        summary = build_execution_summary(execution)
 
         assert "Recorded description:" not in summary.answer
+        assert "Version metadata is not recorded for this execution." in summary.caveats
         assert (
-            "Version metadata is not recorded for this simulation." in summary.caveats
+            "Campaign metadata is not recorded for this execution." in summary.caveats
         )
         assert (
-            "Campaign metadata is not recorded for this simulation." in summary.caveats
-        )
-        assert (
-            "No diagnostic links are recorded for this simulation in SimBoard."
+            "No diagnostic links are recorded for this execution in SimBoard."
             in summary.caveats
         )
 
     def test_case_hash_grouping_is_reflected_in_summary(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_execution(
+        execution = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -180,20 +178,20 @@ class TestBuildExecutionSummary:
             case_hash="assistant-grouped-hash",
         )
 
-        summary = build_execution_summary(simulation)
+        summary = build_execution_summary(execution)
 
         assert (
             "It is grouped under CASE_HASH assistant-grouped-hash within this case."
             in summary.answer
         )
-        assert "simulation.case_hash" in {
+        assert "execution.case_hash" in {
             citation.path for citation in summary.citations
         }
 
     def test_absent_diagnostics_adds_limitation_not_interpretation(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_execution(
+        execution = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -201,11 +199,11 @@ class TestBuildExecutionSummary:
             with_diagnostics=False,
         )
 
-        summary = build_execution_summary(simulation)
+        summary = build_execution_summary(execution)
 
         assert "interpret diagnostic outputs" not in summary.answer
         assert (
-            "No diagnostic links are recorded for this simulation in SimBoard."
+            "No diagnostic links are recorded for this execution in SimBoard."
             in summary.caveats
         )
         assert summary.limitations == [
@@ -215,7 +213,7 @@ class TestBuildExecutionSummary:
     def test_case_owned_diagnostics_are_visible_to_summary_and_citations(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_execution(
+        execution = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -224,16 +222,16 @@ class TestBuildExecutionSummary:
         )
         db.add(
             ExternalLink(
-                case_id=simulation.case_id,
+                case_id=execution.case_id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/case-diagnostic",
                 label="Case diagnostic",
             )
         )
         db.commit()
-        db.refresh(simulation)
+        db.refresh(execution)
 
-        summary = build_execution_summary(simulation)
+        summary = build_execution_summary(execution)
 
         assert "SimBoard records 1 diagnostic link(s) for this run" in summary.answer
         assert "links[kind=diagnostic]" in {
@@ -244,7 +242,7 @@ class TestBuildExecutionSummary:
         summary = build_execution_summary(
             ExecutionSnapshot(
                 execution=SnapshotExecutionFields(
-                    id="simulation-1",
+                    id="execution-1",
                     execution_id="assistant-no-case-hash",
                     compset="AQUAPLANET",
                     compset_alias="QPC4",
@@ -265,7 +263,7 @@ class TestBuildExecutionSummary:
         summary = build_execution_summary(
             ExecutionSnapshot(
                 execution=SnapshotExecutionFields(
-                    id="simulation-1",
+                    id="execution-1",
                     execution_id="assistant-no-start-date",
                     compset="AQUAPLANET",
                     compset_alias="QPC4",
@@ -284,5 +282,5 @@ class TestBuildExecutionSummary:
             in summary.caveats
         )
         assert summary.suggested_followups == [
-            "Review the simulation detail page metadata for additional provenance and run context."
+            "Review the execution detail page metadata for additional provenance and run context."
         ]

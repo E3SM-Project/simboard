@@ -92,12 +92,12 @@ class TestIngestionSchemas:
 
     def test_ingest_archive_response_valid(self) -> None:
         payload = IngestionResponse(
-            created_count=1, duplicate_count=0, simulations=[], errors=[]
+            created_count=1, duplicate_count=0, executions=[], errors=[]
         )
 
         assert payload.created_count == 1
         assert payload.duplicate_count == 0
-        assert payload.simulations == []
+        assert payload.executions == []
         assert payload.errors == []
 
 

@@ -6,7 +6,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    computed_field,
     field_validator,
     model_validator,
 )
@@ -21,29 +20,24 @@ from app.features.ingestion.enums import (
 class IngestionExecutionSummary(BaseModel):
     """Lightweight summary of a persisted execution created by ingestion."""
 
-    id: Annotated[UUID, Field(..., description="ID of the created simulation")]
+    id: Annotated[UUID, Field(..., description="ID of the created execution")]
     case_id: Annotated[UUID, Field(..., description="ID of the associated case")]
     case_name: Annotated[str, Field(..., description="Name of the associated case")]
     execution_id: Annotated[
-        str, Field(..., description="Execution identifier for the created simulation")
+        str, Field(..., description="Execution identifier for the created execution")
     ]
-
-
-# Phase 2 public-contract adapter. Remove with legacy schemas in Phase 5.
-class IngestionSimulationSummary(IngestionExecutionSummary):
-    """Lightweight summary of a persisted simulation created by ingestion."""
 
 
 class IngestFromPathRequest(BaseModel):
     """
     Request payload for ingesting an archive from a path and persisting
-    simulations.
+    executions.
     """
 
     archive_path: Annotated[str, Field(..., description="Path to the archive file")]
     machine_name: Annotated[
         str,
-        Field(..., description="Name of the machine associated with the simulations"),
+        Field(..., description="Name of the machine associated with the executions"),
     ]
     hpc_username: Annotated[
         str | None,
@@ -66,7 +60,7 @@ class IngestFromHpcUploadRequest(BaseModel):
 
     machine_name: Annotated[
         str,
-        Field(..., description="Name of the machine associated with the simulations"),
+        Field(..., description="Name of the machine associated with the executions"),
     ]
     case_path: Annotated[
         str,
@@ -100,28 +94,16 @@ class IngestionResponse(BaseModel):
         int, Field(..., description="Number of new executions created")
     ]
     duplicate_count: Annotated[
-        int, Field(..., description="Number of duplicate simulations detected")
+        int, Field(..., description="Number of duplicate executions detected")
     ]
-    simulations: Annotated[
-        list[IngestionSimulationSummary],
-        Field(
-            ...,
-            description="List of created simulation summaries",
-            deprecated=True,
-        ),
+    executions: Annotated[
+        list[IngestionExecutionSummary],
+        Field(..., description="List of created execution summaries"),
     ]
     errors: Annotated[
         list[dict[str, str]],
         Field(..., description="List of errors encountered during ingestion"),
     ]
-
-    @computed_field
-    def executions(self) -> list[IngestionExecutionSummary]:
-        """Canonical alias retained alongside deprecated simulations."""
-        return [
-            IngestionExecutionSummary.model_validate(summary.model_dump())
-            for summary in self.__dict__["simulations"]
-        ]
 
 
 class IngestionStateCase(BaseModel):
@@ -267,7 +249,7 @@ class IngestionCreate(BaseModel):
         ),
     ]
     machine_id: Annotated[
-        UUID, Field(..., description="ID of the machine used for the simulation")
+        UUID, Field(..., description="ID of the machine used for the execution")
     ]
     triggered_by: Annotated[
         UUID, Field(..., description="User ID or process that triggered the ingestion")
@@ -276,10 +258,10 @@ class IngestionCreate(BaseModel):
         IngestionStatus, Field(..., description="Status of the ingestion event")
     ]
     created_count: Annotated[
-        int, Field(..., description="Number of new simulations created")
+        int, Field(..., description="Number of new executions created")
     ]
     duplicate_count: Annotated[
-        int, Field(..., description="Number of duplicate simulations detected")
+        int, Field(..., description="Number of duplicate executions detected")
     ]
     error_count: Annotated[
         int, Field(..., description="Number of errors encountered during ingestion")
@@ -319,7 +301,7 @@ class IngestionRead(BaseModel):
         ),
     ]
     machine_id: Annotated[
-        UUID, Field(..., description="ID of the machine used for the simulation")
+        UUID, Field(..., description="ID of the machine used for the execution")
     ]
     triggeredBy: Annotated[
         UUID, Field(..., description="User ID or process that triggered the ingestion")
@@ -331,10 +313,10 @@ class IngestionRead(BaseModel):
         IngestionStatus, Field(..., description="Status of the ingestion event")
     ]
     createdCount: Annotated[
-        int, Field(..., description="Number of new simulations created")
+        int, Field(..., description="Number of new executions created")
     ]
     duplicateCount: Annotated[
-        int, Field(..., description="Number of duplicate simulations detected")
+        int, Field(..., description="Number of duplicate executions detected")
     ]
     errorCount: Annotated[
         int, Field(..., description="Number of errors encountered during ingestion")

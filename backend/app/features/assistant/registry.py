@@ -5,7 +5,7 @@ from types import MappingProxyType
 from typing import Literal
 
 CitationSource = Literal[
-    "simulation_field",
+    "execution_field",
     "case_field",
     "machine_field",
     "artifact",
@@ -20,108 +20,108 @@ class CitationRegistryEntry:
 
 
 _CITATION_REGISTRY = {
-    "simulation.id": CitationRegistryEntry(
-        source_type="simulation_field",
-        label="Simulation ID",
+    "execution.id": CitationRegistryEntry(
+        source_type="execution_field",
+        label="Execution record ID",
     ),
-    "simulation.execution_id": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.execution_id": CitationRegistryEntry(
+        source_type="execution_field",
         label="Execution ID",
     ),
-    "simulation.description": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.description": CitationRegistryEntry(
+        source_type="execution_field",
         label="Description",
     ),
-    "simulation.compset": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.compset": CitationRegistryEntry(
+        source_type="execution_field",
         label="Compset",
     ),
-    "simulation.compset_alias": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.compset_alias": CitationRegistryEntry(
+        source_type="execution_field",
         label="Compset alias",
     ),
-    "simulation.grid_name": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.grid_name": CitationRegistryEntry(
+        source_type="execution_field",
         label="Grid name",
     ),
-    "simulation.grid_resolution": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.grid_resolution": CitationRegistryEntry(
+        source_type="execution_field",
         label="Grid resolution",
     ),
-    "simulation.simulation_type": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.simulation_type": CitationRegistryEntry(
+        source_type="execution_field",
         label="Simulation type",
     ),
-    "simulation.status": CitationRegistryEntry(
-        source_type="simulation_field",
-        label="Simulation status",
+    "execution.status": CitationRegistryEntry(
+        source_type="execution_field",
+        label="Execution status",
     ),
-    "simulation.campaign": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.campaign": CitationRegistryEntry(
+        source_type="execution_field",
         label="Campaign",
     ),
-    "simulation.experiment_type": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.experiment_type": CitationRegistryEntry(
+        source_type="execution_field",
         label="Experiment type",
     ),
-    "simulation.initialization_type": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.initialization_type": CitationRegistryEntry(
+        source_type="execution_field",
         label="Initialization type",
     ),
-    "simulation.simulation_start_date": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.simulation_start_date": CitationRegistryEntry(
+        source_type="execution_field",
         label="Simulation start date",
     ),
-    "simulation.simulation_end_date": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.simulation_end_date": CitationRegistryEntry(
+        source_type="execution_field",
         label="Simulation end date",
     ),
-    "simulation.run_start_date": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.run_start_date": CitationRegistryEntry(
+        source_type="execution_field",
         label="Run start date",
     ),
-    "simulation.run_end_date": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.run_end_date": CitationRegistryEntry(
+        source_type="execution_field",
         label="Run end date",
     ),
-    "simulation.compiler": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.compiler": CitationRegistryEntry(
+        source_type="execution_field",
         label="Compiler",
     ),
-    "simulation.key_features": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.key_features": CitationRegistryEntry(
+        source_type="execution_field",
         label="Key features",
     ),
-    "simulation.known_issues": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.known_issues": CitationRegistryEntry(
+        source_type="execution_field",
         label="Known issues",
     ),
-    "simulation.notes_markdown": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.notes_markdown": CitationRegistryEntry(
+        source_type="execution_field",
         label="Notes",
     ),
-    "simulation.git_repository_url": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.git_repository_url": CitationRegistryEntry(
+        source_type="execution_field",
         label="Git repository URL",
     ),
-    "simulation.git_branch": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.git_branch": CitationRegistryEntry(
+        source_type="execution_field",
         label="Git branch",
     ),
-    "simulation.git_tag": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.git_tag": CitationRegistryEntry(
+        source_type="execution_field",
         label="Git tag",
     ),
-    "simulation.git_commit_hash": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.git_commit_hash": CitationRegistryEntry(
+        source_type="execution_field",
         label="Git commit hash",
     ),
-    "simulation.case_hash": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.case_hash": CitationRegistryEntry(
+        source_type="execution_field",
         label="Case hash",
     ),
-    "simulation.extra": CitationRegistryEntry(
-        source_type="simulation_field",
+    "execution.extra": CitationRegistryEntry(
+        source_type="execution_field",
         label="Extra metadata",
     ),
     "case.name": CitationRegistryEntry(

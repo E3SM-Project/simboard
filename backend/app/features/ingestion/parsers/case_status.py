@@ -2,8 +2,8 @@ import re
 from pathlib import Path
 
 from app.core.logger import _setup_custom_logger
+from app.features.catalog.enums import ExecutionStatus
 from app.features.ingestion.parsers.utils import _open_text
-from app.features.simulation.enums import ExecutionStatus
 
 logger = _setup_custom_logger(__name__)
 

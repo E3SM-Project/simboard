@@ -12,7 +12,7 @@ export const ARTIFACT_KIND_MAP: Record<
 export type ArtifactKind = 'output' | 'archive' | 'run_script' | 'postprocessing_script';
 
 /**
- * Represents an artifact uploaded or linked to a simulation.
+ * Represents an artifact uploaded or linked to an execution.
  */
 export interface ArtifactIn {
   kind: ArtifactKind;

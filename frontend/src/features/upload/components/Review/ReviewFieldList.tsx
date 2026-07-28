@@ -1,8 +1,8 @@
 import type { RenderableField } from '@/features/upload/types/field';
-import { SimulationCreateForm } from '@/types/simulation';
+import { ExecutionCreateForm } from '@/types/catalog';
 
 interface ReviewFieldListProps {
-  form: SimulationCreateForm;
+  form: ExecutionCreateForm;
   fields: RenderableField[];
   className?: string;
 }
@@ -21,7 +21,7 @@ export const ReviewFieldList = ({
   return (
     <div className={className}>
       {fields.map((field) => {
-        const value = form[field.name as keyof SimulationCreateForm];
+        const value = form[field.name as keyof ExecutionCreateForm];
         const isEmpty = fieldIsEmpty(value);
 
         let bgColor = 'bg-gray-100';

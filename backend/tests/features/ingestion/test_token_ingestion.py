@@ -9,12 +9,12 @@ from fastapi import status
 
 from app.api.version import API_BASE
 from app.common.models.base import Base
+from app.features.catalog.enums import ExecutionStatus, SimulationType
+from app.features.catalog.models import Case, Execution
+from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.enums import ExecutionStatus, SimulationType
-from app.features.simulation.models import Case, Execution
-from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.auth.token import generate_token
 from app.features.user.models import ApiToken, User, UserRole
 from tests.conftest import engine
@@ -386,7 +386,7 @@ class TestIngestionWithAPIToken:
         db.add(machine)
         db.commit()
 
-        # Create a case for the test simulation
+        # Create a case for the test execution
         case = Case(
             name="test_case",
             machine_id=machine.id,
@@ -439,14 +439,12 @@ class TestIngestionWithAPIToken:
             mock_ingest.assert_called_once()
             assert mock_ingest.call_args.kwargs["hpc_username"] == "hpc_user_test"
 
-            simulation = (
+            execution = (
                 db.query(Execution)
                 .filter(Execution.execution_id == "1081156.251218-200923")
                 .first()
             )
-            assert simulation is not None
-            persisted_case = (
-                db.query(Case).filter(Case.id == simulation.case_id).first()
-            )
+            assert execution is not None
+            persisted_case = db.query(Case).filter(Case.id == execution.case_id).first()
             assert persisted_case is not None
             assert persisted_case.hpc_username == "hpc_user_test"

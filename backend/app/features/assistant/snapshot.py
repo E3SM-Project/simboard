@@ -9,8 +9,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
-from app.features.simulation.link_utils import merge_execution_and_case_links
-from app.features.simulation.models import Artifact, Execution, ExternalLink
+from app.features.catalog.link_utils import merge_execution_and_case_links
+from app.features.catalog.models import Artifact, Execution, ExternalLink
 
 SNAPSHOT_TRUNCATED_CAVEAT = (
     "The metadata snapshot was truncated to fit the assistant size budget. "

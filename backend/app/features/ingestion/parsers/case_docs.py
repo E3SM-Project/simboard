@@ -5,8 +5,8 @@ from pathlib import Path
 
 from dateutil.relativedelta import relativedelta
 
+from app.features.catalog.schemas import KNOWN_EXPERIMENT_TYPES
 from app.features.ingestion.parsers.utils import _open_text
-from app.features.simulation.schemas import KNOWN_EXPERIMENT_TYPES
 
 
 def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:

@@ -21,7 +21,7 @@ from app.features.assistant.snapshot import (
     SnapshotLink,
     SnapshotMachineFields,
 )
-from app.features.simulation.models import Execution
+from app.features.catalog.models import Execution
 
 DEFAULT_LIVAI_API_KEY = SecretStr("livai-key")
 
@@ -29,9 +29,9 @@ DEFAULT_LIVAI_API_KEY = SecretStr("livai-key")
 def _make_snapshot() -> ExecutionSnapshot:
     return ExecutionSnapshot(
         execution=SnapshotExecutionFields(
-            id="simulation-1",
+            id="execution-1",
             execution_id="assistant-livai-exec",
-            description="LivAI-backed simulation summary test.",
+            description="LivAI-backed execution summary test.",
             compset="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
@@ -52,12 +52,12 @@ def _make_snapshot() -> ExecutionSnapshot:
 
 def _make_llm_content(**overrides) -> ExecutionSummaryContent:
     payload = {
-        "answer": "Simulation assistant-livai-exec belongs to case assistant_livai_case.",
+        "answer": "Execution assistant-livai-exec belongs to case assistant_livai_case.",
         "citations": [
             SummaryCitationOut(
-                source_type="simulation_field",
-                path="simulation.execution_id",
-                label="Simulation ID",
+                source_type="execution_field",
+                path="execution.execution_id",
+                label="Execution ID",
             ),
             SummaryCitationOut(
                 source_type="case_field",
@@ -206,12 +206,12 @@ class TestResolveLLMConfig:
 class TestValidationHelpers:
     def test_normalize_llm_answer_strips_inline_citation_markers(self) -> None:
         answer = (
-            "This simulation completed [simulation.status]. It ran on chrysalis "
-            "[machine.name] and used WCYCL20TR [simulation.compset]."
+            "This execution completed [execution.status]. It ran on chrysalis "
+            "[machine.name] and used WCYCL20TR [execution.compset]."
         )
 
         assert orchestrator._normalize_llm_answer(answer) == (
-            "This simulation completed. It ran on chrysalis and used WCYCL20TR."
+            "This execution completed. It ran on chrysalis and used WCYCL20TR."
         )
 
     def test_standardize_citations_rejects_invalid_path(self) -> None:
@@ -219,7 +219,7 @@ class TestValidationHelpers:
             orchestrator._standardize_citations(
                 [
                     SummaryCitationOut(
-                        source_type="simulation_field",
+                        source_type="execution_field",
                         path="invalid.path",
                         label="Invalid",
                     )
@@ -231,7 +231,7 @@ class TestValidationHelpers:
         result = orchestrator._standardize_citations(
             [
                 SummaryCitationOut(
-                    source_type="simulation_field",
+                    source_type="execution_field",
                     path="status",
                     label="Status",
                 )
@@ -241,23 +241,23 @@ class TestValidationHelpers:
 
         assert result == [
             SummaryCitationOut(
-                source_type="simulation_field",
-                path="simulation.status",
-                label="Simulation status",
+                source_type="execution_field",
+                path="execution.status",
+                label="Execution status",
             )
         ]
 
     def test_canonicalize_citation_path_uses_unique_suffix_without_source_type(
         self,
     ) -> None:
-        assert orchestrator._canonicalize_citation_path("status") == "simulation.status"
+        assert orchestrator._canonicalize_citation_path("status") == "execution.status"
 
     def test_standardize_citations_rejects_ambiguous_suffix_path(self) -> None:
         with pytest.raises(ValueError, match="invalid_citation_path:name"):
             orchestrator._standardize_citations(
                 [
                     SummaryCitationOut(
-                        source_type="simulation_field",
+                        source_type="execution_field",
                         path="name",
                         label="Name",
                     )
@@ -350,7 +350,7 @@ class TestValidationHelpers:
         result = orchestrator._validate_llm_content(
             _make_llm_content(
                 answer=(
-                    "Simulation assistant-livai-exec belongs to case "
+                    "Execution assistant-livai-exec belongs to case "
                     "assistant_livai_case [case.name]."
                 )
             ),
@@ -358,7 +358,7 @@ class TestValidationHelpers:
         )
 
         assert result.answer == (
-            "Simulation assistant-livai-exec belongs to case assistant_livai_case."
+            "Execution assistant-livai-exec belongs to case assistant_livai_case."
         )
 
     def test_fill_missing_llm_followups_uses_deterministic_followups(self) -> None:
@@ -411,7 +411,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         result = await orchestrator.generate_execution_summary(cast(Execution, None))
@@ -431,7 +431,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         result = await orchestrator.generate_execution_summary(
@@ -455,17 +455,17 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
             return ExecutionSummaryContent(
-                answer="Simulation assistant-livai-exec belongs to case assistant_livai_case.",
+                answer="Execution assistant-livai-exec belongs to case assistant_livai_case.",
                 citations=[
                     SummaryCitationOut(
-                        source_type="simulation_field",
-                        path="simulation.execution_id",
-                        label="Simulation ID",
+                        source_type="execution_field",
+                        path="execution.execution_id",
+                        label="Execution ID",
                     ),
                     SummaryCitationOut(
                         source_type="case_field",
@@ -503,7 +503,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -534,7 +534,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         result = await orchestrator.generate_execution_summary(cast(Execution, None))
@@ -556,7 +556,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         result = await orchestrator.generate_execution_summary(cast(Execution, None))
@@ -577,7 +577,7 @@ class TestGenerateExecutionSummary:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
 
-        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
+        def fail_snapshot_build(execution: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
@@ -603,7 +603,7 @@ class TestGenerateExecutionSummary:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch, enabled=False)
 
-        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
+        def fail_snapshot_build(execution: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
@@ -628,7 +628,7 @@ class TestGenerateExecutionSummary:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
 
-        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
+        def fail_snapshot_build(execution: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
@@ -658,7 +658,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -688,7 +688,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -721,14 +721,14 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
             return _make_llm_content(
                 citations=[
                     SummaryCitationOut(
-                        source_type="simulation_field",
+                        source_type="execution_field",
                         path="status",
                         label="Status",
                     )
@@ -749,9 +749,9 @@ class TestGenerateExecutionSummary:
         assert result.summary.generation_model == "llama3.1:8b"
         assert result.summary.citations == [
             SummaryCitationOut(
-                source_type="simulation_field",
-                path="simulation.status",
-                label="Simulation status",
+                source_type="execution_field",
+                path="execution.status",
+                label="Execution status",
             )
         ]
         assert result.attempted_provider == "ollama"
@@ -766,7 +766,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -811,7 +811,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -840,7 +840,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
@@ -868,7 +868,7 @@ class TestGenerateExecutionSummary:
         monkeypatch.setattr(
             orchestrator,
             "build_execution_snapshot",
-            lambda simulation: snapshot,
+            lambda execution: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):

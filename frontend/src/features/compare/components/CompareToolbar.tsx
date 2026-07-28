@@ -11,7 +11,7 @@ interface CompareToolbarProps {
   diffsOnlyEnabled: boolean;
   onDiffOnlyToggle: (checked: boolean) => void;
   onDiffToggle: (checked: boolean) => void;
-  simulationCount: number;
+  executionCount: number;
   onBackToBrowse?: () => void;
   onSummaryToggle: () => void;
   summaryExpanded: boolean;
@@ -30,7 +30,7 @@ const CompareToolbar = ({
   onDiffOnlyToggle,
   onDiffToggle,
   onSummaryToggle,
-  simulationCount,
+  executionCount,
   summaryExpanded,
   summaryHighlightCount,
   toolbarDescription,
@@ -41,7 +41,7 @@ const CompareToolbar = ({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <h2 className="mt-1 text-xl font-semibold text-slate-950">
-            Comparing {simulationCount} execution{simulationCount === 1 ? '' : 's'}
+            Comparing {executionCount} execution{executionCount === 1 ? '' : 's'}
           </h2>
           {toolbarDescription ? (
             <p className="mt-1 max-w-2xl text-sm text-slate-600">{toolbarDescription}</p>

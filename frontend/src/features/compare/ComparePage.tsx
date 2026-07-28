@@ -11,33 +11,32 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { getSimulationById } from '@/api/catalog';
-import { normalizeSelectedSimulationIds } from '@/components/shared/normalizeSelectedSimulationIds';
+import { getExecutionById } from '@/api/catalog';
+import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { AIFloatingButton } from '@/features/compare/components/AIFloatingButton';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
-import type { SimulationOut } from '@/types/index';
+import type { ExecutionOut } from '@/types/index';
 import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
 
 interface ComparePageProps {
-  selectedCaseSimulationIdsByCase: Record<string, string[]>;
-  selectedSimulationIds: string[];
-  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedCaseExecutionIdsByCase: Record<string, string[]>;
+  selectedExecutionIds: string[];
+  setSelectedExecutionIds: (ids: string[]) => void;
 }
 
 interface CompareLocationState {
-  selectedSimulationIds?: string[];
-  selectedSimulations?: SimulationOut[];
+  selectedExecutionIds?: string[];
+  selectedExecutions?: ExecutionOut[];
 }
 
 interface CompareWorkspaceProps {
-  selectedSimulationIds: string[];
-  setSelectedSimulationIds: (ids: string[]) => void;
-  selectedSimulations: SimulationOut[];
+  selectedExecutionIds: string[];
+  setSelectedExecutionIds: (ids: string[]) => void;
+  selectedExecutions: ExecutionOut[];
   backLabel?: string;
   contextNotice?: ReactNode;
   description?: string;
@@ -91,9 +90,9 @@ export const CompareWorkspace = ({
   labelColumnWidth,
   onBack,
   showHeader = true,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
-  selectedSimulations,
+  selectedExecutionIds,
+  setSelectedExecutionIds,
+  selectedExecutions,
   toolbarDescription,
   title = 'Cross-Case Compare',
 }: CompareWorkspaceProps) => {
@@ -105,13 +104,13 @@ export const CompareWorkspace = ({
 
   // -------------------- Global State --------------------
   // -------------------- Local State --------------------
-  const [order, setOrder] = useState(selectedSimulationIds.map((_, i) => i));
+  const [order, setOrder] = useState(selectedExecutionIds.map((_, i) => i));
 
-  const simHeaders = selectedSimulationIds.map((id) => {
-    const sim = selectedSimulations.find((s) => s.id === id);
-    return sim?.executionId || id;
+  const executionHeaders = selectedExecutionIds.map((id) => {
+    const execution = selectedExecutions.find((item) => item.id === id);
+    return execution?.executionId || id;
   });
-  const [headers, setHeaders] = useState(simHeaders);
+  const [headers, setHeaders] = useState(executionHeaders);
 
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [hidden, setHidden] = useState<string[]>(() => {
@@ -124,36 +123,36 @@ export const CompareWorkspace = ({
     }
   });
   const dragCol = useRef<number | null>(null);
-  const previousSelectedSimulationIds = useRef(selectedSimulationIds);
+  const previousSelectedExecutionIds = useRef(selectedExecutionIds);
   const [diffsEnabled, setDiffsEnabled] = useState(false);
   const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const previousExpandedSections = useRef<Record<string, boolean> | null>(null);
 
   // -------------------- Derived Data --------------------
-  const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedSimulationIds[colIdx]));
+  const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedExecutionIds[colIdx]));
   const canCompareDifferences = visibleOrder.length > 1;
 
-  const getSimProp = <K extends keyof SimulationOut>(
+  const getExecutionProp = <K extends keyof ExecutionOut>(
     id: string,
     prop: K,
-    fallback: SimulationOut[K] | '',
-  ): SimulationOut[K] => {
-    const sim = selectedSimulations.find((s) => s.id === id);
-    return (sim?.[prop] ?? fallback) as SimulationOut[K];
+    fallback: ExecutionOut[K] | '',
+  ): ExecutionOut[K] => {
+    const execution = selectedExecutions.find((s) => s.id === id);
+    return (execution?.[prop] ?? fallback) as ExecutionOut[K];
   };
 
-  const makeMetricRow = <T extends keyof SimulationOut>(
+  const makeMetricRow = <T extends keyof ExecutionOut>(
     label: string,
     prop: T,
-    fallback: SimulationOut[T] | '' = '',
+    fallback: ExecutionOut[T] | '' = '',
     renderMode: CompareMetricRow['renderMode'] = 'default',
     diffable = true,
   ): CompareMetricRow => {
-    const values = selectedSimulationIds.map((id) => {
-      const sim = selectedSimulations.find((s) => s.id === id);
-      if (!sim) return fallback;
-      return (sim[prop] ?? fallback) as SimulationOut[T];
+    const values = selectedExecutionIds.map((id) => {
+      const execution = selectedExecutions.find((s) => s.id === id);
+      if (!execution) return fallback;
+      return (execution[prop] ?? fallback) as ExecutionOut[T];
     });
 
     return { label, values, renderMode, diffable };
@@ -165,11 +164,11 @@ export const CompareWorkspace = ({
     fallback: unknown[] = [],
     diffable = true,
   ): CompareMetricRow => {
-    const values = selectedSimulationIds.map((id) => {
-      const sim = selectedSimulations.find((s) => s.id === id);
-      if (!sim) return fallback;
+    const values = selectedExecutionIds.map((id) => {
+      const execution = selectedExecutions.find((s) => s.id === id);
+      if (!execution) return fallback;
 
-      return getArtifactsByKind(sim.artifacts, sim.groupedArtifacts, kind);
+      return getArtifactsByKind(execution.artifacts, execution.groupedArtifacts, kind);
     });
 
     return { label, values, diffable };
@@ -207,27 +206,28 @@ export const CompareWorkspace = ({
     return `${startLabel} -> ${endLabel}`;
   };
 
-  const getSimulationById = (id: string) => selectedSimulations.find((sim) => sim.id === id);
+  const getExecutionById = (id: string) =>
+    selectedExecutions.find((execution) => execution.id === id);
 
-  const buildVersionSummary = (simulation: SimulationOut | undefined) => {
-    if (!simulation) return '—';
+  const buildVersionSummary = (execution: ExecutionOut | undefined) => {
+    if (!execution) return '—';
 
     const parts = [
-      simulation.gitBranch || null,
-      simulation.gitTag || null,
-      simulation.gitCommitHash ? simulation.gitCommitHash.slice(0, 7) : null,
+      execution.gitBranch || null,
+      execution.gitTag || null,
+      execution.gitCommitHash ? execution.gitCommitHash.slice(0, 7) : null,
     ].filter(Boolean);
 
     return parts.length > 0 ? parts.join(' • ') : '—';
   };
 
-  const buildConfigurationSummary = (simulation: SimulationOut | undefined) => {
-    if (!simulation) return '—';
+  const buildConfigurationSummary = (execution: ExecutionOut | undefined) => {
+    if (!execution) return '—';
 
     const configBits = [
-      simulation.compset || null,
-      simulation.gridName || null,
-      simulation.gridResolution || null,
+      execution.compset || null,
+      execution.gridName || null,
+      execution.gridResolution || null,
     ]
       .filter(Boolean)
       .join(' • ');
@@ -236,16 +236,16 @@ export const CompareWorkspace = ({
   };
 
   const visibleColumns = visibleOrder.map((colIdx) => {
-    const simulationId = selectedSimulationIds[colIdx];
-    const simulation = getSimulationById(simulationId);
+    const executionId = selectedExecutionIds[colIdx];
+    const execution = getExecutionById(executionId);
 
     return {
-      caseHref: simulation?.caseId ? `/cases/${simulation.caseId}` : undefined,
-      caseName: simulation?.caseName || '—',
+      caseHref: execution?.caseId ? `/cases/${execution.caseId}` : undefined,
+      caseName: execution?.caseName || '—',
       colIdx,
       executionHeader: headers[colIdx],
-      simulationHref: `/executions/${simulationId}`,
-      simulationId,
+      executionHref: `/executions/${executionId}`,
+      executionId,
     };
   });
 
@@ -266,9 +266,9 @@ export const CompareWorkspace = ({
       makeMetricRow('Experiment Type ID', 'experimentType', ''),
       {
         label: 'Machine Name',
-        values: selectedSimulationIds.map((id) => {
-          const sim = selectedSimulations.find((s) => s.id === id);
-          return sim?.machine?.name ?? '';
+        values: selectedExecutionIds.map((id) => {
+          const execution = selectedExecutions.find((s) => s.id === id);
+          return execution?.machine?.name ?? '';
         }),
       },
       makeMetricRow('Branch', 'gitBranch', ''),
@@ -276,23 +276,23 @@ export const CompareWorkspace = ({
     timeline: [
       {
         label: 'Model Start',
-        values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'simulationStartDate', '');
+        values: selectedExecutionIds.map((id) => {
+          const date = getExecutionProp(id, 'simulationStartDate', '');
           return formatModelDate(date as string);
         }),
       },
       {
         label: 'Model End',
-        values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'simulationEndDate', '');
+        values: selectedExecutionIds.map((id) => {
+          const date = getExecutionProp(id, 'simulationEndDate', '');
           return formatModelDate(date as string);
         }),
       },
       {
         label: 'Duration',
-        values: selectedSimulationIds.map((id) => {
-          const start = getSimProp(id, 'simulationStartDate', '');
-          const end = getSimProp(id, 'simulationEndDate', '');
+        values: selectedExecutionIds.map((id) => {
+          const start = getExecutionProp(id, 'simulationStartDate', '');
+          const end = getExecutionProp(id, 'simulationEndDate', '');
           if (start && end) {
             try {
               return getModelDateDuration(start as string, end as string);
@@ -305,15 +305,15 @@ export const CompareWorkspace = ({
       },
       {
         label: 'Calendar Start',
-        values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'runStartDate', '');
+        values: selectedExecutionIds.map((id) => {
+          const date = getExecutionProp(id, 'runStartDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
       {
         label: 'Calendar End Date',
-        values: selectedSimulationIds.map((id) => {
-          const date = getSimProp(id, 'runEndDate', '');
+        values: selectedExecutionIds.map((id) => {
+          const date = getExecutionProp(id, 'runEndDate', '');
           return date ? formatDate(date as string) : '—';
         }),
       },
@@ -363,30 +363,30 @@ export const CompareWorkspace = ({
     {
       key: 'status',
       label: 'Status',
-      values: selectedSimulationIds.map((id) => getSimulationById(id)?.status || '—'),
+      values: selectedExecutionIds.map((id) => getExecutionById(id)?.status || '—'),
     },
     {
       key: 'machine',
       label: 'Machine',
-      values: selectedSimulationIds.map((id) => getSimulationById(id)?.machine?.name || '—'),
+      values: selectedExecutionIds.map((id) => getExecutionById(id)?.machine?.name || '—'),
     },
     {
       key: 'provenance',
       label: 'Branch / Tag / Commit',
-      values: selectedSimulationIds.map((id) => buildVersionSummary(getSimulationById(id))),
+      values: selectedExecutionIds.map((id) => buildVersionSummary(getExecutionById(id))),
     },
     {
       key: 'configuration',
       label: 'Compset / Grid',
-      values: selectedSimulationIds.map((id) => buildConfigurationSummary(getSimulationById(id))),
+      values: selectedExecutionIds.map((id) => buildConfigurationSummary(getExecutionById(id))),
     },
     {
       key: 'dateRange',
       label: 'Model Date Range',
-      values: selectedSimulationIds.map((id) => {
-        const simulation = getSimulationById(id);
+      values: selectedExecutionIds.map((id) => {
+        const execution = getExecutionById(id);
 
-        return formatDateRange(simulation?.simulationStartDate, simulation?.simulationEndDate);
+        return formatDateRange(execution?.simulationStartDate, execution?.simulationEndDate);
       }),
     },
   ]
@@ -401,27 +401,27 @@ export const CompareWorkspace = ({
   // -------------------- Effects --------------------
   useEffect(() => {
     setHidden((prev) => {
-      const nextHidden = prev.filter((id) => selectedSimulationIds.includes(id));
+      const nextHidden = prev.filter((id) => selectedExecutionIds.includes(id));
       return arraysEqual(prev, nextHidden) ? prev : nextHidden;
     });
-  }, [selectedSimulationIds]);
+  }, [selectedExecutionIds]);
 
   useEffect(() => {
     localStorage.setItem(hiddenStorageKey, JSON.stringify(hidden));
   }, [hidden, hiddenStorageKey]);
 
   useEffect(() => {
-    const nextHeaders = selectedSimulationIds.map(
-      (id) => selectedSimulations.find((s) => s.id === id)?.executionId || id,
+    const nextHeaders = selectedExecutionIds.map(
+      (id) => selectedExecutions.find((s) => s.id === id)?.executionId || id,
     );
 
     setHeaders((prev) => (arraysEqual(prev, nextHeaders) ? prev : nextHeaders));
 
-    if (!arraysEqual(previousSelectedSimulationIds.current, selectedSimulationIds)) {
-      setOrder(selectedSimulationIds.map((_, i) => i));
-      previousSelectedSimulationIds.current = selectedSimulationIds;
+    if (!arraysEqual(previousSelectedExecutionIds.current, selectedExecutionIds)) {
+      setOrder(selectedExecutionIds.map((_, i) => i));
+      previousSelectedExecutionIds.current = selectedExecutionIds;
     }
-  }, [selectedSimulationIds, selectedSimulations]);
+  }, [selectedExecutionIds, selectedExecutions]);
 
   useEffect(() => {
     if (canCompareDifferences || !diffsOnlyEnabled) {
@@ -448,15 +448,15 @@ export const CompareWorkspace = ({
   };
 
   const handleHide = (colIdx: number) => {
-    const simId = selectedSimulationIds[colIdx];
-    if (!hidden.includes(simId)) {
-      setHidden((prev) => [...prev, simId]);
+    const executionId = selectedExecutionIds[colIdx];
+    if (!hidden.includes(executionId)) {
+      setHidden((prev) => [...prev, executionId]);
     }
   };
 
   const handleRemove = (colIdx: number) => {
-    const simId = selectedSimulationIds[colIdx];
-    setSelectedSimulationIds(selectedSimulationIds.filter((id) => id !== simId));
+    const executionId = selectedExecutionIds[colIdx];
+    setSelectedExecutionIds(selectedExecutionIds.filter((id) => id !== executionId));
   };
 
   const handleDragStart = (colIdx: number) => {
@@ -545,7 +545,7 @@ export const CompareWorkspace = ({
     colIdx: number,
   ) => {
     if (sectionKey === 'configuration' && row.label === 'Case Name') {
-      const caseId = getSimProp(selectedSimulationIds[colIdx], 'caseId', '');
+      const caseId = getExecutionProp(selectedExecutionIds[colIdx], 'caseId', '');
       const caseHref = caseId ? `/cases/${caseId}` : undefined;
       const textValue = value === null || value === undefined || value === '' ? '—' : String(value);
 
@@ -589,7 +589,7 @@ export const CompareWorkspace = ({
   const tableMinWidth = LABEL_COLUMN_WIDTH + visibleValueWidth;
 
   // -------------------- Render --------------------
-  if (selectedSimulationIds.length === 0) {
+  if (selectedExecutionIds.length === 0) {
     return (
       <div className="max-w-screen-2xl mx-auto p-8 text-center text-gray-600">
         <p className="text-lg mb-4">{emptyStateMessage}</p>
@@ -624,7 +624,7 @@ export const CompareWorkspace = ({
           onDiffOnlyToggle={handleDiffOnlyToggle}
           onDiffToggle={setDiffsEnabled}
           onSummaryToggle={() => setSummaryExpanded((prev) => !prev)}
-          simulationCount={selectedSimulationIds.length}
+          executionCount={selectedExecutionIds.length}
           onBackToBrowse={onBack}
           summaryExpanded={summaryExpanded}
           summaryHighlightCount={summaryCards.length}
@@ -678,7 +678,7 @@ export const CompareWorkspace = ({
                       </div>
                       {visibleColumns.map((column) => (
                         <div
-                          key={`summary-header-${column.simulationId}`}
+                          key={`summary-header-${column.executionId}`}
                           className="shrink-0 border-l px-4 py-3"
                           style={{ width: 220 }}
                         >
@@ -709,7 +709,7 @@ export const CompareWorkspace = ({
 
                         {visibleColumns.map((column) => (
                           <div
-                            key={`${card.key}-${column.simulationId}`}
+                            key={`${card.key}-${column.executionId}`}
                             className="shrink-0 border-l px-4 py-3"
                             style={{ width: 220 }}
                           >
@@ -730,7 +730,7 @@ export const CompareWorkspace = ({
           </section>
         )}
 
-        {/* Show Hidden Simulations  */}
+        {/* Show Hidden Executions  */}
         <section
           aria-label="Show hidden executions"
           className={`mb-2 mt-4 flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2${
@@ -742,7 +742,7 @@ export const CompareWorkspace = ({
             <>
               <span className="text-sm font-medium text-slate-600">Hidden executions:</span>
               {hidden.map((hiddenId) => {
-                const idx = selectedSimulationIds.indexOf(hiddenId);
+                const idx = selectedExecutionIds.indexOf(hiddenId);
                 const headerName = headers[idx] ?? hiddenId;
 
                 return (
@@ -794,7 +794,7 @@ export const CompareWorkspace = ({
 
                 return (
                   <div
-                    key={column.simulationId}
+                    key={column.executionId}
                     className={`group relative shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 transition ${
                       isDropTarget ? 'ring-2 ring-blue-400 ring-inset' : ''
                     }`}
@@ -815,11 +815,11 @@ export const CompareWorkspace = ({
                       />
                       <div className="min-w-0 flex-1">
                         <a
-                          href={column.simulationHref}
+                          href={column.executionHref}
                           className="block max-w-full font-mono text-sm font-semibold text-blue-700 transition hover:underline"
                           title={`Go to details for ${column.executionHeader}`}
                           onClick={(event) => {
-                            handleInternalLinkClick(event, column.simulationHref);
+                            handleInternalLinkClick(event, column.executionHref);
                           }}
                         >
                           <TableCellText
@@ -1003,7 +1003,7 @@ export const CompareWorkspace = ({
 
                                 return (
                                   <div
-                                    key={column.simulationId}
+                                    key={column.executionId}
                                     className="shrink-0 border-r border-slate-100 px-4 py-3 text-sm align-top last:border-r-0"
                                     style={{ width: VALUE_COLUMN_WIDTH }}
                                   >
@@ -1020,13 +1020,6 @@ export const CompareWorkspace = ({
                 </Fragment>
               );
             })}
-
-            {/* Comparison AI Floating Widget */}
-            <AIFloatingButton
-              selectedSimulations={selectedSimulations.filter((sim) =>
-                selectedSimulationIds.includes(sim.id),
-              )}
-            />
           </div>
         </div>
       </div>
@@ -1035,55 +1028,55 @@ export const CompareWorkspace = ({
 };
 
 export const ComparePage = ({
-  selectedCaseSimulationIdsByCase,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
+  selectedCaseExecutionIdsByCase,
+  selectedExecutionIds,
+  setSelectedExecutionIds,
 }: ComparePageProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as CompareLocationState | null;
-  const routedSelectedSimulationIds = normalizeSelectedSimulationIds(
-    locationState?.selectedSimulationIds,
+  const routedSelectedExecutionIds = normalizeSelectedExecutionIds(
+    locationState?.selectedExecutionIds,
   );
-  const routedSelectedSimulations = Array.isArray(locationState?.selectedSimulations)
-    ? locationState.selectedSimulations
+  const routedSelectedExecutions = Array.isArray(locationState?.selectedExecutions)
+    ? locationState.selectedExecutions
     : [];
   const shouldUseRoutedSelection =
-    selectedSimulationIds.length < 2 && routedSelectedSimulationIds.length >= 2;
-  const caseSelectionFallbackCandidates = Object.values(selectedCaseSimulationIdsByCase)
-    .map((ids) => normalizeSelectedSimulationIds(ids))
+    selectedExecutionIds.length < 2 && routedSelectedExecutionIds.length >= 2;
+  const caseSelectionFallbackCandidates = Object.values(selectedCaseExecutionIdsByCase)
+    .map((ids) => normalizeSelectedExecutionIds(ids))
     .filter((ids) => ids.length >= 2);
   const caseSelectionFallbackIds =
     caseSelectionFallbackCandidates.length === 1 ? caseSelectionFallbackCandidates[0] : [];
   const shouldUseCaseSelectionFallback =
     !shouldUseRoutedSelection &&
-    selectedSimulationIds.length < 2 &&
+    selectedExecutionIds.length < 2 &&
     caseSelectionFallbackIds.length >= 2;
-  const effectiveSelectedSimulationIds = shouldUseRoutedSelection
-    ? routedSelectedSimulationIds
+  const effectiveSelectedExecutionIds = shouldUseRoutedSelection
+    ? routedSelectedExecutionIds
     : shouldUseCaseSelectionFallback
       ? caseSelectionFallbackIds
-      : selectedSimulationIds;
+      : selectedExecutionIds;
   const detailQueries = useQueries({
-    queries: effectiveSelectedSimulationIds.map((simulationId) => ({
-      queryKey: catalogQueryKeys.executions.detail(simulationId),
-      queryFn: () => getSimulationById(simulationId),
-      initialData: routedSelectedSimulations.find((simulation) => simulation.id === simulationId),
+    queries: effectiveSelectedExecutionIds.map((executionId) => ({
+      queryKey: catalogQueryKeys.executions.detail(executionId),
+      queryFn: () => getExecutionById(executionId),
+      initialData: routedSelectedExecutions.find((execution) => execution.id === executionId),
     })),
   });
-  const effectiveSelectedSimulations = detailQueries
+  const effectiveSelectedExecutions = detailQueries
     .map((query) => query.data)
-    .filter((simulation): simulation is SimulationOut => simulation != null);
+    .filter((execution): execution is ExecutionOut => execution != null);
 
   useEffect(() => {
     if (!shouldUseRoutedSelection && !shouldUseCaseSelectionFallback) {
       return;
     }
 
-    setSelectedSimulationIds(effectiveSelectedSimulationIds);
+    setSelectedExecutionIds(effectiveSelectedExecutionIds);
   }, [
-    effectiveSelectedSimulationIds,
-    setSelectedSimulationIds,
+    effectiveSelectedExecutionIds,
+    setSelectedExecutionIds,
     shouldUseCaseSelectionFallback,
     shouldUseRoutedSelection,
   ]);
@@ -1091,9 +1084,9 @@ export const ComparePage = ({
   return (
     <CompareWorkspace
       key="global-compare"
-      selectedSimulationIds={effectiveSelectedSimulationIds}
-      setSelectedSimulationIds={setSelectedSimulationIds}
-      selectedSimulations={effectiveSelectedSimulations}
+      selectedExecutionIds={effectiveSelectedExecutionIds}
+      setSelectedExecutionIds={setSelectedExecutionIds}
+      selectedExecutions={effectiveSelectedExecutions}
       onBack={() => navigate('/browse')}
     />
   );

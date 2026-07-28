@@ -15,7 +15,7 @@ The backend is a FastAPI service that ingests simulation archives, stores normal
 ```text
 backend/app/main.py                 FastAPI app and router registration
 backend/app/features/ingestion/     ingestion endpoints and parser integration
-backend/app/features/simulation/    cases, executions, schemas, delta logic
+backend/app/features/catalog/       cases, executions, schemas, delta logic
 backend/app/features/machine/       machine models and API
 backend/app/features/user/          auth, tokens, user models
 backend/app/core/                   config, DB setup, exceptions, logging

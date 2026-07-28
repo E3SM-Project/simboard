@@ -20,10 +20,10 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
-import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
-import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
-import { useSimulationFilterOptions } from '@/lib/catalog/hooks/useSimulationFilterOptions';
-import { useSimulations } from '@/lib/catalog/hooks/useSimulations';
+import { ExecutionResultCards } from '@/features/browse/components/ExecutionResults/ExecutionResultsCards';
+import { ExecutionResultsTable } from '@/features/browse/components/ExecutionResults/ExecutionResultsTable';
+import { useExecutionFilterOptions } from '@/lib/catalog/hooks/useExecutionFilterOptions';
+import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
@@ -79,8 +79,8 @@ export interface FilterState {
 }
 
 interface BrowsePageProps {
-  selectedSimulationIds: string[];
-  setSelectedSimulationIds: (ids: string[]) => void;
+  selectedExecutionIds: string[];
+  setSelectedExecutionIds: (ids: string[]) => void;
 }
 
 // -------------------- Pure Helpers --------------------
@@ -152,8 +152,8 @@ const serializeArrayFilter = (values: string[]): string =>
   values.map((value) => encodeURIComponent(value)).join(',');
 
 export const BrowsePage = ({
-  selectedSimulationIds,
-  setSelectedSimulationIds,
+  selectedExecutionIds,
+  setSelectedExecutionIds,
 }: BrowsePageProps) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
@@ -170,9 +170,9 @@ export const BrowsePage = ({
     useState<VisibilityState>(DEFAULT_COLUMN_VISIBILITY);
 
   // -------------------- Derived Data --------------------
-  const { data: filterOptions } = useSimulationFilterOptions();
+  const { data: filterOptions } = useExecutionFilterOptions();
   const primarySort = sorting[0];
-  const simulationParams = useMemo(
+  const executionParams = useMemo(
     () => ({
       page,
       pageSize,
@@ -188,13 +188,13 @@ export const BrowsePage = ({
     [appliedFilters, page, pageSize, primarySort],
   );
   const {
-    data: simulations,
-    page: simulationPage,
+    data: executions,
+    page: executionPage,
     loading,
     error,
     refetch,
-  } = useSimulations(simulationParams);
-  const totalItems = simulationPage?.total ?? 0;
+  } = useExecutions(executionParams);
+  const totalItems = executionPage?.total ?? 0;
   const availableFilters = useMemo<FilterState>(
     () => ({
       caseName: filterOptions?.caseNames ?? [],
@@ -357,7 +357,7 @@ export const BrowsePage = ({
     );
   }
 
-  if (error && !simulationPage) {
+  if (error && !executionPage) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-6">
         <div className="space-y-3 text-center">
@@ -618,23 +618,23 @@ export const BrowsePage = ({
               )}
               <div className="min-w-0">
                 {viewMode === 'table' ? (
-                  <SimulationResultsTable
-                    simulations={simulations}
-                    filteredData={simulations}
+                  <ExecutionResultsTable
+                    executions={executions}
+                    filteredData={executions}
                     sorting={sorting}
                     setSorting={setSorting}
-                    selectedSimulationIds={selectedSimulationIds}
-                    setSelectedSimulationIds={setSelectedSimulationIds}
+                    selectedExecutionIds={selectedExecutionIds}
+                    setSelectedExecutionIds={setSelectedExecutionIds}
                     handleCompareButtonClick={handleCompareButtonClick}
                     columnVisibility={columnVisibility}
                     setColumnVisibility={setColumnVisibility}
                   />
                 ) : (
-                  <SimulationResultCards
-                    simulations={simulations}
-                    filteredData={simulations}
-                    selectedSimulationIds={selectedSimulationIds}
-                    setSelectedSimulationIds={setSelectedSimulationIds}
+                  <ExecutionResultCards
+                    executions={executions}
+                    filteredData={executions}
+                    selectedExecutionIds={selectedExecutionIds}
+                    setSelectedExecutionIds={setSelectedExecutionIds}
                     handleCompareButtonClick={handleCompareButtonClick}
                   />
                 )}

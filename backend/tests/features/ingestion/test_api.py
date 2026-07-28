@@ -19,6 +19,9 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.features.catalog.enums import ArtifactKind
+from app.features.catalog.models import Case, Execution
+from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.api import (
     _build_hpc_upload_payload,
     _build_ingestion_state_response,
@@ -51,9 +54,6 @@ from app.features.ingestion.schemas import (
     IngestionStateResponse,
 )
 from app.features.machine.models import Machine
-from app.features.simulation.enums import ArtifactKind
-from app.features.simulation.models import Case, Execution
-from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -791,7 +791,7 @@ class TestGetIngestionStateEndpoint:
             "200.1-1"
         ]
 
-    def test_endpoint_falls_back_to_simulation_ids_for_legacy_ingestions_without_persisted_state(
+    def test_endpoint_falls_back_to_execution_ids_for_legacy_ingestions_without_persisted_state(
         self, client, db: Session, normal_user_sync
     ) -> None:
         machine = self._create_machine(db, "perlmutter")
@@ -838,7 +838,7 @@ class TestGetIngestionStateEndpoint:
             "processed_execution_ids"
         ] == ["legacy-100.1-1"]
 
-    def test_endpoint_falls_back_to_simulation_ids_for_legacy_hpc_upload_ingestions_without_persisted_state(
+    def test_endpoint_falls_back_to_execution_ids_for_legacy_hpc_upload_ingestions_without_persisted_state(
         self, client, db: Session, normal_user_sync
     ) -> None:
         machine = self._create_machine(db, "perlmutter")
@@ -1095,7 +1095,7 @@ class TestIngestFromPathEndpoint:
 
         case = _create_case(db, "test_case", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1117,7 +1117,7 @@ class TestIngestFromPathEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1139,12 +1139,12 @@ class TestIngestFromPathEndpoint:
 
         with patch(
             "app.features.ingestion.api.ingest_archive",
-            side_effect=ValueError("Duplicate simulation"),
+            side_effect=ValueError("Duplicate execution"),
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 409
-        assert res.json()["detail"] == "Duplicate simulation"
+        assert res.json()["detail"] == "Duplicate execution"
 
     def test_endpoint_includes_errors_in_response(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
@@ -1156,7 +1156,7 @@ class TestIngestFromPathEndpoint:
         case1 = _create_case(db, "test_case_errors", machine=machine)
         case2 = _create_case(db, "case2_errors", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case1.id),
@@ -1195,7 +1195,7 @@ class TestIngestFromPathEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=2,
                 duplicate_count=0,
                 errors=mock_errors,
@@ -1211,16 +1211,16 @@ class TestIngestFromPathEndpoint:
         assert data["duplicate_count"] == 0
         assert data["errors"] == mock_errors
 
-        assert len(data["simulations"]) == 2
-        assert {simulation["execution_id"] for simulation in data["simulations"]} == {
+        assert len(data["executions"]) == 2
+        assert {execution["execution_id"] for execution in data["executions"]} == {
             "exec-errors-1",
             "exec-errors-2",
         }
-        assert {simulation["case_name"] for simulation in data["simulations"]} == {
+        assert {execution["case_name"] for execution in data["executions"]} == {
             "test_case_errors",
             "case2_errors",
         }
-        assert data["executions"] == data["simulations"]
+        assert data["executions"] == data["executions"]
 
     def test_endpoint_creates_audit_record(self, client, db: Session, tmp_path):
         """Test that ingestion creates an audit record in the database."""
@@ -1235,7 +1235,7 @@ class TestIngestFromPathEndpoint:
 
         case = _create_case(db, "test_case_audit", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1257,7 +1257,7 @@ class TestIngestFromPathEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1378,7 +1378,7 @@ class TestIngestFromPathEndpoint:
 
         case = _create_case(db, f"test_case_alias_{machine_alias}", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1400,7 +1400,7 @@ class TestIngestFromPathEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1432,7 +1432,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_zip", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1454,7 +1454,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1470,9 +1470,9 @@ class TestIngestFromUploadEndpoint:
         data = res.json()
         assert data["created_count"] == 1
         assert data["duplicate_count"] == 0
-        assert len(data["simulations"]) == 1
-        assert data["simulations"][0]["execution_id"] == "exec-zip-1"
-        assert data["simulations"][0]["case_name"] == "test_case_zip"
+        assert len(data["executions"]) == 1
+        assert data["executions"][0]["execution_id"] == "exec-zip-1"
+        assert data["executions"][0]["case_name"] == "test_case_zip"
 
     def test_upload_valid_tar_gz_file(self, client, db: Session):
         """Test uploading a valid .tar.gz archive."""
@@ -1484,7 +1484,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_targz", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1506,7 +1506,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1519,7 +1519,7 @@ class TestIngestFromUploadEndpoint:
             )
 
         assert res.status_code == 201
-        assert res.json()["simulations"][0]["execution_id"] == "exec-targz-1"
+        assert res.json()["executions"][0]["execution_id"] == "exec-targz-1"
 
     def test_upload_invalid_file_extension(self, client, db: Session):
         """Test that invalid file extensions are rejected."""
@@ -1561,7 +1561,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_sha256", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1583,7 +1583,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -1620,7 +1620,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_partial", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -1643,7 +1643,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=mock_errors,
@@ -1779,11 +1779,11 @@ class TestIngestFromUploadEndpoint:
             )
 
         assert res.status_code == 201
-        simulation = (
+        execution = (
             db.query(Execution).filter(Execution.execution_id == execution_id).first()
         )
-        assert simulation is not None
-        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        assert execution is not None
+        by_kind = {artifact.kind: artifact.uri for artifact in execution.artifacts}
         assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/run"
         assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/archive"
         assert (
@@ -1860,11 +1860,11 @@ class TestIngestFromUploadEndpoint:
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 201
-        simulation = (
+        execution = (
             db.query(Execution).filter(Execution.execution_id == execution_id).first()
         )
-        assert simulation is not None
-        by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
+        assert execution is not None
+        by_kind = {artifact.kind: artifact.uri for artifact in execution.artifacts}
         assert by_kind[ArtifactKind.OUTPUT] == "/pscratch/sd/a/ac.golaz/run"
         assert by_kind[ArtifactKind.ARCHIVE] == "/pscratch/sd/a/ac.golaz/archive"
         assert (
@@ -1895,10 +1895,10 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 500
         assert res.json()["detail"] == "Unexpected error"
 
-    def test_path_endpoint_failed_status_no_simulations_with_errors(
+    def test_path_endpoint_failed_status_no_executions_with_errors(
         self, client, db: Session, tmp_path
     ):
-        """Test that failed status is set when no simulations are created but errors exist."""
+        """Test that failed status is set when no executions are created but errors exist."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2076,7 +2076,7 @@ class TestIngestFromUploadEndpoint:
         assert res.json()["detail"] == "Unexpected upload error"
 
     def test_persist_executions_with_artifacts(self, client, db: Session, tmp_path):
-        """Test that simulations with artifacts are persisted correctly."""
+        """Test that executions with artifacts are persisted correctly."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2087,7 +2087,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_artifacts", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -2116,7 +2116,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -2126,15 +2126,15 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = db.query(Execution).filter(Execution.case_id == case.id).first()
+        execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
-        assert simulation is not None
-        assert len(simulation.artifacts) == 1
-        assert simulation.artifacts[0].kind == "output"
-        assert simulation.artifacts[0].uri == "https://example.com/output.tar.gz"
+        assert execution is not None
+        assert len(execution.artifacts) == 1
+        assert execution.artifacts[0].kind == "output"
+        assert execution.artifacts[0].uri == "https://example.com/output.tar.gz"
 
     def test_persist_executions_with_links(self, client, db: Session, tmp_path):
-        """Test that simulations with external links are persisted correctly."""
+        """Test that executions with external links are persisted correctly."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2143,7 +2143,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_links", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -2172,7 +2172,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -2182,12 +2182,12 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = db.query(Execution).filter(Execution.case_id == case.id).first()
+        execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
-        assert simulation is not None
-        assert len(simulation.links) == 1
-        assert simulation.links[0].kind == "diagnostic"
-        assert simulation.links[0].url == "https://example.com/diagnostics"
+        assert execution is not None
+        assert len(execution.links) == 1
+        assert execution.links[0].kind == "diagnostic"
+        assert execution.links[0].url == "https://example.com/diagnostics"
 
     def test_upload_with_none_filename_in_validation(self, client):
         """Test that upload with file.filename = None is rejected by validation."""
@@ -2207,7 +2207,7 @@ class TestIngestFromUploadEndpoint:
     def test_persist_executions_with_git_repository_url(
         self, client, db: Session, tmp_path
     ):
-        """Test that simulations with git_repository_url are persisted correctly."""
+        """Test that executions with git_repository_url are persisted correctly."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2218,7 +2218,7 @@ class TestIngestFromUploadEndpoint:
 
         case = _create_case(db, "test_case_git_url", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -2241,7 +2241,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -2251,11 +2251,11 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = db.query(Execution).filter(Execution.case_id == case.id).first()
+        execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
-        assert simulation is not None
+        assert execution is not None
         assert (
-            simulation.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
+            execution.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         )
 
     def test_persist_executions_with_hpc_username(self, client, db: Session, tmp_path):
@@ -2278,7 +2278,7 @@ class TestIngestFromUploadEndpoint:
             hpc_username="nersc-user",
         )
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -2300,7 +2300,7 @@ class TestIngestFromUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -2310,10 +2310,10 @@ class TestIngestFromUploadEndpoint:
 
         assert res.status_code == 201
 
-        simulation = db.query(Execution).filter(Execution.case_id == case.id).first()
+        execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
-        assert simulation is not None
-        persisted_case = db.query(Case).filter(Case.id == simulation.case_id).first()
+        assert execution is not None
+        persisted_case = db.query(Case).filter(Case.id == execution.case_id).first()
         assert persisted_case is not None
         assert persisted_case.hpc_username == "nersc-user"
 
@@ -2367,14 +2367,14 @@ class TestIngestFromUploadEndpoint:
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
         assert res.status_code == 201
-        assert res.json()["simulations"][0]["case_name"] == "request_fallback_case"
+        assert res.json()["executions"][0]["case_name"] == "request_fallback_case"
 
-        simulation = (
+        execution = (
             db.query(Execution).filter(Execution.execution_id == execution_id).first()
         )
-        assert simulation is not None
+        assert execution is not None
 
-        case = db.query(Case).filter(Case.id == simulation.case_id).first()
+        case = db.query(Case).filter(Case.id == execution.case_id).first()
         assert case is not None
         assert case.hpc_username == "fallback-user"
 
@@ -2410,7 +2410,7 @@ class TestIngestFromHpcUploadEndpoint:
 
         case = _create_case(db, "test_case_hpc_upload", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(case.id),
@@ -2430,7 +2430,7 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=1,
                 duplicate_count=0,
                 errors=[],
@@ -2516,7 +2516,7 @@ class TestIngestFromHpcUploadEndpoint:
         first_case = _create_case(db, "multi_case_first", machine=machine)
         second_case = _create_case(db, "multi_case_second", machine=machine)
 
-        mock_simulations = [
+        mock_executions = [
             ExecutionCreate.model_validate(
                 {
                     "caseId": str(first_case.id),
@@ -2550,7 +2550,7 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=mock_simulations,
+                executions=mock_executions,
                 created_count=2,
                 duplicate_count=0,
                 errors=[],

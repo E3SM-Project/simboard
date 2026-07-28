@@ -5,7 +5,7 @@ The frontend is a React single-page application for browsing, comparing, and upl
 ## Responsibilities
 
 - route composition and page-level UI
-- case and simulation browsing
+- case and execution browsing
 - side-by-side comparison
 - authenticated upload flow
 - cookie-based browser auth integration
@@ -15,7 +15,7 @@ The frontend is a React single-page application for browsing, comparing, and upl
 The frontend uses feature-based organization and enforces import boundaries with ESLint.
 
 - `src/routes/` composes top-level routes.
-- `src/features/*/` contains feature modules such as `browse`, `simulations`, `compare`, and `upload`.
+- `src/features/*/` contains feature modules such as `browse`, `catalog`, `compare`, and `upload`.
 - `src/features/*/api/` contains feature-specific API calls.
 - `src/features/*/hooks/` contains feature-specific hooks.
 - `src/components/shared/` is for reusable shared components.
@@ -27,9 +27,9 @@ Feature modules should not import directly from other feature modules. This is e
 
 ```text
 frontend/src/routes/            top-level route composition
-frontend/src/features/browse/   run browser and filters
-frontend/src/features/simulations/
-                                cases, runs, and detail pages
+frontend/src/features/browse/   execution browser and filters
+frontend/src/features/catalog/
+                                cases, executions, and detail pages
 frontend/src/features/compare/  side-by-side comparison UI
 frontend/src/features/upload/   authenticated archive upload flow
 frontend/src/auth/              auth provider, callback, protected routes

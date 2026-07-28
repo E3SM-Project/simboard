@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
+from app.features.catalog.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.catalog.models import Case, Execution
+from app.features.catalog.schemas import ArtifactCreate, ExecutionCreate
 from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.utils import parse_machine_name, resolve_machine_by_name
-from app.features.simulation.enums import ArtifactKind, ExecutionStatus, SimulationType
-from app.features.simulation.models import Case, Execution
-from app.features.simulation.schemas import ArtifactCreate, ExecutionCreate
 
 logger = _setup_custom_logger(__name__)
 

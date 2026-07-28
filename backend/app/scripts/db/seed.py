@@ -21,15 +21,15 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
-from app.features.ingestion.models import Ingestion
-from app.features.machine.models import Machine
-from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
-from app.features.simulation.schemas import (
+from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
+from app.features.catalog.schemas import (
     ArtifactCreate,
     ExecutionCreate,
     ExternalLinkCreate,
 )
+from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
 from app.features.user.models import OAuthAccount, User
 from app.scripts.db.rollback_seed import rollback_seed
 
@@ -159,7 +159,7 @@ def seed_from_json(db: Session, json_path: str):
             raise ValueError(f"Missing 'caseName' in JSON case entry: {case_entry}")
 
         case_group = case_entry.get("caseGroup")
-        executions_data = case_entry.get("simulations", [])
+        executions_data = case_entry.get("executions", [])
         if not executions_data:
             raise ValueError(f"No executions for case '{case_name}'")
 
@@ -355,7 +355,7 @@ def _seed_execution(
 
 if __name__ == "__main__":
     db = SessionLocal()
-    mock_filepath = str(Path(__file__).resolve().parent / "simulations.json")
+    mock_filepath = str(Path(__file__).resolve().parent / "catalog.json")
 
     try:
         create_dev_oauth_user(db)  # ✅ always ensure dummy user exists
