@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ParsedSimulation:
+class ParsedExecution:
     """Archive-derived metadata for one parsed execution run."""
 
     execution_dir: str

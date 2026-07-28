@@ -6,26 +6,26 @@ import pytest
 from app.features.assistant import snapshot as snapshot_module
 from app.features.assistant.snapshot import (
     SNAPSHOT_TRUNCATED_CAVEAT,
-    SimulationSnapshot,
+    ExecutionSnapshot,
     SnapshotArtifact,
     SnapshotBudgetExceededError,
     SnapshotCaseFields,
+    SnapshotExecutionFields,
     SnapshotLink,
     SnapshotMachineFields,
-    SnapshotSimulationFields,
     _SnapshotSizeBudget,
 )
 from app.features.simulation.enums import (
+    ExecutionStatus,
     ExternalLinkKind,
-    SimulationStatus,
     SimulationType,
 )
-from app.features.simulation.models import Case, ExternalLink, Simulation
+from app.features.simulation.models import Case, Execution, ExternalLink
 
 
-def _make_snapshot() -> SimulationSnapshot:
-    return SimulationSnapshot(
-        simulation=SnapshotSimulationFields(
+def _make_snapshot() -> ExecutionSnapshot:
+    return ExecutionSnapshot(
+        execution=SnapshotExecutionFields(
             id="simulation-1",
             execution_id="assistant-snapshot-exec",
             description="Description " * 5,
@@ -64,7 +64,7 @@ class TestSnapshotHelpers:
         timestamp = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
 
         assert snapshot_module._enum_value(None) is None
-        assert snapshot_module._enum_value(SimulationStatus.COMPLETED) == "completed"
+        assert snapshot_module._enum_value(ExecutionStatus.COMPLETED) == "completed"
         assert snapshot_module._enum_value("plain-value") == "plain-value"
         assert snapshot_module._isoformat(None) is None
         assert snapshot_module._isoformat(timestamp) == "2024-01-02T03:04:05+00:00"
@@ -83,16 +83,16 @@ class TestSnapshotHelpers:
     ) -> None:
         snapshot = _make_snapshot()
 
-        def fake_snapshot_size(current_snapshot: SimulationSnapshot) -> int:
+        def fake_snapshot_size(current_snapshot: ExecutionSnapshot) -> int:
             # After all trimming and caveat, return size within budget
             if (
-                current_snapshot.simulation.notes_markdown is None
+                current_snapshot.execution.notes_markdown is None
                 and not current_snapshot.artifacts
                 and not current_snapshot.links
                 and SNAPSHOT_TRUNCATED_CAVEAT in current_snapshot.snapshot_caveats
             ):
                 return 5
-            if current_snapshot.simulation.notes_markdown is None:
+            if current_snapshot.execution.notes_markdown is None:
                 return 200
             if (
                 len(current_snapshot.artifacts),
@@ -112,11 +112,11 @@ class TestSnapshotHelpers:
 
         assert trimmed.artifacts == []
         assert trimmed.links == []
-        assert trimmed.simulation.notes_markdown is None
-        assert trimmed.simulation.description is None
-        assert trimmed.simulation.key_features is None
-        assert trimmed.simulation.known_issues is None
-        assert trimmed.simulation.extra == {}
+        assert trimmed.execution.notes_markdown is None
+        assert trimmed.execution.description is None
+        assert trimmed.execution.key_features is None
+        assert trimmed.execution.known_issues is None
+        assert trimmed.execution.extra == {}
         assert SNAPSHOT_TRUNCATED_CAVEAT in trimmed.snapshot_caveats
 
     def test_apply_size_budget_drops_remaining_artifacts_after_trim(
@@ -194,14 +194,14 @@ class TestSnapshotHelpers:
 
         assert exc_info.value.snapshot.artifacts == []
         assert exc_info.value.snapshot.links == []
-        assert exc_info.value.snapshot.simulation.notes_markdown is None
-        assert exc_info.value.snapshot.simulation.description is None
-        assert exc_info.value.snapshot.simulation.key_features is None
-        assert exc_info.value.snapshot.simulation.known_issues is None
-        assert exc_info.value.snapshot.simulation.extra == {}
+        assert exc_info.value.snapshot.execution.notes_markdown is None
+        assert exc_info.value.snapshot.execution.description is None
+        assert exc_info.value.snapshot.execution.key_features is None
+        assert exc_info.value.snapshot.execution.known_issues is None
+        assert exc_info.value.snapshot.execution.extra == {}
         assert SNAPSHOT_TRUNCATED_CAVEAT in exc_info.value.snapshot.snapshot_caveats
 
-    def test_build_snapshot_merges_case_links_with_simulation_precedence(self) -> None:
+    def test_build_snapshot_merges_case_links_with_execution_precedence(self) -> None:
         case = Case(
             id=uuid4(),
             name="snapshot-case",
@@ -209,7 +209,7 @@ class TestSnapshotHelpers:
             hpc_username="snapshot-user",
             case_group="snapshot-group",
         )
-        simulation = Simulation(
+        simulation = Execution(
             id=uuid4(),
             case=case,
             case_id=case.id,
@@ -219,7 +219,7 @@ class TestSnapshotHelpers:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             simulation_type=SimulationType.EXPERIMENTAL,
-            status=SimulationStatus.COMPLETED,
+            status=ExecutionStatus.COMPLETED,
             initialization_type="startup",
             simulation_start_date=date(2024, 1, 1),
             created_by=uuid4(),
@@ -245,7 +245,7 @@ class TestSnapshotHelpers:
         ]
         simulation.links = [
             ExternalLink(
-                simulation=simulation,
+                execution=simulation,
                 simulation_id=simulation.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/shared",
@@ -254,7 +254,7 @@ class TestSnapshotHelpers:
         ]
         simulation.artifacts = []
 
-        snapshot = snapshot_module.build_simulation_snapshot(simulation)
+        snapshot = snapshot_module.build_execution_snapshot(simulation)
 
         assert [(link.url, link.label) for link in snapshot.links] == [
             ("https://example.com/case-only", "Case only"),

@@ -16,49 +16,49 @@ from app.core.config import settings
 from app.features.assistant.llm_generator import AssistantLLMConfig, SummaryLLMGenerator
 from app.features.assistant.registry import VALID_CITATION_PATHS, get_citation_entry
 from app.features.assistant.schemas import (
-    SimulationSummaryContent,
-    SimulationSummaryResponse,
+    ExecutionSummaryContent,
+    ExecutionSummaryResponse,
     SummaryCitationOut,
     SummaryGenerationProvider,
 )
 from app.features.assistant.service import (
     LLM_LIMITATIONS,
-    build_simulation_summary,
+    build_execution_summary,
 )
 from app.features.assistant.snapshot import (
-    SimulationSnapshot,
+    ExecutionSnapshot,
     SnapshotBudgetExceededError,
-    build_simulation_snapshot,
+    build_execution_snapshot,
 )
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Execution
 
 _SNAPSHOT_PATH_ACCESSORS = {
-    "simulation.id": lambda snapshot: snapshot.simulation.id,
-    "simulation.execution_id": lambda snapshot: snapshot.simulation.execution_id,
-    "simulation.description": lambda snapshot: snapshot.simulation.description,
-    "simulation.compset": lambda snapshot: snapshot.simulation.compset,
-    "simulation.compset_alias": lambda snapshot: snapshot.simulation.compset_alias,
-    "simulation.grid_name": lambda snapshot: snapshot.simulation.grid_name,
-    "simulation.grid_resolution": lambda snapshot: snapshot.simulation.grid_resolution,
-    "simulation.simulation_type": lambda snapshot: snapshot.simulation.simulation_type,
-    "simulation.status": lambda snapshot: snapshot.simulation.status,
-    "simulation.campaign": lambda snapshot: snapshot.simulation.campaign,
-    "simulation.experiment_type": lambda snapshot: snapshot.simulation.experiment_type,
-    "simulation.initialization_type": lambda snapshot: snapshot.simulation.initialization_type,
-    "simulation.simulation_start_date": lambda snapshot: snapshot.simulation.simulation_start_date,
-    "simulation.simulation_end_date": lambda snapshot: snapshot.simulation.simulation_end_date,
-    "simulation.run_start_date": lambda snapshot: snapshot.simulation.run_start_date,
-    "simulation.run_end_date": lambda snapshot: snapshot.simulation.run_end_date,
-    "simulation.compiler": lambda snapshot: snapshot.simulation.compiler,
-    "simulation.key_features": lambda snapshot: snapshot.simulation.key_features,
-    "simulation.known_issues": lambda snapshot: snapshot.simulation.known_issues,
-    "simulation.notes_markdown": lambda snapshot: snapshot.simulation.notes_markdown,
-    "simulation.git_repository_url": lambda snapshot: snapshot.simulation.git_repository_url,
-    "simulation.git_branch": lambda snapshot: snapshot.simulation.git_branch,
-    "simulation.git_tag": lambda snapshot: snapshot.simulation.git_tag,
-    "simulation.git_commit_hash": lambda snapshot: snapshot.simulation.git_commit_hash,
-    "simulation.case_hash": lambda snapshot: snapshot.simulation.case_hash,
-    "simulation.extra": lambda snapshot: snapshot.simulation.extra,
+    "simulation.id": lambda snapshot: snapshot.execution.id,
+    "simulation.execution_id": lambda snapshot: snapshot.execution.execution_id,
+    "simulation.description": lambda snapshot: snapshot.execution.description,
+    "simulation.compset": lambda snapshot: snapshot.execution.compset,
+    "simulation.compset_alias": lambda snapshot: snapshot.execution.compset_alias,
+    "simulation.grid_name": lambda snapshot: snapshot.execution.grid_name,
+    "simulation.grid_resolution": lambda snapshot: snapshot.execution.grid_resolution,
+    "simulation.simulation_type": lambda snapshot: snapshot.execution.simulation_type,
+    "simulation.status": lambda snapshot: snapshot.execution.status,
+    "simulation.campaign": lambda snapshot: snapshot.execution.campaign,
+    "simulation.experiment_type": lambda snapshot: snapshot.execution.experiment_type,
+    "simulation.initialization_type": lambda snapshot: snapshot.execution.initialization_type,
+    "simulation.simulation_start_date": lambda snapshot: snapshot.execution.simulation_start_date,
+    "simulation.simulation_end_date": lambda snapshot: snapshot.execution.simulation_end_date,
+    "simulation.run_start_date": lambda snapshot: snapshot.execution.run_start_date,
+    "simulation.run_end_date": lambda snapshot: snapshot.execution.run_end_date,
+    "simulation.compiler": lambda snapshot: snapshot.execution.compiler,
+    "simulation.key_features": lambda snapshot: snapshot.execution.key_features,
+    "simulation.known_issues": lambda snapshot: snapshot.execution.known_issues,
+    "simulation.notes_markdown": lambda snapshot: snapshot.execution.notes_markdown,
+    "simulation.git_repository_url": lambda snapshot: snapshot.execution.git_repository_url,
+    "simulation.git_branch": lambda snapshot: snapshot.execution.git_branch,
+    "simulation.git_tag": lambda snapshot: snapshot.execution.git_tag,
+    "simulation.git_commit_hash": lambda snapshot: snapshot.execution.git_commit_hash,
+    "simulation.case_hash": lambda snapshot: snapshot.execution.case_hash,
+    "simulation.extra": lambda snapshot: snapshot.execution.extra,
     "case.name": lambda snapshot: snapshot.case.name,
     "case.case_group": lambda snapshot: snapshot.case.case_group,
     "machine.name": lambda snapshot: snapshot.machine.name
@@ -75,7 +75,7 @@ _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.;:])")
 
 @dataclass(frozen=True)
 class SummaryGenerationResult:
-    summary: SimulationSummaryResponse
+    summary: ExecutionSummaryResponse
     fallback_reason: str | None
     llm_latency_ms: float
     attempted_provider: SummaryGenerationProvider | None
@@ -96,19 +96,19 @@ def is_summary_llm_available() -> bool:
     return True
 
 
-async def generate_simulation_summary(
-    simulation: Simulation,
+async def generate_execution_summary(
+    execution: Execution,
     *,
     allow_llm: bool = True,
 ) -> SummaryGenerationResult:
     """
-    Generates a simulation summary, attempting LLM generation if allowed and
+    Generates an execution summary, attempting LLM generation if allowed and
     falling back to deterministic generation on failure.
 
     Parameters
     ----------
-    simulation : Simulation
-        The simulation for which to generate the summary
+    execution : Execution
+        The execution for which to generate the summary
     allow_llm : bool, optional
         Whether to attempt LLM generation (default: True)
 
@@ -123,7 +123,7 @@ async def generate_simulation_summary(
     )
 
     try:
-        snapshot = build_simulation_snapshot(simulation)
+        snapshot = build_execution_snapshot(execution)
     except SnapshotBudgetExceededError as exc:
         if not allow_llm:
             return _build_deterministic_result(
@@ -221,7 +221,7 @@ def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
 
 
 def _build_deterministic_result(
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
     *,
     include_fallback_caveat: bool,
     fallback_reason: str | None,
@@ -249,12 +249,12 @@ def _build_deterministic_result(
 
 
 def _build_llm_result(
-    validated: SimulationSummaryContent,
+    validated: ExecutionSummaryContent,
     *,
     config: AssistantLLMConfig,
     llm_latency_ms: float,
 ) -> SummaryGenerationResult:
-    response = SimulationSummaryResponse(
+    response = ExecutionSummaryResponse(
         **validated.model_dump(),
         generation_mode="llm",
         fallback_used=False,
@@ -314,7 +314,7 @@ def _resolve_llm_config() -> AssistantLLMConfig:
 
 def _standardize_citations(
     citations: list[SummaryCitationOut],
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
 ) -> list[SummaryCitationOut]:
     normalized: list[SummaryCitationOut] = []
 
@@ -368,7 +368,7 @@ def _canonicalize_citation_path(path: str, source_type: str | None = None) -> st
     raise ValueError(f"invalid_citation_path:{path}")
 
 
-def _snapshot_has_citation_path(snapshot: SimulationSnapshot, path: str) -> bool:
+def _snapshot_has_citation_path(snapshot: ExecutionSnapshot, path: str) -> bool:
     accessor = _SNAPSHOT_PATH_ACCESSORS.get(path)
 
     if accessor is not None:
@@ -400,9 +400,9 @@ def _merge_unique_strings(*groups: list[str]) -> list[str]:
 
 
 def _validate_llm_content(
-    content: SimulationSummaryContent,
-    snapshot: SimulationSnapshot,
-) -> SimulationSummaryContent:
+    content: ExecutionSummaryContent,
+    snapshot: ExecutionSnapshot,
+) -> ExecutionSummaryContent:
     normalized_answer = _normalize_llm_answer(content.answer)
 
     if not normalized_answer:
@@ -435,11 +435,11 @@ def _normalize_llm_answer(answer: str) -> str:
 
 
 def _build_deterministic_response(
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
     *,
     include_fallback_caveat: bool,
-) -> SimulationSummaryResponse:
-    base = build_simulation_summary(
+) -> ExecutionSummaryResponse:
+    base = build_execution_summary(
         snapshot,
         include_fallback_caveat=include_fallback_caveat,
     )
@@ -454,13 +454,13 @@ def _build_deterministic_response(
 
 
 def _fill_missing_llm_followups(
-    content: SimulationSummaryContent,
-    snapshot: SimulationSnapshot,
-) -> SimulationSummaryContent:
+    content: ExecutionSummaryContent,
+    snapshot: ExecutionSnapshot,
+) -> ExecutionSummaryContent:
     if content.suggested_followups:
         return content
 
-    fallback_summary = build_simulation_summary(snapshot)
+    fallback_summary = build_execution_summary(snapshot)
 
     return content.model_copy(
         update={"suggested_followups": fallback_summary.suggested_followups}

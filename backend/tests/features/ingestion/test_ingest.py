@@ -9,17 +9,17 @@ from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
 from app.features.ingestion.ingest import (
-    SimulationCreateDraft,
-    _build_simulation_create_draft,
+    ExecutionCreateDraft,
+    _build_execution_create_draft,
     _extract_postprocessing_script_path,
     _get_known_case_hash,
     _get_or_create_case,
+    _normalize_execution_status,
     _normalize_git_url,
     _normalize_path_candidate,
-    _normalize_simulation_status,
     _normalize_simulation_type,
     _track_case_hash_grouping,
-    _validate_simulation_create,
+    _validate_execution_create,
     ingest_archive,
 )
 from app.features.ingestion.models import (
@@ -27,23 +27,23 @@ from app.features.ingestion.models import (
     IngestionSourceType,
     IngestionStatus,
 )
-from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
-from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
-from app.features.simulation.models import Case, Simulation
-from app.features.simulation.schemas import SimulationCreate
+from app.features.simulation.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.simulation.models import Case, Execution
+from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.models import User
 from tests.features.site.utils import get_or_create_site
 
 
-def _parsed_simulations_from_mapping(
+def _parsed_executions_from_mapping(
     simulations_by_dir: Mapping[str, Mapping[str, str | None]],
-) -> list[ParsedSimulation]:
-    parsed_simulations: list[ParsedSimulation] = []
+) -> list[ParsedExecution]:
+    parsed_executions: list[ParsedExecution] = []
 
     for execution_dir, metadata in simulations_by_dir.items():
-        parsed_simulations.append(
-            ParsedSimulation(
+        parsed_executions.append(
+            ParsedExecution(
                 execution_dir=execution_dir,
                 execution_id=_require_execution_id(metadata, execution_dir),
                 case_name=metadata.get("case_name"),
@@ -77,7 +77,7 @@ def _parsed_simulations_from_mapping(
             )
         )
 
-    return parsed_simulations
+    return parsed_executions
 
 
 def _require_execution_id(
@@ -138,8 +138,8 @@ class TestIngestArchive:
         db.refresh(machine)
         return machine
 
-    def test_returns_list_of_simulation_create(self, db: Session) -> None:
-        """Test that ingest_archive returns list of SimulationCreate objects."""
+    def test_returns_list_of_execution_create(self, db: Session) -> None:
+        """Test that ingest_archive returns list of ExecutionCreate objects."""
         machine = self._create_machine(db, "test-machine")
 
         mock_simulations: dict[str, dict[str, str | None]] = {
@@ -171,22 +171,22 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert isinstance(ingest_result.simulations, list)
-        assert len(ingest_result.simulations) == 1
-        assert isinstance(ingest_result.simulations[0], SimulationCreate)
-        assert ingest_result.simulations[0].execution_id == "1081156.251218-200923"
+        assert isinstance(ingest_result.executions, list)
+        assert len(ingest_result.executions) == 1
+        assert isinstance(ingest_result.executions[0], ExecutionCreate)
+        assert ingest_result.executions[0].execution_id == "1081156.251218-200923"
         # Verify Case was created
         case = db.query(Case).filter(Case.name == "case1").first()
         assert case is not None
-        assert ingest_result.simulations[0].case_id == case.id
+        assert ingest_result.executions[0].case_id == case.id
 
-    def test_handles_multiple_simulations(self, db: Session) -> None:
+    def test_handles_multiple_executions(self, db: Session) -> None:
         """Test ingesting archive with multiple simulations."""
         machine = self._create_machine(db, "test-machine")
 
@@ -243,14 +243,14 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 2
-        exec_ids = {s.execution_id for s in ingest_result.simulations}
+        assert len(ingest_result.executions) == 2
+        exec_ids = {s.execution_id for s in ingest_result.executions}
         assert exec_ids == {"1081157.251218-200924", "1081158.251218-200925"}
 
     def test_returns_empty_list_for_empty_archive(self, db: Session) -> None:
@@ -260,8 +260,8 @@ class TestIngestArchive:
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert isinstance(ingest_result.simulations, list)
-        assert len(ingest_result.simulations) == 0
+        assert isinstance(ingest_result.executions, list)
+        assert len(ingest_result.executions) == 0
 
     def test_accepts_string_paths(self, db: Session) -> None:
         """Test that archive_path and output_dir accept strings."""
@@ -296,12 +296,12 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ) as mock_main_parser:
             ingest_result = ingest_archive("/tmp/archive.zip", "/tmp/out", db)
 
         # Verify main_parser was called with Path objects
-        assert ingest_result.simulations is not None
+        assert ingest_result.executions is not None
         mock_main_parser.assert_called_once()
         args = mock_main_parser.call_args[0]
         assert isinstance(args[0], Path)
@@ -338,13 +338,13 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations == []
+        assert ingest_result.executions == []
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "LookupError"
         assert "nonexistent-machine" in ingest_result.errors[0]["error"]
@@ -395,14 +395,14 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 1
-        assert ingest_result.simulations[0].simulation_start_date == date(2020, 1, 1)
+        assert len(ingest_result.executions) == 1
+        assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
 
     def test_preserves_env_run_calendar_date(self, db: Session) -> None:
         machine = self._create_machine(db, "test-machine")
@@ -422,17 +422,15 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations[0].simulation_start_date == date(2019, 8, 1)
+        assert ingest_result.executions[0].simulation_start_date == date(2019, 8, 1)
         assert (
-            ingest_result.simulations[0].model_dump(mode="json")[
-                "simulation_start_date"
-            ]
+            ingest_result.executions[0].model_dump(mode="json")["simulation_start_date"]
             == "2019-08-01"
         )
 
@@ -454,13 +452,13 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations == []
+        assert ingest_result.executions == []
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "ValidationError"
         assert db.query(Case).filter(Case.name == "invalid-model-date").first() is None
@@ -498,13 +496,13 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations == []
+        assert ingest_result.executions == []
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "ValueError"
 
@@ -549,15 +547,15 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(valid_mock), 0),
+            return_value=(_parsed_executions_from_mapping(valid_mock), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 1
+        assert len(ingest_result.executions) == 1
         resolved_case = (
-            db.query(Case).filter(Case.id == ingest_result.simulations[0].case_id).one()
+            db.query(Case).filter(Case.id == ingest_result.executions[0].case_id).one()
         )
         assert resolved_case.machine_id == machine.id
 
@@ -591,13 +589,13 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(invalid_mock), 0),
+            return_value=(_parsed_executions_from_mapping(invalid_mock), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations == []
+        assert ingest_result.executions == []
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "LookupError"
         assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
@@ -654,16 +652,16 @@ class TestIngestArchive:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 1
-        assert ingest_result.simulations[0].compute_type == compute_type
+        assert len(ingest_result.executions) == 1
+        assert ingest_result.executions[0].compute_type == compute_type
         resolved_case = (
-            db.query(Case).filter(Case.id == ingest_result.simulations[0].case_id).one()
+            db.query(Case).filter(Case.id == ingest_result.executions[0].case_id).one()
         )
         assert resolved_case.machine_id == machine.id
 
@@ -678,14 +676,14 @@ class TestIngestArchiveContinued(TestIngestArchive):
         assert _normalize_simulation_type("TEST") == SimulationType.TEST
         assert _normalize_simulation_type("not-a-type") == SimulationType.UNKNOWN
 
-    def test_normalize_simulation_status_handles_none_and_blank(self) -> None:
-        assert _normalize_simulation_status(None) == SimulationStatus.CREATED
-        assert _normalize_simulation_status("   ") == SimulationStatus.CREATED
+    def test_normalize_execution_status_handles_none_and_blank(self) -> None:
+        assert _normalize_execution_status(None) == ExecutionStatus.CREATED
+        assert _normalize_execution_status("   ") == ExecutionStatus.CREATED
 
-    def test_normalize_simulation_status_handles_valid_and_unknown_values(self) -> None:
-        assert _normalize_simulation_status("running") == SimulationStatus.RUNNING
-        assert _normalize_simulation_status("COMPLETED") == SimulationStatus.COMPLETED
-        assert _normalize_simulation_status("not-a-status") == SimulationStatus.CREATED
+    def test_normalize_execution_status_handles_valid_and_unknown_values(self) -> None:
+        assert _normalize_execution_status("running") == ExecutionStatus.RUNNING
+        assert _normalize_execution_status("COMPLETED") == ExecutionStatus.COMPLETED
+        assert _normalize_execution_status("not-a-status") == ExecutionStatus.CREATED
 
     def test_timezone_aware_datetime_parsing_through_public_api(
         self, db: Session
@@ -725,21 +723,19 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].simulation_start_date == date(
-                2020, 1, 1
-            )
+            assert len(ingest_result.executions) == 1
+            assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
             # Run fields remain timezone-aware timestamps.
-            if ingest_result.simulations[0].run_start_date:
-                assert ingest_result.simulations[0].run_start_date.tzinfo is not None
-            if ingest_result.simulations[0].run_end_date:
-                assert ingest_result.simulations[0].run_end_date.tzinfo is not None
+            if ingest_result.executions[0].run_start_date:
+                assert ingest_result.executions[0].run_start_date.tzinfo is not None
+            if ingest_result.executions[0].run_end_date:
+                assert ingest_result.executions[0].run_end_date.tzinfo is not None
 
     def test_handles_optional_fields_through_public_api(self, db: Session) -> None:
         """Test optional field handling through public API.
@@ -779,30 +775,30 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].experiment_type == "historical"
-            assert ingest_result.simulations[0].campaign == "CMIP6"
-            assert ingest_result.simulations[0].compiler == "gcc"
+            assert len(ingest_result.executions) == 1
+            assert ingest_result.executions[0].experiment_type == "historical"
+            assert ingest_result.executions[0].campaign == "CMIP6"
+            assert ingest_result.executions[0].compiler == "gcc"
             assert (
-                str(ingest_result.simulations[0].git_repository_url)
+                str(ingest_result.executions[0].git_repository_url)
                 == "https://github.com/test/repo"
             )
-            assert ingest_result.simulations[0].git_branch == "main"
-            assert ingest_result.simulations[0].git_tag == "v1.0.0"
-            assert ingest_result.simulations[0].git_commit_hash == "abc123"
+            assert ingest_result.executions[0].git_branch == "main"
+            assert ingest_result.executions[0].git_tag == "v1.0.0"
+            assert ingest_result.executions[0].git_commit_hash == "abc123"
 
-            # Verify case_group is stored on the Case, not the Simulation
+            # Verify case_group is stored on the Case, not the Execution
             case = db.query(Case).filter(Case.name == "case1").first()
             assert case is not None
             assert case.case_group == "test_group"
 
-    def test_skips_duplicate_simulations(self, db: Session) -> None:
+    def test_skips_duplicate_executions(self, db: Session) -> None:
         """Test that duplicate simulations are skipped during ingestion.
 
         This test verifies the deduplication logic by:
@@ -821,7 +817,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         ingestion = Ingestion(
             source_type=IngestionSourceType.HPC_PATH,
-            source_reference="test_skips_duplicate_simulations",
+            source_reference="test_skips_duplicate_executions",
             machine_id=machine.id,
             triggered_by=user.id,
             status=IngestionStatus.SUCCESS,
@@ -835,7 +831,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         # Create a Case and Simulation directly in the database
         case = _create_case(db, name="existing_case", machine=machine)
 
-        existing_sim = Simulation(
+        existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200935",
             compset="FHIST",
@@ -845,7 +841,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -883,7 +879,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -892,7 +888,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             # Duplicate should be skipped, result should be empty
             assert ingest_result.created_count == 0
             assert ingest_result.duplicate_count == 1
-            assert len(ingest_result.simulations) == 0
+            assert len(ingest_result.executions) == 0
             assert db.query(Case).filter(Case.name == "existing_case").count() == 1
 
     def test_validation_error_does_not_persist_empty_case(self, db: Session) -> None:
@@ -927,13 +923,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.simulations == []
+        assert ingest_result.executions == []
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "ValidationError"
         assert (
@@ -966,7 +962,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         case = _create_case(db, name="existing_case", machine=machine)
 
-        existing_sim = Simulation(
+        existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200941",
             compset="FHIST",
@@ -976,7 +972,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1013,7 +1009,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1021,12 +1017,12 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         assert ingest_result.created_count == 1
         assert ingest_result.duplicate_count == 0
-        assert len(ingest_result.simulations) == 1
-        assert ingest_result.simulations[0].execution_id == "1081175.251218-200941"
+        assert len(ingest_result.executions) == 1
+        assert ingest_result.executions[0].execution_id == "1081175.251218-200941"
 
         new_case = db.query(Case).filter(Case.name == "orphan_case_duplicate").first()
         assert new_case is not None
-        assert ingest_result.simulations[0].case_id == new_case.id
+        assert ingest_result.executions[0].case_id == new_case.id
 
     def test_ingest_archive_counts(self, db: Session) -> None:
         """Test that summary counts reflect created and duplicate simulations."""
@@ -1053,7 +1049,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         case = _create_case(db, name="existing_case", machine=machine)
 
-        existing_sim = Simulation(
+        existing_sim = Execution(
             case_id=case.id,
             execution_id="1081176.251218-200936",
             compset="FHIST",
@@ -1063,7 +1059,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             simulation_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1124,7 +1120,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
@@ -1132,11 +1128,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
             assert ingest_result.created_count == 1
             assert ingest_result.duplicate_count == 1
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].execution_id == "1081176.251218-200936"
+            assert len(ingest_result.executions) == 1
+            assert ingest_result.executions[0].execution_id == "1081176.251218-200936"
             new_case = db.query(Case).filter(Case.name == "new_case").first()
             assert new_case is not None
-            assert ingest_result.simulations[0].case_id == new_case.id
+            assert ingest_result.executions[0].case_id == new_case.id
 
     def test_ingest_archive_empty_archive(self, db: Session) -> None:
         """Test summary counts when the archive contains no simulations."""
@@ -1145,7 +1141,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
+            assert ingest_result.executions == []
             assert ingest_result.created_count == 0
             assert ingest_result.duplicate_count == 0
 
@@ -1188,16 +1184,16 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Should succeed with optional dates as None
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].run_start_date is None
-            assert ingest_result.simulations[0].run_end_date is None
+            assert len(ingest_result.executions) == 1
+            assert ingest_result.executions[0].run_start_date is None
+            assert ingest_result.executions[0].run_end_date is None
 
     def test_parse_datetime_field_exception_handling(self, db: Session) -> None:
         """Test exception handling in _parse_datetime_field.
@@ -1247,7 +1243,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
             ),
             patch(
                 "app.features.ingestion.ingest.dateutil_parser.parse",
@@ -1259,8 +1255,8 @@ class TestIngestArchiveContinued(TestIngestArchive):
             )
 
             # Should succeed with run_start_date as None (exception caught and logged)
-            assert len(ingest_result.simulations) == 1
-            assert ingest_result.simulations[0].run_start_date is None
+            assert len(ingest_result.executions) == 1
+            assert ingest_result.executions[0].run_start_date is None
 
     def test_missing_machine_name_in_metadata(self, db: Session) -> None:
         """Test error handling when machine name is missing from metadata."""
@@ -1293,13 +1289,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
+            assert ingest_result.executions == []
             assert len(ingest_result.errors) == 1
             assert ingest_result.errors[0]["error_type"] == "ValueError"
             assert "Machine name is required" in ingest_result.errors[0]["error"]
@@ -1337,13 +1333,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            assert ingest_result.simulations == []
+            assert ingest_result.executions == []
             assert len(ingest_result.errors) == 1
             assert ingest_result.errors[0]["error_type"] == "ValidationError"
 
@@ -1446,15 +1442,15 @@ class TestNormalizeGitUrl:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
             # Verify SSH URL was converted to HTTPS
-            assert len(ingest_result.simulations) == 1
-            assert str(ingest_result.simulations[0].git_repository_url) == (
+            assert len(ingest_result.executions) == 1
+            assert str(ingest_result.executions[0].git_repository_url) == (
                 "https://github.com/E3SM-Project/E3SM.git"
             )
 
@@ -1529,9 +1525,7 @@ class TestCaseHashIngestion:
         base.update(overrides)
         return base
 
-    def test_different_case_names_create_separate_simulations(
-        self, db: Session
-    ) -> None:
+    def test_different_case_names_create_separate_executions(self, db: Session) -> None:
         """Runs with different case_names create separate cases."""
         self._create_machine(db, "test-machine")
 
@@ -1548,7 +1542,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1558,7 +1552,7 @@ class TestCaseHashIngestion:
         case_beta = db.query(Case).filter(Case.name == "case_beta").first()
         assert case_alpha is not None
         assert case_beta is not None
-        case_ids = {s.case_id for s in result.simulations}
+        case_ids = {s.case_id for s in result.executions}
         assert case_ids == {case_alpha.id, case_beta.id}
 
     def test_idempotent_reingestion(self, db: Session) -> None:
@@ -1586,7 +1580,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1595,7 +1589,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1614,14 +1608,14 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         # Duplicate detected, nothing new created
         assert result.created_count == 0
         assert result.duplicate_count == 1
-        assert len(result.simulations) == 0
+        assert len(result.executions) == 0
 
     def test_duplicate_reingestion_does_not_require_hpc_username(
         self, db: Session
@@ -1649,7 +1643,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1658,7 +1652,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1678,7 +1672,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1712,7 +1706,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
             compset="FHIST",
@@ -1721,7 +1715,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1740,7 +1734,7 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
@@ -1775,7 +1769,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
             compset="FHIST",
@@ -1784,7 +1778,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1811,14 +1805,14 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.duplicate_count == 1
         assert result.created_count == 1
-        assert len(result.simulations) == 1
-        new_sim = result.simulations[0]
+        assert len(result.executions) == 1
+        new_sim = result.executions[0]
         assert new_sim.case_id == case.id
         assert new_sim.compiler == "gcc-12"
 
@@ -1848,7 +1842,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200953",
             compset="FHIST",
@@ -1857,7 +1851,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1879,14 +1873,14 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 1
-        assert len(result.simulations) == 1
-        assert result.simulations[0].case_id == case.id
-        assert str(result.simulations[0].git_repository_url) == (
+        assert len(result.executions) == 1
+        assert result.executions[0].case_id == case.id
+        assert str(result.executions[0].git_repository_url) == (
             "https://github.com/E3SM-Project/E3SM.git"
         )
 
@@ -1916,7 +1910,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200954",
             case_hash="existing-hash",
@@ -1926,7 +1920,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.PRODUCTION,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1951,15 +1945,15 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.duplicate_count == 1
         assert result.created_count == 1
-        assert len(result.simulations) == 1
-        assert result.simulations[0].case_id == case.id
-        assert result.simulations[0].case_hash == "new-hash"
+        assert len(result.executions) == 1
+        assert result.executions[0].case_id == case.id
+        assert result.executions[0].case_hash == "new-hash"
 
     def test_same_case_name_groups_to_same_case(self, db: Session) -> None:
         """Runs with the same case_name belong to the same Case without CASE_HASH."""
@@ -1979,13 +1973,13 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
         # Both simulations must share the same case_id
-        case_ids = {s.case_id for s in result.simulations}
+        case_ids = {s.case_id for s in result.executions}
         assert len(case_ids) == 1
         # Case was created with the shared name
         case = db.query(Case).filter(Case.name == "case1").first()
@@ -2012,12 +2006,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.simulations}) == 1
+        assert len({simulation.case_id for simulation in result.executions}) == 1
 
     def test_same_case_name_and_different_hpc_username_splits_case(
         self, db: Session
@@ -2042,12 +2036,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.simulations}) == 2
+        assert len({simulation.case_id for simulation in result.executions}) == 2
         assert db.query(Case).filter(Case.name == "case1").count() == 2
 
     def test_same_case_name_and_different_machine_splits_case(
@@ -2074,15 +2068,15 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        assert len({simulation.case_id for simulation in result.simulations}) == 2
+        assert len({simulation.case_id for simulation in result.executions}) == 2
         assert db.query(Case).filter(Case.name == "case1").count() == 2
 
-    def test_case_hash_is_persisted_on_created_simulation(self, db: Session) -> None:
+    def test_case_hash_is_persisted_on_created_execution(self, db: Session) -> None:
         """Parsed CASE_HASH should be preserved on created simulations."""
         self._create_machine(db, "test-machine")
 
@@ -2096,12 +2090,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 1
-        assert result.simulations[0].case_hash == (
+        assert result.executions[0].case_hash == (
             "ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357"
         )
 
@@ -2131,7 +2125,7 @@ class TestCaseHashIngestion:
 
         case = _create_case(db, name="case1", machine=machine)
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
             case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
@@ -2141,7 +2135,7 @@ class TestCaseHashIngestion:
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
@@ -2164,16 +2158,16 @@ class TestCaseHashIngestion:
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
             ),
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 1
-        assert len({s.case_id for s in result.simulations}) == 1
-        assert result.simulations[0].case_id == case.id
-        assert result.simulations[0].case_hash == (
+        assert len({s.case_id for s in result.executions}) == 1
+        assert result.executions[0].case_id == case.id
+        assert result.executions[0].case_hash == (
             "162f93c8f9ac9296efe7160d1807e41d8c2a6da1cbc77c54dd976665e10818fb"
         )
         assert db.query(Case).filter(Case.name == "case1").count() == 1
@@ -2213,7 +2207,7 @@ class TestCaseHashIngestion:
         )
 
         db.add(
-            Simulation(
+            Execution(
                 case_id=existing_case.id,
                 execution_id="1081192.251218-200952",
                 case_hash="existing-hash",
@@ -2223,7 +2217,7 @@ class TestCaseHashIngestion:
                 grid_resolution="0.9x1.25",
                 simulation_start_date=datetime(2020, 1, 1),
                 initialization_type="test",
-                status=SimulationStatus.CREATED,
+                status=ExecutionStatus.CREATED,
                 simulation_type=SimulationType.UNKNOWN,
                 created_by=user.id,
                 last_updated_by=user.id,
@@ -2246,15 +2240,15 @@ class TestCaseHashIngestion:
         with (
             patch(
                 "app.features.ingestion.ingest.main_parser",
-                return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+                return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
             ),
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 1
-        assert result.simulations[0].case_hash == "other-user-hash"
-        assert result.simulations[0].case_id != existing_case.id
+        assert result.executions[0].case_hash == "other-user-hash"
+        assert result.executions[0].case_id != existing_case.id
         assert not any(
             call.args and "Observed additional CASE_HASH for case '%s'" in call.args[0]
             for call in mock_info.call_args_list
@@ -2277,12 +2271,12 @@ class TestCaseHashIngestion:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
 
         assert result.created_count == 2
-        case_ids = {s.case_id for s in result.simulations}
+        case_ids = {s.case_id for s in result.executions}
         assert len(case_ids) == 2
 
 
@@ -2413,7 +2407,7 @@ class TestIngestHelpers:
     def test_track_case_hash_grouping_skips_info_for_matching_known_hash(
         self,
     ) -> None:
-        parsed = ParsedSimulation(
+        parsed = ParsedExecution(
             execution_dir="/path/to/1082002.260305-120002",
             execution_id="1082002.260305-120002",
             case_name="case_hash_case",
@@ -2454,7 +2448,7 @@ class TestIngestHelpers:
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
             _track_case_hash_grouping(
-                parsed_simulation=parsed,
+                parsed_execution=parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache={},
@@ -2469,7 +2463,7 @@ class TestIngestHelpers:
     def test_track_case_hash_grouping_uses_in_batch_hash_when_reference_hash_missing(
         self,
     ) -> None:
-        first_parsed = ParsedSimulation(
+        first_parsed = ParsedExecution(
             execution_dir="/path/to/1082003.260305-120003",
             execution_id="1082003.260305-120003",
             case_name="case_hash_case",
@@ -2495,7 +2489,7 @@ class TestIngestHelpers:
             status=None,
             case_hash="first-hash",
         )
-        second_parsed = ParsedSimulation(
+        second_parsed = ParsedExecution(
             execution_dir="/path/to/1082004.260305-120004",
             execution_id="1082004.260305-120004",
             case_name="case_hash_case",
@@ -2538,14 +2532,14 @@ class TestIngestHelpers:
             patch("app.features.ingestion.ingest.logger.info") as mock_info,
         ):
             _track_case_hash_grouping(
-                parsed_simulation=first_parsed,
+                parsed_execution=first_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
                 db=MagicMock(spec=Session),
             )
             _track_case_hash_grouping(
-                parsed_simulation=second_parsed,
+                parsed_execution=second_parsed,
                 case=case,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
@@ -2557,8 +2551,8 @@ class TestIngestHelpers:
         }
         mock_info.assert_called_once()
 
-    def test_simulation_create_draft_validates_by_field_name(self) -> None:
-        draft = SimulationCreateDraft(
+    def test_execution_create_draft_validates_by_field_name(self) -> None:
+        draft = ExecutionCreateDraft(
             case_id=uuid4(),
             execution_id="1082005.260305-120005",
             compset="FHIST",
@@ -2566,7 +2560,7 @@ class TestIngestHelpers:
             grid_name="grid1",
             grid_resolution="0.9x1.25",
             simulation_type=SimulationType.UNKNOWN,
-            status=SimulationStatus.CREATED,
+            status=ExecutionStatus.CREATED,
             campaign="campaign",
             experiment_type="historical",
             initialization_type="test",
@@ -2584,17 +2578,17 @@ class TestIngestHelpers:
             case_hash="abc123",
         )
 
-        schema = _validate_simulation_create(draft)
+        schema = _validate_execution_create(draft)
 
-        assert isinstance(schema, SimulationCreate)
+        assert isinstance(schema, ExecutionCreate)
         assert schema.execution_id == draft.execution_id
         assert schema.extra == {}
         assert schema.artifacts == []
         assert schema.links == []
         assert schema.case_hash == "abc123"
 
-    def test_build_simulation_create_draft_normalizes_values(self) -> None:
-        parsed = ParsedSimulation(
+    def test_build_execution_create_draft_normalizes_values(self) -> None:
+        parsed = ParsedExecution(
             execution_dir="/path/to/1082006.260305-120006",
             execution_id="1082006.260305-120006",
             case_name="case1",
@@ -2621,13 +2615,13 @@ class TestIngestHelpers:
             case_hash="hash123",
         )
 
-        draft = _build_simulation_create_draft(
-            parsed_simulation=parsed,
+        draft = _build_execution_create_draft(
+            parsed_execution=parsed,
             case_id=uuid4(),
         )
 
         assert draft.simulation_type == SimulationType.UNKNOWN
-        assert draft.status == SimulationStatus.COMPLETED
+        assert draft.status == ExecutionStatus.COMPLETED
         assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         assert draft.case_hash == "hash123"
         assert draft.simulation_start_date is not None
@@ -2679,14 +2673,14 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 1
-        simulation = ingest_result.simulations[0]
+        assert len(ingest_result.executions) == 1
+        simulation = ingest_result.executions[0]
         assert len(simulation.artifacts) == 4
 
         by_kind = {artifact.kind: artifact.uri for artifact in simulation.artifacts}
@@ -2730,16 +2724,16 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             ingest_result = ingest_archive(
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert len(ingest_result.simulations) == 1
+        assert len(ingest_result.executions) == 1
         by_kind = {
             artifact.kind: artifact.uri
-            for artifact in ingest_result.simulations[0].artifacts
+            for artifact in ingest_result.executions[0].artifacts
         }
         assert by_kind[ArtifactKind.OUTPUT] == "run"
         assert by_kind[ArtifactKind.ARCHIVE] == "archive"
@@ -2781,17 +2775,17 @@ class TestIngestHelpers:
 
         with patch(
             "app.features.ingestion.ingest.main_parser",
-            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+            return_value=(_parsed_executions_from_mapping(mock_simulations), 0),
         ):
             with patch("app.features.ingestion.ingest.logger.warning") as mock_warning:
                 ingest_result = ingest_archive(
                     Path("/tmp/archive.zip"), Path("/tmp/out"), db
                 )
 
-        assert len(ingest_result.simulations) == 1
+        assert len(ingest_result.executions) == 1
         by_kind = {
             artifact.kind: artifact.uri
-            for artifact in ingest_result.simulations[0].artifacts
+            for artifact in ingest_result.executions[0].artifacts
         }
         assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/missing-run"
         assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/missing-archive"

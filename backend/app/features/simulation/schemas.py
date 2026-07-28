@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
+    AliasChoices,
     ConfigDict,
     Field,
     HttpUrl,
@@ -16,6 +17,7 @@ from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
 from app.features.simulation.enums import (
     ArtifactKind,
+    ExecutionStatus,
     ExperimentType,
     ExternalLinkKind,
     SimulationStatus,
@@ -262,8 +264,8 @@ class ArtifactOut(CamelOutBaseModel):
     ]
 
 
-class SimulationCreate(CamelInBaseModel):
-    """Schema for creating a new Simulation."""
+class ExecutionCreate(CamelInBaseModel):
+    """Schema for creating a new execution."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -313,7 +315,7 @@ class SimulationCreate(CamelInBaseModel):
         SimulationType, Field(..., description="Type of the simulation")
     ]
     status: Annotated[
-        SimulationStatus, Field(..., description="Current status of the simulation")
+        ExecutionStatus, Field(..., description="Current status of the simulation")
     ]
     campaign: Annotated[
         str | None,
@@ -452,8 +454,17 @@ class SimulationCreate(CamelInBaseModel):
         return _validate_unique_resources(value, value_attr="url")
 
 
-class SimulationUpdate(CamelInBaseModel):
-    """Schema for narrow v1 simulation metadata updates."""
+# Phase 2 public-contract adapters. Remove with legacy schemas in Phase 5.
+class SimulationCreate(ExecutionCreate):
+    """Schema for creating a new Simulation."""
+
+    status: Annotated[  # type: ignore[assignment]  # Phase 2 compatibility
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+
+
+class ExecutionUpdate(CamelInBaseModel):
+    """Schema for narrow v1 execution metadata updates."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -477,7 +488,7 @@ class SimulationUpdate(CamelInBaseModel):
         SimulationType | None, Field(None, description="Type of the simulation")
     ]
     status: Annotated[
-        SimulationStatus | None,
+        ExecutionStatus | None,
         Field(None, description="Current status of the simulation"),
     ]
     description: Annotated[
@@ -543,8 +554,17 @@ class SimulationUpdate(CamelInBaseModel):
         return _validate_unique_resources(value, value_attr="url")
 
 
-class SimulationSummaryOut(CamelOutBaseModel):
-    """Lightweight schema for simulation summaries nested inside case responses.
+class SimulationUpdate(ExecutionUpdate):
+    """Schema for narrow v1 simulation metadata updates."""
+
+    status: Annotated[  # type: ignore[assignment]  # Phase 2 compatibility
+        SimulationStatus | None,
+        Field(None, description="Current status of the simulation"),
+    ]
+
+
+class ExecutionSummaryOut(CamelOutBaseModel):
+    """Lightweight schema for execution summaries nested inside case responses.
 
     Only includes the fields needed for case-level overview — avoids loading
     heavy relationships (machine, artifacts, links, user objects).
@@ -575,7 +595,7 @@ class SimulationSummaryOut(CamelOutBaseModel):
     ]
     compute_type: ComputeType | None = None
     status: Annotated[
-        SimulationStatus, Field(..., description="Current status of the simulation")
+        ExecutionStatus, Field(..., description="Current status of the simulation")
     ]
     simulation_start_date: Annotated[
         date, Field(..., description="Start date of the simulation")
@@ -585,7 +605,19 @@ class SimulationSummaryOut(CamelOutBaseModel):
     ]
 
 
-class SimulationSummaryCapabilitiesOut(CamelOutBaseModel):
+class SimulationSummaryOut(ExecutionSummaryOut):
+    """Lightweight schema for simulation summaries nested inside case responses.
+
+    Only includes the fields needed for case-level overview — avoids loading
+    heavy relationships (machine, artifacts, links, user objects).
+    """
+
+    status: Annotated[  # type: ignore[assignment]  # Phase 2 compatibility
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+
+
+class ExecutionSummaryCapabilitiesOut(CamelOutBaseModel):
     """Summary-generation capabilities available for this deployment."""
 
     llm_available: Annotated[
@@ -602,6 +634,10 @@ class SimulationSummaryCapabilitiesOut(CamelOutBaseModel):
             description="Whether deterministic summaries should auto-load on page open.",
         ),
     ]
+
+
+class SimulationSummaryCapabilitiesOut(ExecutionSummaryCapabilitiesOut):
+    """Summary-generation capabilities available for this deployment."""
 
 
 class CaseListItemOut(CamelOutBaseModel):
@@ -652,8 +688,8 @@ class CaseFilterOptionsOut(CamelOutBaseModel):
     creators: list[FilterOptionOut]
 
 
-class SimulationListItemOut(CamelOutBaseModel):
-    """Scalar-only simulation row for paginated catalog views."""
+class ExecutionListItemOut(CamelOutBaseModel):
+    """Scalar-only execution row for paginated catalog views."""
 
     id: UUID
     case_id: UUID
@@ -662,7 +698,7 @@ class SimulationListItemOut(CamelOutBaseModel):
     execution_id: str
     case_hash: str | None = None
     simulation_type: SimulationType
-    status: SimulationStatus
+    status: ExecutionStatus
     campaign: str | None = None
     experiment_type: str | None = None
     compset: str
@@ -688,6 +724,21 @@ class SimulationListItemOut(CamelOutBaseModel):
     updated_at: datetime
 
 
+class SimulationListItemOut(ExecutionListItemOut):
+    """Scalar-only simulation row for paginated catalog views."""
+
+    status: SimulationStatus  # type: ignore[assignment]  # Phase 2 compatibility
+
+
+class ExecutionPageOut(CamelOutBaseModel):
+    """Paginated execution catalog response."""
+
+    items: list[ExecutionListItemOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class SimulationPageOut(CamelOutBaseModel):
     """Paginated simulation catalog response."""
 
@@ -697,8 +748,8 @@ class SimulationPageOut(CamelOutBaseModel):
     page_size: int
 
 
-class SimulationFilterOptionsOut(CamelOutBaseModel):
-    """Distinct scalar options supported by simulation catalog filters."""
+class ExecutionFilterOptionsOut(CamelOutBaseModel):
+    """Distinct scalar options supported by execution catalog filters."""
 
     case_names: list[str]
     case_groups: list[str]
@@ -713,10 +764,16 @@ class SimulationFilterOptionsOut(CamelOutBaseModel):
     simulation_types: list[SimulationType]
     initialization_types: list[str]
     compilers: list[str]
-    statuses: list[SimulationStatus]
+    statuses: list[ExecutionStatus]
     git_tags: list[str]
     created_by_ids: list[UUID]
     creators: list[FilterOptionOut]
+
+
+class SimulationFilterOptionsOut(ExecutionFilterOptionsOut):
+    """Distinct scalar options supported by simulation catalog filters."""
+
+    statuses: list[SimulationStatus]  # type: ignore[assignment]  # Phase 2 compatibility
 
 
 class CatalogOverviewOut(CamelOutBaseModel):
@@ -749,6 +806,7 @@ class CaseSummaryOut(CamelOutBaseModel):
         Field(
             default_factory=list,
             description="Simulation executions belonging to this case.",
+            validation_alias=AliasChoices("simulations", "executions"),
         ),
     ]
     machine_names: Annotated[
@@ -853,8 +911,8 @@ class CaseUpdate(CamelInBaseModel):
         return _validate_unique_resources(value, value_attr="url")
 
 
-class SimulationOut(CamelOutBaseModel):
-    """Schema for representing a Simulation with related entities."""
+class ExecutionOut(CamelOutBaseModel):
+    """Schema for representing an execution with related entities."""
 
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the simulation.")
@@ -919,7 +977,7 @@ class SimulationOut(CamelOutBaseModel):
         SimulationType, Field(..., description="Type of the simulation")
     ]
     status: Annotated[
-        SimulationStatus, Field(..., description="Current status of the simulation")
+        ExecutionStatus, Field(..., description="Current status of the simulation")
     ]
     campaign: Annotated[
         str | None,
@@ -1050,7 +1108,7 @@ class SimulationOut(CamelOutBaseModel):
         ),
     ]
     summary_capabilities: Annotated[
-        SimulationSummaryCapabilitiesOut,
+        ExecutionSummaryCapabilitiesOut,
         Field(
             description=(
                 "Deployment-level summary generation capabilities available to the UI."
@@ -1095,3 +1153,19 @@ class SimulationOut(CamelOutBaseModel):
             grouped[item.kind].append(item)
 
         return dict(grouped)
+
+
+class SimulationOut(ExecutionOut):
+    """Schema for representing a Simulation with related entities."""
+
+    status: Annotated[  # type: ignore[assignment]  # Phase 2 compatibility
+        SimulationStatus, Field(..., description="Current status of the simulation")
+    ]
+    summary_capabilities: Annotated[
+        SimulationSummaryCapabilitiesOut,
+        Field(
+            description=(
+                "Deployment-level summary generation capabilities available to the UI."
+            )
+        ),
+    ]

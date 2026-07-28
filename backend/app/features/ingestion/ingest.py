@@ -14,11 +14,11 @@ from sqlalchemy.orm import Session
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.parser import main_parser
-from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.utils import parse_machine_name, resolve_machine_by_name
-from app.features.simulation.enums import ArtifactKind, SimulationStatus, SimulationType
-from app.features.simulation.models import Case, Simulation
-from app.features.simulation.schemas import ArtifactCreate, SimulationCreate
+from app.features.simulation.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.simulation.models import Case, Execution
+from app.features.simulation.schemas import ArtifactCreate, ExecutionCreate
 
 logger = _setup_custom_logger(__name__)
 
@@ -36,20 +36,20 @@ class IngestArchiveResult:
 
     Attributes
     ----------
-    simulations : list[SimulationCreate]
-        Collection of simulation schema objects successfully parsed and
+    executions : list[ExecutionCreate]
+        Collection of execution schema objects successfully parsed and
         validated from the archive.
     created_count : int
-        Number of new simulations eligible for creation.
+        Number of new executions eligible for creation.
     duplicate_count : int
-        Number of simulations skipped due to existing records in the database.
+        Number of executions skipped due to existing records in the database.
     skipped_count : int
         Number of incomplete runs that were skipped at the parser level.
     errors : list[dict[str, str]]
         List of ingestion errors encountered during processing.
     """
 
-    simulations: list[SimulationCreate]
+    executions: list[ExecutionCreate]
     created_count: int
     duplicate_count: int
     skipped_count: int = 0
@@ -57,8 +57,8 @@ class IngestArchiveResult:
 
 
 @dataclass(frozen=True)
-class SimulationCreateDraft:
-    """Normalized internal payload validated into ``SimulationCreate``."""
+class ExecutionCreateDraft:
+    """Normalized internal payload validated into ``ExecutionCreate``."""
 
     case_id: UUID | None
     execution_id: str
@@ -67,7 +67,7 @@ class SimulationCreateDraft:
     grid_name: str | None
     grid_resolution: str | None
     simulation_type: SimulationType
-    status: SimulationStatus
+    status: ExecutionStatus
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None
@@ -107,12 +107,12 @@ def ingest_archive(
     output_dir : Path | str
         Directory where extracted files will be stored.
     db : Session
-        SQLAlchemy database session for machine and simulation lookups.
+        SQLAlchemy database session for machine and execution lookups.
     Returns
     -------
     IngestArchiveResult
-        Dataclass containing list of SimulationCreate objects, counts of
-        created and duplicate simulations, and any errors encountered.
+        Dataclass containing list of ExecutionCreate objects, counts of
+        created and duplicate executions, and any errors encountered.
     """
     archive_path_resolved = (
         Path(archive_path) if isinstance(archive_path, str) else archive_path
@@ -121,32 +121,32 @@ def ingest_archive(
         Path(output_dir) if isinstance(output_dir, str) else output_dir
     )
 
-    parsed_simulations, skipped_count = main_parser(
+    parsed_executions, skipped_count = main_parser(
         archive_path_resolved,
         output_dir_resolved,
         strict_validation=strict_validation,
     )
 
-    if not parsed_simulations:
-        logger.warning(f"No simulations found in archive: {archive_path_resolved}")
+    if not parsed_executions:
+        logger.warning(f"No executions found in archive: {archive_path_resolved}")
 
         return IngestArchiveResult(
-            simulations=[],
+            executions=[],
             created_count=0,
             duplicate_count=0,
             skipped_count=skipped_count,
         )
 
-    simulations: list[SimulationCreate] = []
+    executions: list[ExecutionCreate] = []
     duplicate_count = 0
     errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
 
-    for parsed_simulation in parsed_simulations:
+    for parsed_execution in parsed_executions:
         try:
-            simulation, is_duplicate = _process_simulation_for_ingest(
-                parsed_simulation=parsed_simulation,
+            execution, is_duplicate = _process_execution_for_ingest(
+                parsed_execution=parsed_execution,
                 db=db,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
@@ -157,19 +157,19 @@ def ingest_archive(
                 duplicate_count += 1
                 continue
 
-            if simulation is not None:
-                simulations.append(simulation)
+            if execution is not None:
+                executions.append(execution)
 
         except (ValueError, LookupError, ValidationError) as e:
             logger.error(
-                "Failed to process simulation from %s: %s",
-                parsed_simulation.execution_dir,
+                "Failed to process execution from %s: %s",
+                parsed_execution.execution_dir,
                 e,
             )
 
             errors.append(
                 {
-                    "execution_dir": parsed_simulation.execution_dir,
+                    "execution_dir": parsed_execution.execution_dir,
                     "error_type": type(e).__name__,
                     "error": str(e),
                 }
@@ -177,8 +177,8 @@ def ingest_archive(
             continue
 
     result = IngestArchiveResult(
-        simulations=simulations,
-        created_count=len(simulations),
+        executions=executions,
+        created_count=len(executions),
         duplicate_count=duplicate_count,
         skipped_count=skipped_count,
         errors=errors,
@@ -187,33 +187,33 @@ def ingest_archive(
     return result
 
 
-def _process_simulation_for_ingest(
-    parsed_simulation: ParsedSimulation,
+def _process_execution_for_ingest(
+    parsed_execution: ParsedExecution,
     db: Session,
     case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     request_hpc_username: str | None = None,
-) -> tuple[SimulationCreate | None, bool]:
-    """Process one parsed simulation entry.
+) -> tuple[ExecutionCreate | None, bool]:
+    """Process one parsed execution entry.
 
     Parameters
     ----------
-    parsed_simulation : ParsedSimulation
-        Parsed archive-derived metadata for the simulation.
+    parsed_execution : ParsedExecution
+        Parsed archive-derived metadata for the execution.
     db : Session
         Active database session for lookups and case resolution.
     Returns
     -------
-    tuple[SimulationCreate | None, bool]
-        ``(simulation, is_duplicate)`` where ``simulation`` is populated
+    tuple[ExecutionCreate | None, bool]
+        ``(execution, is_duplicate)`` where ``execution`` is populated
         only for new records and ``is_duplicate`` is True when an existing
         ``(case_id, execution_id)`` pair was found.
     """
-    execution_id = parsed_simulation.execution_id
-    case_name = _require_case_name(parsed_simulation)
-    machine_id = _resolve_machine_id(parsed_simulation, db)
+    execution_id = parsed_execution.execution_id
+    case_name = _require_case_name(parsed_execution)
+    machine_id = _resolve_machine_id(parsed_execution, db)
     resolved_hpc_username = _resolve_case_hpc_username(
-        parsed_simulation,
+        parsed_execution,
         request_hpc_username,
     )
 
@@ -223,49 +223,49 @@ def _process_simulation_for_ingest(
         machine_id=machine_id,
         hpc_username=resolved_hpc_username,
     )
-    if existing_case is not None and _is_duplicate_simulation(
+    if existing_case is not None and _is_duplicate_execution(
         case=existing_case,
         execution_id=execution_id,
-        execution_dir=parsed_simulation.execution_dir,
+        execution_dir=parsed_execution.execution_dir,
         db=db,
     ):
         return None, True
 
-    prevalidated_draft = _prevalidate_simulation_create(
-        parsed_simulation,
+    prevalidated_draft = _prevalidate_execution_create(
+        parsed_execution,
     )
     case = existing_case or _resolve_case(
-        parsed_simulation,
+        parsed_execution,
         case_name,
         machine_id,
         resolved_hpc_username,
         db,
     )
     _track_case_hash_grouping(
-        parsed_simulation=parsed_simulation,
+        parsed_execution=parsed_execution,
         case=case,
         case_hash_cache=case_hash_cache,
         persisted_case_hash_cache=persisted_case_hash_cache,
         db=db,
     )
-    simulation = _build_simulation_create(
-        parsed_simulation=parsed_simulation,
+    execution = _build_execution_create(
+        parsed_execution=parsed_execution,
         prevalidated_draft=prevalidated_draft,
         case=case,
     )
 
-    return simulation, False
+    return execution, False
 
 
 def _track_case_hash_grouping(
-    parsed_simulation: ParsedSimulation,
+    parsed_execution: ParsedExecution,
     case: Case,
     case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     db: Session,
 ) -> None:
     """Track CASE_HASH values as within-case execution grouping metadata."""
-    current_hash = parsed_simulation.case_hash
+    current_hash = parsed_execution.case_hash
     if not current_hash:
         return
 
@@ -289,7 +289,7 @@ def _track_case_hash_grouping(
         case.name,
         known_hash,
         current_hash,
-        parsed_simulation.execution_dir,
+        parsed_execution.execution_dir,
     )
 
 
@@ -302,12 +302,12 @@ def _get_known_case_hash(
     """Return first known CASE_HASH used for within-case execution grouping."""
     if case.id not in persisted_case_hash_cache:
         known_hash = (
-            db.query(Simulation.case_hash)
+            db.query(Execution.case_hash)
             .filter(
-                Simulation.case_id == case.id,
-                Simulation.case_hash.is_not(None),
+                Execution.case_id == case.id,
+                Execution.case_hash.is_not(None),
             )
-            .order_by(Simulation.created_at.asc())
+            .order_by(Execution.created_at.asc())
             .limit(1)
             .scalar()
         )
@@ -322,13 +322,13 @@ def _get_known_case_hash(
     return case_hash_cache.get(_case_identity_key(case))
 
 
-def _require_case_name(parsed_simulation: ParsedSimulation) -> str:
+def _require_case_name(parsed_execution: ParsedExecution) -> str:
     """Return case_name from metadata or raise a descriptive error."""
-    case_name = parsed_simulation.case_name
+    case_name = parsed_execution.case_name
 
     if not case_name:
         raise ValueError(
-            f"case_name is required but missing from '{parsed_simulation.execution_dir}'. "
+            f"case_name is required but missing from '{parsed_execution.execution_dir}'. "
             "Cannot determine Case identity."
         )
 
@@ -336,14 +336,14 @@ def _require_case_name(parsed_simulation: ParsedSimulation) -> str:
 
 
 def _resolve_case(
-    parsed_simulation: ParsedSimulation,
+    parsed_execution: ParsedExecution,
     case_name: str,
     machine_id: UUID,
     hpc_username: str,
     db: Session,
 ) -> Case:
     """Resolve or create the Case for the current metadata row."""
-    case_group = parsed_simulation.case_group
+    case_group = parsed_execution.case_group
 
     result = _get_or_create_case(
         db,
@@ -374,17 +374,17 @@ def _find_case(
     )
 
 
-def _is_duplicate_simulation(
+def _is_duplicate_execution(
     case: Case, execution_id: str, execution_dir: str, db: Session
 ) -> bool:
-    """Return True when a simulation with the same case/execution already exists."""
-    existing_sim = _find_existing_simulation(db, case.id, execution_id)
+    """Return True when an execution with the same case/execution already exists."""
+    existing_execution = _find_existing_execution(db, case.id, execution_id)
 
-    if not existing_sim:
+    if not existing_execution:
         return False
 
     logger.info(
-        "Simulation with case_name='%s' and execution_id='%s' already exists. "
+        "Execution with case_name='%s' and execution_id='%s' already exists. "
         "Skipping duplicate from %s.",
         case.name,
         execution_id,
@@ -393,44 +393,42 @@ def _is_duplicate_simulation(
     return True
 
 
-def _build_simulation_create(
-    parsed_simulation: ParsedSimulation,
-    prevalidated_draft: SimulationCreateDraft,
+def _build_execution_create(
+    parsed_execution: ParsedExecution,
+    prevalidated_draft: ExecutionCreateDraft,
     case: Case,
-) -> SimulationCreate:
-    """Create a SimulationCreate from parsed archive metadata."""
-    simulation = _validate_simulation_create(
-        replace(prevalidated_draft, case_id=case.id)
-    )
-    simulation = _attach_path_artifacts(simulation, parsed_simulation)
+) -> ExecutionCreate:
+    """Create an ExecutionCreate from parsed archive metadata."""
+    execution = _validate_execution_create(replace(prevalidated_draft, case_id=case.id))
+    execution = _attach_path_artifacts(execution, parsed_execution)
     logger.info(
-        "Mapped simulation from %s: %s", parsed_simulation.execution_dir, case.name
+        "Mapped execution from %s: %s", parsed_execution.execution_dir, case.name
     )
-    return simulation
+    return execution
 
 
 def _attach_path_artifacts(
-    simulation: SimulationCreate,
-    parsed_simulation: ParsedSimulation,
-) -> SimulationCreate:
-    path_artifacts = _build_path_artifacts(parsed_simulation)
+    execution: ExecutionCreate,
+    parsed_execution: ParsedExecution,
+) -> ExecutionCreate:
+    path_artifacts = _build_path_artifacts(parsed_execution)
     if not path_artifacts:
-        return simulation
+        return execution
 
-    return simulation.model_copy(
-        update={"artifacts": [*simulation.artifacts, *path_artifacts]}
+    return execution.model_copy(
+        update={"artifacts": [*execution.artifacts, *path_artifacts]}
     )
 
 
-def _build_path_artifacts(parsed_simulation: ParsedSimulation) -> list[ArtifactCreate]:
+def _build_path_artifacts(parsed_execution: ParsedExecution) -> list[ArtifactCreate]:
     path_artifacts: list[ArtifactCreate] = []
 
-    output_path = _normalize_path_candidate(parsed_simulation.output_path)
-    archive_path = _normalize_path_candidate(parsed_simulation.archive_path)
-    run_script_path = _derive_case_run_script_path(parsed_simulation.case_root)
+    output_path = _normalize_path_candidate(parsed_execution.output_path)
+    archive_path = _normalize_path_candidate(parsed_execution.archive_path)
+    run_script_path = _derive_case_run_script_path(parsed_execution.case_root)
     postprocessing_path = _extract_postprocessing_script_path(
-        parsed_simulation.postprocessing_script,
-        execution_dir=parsed_simulation.execution_dir,
+        parsed_execution.postprocessing_script,
+        execution_dir=parsed_execution.execution_dir,
     )
 
     _append_path_artifact(path_artifacts, ArtifactKind.OUTPUT, output_path)
@@ -497,12 +495,12 @@ def _normalize_path_candidate(path_value: str | None) -> str | None:
     return normalized
 
 
-def _prevalidate_simulation_create(
-    parsed_simulation: ParsedSimulation,
-) -> SimulationCreateDraft:
-    """Build and validate non-identity simulation fields before create."""
-    draft = _build_simulation_create_draft(
-        parsed_simulation=parsed_simulation,
+def _prevalidate_execution_create(
+    parsed_execution: ParsedExecution,
+) -> ExecutionCreateDraft:
+    """Build and validate non-identity execution fields before create."""
+    draft = _build_execution_create_draft(
+        parsed_execution=parsed_execution,
         case_id=None,
     )
 
@@ -511,7 +509,7 @@ def _prevalidate_simulation_create(
     return draft
 
 
-def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
+def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     """Validate the draft fields that must succeed before case creation."""
     for field_name in (
         "execution_id",
@@ -595,10 +593,10 @@ def _case_identity_key(case: Case) -> CaseIdentity:
 
 
 def _resolve_case_hpc_username(
-    parsed_simulation: ParsedSimulation,
+    parsed_execution: ParsedExecution,
     request_hpc_username: str | None,
 ) -> str:
-    resolved_hpc_username = _normalize_hpc_username(parsed_simulation.hpc_username)
+    resolved_hpc_username = _normalize_hpc_username(parsed_execution.hpc_username)
     if resolved_hpc_username is not None:
         return resolved_hpc_username
 
@@ -607,18 +605,18 @@ def _resolve_case_hpc_username(
         return request_hpc_username
 
     raise ValueError(
-        f"hpc_username is required but missing from '{parsed_simulation.execution_dir}'. "
+        f"hpc_username is required but missing from '{parsed_execution.execution_dir}'. "
         "Provide it in parsed metadata or request payload."
     )
 
 
-def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
+def _resolve_machine_id(metadata: ParsedExecution, db: Session) -> UUID:
     """Resolve machine name to machine ID from the database.
 
     Parameters
     ----------
-    metadata : ParsedSimulation
-        Parsed metadata for the simulation, expected to contain a
+    metadata : ParsedExecution
+        Parsed metadata for the execution, expected to contain a
         "machine" key with the machine name.
     db : Session
         Active database session for querying the Machine table.
@@ -643,15 +641,15 @@ def _resolve_machine_id(metadata: ParsedSimulation, db: Session) -> UUID:
     return machine.id
 
 
-def _find_existing_simulation(
+def _find_existing_execution(
     db: Session, case_id: UUID, execution_id: str
-) -> Simulation | None:
-    """Find an existing simulation by case/execution pair.
+) -> Execution | None:
+    """Find an existing execution by case/execution pair.
 
     Parameters
     ----------
     db : Session
-        Active database session for querying the Simulation table.
+        Active database session for querying the Execution table.
     case_id : UUID
         Case identifier paired with the execution identifier.
     execution_id : str
@@ -659,15 +657,15 @@ def _find_existing_simulation(
 
     Returns
     -------
-    Simulation | None
-        The existing Simulation object with the given case/execution pair,
+    Execution | None
+        The existing Execution object with the given case/execution pair,
         or None if not found.
     """
     result = (
-        db.query(Simulation)
+        db.query(Execution)
         .filter(
-            Simulation.case_id == case_id,
-            Simulation.execution_id == execution_id,
+            Execution.case_id == case_id,
+            Execution.execution_id == execution_id,
         )
         .first()
     )
@@ -722,69 +720,69 @@ def _normalize_git_url(url: str | None) -> str | None:
     return url
 
 
-def _build_simulation_create_draft(
-    parsed_simulation: ParsedSimulation,
+def _build_execution_create_draft(
+    parsed_execution: ParsedExecution,
     case_id: UUID | None,
-) -> SimulationCreateDraft:
-    """Build a normalized internal draft for ``SimulationCreate`` validation.
+) -> ExecutionCreateDraft:
+    """Build a normalized internal draft for ``ExecutionCreate`` validation.
 
     Parameters
     ----------
-    parsed_simulation : ParsedSimulation
+    parsed_execution : ParsedExecution
         Parsed archive-derived metadata with string values.
     machine_id : UUID
         Pre-extracted machine ID.
     case_id : UUID
-        ID of the Case this simulation belongs to.
+        ID of the Case this execution belongs to.
     Returns
     -------
-    SimulationCreateDraft
+    ExecutionCreateDraft
         Typed ingest draft ready for schema validation.
     """
-    simulation_start_date = _parse_date_field(parsed_simulation.simulation_start_date)
-    simulation_end_date = _parse_date_field(parsed_simulation.simulation_end_date)
+    simulation_start_date = _parse_date_field(parsed_execution.simulation_start_date)
+    simulation_end_date = _parse_date_field(parsed_execution.simulation_end_date)
 
-    run_start_date = _parse_datetime_field(parsed_simulation.run_start_date)
-    run_end_date = _parse_datetime_field(parsed_simulation.run_end_date)
+    run_start_date = _parse_datetime_field(parsed_execution.run_start_date)
+    run_end_date = _parse_datetime_field(parsed_execution.run_end_date)
 
-    git_repository_url = _normalize_git_url(parsed_simulation.git_repository_url)
+    git_repository_url = _normalize_git_url(parsed_execution.git_repository_url)
     simulation_type = _normalize_simulation_type(None)
-    status = _normalize_simulation_status(parsed_simulation.status)
-    _, compute_type = parse_machine_name(parsed_simulation.machine or "")
+    status = _normalize_execution_status(parsed_execution.status)
+    _, compute_type = parse_machine_name(parsed_execution.machine or "")
 
-    simulation_draft = SimulationCreateDraft(
+    execution_draft = ExecutionCreateDraft(
         case_id=case_id,
-        execution_id=parsed_simulation.execution_id,
-        compset=parsed_simulation.compset,
-        compset_alias=parsed_simulation.compset_alias,
-        grid_name=parsed_simulation.grid_name,
-        grid_resolution=parsed_simulation.grid_resolution,
+        execution_id=parsed_execution.execution_id,
+        compset=parsed_execution.compset,
+        compset_alias=parsed_execution.compset_alias,
+        grid_name=parsed_execution.grid_name,
+        grid_resolution=parsed_execution.grid_resolution,
         simulation_type=simulation_type,
         status=status,
-        campaign=parsed_simulation.campaign,
-        experiment_type=parsed_simulation.experiment_type,
-        initialization_type=parsed_simulation.initialization_type,
+        campaign=parsed_execution.campaign,
+        experiment_type=parsed_execution.experiment_type,
+        initialization_type=parsed_execution.initialization_type,
         simulation_start_date=simulation_start_date,
         simulation_end_date=simulation_end_date,
         run_start_date=run_start_date,
         run_end_date=run_end_date,
-        compiler=parsed_simulation.compiler,
+        compiler=parsed_execution.compiler,
         compute_type=compute_type,
         git_repository_url=git_repository_url,
-        git_branch=parsed_simulation.git_branch,
-        git_tag=parsed_simulation.git_tag,
-        git_commit_hash=parsed_simulation.git_commit_hash,
+        git_branch=parsed_execution.git_branch,
+        git_tag=parsed_execution.git_tag,
+        git_commit_hash=parsed_execution.git_commit_hash,
         created_by=None,
         last_updated_by=None,
-        case_hash=parsed_simulation.case_hash,
+        case_hash=parsed_execution.case_hash,
     )
 
-    return simulation_draft
+    return execution_draft
 
 
-def _validate_simulation_create(draft: SimulationCreateDraft) -> SimulationCreate:
-    """Validate a typed ingest draft into ``SimulationCreate``."""
-    return SimulationCreate.model_validate(
+def _validate_execution_create(draft: ExecutionCreateDraft) -> ExecutionCreate:
+    """Validate a typed ingest draft into ``ExecutionCreate``."""
+    return ExecutionCreate.model_validate(
         draft,
         by_name=True,
         from_attributes=True,
@@ -814,27 +812,27 @@ def _normalize_simulation_type(value: str | None) -> SimulationType:
             return SimulationType.UNKNOWN
 
 
-def _normalize_simulation_status(value: str | None) -> SimulationStatus:
-    """Return a valid SimulationStatus enum value with CREATED fallback."""
+def _normalize_execution_status(value: str | None) -> ExecutionStatus:
+    """Return a valid ExecutionStatus enum value with CREATED fallback."""
     if not value:
-        return SimulationStatus.CREATED
+        return ExecutionStatus.CREATED
 
     normalized = value.strip()
     if not normalized:
-        return SimulationStatus.CREATED
+        return ExecutionStatus.CREATED
 
     try:
-        return SimulationStatus(normalized)
+        return ExecutionStatus(normalized)
     except ValueError:
         try:
-            return SimulationStatus[normalized.upper()]
+            return ExecutionStatus.__members__[normalized.upper()]
         except KeyError:
             logger.warning(
                 "Unknown status '%s'; defaulting to '%s'.",
                 value,
-                SimulationStatus.CREATED.value,
+                ExecutionStatus.CREATED.value,
             )
-            return SimulationStatus.CREATED
+            return ExecutionStatus.CREATED
 
 
 def _parse_datetime_field(value: str | None) -> datetime | None:

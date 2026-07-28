@@ -12,9 +12,9 @@ from app.common.models.base import Base
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.enums import SimulationStatus, SimulationType
-from app.features.simulation.models import Case, Simulation
-from app.features.simulation.schemas import SimulationCreate
+from app.features.simulation.enums import ExecutionStatus, SimulationType
+from app.features.simulation.models import Case, Execution
+from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.auth.token import generate_token
 from app.features.user.models import ApiToken, User, UserRole
 from tests.conftest import engine
@@ -97,7 +97,7 @@ class TestIngestionWithAPIToken:
         db.flush()
 
         db.add(
-            Simulation(
+            Execution(
                 case_id=case.id,
                 execution_id="1083012.260305-120012",
                 compset="FHIST",
@@ -105,7 +105,7 @@ class TestIngestionWithAPIToken:
                 grid_name="grid",
                 grid_resolution="1x1",
                 simulation_type=SimulationType.PRODUCTION,
-                status=SimulationStatus.COMPLETED,
+                status=ExecutionStatus.COMPLETED,
                 initialization_type="branch",
                 simulation_start_date=datetime.now(timezone.utc),
                 created_by=svc_user.id,
@@ -153,7 +153,7 @@ class TestIngestionWithAPIToken:
             mock_result.created_count = 1
             mock_result.duplicate_count = 0
             mock_result.errors = []
-            mock_result.simulations = []
+            mock_result.executions = []
             mock_ingest.return_value = mock_result
 
             machine = Machine(
@@ -203,7 +203,7 @@ class TestIngestionWithAPIToken:
             mock_result.created_count = 0
             mock_result.duplicate_count = 1
             mock_result.errors = [{"execution_dir": "x", "error": "duplicate"}]
-            mock_result.simulations = []
+            mock_result.executions = []
             mock_ingest.return_value = mock_result
 
             machine = Machine(
@@ -403,7 +403,7 @@ class TestIngestionWithAPIToken:
         ):
             mock_validate.return_value = None
 
-            mock_sim = SimulationCreate(
+            mock_sim = ExecutionCreate(
                 caseId=case.id,
                 executionId="1081156.251218-200923",
                 compset="test_compset",
@@ -411,7 +411,7 @@ class TestIngestionWithAPIToken:
                 gridName="test_grid",
                 gridResolution="1x1",
                 simulationType=SimulationType.PRODUCTION,
-                status=SimulationStatus.RUNNING,
+                status=ExecutionStatus.RUNNING,
                 initializationType="cold",
                 simulationStartDate=date.today(),
             )
@@ -420,7 +420,7 @@ class TestIngestionWithAPIToken:
             mock_result.created_count = 1
             mock_result.duplicate_count = 0
             mock_result.errors = []
-            mock_result.simulations = [mock_sim]
+            mock_result.executions = [mock_sim]
             mock_ingest.return_value = mock_result
 
             payload = {
@@ -440,8 +440,8 @@ class TestIngestionWithAPIToken:
             assert mock_ingest.call_args.kwargs["hpc_username"] == "hpc_user_test"
 
             simulation = (
-                db.query(Simulation)
-                .filter(Simulation.execution_id == "1081156.251218-200923")
+                db.query(Execution)
+                .filter(Execution.execution_id == "1081156.251218-200923")
                 .first()
             )
             assert simulation is not None

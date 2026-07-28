@@ -8,7 +8,7 @@ from app.features.simulation.models import Case
 from app.scripts.db.seed import (
     DEV_HPC_USERNAME,
     _resolve_seed_case_machine,
-    _seed_simulation,
+    _seed_execution,
 )
 from tests.features.site.utils import get_or_create_site
 
@@ -27,7 +27,7 @@ class TestResolveSeedCaseMachine:
 
         resolved = _resolve_seed_case_machine(
             db,
-            simulations_data=[
+            executions_data=[
                 {"machine": {"name": "seed-machine"}},
                 {"machine": {"name": "seed-machine"}},
             ],
@@ -60,7 +60,7 @@ class TestResolveSeedCaseMachine:
         with pytest.raises(ValueError, match="mixes machines"):
             _resolve_seed_case_machine(
                 db,
-                simulations_data=[
+                executions_data=[
                     {"machine": {"name": "seed-machine-one"}},
                     {"machine": {"name": "seed-machine-two"}},
                 ],
@@ -68,7 +68,7 @@ class TestResolveSeedCaseMachine:
             )
 
 
-class TestSeedSimulation:
+class TestSeedExecution:
     def test_strips_seed_only_identity_fields(
         self, db: Session, normal_user_sync
     ) -> None:
@@ -90,9 +90,9 @@ class TestSeedSimulation:
         db.add(case)
         db.flush()
 
-        simulation = _seed_simulation(
+        simulation = _seed_execution(
             db,
-            sim_entry={
+            execution_entry={
                 "machine": {"name": "seed-machine"},
                 "machineId": str(machine.id),
                 "hpcUsername": "override-me",

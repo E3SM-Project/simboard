@@ -7,28 +7,28 @@ from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from app.core.config import settings
 from app.features.assistant import orchestrator
 from app.features.assistant.schemas import (
-    SimulationSummaryContent,
+    ExecutionSummaryContent,
     SummaryCitationOut,
     SummaryGenerationProvider,
 )
 from app.features.assistant.service import LLM_FALLBACK_CAVEAT
 from app.features.assistant.snapshot import (
-    SimulationSnapshot,
+    ExecutionSnapshot,
     SnapshotArtifact,
     SnapshotBudgetExceededError,
     SnapshotCaseFields,
+    SnapshotExecutionFields,
     SnapshotLink,
     SnapshotMachineFields,
-    SnapshotSimulationFields,
 )
-from app.features.simulation.models import Simulation
+from app.features.simulation.models import Execution
 
 DEFAULT_LIVAI_API_KEY = SecretStr("livai-key")
 
 
-def _make_snapshot() -> SimulationSnapshot:
-    return SimulationSnapshot(
-        simulation=SnapshotSimulationFields(
+def _make_snapshot() -> ExecutionSnapshot:
+    return ExecutionSnapshot(
+        execution=SnapshotExecutionFields(
             id="simulation-1",
             execution_id="assistant-livai-exec",
             description="LivAI-backed simulation summary test.",
@@ -50,14 +50,14 @@ def _make_snapshot() -> SimulationSnapshot:
     )
 
 
-def _make_llm_content(**overrides) -> SimulationSummaryContent:
+def _make_llm_content(**overrides) -> ExecutionSummaryContent:
     payload = {
         "answer": "Simulation assistant-livai-exec belongs to case assistant_livai_case.",
         "citations": [
             SummaryCitationOut(
                 source_type="simulation_field",
                 path="simulation.execution_id",
-                label="Execution ID",
+                label="Simulation ID",
             ),
             SummaryCitationOut(
                 source_type="case_field",
@@ -71,7 +71,7 @@ def _make_llm_content(**overrides) -> SimulationSummaryContent:
         "suggested_followups": ["Review recorded artifacts."],
     }
     payload.update(overrides)
-    return SimulationSummaryContent(**payload)
+    return ExecutionSummaryContent(**payload)
 
 
 def _set_livai_settings(
@@ -370,7 +370,7 @@ class TestValidationHelpers:
         )
 
         assert result.suggested_followups == (
-            orchestrator.build_simulation_summary(snapshot).suggested_followups
+            orchestrator.build_execution_summary(snapshot).suggested_followups
         )
 
     def test_snapshot_has_citation_path_supports_related_record_selectors(self) -> None:
@@ -401,20 +401,20 @@ class TestValidationHelpers:
         assert orchestrator._trim_fallback_reason("abcdef", limit=5) == "ab..."
 
 
-class TestGenerateSimulationSummary:
+class TestGenerateExecutionSummary:
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_returns_deterministic_when_disabled(
+    async def test_generate_execution_summary_returns_deterministic_when_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         monkeypatch.setattr(settings, "assistant_llm_enabled", False)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "llm_disabled"
         assert result.summary.generation_mode == "deterministic"
@@ -423,19 +423,19 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model is None
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_returns_deterministic_when_llm_disallowed(
+    async def test_generate_execution_summary_returns_deterministic_when_llm_disallowed(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
-        result = await orchestrator.generate_simulation_summary(
-            cast(Simulation, None),
+        result = await orchestrator.generate_execution_summary(
+            cast(Execution, None),
             allow_llm=False,
         )
 
@@ -447,25 +447,25 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_returns_livai_provider_on_success(
+    async def test_generate_execution_summary_returns_livai_provider_on_success(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
         async def fake_generate(self, snapshot_arg):
-            return SimulationSummaryContent(
+            return ExecutionSummaryContent(
                 answer="Simulation assistant-livai-exec belongs to case assistant_livai_case.",
                 citations=[
                     SummaryCitationOut(
                         source_type="simulation_field",
                         path="simulation.execution_id",
-                        label="Execution ID",
+                        label="Simulation ID",
                     ),
                     SummaryCitationOut(
                         source_type="case_field",
@@ -485,7 +485,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
@@ -495,14 +495,14 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "livai-model"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_returns_ollama_provider_on_success(
+    async def test_generate_execution_summary_returns_ollama_provider_on_success(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model="gemma4:26b")
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -515,7 +515,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
@@ -526,18 +526,18 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "gemma4:26b"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_falls_back_for_livai_misconfiguration(
+    async def test_generate_execution_summary_falls_back_for_livai_misconfiguration(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch, api_key=None)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "livai_misconfigured"
         assert result.summary.generation_mode == "deterministic"
@@ -548,18 +548,18 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_falls_back_for_ollama_misconfiguration(
+    async def test_generate_execution_summary_falls_back_for_ollama_misconfiguration(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model=None)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "ollama_misconfigured"
         assert result.summary.generation_mode == "deterministic"
@@ -571,22 +571,22 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_falls_back_when_snapshot_budget_exceeded(
+    async def test_generate_execution_summary_falls_back_when_snapshot_budget_exceeded(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
 
-        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             fail_snapshot_build,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is not None
         assert result.fallback_reason.startswith("Snapshot size ")
@@ -597,22 +597,22 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_keeps_deterministic_mode_when_llm_disabled_and_snapshot_budget_exceeded(
+    async def test_generate_execution_summary_keeps_deterministic_mode_when_llm_disabled_and_snapshot_budget_exceeded(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch, enabled=False)
 
-        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             fail_snapshot_build,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "llm_disabled"
         assert result.summary.generation_mode == "deterministic"
@@ -622,23 +622,23 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_returns_deterministic_when_llm_disallowed_and_snapshot_budget_exceeded(
+    async def test_generate_execution_summary_returns_deterministic_when_llm_disallowed_and_snapshot_budget_exceeded(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
 
-        def fail_snapshot_build(simulation: Simulation) -> SimulationSnapshot:
+        def fail_snapshot_build(simulation: Execution) -> ExecutionSnapshot:
             raise SnapshotBudgetExceededError(snapshot, 10)
 
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             fail_snapshot_build,
         )
 
-        result = await orchestrator.generate_simulation_summary(
-            cast(Simulation, None),
+        result = await orchestrator.generate_execution_summary(
+            cast(Execution, None),
             allow_llm=False,
         )
 
@@ -650,14 +650,14 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT not in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_falls_back_on_invalid_llm_content(
+    async def test_generate_execution_summary_falls_back_on_invalid_llm_content(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -670,7 +670,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "missing_limitations"
         assert result.summary.generation_mode == "deterministic"
@@ -680,14 +680,14 @@ class TestGenerateSimulationSummary:
         assert LLM_FALLBACK_CAVEAT in result.summary.caveats
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_keeps_llm_mode_when_followups_missing(
+    async def test_generate_execution_summary_keeps_llm_mode_when_followups_missing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -700,27 +700,27 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
         assert result.summary.generation_provider == "livai"
         assert result.summary.generation_model == "livai-model"
         assert result.summary.suggested_followups == (
-            orchestrator.build_simulation_summary(snapshot).suggested_followups
+            orchestrator.build_execution_summary(snapshot).suggested_followups
         )
         assert result.attempted_provider == "livai"
         assert result.attempted_model == "livai-model"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_canonicalizes_unambiguous_citation_alias(
+    async def test_generate_execution_summary_canonicalizes_unambiguous_citation_alias(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model="llama3.1:8b")
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -741,7 +741,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
@@ -758,14 +758,14 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "llama3.1:8b"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_uses_source_type_to_fix_name_alias(
+    async def test_generate_execution_summary_uses_source_type_to_fix_name_alias(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model="llama3.1:8b")
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -786,7 +786,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason is None
         assert result.summary.generation_mode == "llm"
@@ -803,14 +803,14 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "llama3.1:8b"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_falls_back_on_unexpected_exception(
+    async def test_generate_execution_summary_falls_back_on_unexpected_exception(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_livai_settings(monkeypatch)
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -823,7 +823,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == "RuntimeError: boom"
         assert result.summary.generation_mode == "deterministic"
@@ -832,14 +832,14 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "livai-model"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_preserves_model_api_error_details(
+    async def test_generate_execution_summary_preserves_model_api_error_details(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model="gemma4:e4b")
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -852,7 +852,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == ("ModelAPIError: unsupported value for tools")
         assert result.summary.generation_mode == "deterministic"
@@ -860,14 +860,14 @@ class TestGenerateSimulationSummary:
         assert result.attempted_model == "gemma4:e4b"
 
     @pytest.mark.asyncio
-    async def test_generate_simulation_summary_preserves_model_http_error_details(
+    async def test_generate_execution_summary_preserves_model_http_error_details(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         snapshot = _make_snapshot()
         _set_ollama_settings(monkeypatch, model="gemma4:e4b")
         monkeypatch.setattr(
             orchestrator,
-            "build_simulation_snapshot",
+            "build_execution_snapshot",
             lambda simulation: snapshot,
         )
 
@@ -884,7 +884,7 @@ class TestGenerateSimulationSummary:
             fake_generate,
         )
 
-        result = await orchestrator.generate_simulation_summary(cast(Simulation, None))
+        result = await orchestrator.generate_execution_summary(cast(Execution, None))
 
         assert result.fallback_reason == (
             'ModelHTTPError: status_code=400; body={"error": {"message": "unknown field `tools`"}}'

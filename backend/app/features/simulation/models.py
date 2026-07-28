@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for simulations and related entities."""
+"""SQLAlchemy ORM models for executions and related entities."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
 from app.features.simulation.enums import (
     ArtifactKind,
+    ExecutionStatus,
     ExternalLinkKind,
-    SimulationStatus,
     SimulationType,
 )
 
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 class Case(Base, IDMixin, TimestampMixin):
     """A logical experiment grouped by case name.
 
-    Each Case contains one or more Simulation executions.
+    Each Case contains one or more executions.
     """
 
     __tablename__ = "cases"
@@ -67,10 +67,10 @@ class Case(Base, IDMixin, TimestampMixin):
 
     # Relationships
     machine: Mapped[Machine] = relationship("Machine", foreign_keys=[machine_id])
-    simulations: Mapped[list[Simulation]] = relationship(
-        "Simulation",
+    executions: Mapped[list[Execution]] = relationship(
+        "Execution",
         back_populates="case",
-        foreign_keys="Simulation.case_id",
+        foreign_keys="Execution.case_id",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
@@ -83,7 +83,7 @@ class Case(Base, IDMixin, TimestampMixin):
     )
 
 
-class Simulation(Base, IDMixin, TimestampMixin):
+class Execution(Base, IDMixin, TimestampMixin):
     __tablename__ = "simulations"
     __table_args__ = (
         UniqueConstraint(
@@ -124,9 +124,9 @@ class Simulation(Base, IDMixin, TimestampMixin):
             validate_strings=True,
         )
     )
-    status: Mapped[SimulationStatus] = mapped_column(
+    status: Mapped[ExecutionStatus] = mapped_column(
         SAEnum(
-            SimulationStatus,
+            ExecutionStatus,
             name="simulation_status_enum",
             native_enum=False,
             values_callable=lambda obj: [e.value for e in obj],
@@ -181,20 +181,20 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Relationships
     # ~~~~~~~~~~~~~
     case: Mapped[Case] = relationship(
-        "Case", back_populates="simulations", foreign_keys=[case_id]
+        "Case", back_populates="executions", foreign_keys=[case_id]
     )
     created_by_user = relationship("User", foreign_keys=[created_by], lazy="joined")
     last_updated_by_user = relationship(
         "User", foreign_keys=[last_updated_by], lazy="joined"
     )
     ingestion: Mapped[Ingestion] = relationship(
-        "Ingestion", back_populates="simulations"
+        "Ingestion", back_populates="executions"
     )
     artifacts: Mapped[list[Artifact]] = relationship(
-        back_populates="simulation", cascade="all, delete-orphan"
+        back_populates="execution", cascade="all, delete-orphan"
     )
     links: Mapped[list[ExternalLink]] = relationship(
-        back_populates="simulation", cascade="all, delete-orphan"
+        back_populates="execution", cascade="all, delete-orphan"
     )
 
 
@@ -223,9 +223,9 @@ class Artifact(Base, IDMixin, TimestampMixin):
     checksum: Mapped[Optional[str]] = mapped_column(String(128))
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer)
 
-    simulation: Mapped[Simulation] = relationship(
+    execution: Mapped[Execution] = relationship(
         back_populates="artifacts",
-        primaryjoin="Artifact.simulation_id==Simulation.id",
+        primaryjoin="Artifact.simulation_id==Execution.id",
         passive_deletes=True,
     )
 
@@ -271,9 +271,9 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     url: Mapped[str] = mapped_column(String(1000))
     label: Mapped[Optional[str]] = mapped_column(String(200))
 
-    simulation: Mapped[Simulation | None] = relationship(
+    execution: Mapped[Execution | None] = relationship(
         back_populates="links",
-        primaryjoin="ExternalLink.simulation_id==Simulation.id",
+        primaryjoin="ExternalLink.simulation_id==Execution.id",
         foreign_keys=[simulation_id],
         passive_deletes=True,
     )
@@ -283,3 +283,7 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
         foreign_keys=[case_id],
         passive_deletes=True,
     )
+
+
+# Phase 2 compatibility alias. Database and public API terminology change later.
+Simulation = Execution

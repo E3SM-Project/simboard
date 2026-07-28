@@ -14,10 +14,10 @@ from pydantic_ai.settings import ModelSettings
 
 from app.features.assistant.registry import CITATION_REGISTRY
 from app.features.assistant.schemas import (
-    SimulationSummaryContent,
+    ExecutionSummaryContent,
     SummaryGenerationProvider,
 )
-from app.features.assistant.snapshot import SimulationSnapshot
+from app.features.assistant.snapshot import ExecutionSnapshot
 
 SUMMARY_SYSTEM_PROMPT = """
 You generate structured SimBoard simulation summaries from provided metadata only.
@@ -61,19 +61,19 @@ class SummaryLLMGenerator:
     def __init__(self, config: AssistantLLMConfig) -> None:
         self.config = config
 
-    async def generate(self, snapshot: SimulationSnapshot) -> SimulationSummaryContent:
+    async def generate(self, snapshot: ExecutionSnapshot) -> ExecutionSummaryContent:
         """
         Generates a simulation summary from the given snapshot using the
         configured LLM provider.
 
         Parameters
         ----------
-        snapshot : SimulationSnapshot
+        snapshot : ExecutionSnapshot
             The simulation snapshot containing metadata to summarize.
 
         Returns
         -------
-        SimulationSummaryContent
+        ExecutionSummaryContent
             The generated simulation summary content.
         """
         async with AsyncClient(timeout=self.config.timeout_seconds) as http_client:
@@ -159,13 +159,13 @@ class SummaryLLMGenerator:
 
     def _build_output_type(
         self,
-    ) -> type[SimulationSummaryContent] | PromptedOutput[SimulationSummaryContent]:
+    ) -> type[ExecutionSummaryContent] | PromptedOutput[ExecutionSummaryContent]:
         if self.config.provider == "ollama":
-            return PromptedOutput(SimulationSummaryContent)
+            return PromptedOutput(ExecutionSummaryContent)
 
-        return SimulationSummaryContent
+        return ExecutionSummaryContent
 
-    def _build_user_prompt(self, snapshot: SimulationSnapshot) -> str:
+    def _build_user_prompt(self, snapshot: ExecutionSnapshot) -> str:
         allowed_citations = "\n".join(
             f"- {path} ({entry.source_type})"
             for path, entry in sorted(CITATION_REGISTRY.items())

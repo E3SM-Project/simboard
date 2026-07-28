@@ -11,8 +11,8 @@ from app.features.ingestion.enums import (
 )
 
 
-class IngestionSimulationSummary(BaseModel):
-    """Lightweight summary of a persisted simulation created by ingestion."""
+class IngestionExecutionSummary(BaseModel):
+    """Lightweight summary of a persisted execution created by ingestion."""
 
     id: Annotated[UUID, Field(..., description="ID of the created simulation")]
     case_id: Annotated[UUID, Field(..., description="ID of the associated case")]
@@ -20,6 +20,11 @@ class IngestionSimulationSummary(BaseModel):
     execution_id: Annotated[
         str, Field(..., description="Execution identifier for the created simulation")
     ]
+
+
+# Phase 2 public-contract adapter. Remove with legacy schemas in Phase 5.
+class IngestionSimulationSummary(IngestionExecutionSummary):
+    """Lightweight summary of a persisted simulation created by ingestion."""
 
 
 class IngestFromPathRequest(BaseModel):

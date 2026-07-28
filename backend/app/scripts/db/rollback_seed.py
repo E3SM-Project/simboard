@@ -12,8 +12,8 @@ from app.features.ingestion.models import Ingestion
 from app.features.simulation.models import (
     Artifact,
     Case,
+    Execution,
     ExternalLink,
-    Simulation,
 )
 from app.features.user.models import OAuthAccount, User
 
@@ -38,23 +38,23 @@ def rollback_seed(db: Session):
         )
 
         if seed_ingestion_ids:
-            simulation_ids = (
+            execution_ids = (
                 db.execute(
-                    select(Simulation.id).where(
-                        Simulation.__table__.c.ingestion_id.in_(seed_ingestion_ids)
+                    select(Execution.id).where(
+                        Execution.__table__.c.ingestion_id.in_(seed_ingestion_ids)
                     )
                 )
                 .scalars()
                 .all()
             )
 
-            # Collect case_ids before deleting simulations
+            # Collect case_ids before deleting executions
             case_ids: list[UUID] = []
-            if simulation_ids:
+            if execution_ids:
                 case_ids = list(
                     db.execute(
-                        select(Simulation.__table__.c.case_id)
-                        .where(Simulation.__table__.c.id.in_(simulation_ids))
+                        select(Execution.__table__.c.case_id)
+                        .where(Execution.__table__.c.id.in_(execution_ids))
                         .distinct()
                     )
                     .scalars()
@@ -63,19 +63,17 @@ def rollback_seed(db: Session):
 
                 db.execute(
                     delete(ExternalLink).where(
-                        ExternalLink.__table__.c.simulation_id.in_(simulation_ids)
+                        ExternalLink.__table__.c.simulation_id.in_(execution_ids)
                     )
                 )
                 db.execute(
                     delete(Artifact).where(
-                        Artifact.__table__.c.simulation_id.in_(simulation_ids)
+                        Artifact.__table__.c.simulation_id.in_(execution_ids)
                     )
                 )
 
                 db.execute(
-                    delete(Simulation).where(
-                        Simulation.__table__.c.id.in_(simulation_ids)
-                    )
+                    delete(Execution).where(Execution.__table__.c.id.in_(execution_ids))
                 )
 
             db.execute(
@@ -84,19 +82,19 @@ def rollback_seed(db: Session):
                 )
             )
 
-            # Delete cases that no longer have any simulations
+            # Delete cases that no longer have any executions
             if case_ids:
-                # Only delete cases that have no remaining simulations
-                cases_with_sims = list(
+                # Only delete cases that have no remaining executions
+                cases_with_executions = list(
                     db.execute(
-                        select(Simulation.__table__.c.case_id)
-                        .where(Simulation.__table__.c.case_id.in_(case_ids))
+                        select(Execution.__table__.c.case_id)
+                        .where(Execution.__table__.c.case_id.in_(case_ids))
                         .distinct()
                     )
                     .scalars()
                     .all()
                 )
-                orphan_case_ids = set(case_ids) - set(cases_with_sims)
+                orphan_case_ids = set(case_ids) - set(cases_with_executions)
                 if orphan_case_ids:
                     db.execute(
                         delete(Case).where(

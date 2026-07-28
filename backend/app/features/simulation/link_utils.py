@@ -5,15 +5,15 @@ from collections.abc import Iterable
 from app.features.simulation.models import ExternalLink
 
 
-def merge_simulation_and_case_links(
-    simulation_links: Iterable[ExternalLink],
+def merge_execution_and_case_links(
+    execution_links: Iterable[ExternalLink],
     case_links: Iterable[ExternalLink],
 ) -> list[ExternalLink]:
-    """Merge simulation-owned and case-owned links with simulation precedence."""
+    """Merge execution-owned and case-owned links with execution precedence."""
     merged: list[ExternalLink] = []
     seen: set[tuple[str, str]] = set()
 
-    for link in simulation_links:
+    for link in execution_links:
         key = (str(link.kind), link.url)
         if key in seen:
             continue
@@ -28,3 +28,7 @@ def merge_simulation_and_case_links(
         merged.append(link)
 
     return merged
+
+
+# Phase 2 compatibility alias. Remove with legacy simulation contracts.
+merge_simulation_and_case_links = merge_execution_and_case_links

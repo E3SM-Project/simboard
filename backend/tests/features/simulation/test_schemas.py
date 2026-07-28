@@ -8,6 +8,7 @@ from pydantic import HttpUrl, ValidationError
 
 from app.common.schemas.utils import to_snake_case
 from app.features.machine.schemas import MachineOut
+from app.features.simulation.enums import ExecutionStatus, SimulationStatus
 from app.features.simulation.schemas import (
     ArtifactCreate,
     ArtifactKind,
@@ -15,11 +16,21 @@ from app.features.simulation.schemas import (
     CaseDetailOut,
     CaseSummaryOut,
     CaseUpdate,
+    ExecutionCreate,
+    ExecutionFilterOptionsOut,
+    ExecutionListItemOut,
+    ExecutionOut,
+    ExecutionPageOut,
+    ExecutionSummaryCapabilitiesOut,
+    ExecutionSummaryOut,
+    ExecutionUpdate,
     ExternalLinkKind,
     ExternalLinkOut,
     SimulationCreate,
+    SimulationFilterOptionsOut,
+    SimulationListItemOut,
     SimulationOut,
-    SimulationSummaryCapabilitiesOut,
+    SimulationPageOut,
     SimulationSummaryOut,
     SimulationUpdate,
     _normalize_optional_label,
@@ -33,8 +44,8 @@ def _populate_external_link_owner_type(value: Any) -> Any:
     return validator.__func__(ExternalLinkOut, value)
 
 
-class TestSimulationCreateSchema:
-    def test_valid_simulation_create_required_fields(self):
+class TestExecutionCreateSchema:
+    def test_valid_execution_create_required_fields(self):
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
@@ -51,12 +62,12 @@ class TestSimulationCreateSchema:
             "lastUpdatedBy": uuid4(),
         }
 
-        simulation_create = SimulationCreate(**payload)
+        execution_create = ExecutionCreate(**payload)
         for key, value in payload.items():
             snake_case_key = to_snake_case(key)
-            assert getattr(simulation_create, snake_case_key) == value
+            assert getattr(execution_create, snake_case_key) == value
 
-    def test_valid_simulation_create_optional_fields(self):
+    def test_valid_execution_create_optional_fields(self):
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
@@ -100,24 +111,24 @@ class TestSimulationCreateSchema:
             ],
         }
 
-        simulation_create = SimulationCreate(**payload)
+        execution_create = ExecutionCreate(**payload)
         for key, value in payload.items():
             snake_case_key = to_snake_case(key)
 
             if snake_case_key in ["artifacts", "links"]:
-                assert len(getattr(simulation_create, snake_case_key)) == len(value)  # type: ignore
+                assert len(getattr(execution_create, snake_case_key)) == len(value)  # type: ignore
                 for i, item in enumerate(value):  # type: ignore
                     for attr, attr_value in item.items():
                         assert (
-                            getattr(getattr(simulation_create, snake_case_key)[i], attr)
+                            getattr(getattr(execution_create, snake_case_key)[i], attr)
                             == attr_value
                         )
             else:
-                assert getattr(simulation_create, snake_case_key) == value
+                assert getattr(execution_create, snake_case_key) == value
 
     def test_rejects_invalid_compute_type(self):
         with pytest.raises(ValidationError):
-            SimulationCreate(
+            ExecutionCreate(
                 caseId=uuid4(),
                 executionId="1081156.251218-200923",
                 compset="AQUAPLANET",
@@ -133,7 +144,7 @@ class TestSimulationCreateSchema:
 
     @pytest.mark.parametrize("value", ["2019-08-01", "2019-08-01T00:00:00Z"])
     def test_normalizes_supported_model_date_inputs(self, value: str):
-        simulation = SimulationCreate(
+        simulation = ExecutionCreate(
             caseId=uuid4(),
             executionId="1081156.251218-200923",
             compset="AQUAPLANET",
@@ -153,7 +164,7 @@ class TestSimulationCreateSchema:
 
     def test_rejects_non_midnight_model_datetime(self):
         with pytest.raises(ValidationError):
-            SimulationCreate(
+            ExecutionCreate(
                 caseId=uuid4(),
                 executionId="1081156.251218-200923",
                 compset="AQUAPLANET",
@@ -167,7 +178,7 @@ class TestSimulationCreateSchema:
             )
 
 
-class TestSimulationUpdateSchema:
+class TestExecutionUpdateSchema:
     def test_normalize_optional_label_accepts_none(self):
         assert _normalize_optional_label(None) is None
 
@@ -183,7 +194,7 @@ class TestSimulationUpdateSchema:
             "notesMarkdown": "## Notes",
         }
 
-        update = SimulationUpdate(**payload)
+        update = ExecutionUpdate(**payload)
 
         for key, value in payload.items():
             assert getattr(update, to_snake_case(key)) == value
@@ -200,28 +211,28 @@ class TestSimulationUpdateSchema:
     )
     def test_rejects_non_editable_fields(self, field_name: str, value: str):
         with pytest.raises(ValidationError):
-            SimulationUpdate(**{field_name: value})
+            ExecutionUpdate(**{field_name: value})
 
     def test_rejects_invalid_predefined_value(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(status="done")
+            ExecutionUpdate(status="done")
 
     @pytest.mark.parametrize("field_name", ["status", "simulationType"])
     def test_rejects_explicit_null_for_non_nullable_enums(self, field_name: str):
         with pytest.raises(ValidationError):
-            SimulationUpdate(**{field_name: None})
+            ExecutionUpdate(**{field_name: None})
 
     @pytest.mark.parametrize("field_name", ["artifacts", "links"])
     def test_rejects_explicit_null_for_resource_fields(self, field_name: str):
         with pytest.raises(ValidationError):
-            SimulationUpdate(**{field_name: None})
+            ExecutionUpdate(**{field_name: None})
 
     def test_rejects_out_of_scope_field(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(caseName="new-case")
+            ExecutionUpdate(caseName="new-case")
 
     def test_accepts_resource_replacement_payloads(self):
-        update = SimulationUpdate(
+        update = ExecutionUpdate(
             artifacts=[
                 {
                     "kind": "archive",
@@ -247,7 +258,7 @@ class TestSimulationUpdateSchema:
 
     def test_rejects_blank_artifact_uri(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(
+            ExecutionUpdate(
                 artifacts=[{"kind": "output", "uri": "   ", "label": "Blank"}]
             )
 
@@ -259,17 +270,17 @@ class TestSimulationUpdateSchema:
     @pytest.mark.parametrize("uri", [None, 123])
     def test_update_rejects_non_string_artifact_uri(self, uri):
         with pytest.raises(ValidationError):
-            SimulationUpdate(artifacts=[{"kind": "output", "uri": uri, "label": "Bad"}])
+            ExecutionUpdate(artifacts=[{"kind": "output", "uri": uri, "label": "Bad"}])
 
     def test_rejects_invalid_external_link_url(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(
+            ExecutionUpdate(
                 links=[{"kind": "diagnostic", "url": "not-a-url", "label": "Bad"}]
             )
 
     def test_rejects_duplicate_resource_pairs(self):
         with pytest.raises(ValidationError):
-            SimulationUpdate(
+            ExecutionUpdate(
                 artifacts=[
                     {"kind": "archive", "uri": "/tmp/archive", "label": "One"},
                     {"kind": "archive", "uri": "/tmp/archive", "label": "Two"},
@@ -277,7 +288,7 @@ class TestSimulationUpdateSchema:
             )
 
         with pytest.raises(ValidationError):
-            SimulationUpdate(
+            ExecutionUpdate(
                 links=[
                     {
                         "kind": "docs",
@@ -293,8 +304,8 @@ class TestSimulationUpdateSchema:
             )
 
     def test_update_resource_validators_accept_none_when_called_directly(self):
-        assert SimulationUpdate.validate_update_artifacts(None) is None
-        assert SimulationUpdate.validate_update_links(None) is None
+        assert ExecutionUpdate.validate_update_artifacts(None) is None
+        assert ExecutionUpdate.validate_update_links(None) is None
 
 
 class TestCaseUpdateSchema:
@@ -500,8 +511,8 @@ class TestExternalLinkOutSchema:
         assert link_out.owner_type == "case"
 
 
-class TestSimulationOutSchema:
-    def test_valid_simulation_out_required_fields(self):
+class TestExecutionOutSchema:
+    def test_valid_execution_out_required_fields(self):
         # Arrange: Define the required fields
         case_id = uuid4()
         fields = {
@@ -529,7 +540,7 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             "last_updated_by": uuid4(),
-            "summary_capabilities": SimulationSummaryCapabilitiesOut(
+            "summary_capabilities": ExecutionSummaryCapabilitiesOut(
                 llm_available=False,
                 auto_generate_deterministic_on_load=True,
             ),
@@ -547,12 +558,12 @@ class TestSimulationOutSchema:
             ),
         }
 
-        # Act: Create a SimulationOut instance
-        simulation_out = SimulationOut(**fields)
+        # Act: Create a ExecutionOut instance
+        execution_out = ExecutionOut(**fields)
 
         # Assert: Validate all fields
         for key, value in fields.items():
-            assert getattr(simulation_out, key) == value, (
+            assert getattr(execution_out, key) == value, (
                 f"Field '{key}' does not match the expected value."
             )
 
@@ -574,19 +585,19 @@ class TestSimulationOutSchema:
             "git_commit_hash",
         ]
         for field in optional_fields:
-            assert getattr(simulation_out, field) is None, (
+            assert getattr(execution_out, field) is None, (
                 f"Optional field '{field}' is not None by default."
             )
 
         # Assert: Validate default values for list fields
-        assert simulation_out.artifacts == [], (
+        assert execution_out.artifacts == [], (
             "Field 'artifacts' is not an empty list by default."
         )
-        assert simulation_out.links == [], (
+        assert execution_out.links == [], (
             "Field 'links' is not an empty list by default."
         )
 
-    def test_valid_simulation_out_optional_fields(self):
+    def test_valid_execution_out_optional_fields(self):
         case_id = uuid4()
         required_fields = {
             "id": uuid4(),
@@ -613,7 +624,7 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             "last_updated_by": uuid4(),
-            "summary_capabilities": SimulationSummaryCapabilitiesOut(
+            "summary_capabilities": ExecutionSummaryCapabilitiesOut(
                 llm_available=False,
                 auto_generate_deterministic_on_load=True,
             ),
@@ -671,21 +682,21 @@ class TestSimulationOutSchema:
 
         fields = {**required_fields, **optional_fields}
 
-        simulation_out = SimulationOut(**fields)
+        execution_out = ExecutionOut(**fields)
 
         for key, value in fields.items():
             if key in ["artifacts", "links"]:
-                assert len(getattr(simulation_out, key)) == len(value)  # type: ignore
+                assert len(getattr(execution_out, key)) == len(value)  # type: ignore
                 for i, item in enumerate(value):  # type: ignore
                     for attr, attr_value in item.items():
                         assert (
-                            getattr(getattr(simulation_out, key)[i], attr) == attr_value
+                            getattr(getattr(execution_out, key)[i], attr) == attr_value
                         )
             else:
-                assert getattr(simulation_out, key) == value
+                assert getattr(execution_out, key) == value
 
     def test_grouped_artifacts_computed_field(self):
-        simulation_out = SimulationOut(  # type: ignore[call-arg]
+        execution_out = ExecutionOut(  # type: ignore[call-arg]
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
@@ -709,7 +720,7 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             last_updated_by=uuid4(),
-            summary_capabilities=SimulationSummaryCapabilitiesOut(
+            summary_capabilities=ExecutionSummaryCapabilitiesOut(
                 llm_available=False,
                 auto_generate_deterministic_on_load=True,
             ),
@@ -753,13 +764,13 @@ class TestSimulationOutSchema:
             ],
         )
 
-        grouped = simulation_out.grouped_artifacts
+        grouped = execution_out.grouped_artifacts
         assert len(grouped) == 2, "There should be 2 groups of artifacts."  # type: ignore
         assert len(grouped["output"]) == 2, "There should be 2 output artifacts."  # type: ignore
         assert len(grouped["archive"]) == 1, "There should be 1 archive artifact."  # type: ignore
 
     def test_grouped_links_computed_field(self):
-        simulation_out = SimulationOut(  # type: ignore[call-arg]
+        execution_out = ExecutionOut(  # type: ignore[call-arg]
             id=uuid4(),
             case_id=uuid4(),
             case_name="test_case",
@@ -783,7 +794,7 @@ class TestSimulationOutSchema:
                 id=uuid4(), email="updater@example.com", role="user"
             ),
             last_updated_by=uuid4(),
-            summary_capabilities=SimulationSummaryCapabilitiesOut(
+            summary_capabilities=ExecutionSummaryCapabilitiesOut(
                 llm_available=False,
                 auto_generate_deterministic_on_load=True,
             ),
@@ -821,34 +832,34 @@ class TestSimulationOutSchema:
             ],
         )
 
-        grouped = simulation_out.grouped_links
+        grouped = execution_out.grouped_links
         assert len(grouped) == 2, "There should be 2 groups of links."  # type: ignore
         assert len(grouped["diagnostic"]) == 1, "There should be 2 diagnostic links."  # type: ignore
         assert len(grouped["performance"]) == 1, "There should be 2 performance links."  # type: ignore
 
 
-class TestSimulationSummaryOutSchema:
+class TestExecutionSummaryOutSchema:
     def test_case_hash_schema_descriptions_reflect_grouping_semantics(self):
-        create_schema = SimulationCreate.model_json_schema()
+        create_schema = ExecutionCreate.model_json_schema()
         create_description = create_schema["properties"]["caseHash"]["description"]
         assert (
             "group related executions or sub-cases within a case" in create_description
         )
         assert "not top-level case identity" in create_description
 
-        summary_schema = SimulationSummaryOut.model_json_schema()
+        summary_schema = ExecutionSummaryOut.model_json_schema()
         summary_description = summary_schema["properties"]["caseHash"]["description"]
         assert (
             "group related executions or sub-cases within a case" in summary_description
         )
 
-        simulation_out_schema = SimulationOut.model_json_schema()
+        simulation_out_schema = ExecutionOut.model_json_schema()
         out_description = simulation_out_schema["properties"]["caseHash"]["description"]
         assert "group related executions or sub-cases within a case" in out_description
         assert "not top-level case identity" in out_description
 
     def test_valid_summary_fields(self):
-        summary = SimulationSummaryOut(
+        summary = ExecutionSummaryOut(
             id=uuid4(),
             execution_id="1081156.251218-200923",
             case_hash=None,
@@ -860,7 +871,7 @@ class TestSimulationSummaryOutSchema:
         assert summary.simulation_end_date is None
 
     def test_non_reference_with_changes(self):
-        summary = SimulationSummaryOut(
+        summary = ExecutionSummaryOut(
             id=uuid4(),
             execution_id="1081290.251218-211543",
             case_hash="hash-2",
@@ -872,6 +883,62 @@ class TestSimulationSummaryOutSchema:
         assert summary.simulation_end_date == date(2023, 12, 31)
 
 
+class TestExecutionSchemaCompatibility:
+    def test_execution_status_is_canonical_runtime_enum(self) -> None:
+        assert ExecutionStatus.__name__ == "ExecutionStatus"
+        assert SimulationStatus.__name__ == "SimulationStatus"
+        assert ExecutionStatus is not SimulationStatus
+        assert [status.value for status in ExecutionStatus] == [
+            status.value for status in SimulationStatus
+        ]
+
+    @pytest.mark.parametrize(
+        ("canonical_schema", "legacy_schema"),
+        [
+            (ExecutionCreate, SimulationCreate),
+            (ExecutionUpdate, SimulationUpdate),
+            (ExecutionSummaryOut, SimulationSummaryOut),
+            (ExecutionListItemOut, SimulationListItemOut),
+            (ExecutionOut, SimulationOut),
+            (ExecutionFilterOptionsOut, SimulationFilterOptionsOut),
+        ],
+    )
+    def test_legacy_status_adapters_preserve_distinct_schema_names(
+        self,
+        canonical_schema,
+        legacy_schema,
+    ) -> None:
+        canonical_json_schema = canonical_schema.model_json_schema()
+        legacy_json_schema = legacy_schema.model_json_schema()
+        canonical_status = canonical_json_schema["properties"].get(
+            "status", canonical_json_schema["properties"].get("statuses")
+        )
+        legacy_status = legacy_json_schema["properties"].get(
+            "status", legacy_json_schema["properties"].get("statuses")
+        )
+
+        if canonical_status.get("type") == "array":
+            canonical_status = canonical_status["items"]
+            legacy_status = legacy_status["items"]
+        elif "anyOf" in canonical_status:
+            canonical_status = canonical_status["anyOf"][0]
+            legacy_status = legacy_status["anyOf"][0]
+
+        assert canonical_status["$ref"] == "#/$defs/ExecutionStatus"
+        assert legacy_status["$ref"] == "#/$defs/SimulationStatus"
+
+    def test_page_schemas_reference_matching_list_items(self) -> None:
+        canonical_schema = ExecutionPageOut.model_json_schema()
+        legacy_schema = SimulationPageOut.model_json_schema()
+
+        assert canonical_schema["properties"]["items"]["items"]["$ref"] == (
+            "#/$defs/ExecutionListItemOut"
+        )
+        assert legacy_schema["properties"]["items"]["items"]["$ref"] == (
+            "#/$defs/SimulationListItemOut"
+        )
+
+
 class TestCaseSchemas:
     def test_case_summary_out_with_nested_simulations(self):
         sim_id = uuid4()
@@ -880,7 +947,7 @@ class TestCaseSchemas:
             name="v3.LR.historical_0121",
             case_group="ensemble_v3",
             simulations=[
-                SimulationSummaryOut(
+                ExecutionSummaryOut(
                     id=sim_id,
                     execution_id="1081156.251218-200923",
                     case_hash="hash-1",
@@ -888,7 +955,7 @@ class TestCaseSchemas:
                     simulation_start_date=date(2023, 1, 1),
                     simulation_end_date=date(2023, 12, 31),
                 ),
-                SimulationSummaryOut(
+                ExecutionSummaryOut(
                     id=uuid4(),
                     execution_id="1081290.251218-211543",
                     case_hash="hash-2",

@@ -7,17 +7,17 @@ from pydantic_ai.output import PromptedOutput
 
 from app.features.assistant import llm_generator
 from app.features.assistant.llm_generator import AssistantLLMConfig, SummaryLLMGenerator
-from app.features.assistant.schemas import SimulationSummaryContent, SummaryCitationOut
+from app.features.assistant.schemas import ExecutionSummaryContent, SummaryCitationOut
 from app.features.assistant.snapshot import (
-    SimulationSnapshot,
+    ExecutionSnapshot,
     SnapshotCaseFields,
-    SnapshotSimulationFields,
+    SnapshotExecutionFields,
 )
 
 
-def _make_snapshot() -> SimulationSnapshot:
-    return SimulationSnapshot(
-        simulation=SnapshotSimulationFields(
+def _make_snapshot() -> ExecutionSnapshot:
+    return ExecutionSnapshot(
+        execution=SnapshotExecutionFields(
             id="simulation-1",
             execution_id="assistant-llm-exec",
             compset="AQUAPLANET",
@@ -205,7 +205,7 @@ class TestSummaryLLMGenerator:
         )._build_output_type()
 
         assert isinstance(output_type, PromptedOutput)
-        assert output_type.outputs is SimulationSummaryContent
+        assert output_type.outputs is ExecutionSummaryContent
 
     def test_build_output_type_keeps_native_type_for_livai(self) -> None:
         output_type = SummaryLLMGenerator(
@@ -220,19 +220,19 @@ class TestSummaryLLMGenerator:
             )
         )._build_output_type()
 
-        assert output_type is SimulationSummaryContent
+        assert output_type is ExecutionSummaryContent
 
     @pytest.mark.asyncio
     async def test_generate_returns_agent_output(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        expected = SimulationSummaryContent(
+        expected = ExecutionSummaryContent(
             answer="Generated summary.",
             citations=[
                 SummaryCitationOut(
                     source_type="simulation_field",
                     path="simulation.execution_id",
-                    label="Execution ID",
+                    label="Simulation ID",
                 )
             ],
             assumptions=[],
@@ -272,7 +272,7 @@ class TestSummaryLLMGenerator:
         result = await generator.generate(_make_snapshot())
 
         assert result == expected
-        assert captured["output_type"] is SimulationSummaryContent
+        assert captured["output_type"] is ExecutionSummaryContent
         assert captured["system_prompt"] == llm_generator.SUMMARY_SYSTEM_PROMPT
         assert captured["model_settings"] == {
             "temperature": 0.2,
@@ -284,13 +284,13 @@ class TestSummaryLLMGenerator:
     async def test_generate_uses_prompted_output_for_ollama(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        expected = SimulationSummaryContent(
+        expected = ExecutionSummaryContent(
             answer="Generated summary.",
             citations=[
                 SummaryCitationOut(
                     source_type="simulation_field",
                     path="simulation.execution_id",
-                    label="Execution ID",
+                    label="Simulation ID",
                 )
             ],
             assumptions=[],

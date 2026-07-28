@@ -9,8 +9,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
-from app.features.simulation.link_utils import merge_simulation_and_case_links
-from app.features.simulation.models import Artifact, ExternalLink, Simulation
+from app.features.simulation.link_utils import merge_execution_and_case_links
+from app.features.simulation.models import Artifact, Execution, ExternalLink
 
 SNAPSHOT_TRUNCATED_CAVEAT = (
     "The metadata snapshot was truncated to fit the assistant size budget. "
@@ -44,7 +44,7 @@ class SnapshotLink(BaseModel):
     label: str | None = None
 
 
-class SnapshotSimulationFields(BaseModel):
+class SnapshotExecutionFields(BaseModel):
     id: str
     execution_id: str
     description: str | None = None
@@ -82,8 +82,8 @@ class SnapshotMachineFields(BaseModel):
     name: str
 
 
-class SimulationSnapshot(BaseModel):
-    simulation: SnapshotSimulationFields
+class ExecutionSnapshot(BaseModel):
+    execution: SnapshotExecutionFields
     case: SnapshotCaseFields
     machine: SnapshotMachineFields | None = None
     artifacts: list[SnapshotArtifact] = Field(default_factory=list)
@@ -92,7 +92,7 @@ class SimulationSnapshot(BaseModel):
 
 
 class SnapshotBudgetExceededError(ValueError):
-    def __init__(self, snapshot: SimulationSnapshot, max_chars: int) -> None:
+    def __init__(self, snapshot: ExecutionSnapshot, max_chars: int) -> None:
         size = _snapshot_size(snapshot)
         super().__init__(
             f"Snapshot size {size} exceeds budget {max_chars} even after all "
@@ -136,11 +136,11 @@ def _sorted_links(items: Iterable[ExternalLink]) -> list[SnapshotLink]:
     )
 
 
-def _snapshot_size(snapshot: SimulationSnapshot) -> int:
+def _snapshot_size(snapshot: ExecutionSnapshot) -> int:
     return len(snapshot.model_dump_json(exclude_none=True))
 
 
-def _add_truncation_caveat(snapshot: SimulationSnapshot) -> SimulationSnapshot:
+def _add_truncation_caveat(snapshot: ExecutionSnapshot) -> ExecutionSnapshot:
     if SNAPSHOT_TRUNCATED_CAVEAT in snapshot.snapshot_caveats:
         return snapshot
     return snapshot.model_copy(
@@ -150,8 +150,8 @@ def _add_truncation_caveat(snapshot: SimulationSnapshot) -> SimulationSnapshot:
     )
 
 
-def _trim_snapshot_strings(snapshot: SimulationSnapshot) -> SimulationSnapshot:
-    simulation = snapshot.simulation.model_copy(
+def _trim_snapshot_strings(snapshot: ExecutionSnapshot) -> ExecutionSnapshot:
+    execution = snapshot.execution.model_copy(
         update={
             "notes_markdown": None,
             "description": None,
@@ -160,13 +160,13 @@ def _trim_snapshot_strings(snapshot: SimulationSnapshot) -> SimulationSnapshot:
             "extra": {},
         }
     )
-    return snapshot.model_copy(update={"simulation": simulation})
+    return snapshot.model_copy(update={"execution": execution})
 
 
 def _apply_size_budget(
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
     budget: _SnapshotSizeBudget,
-) -> SimulationSnapshot:
+) -> ExecutionSnapshot:
     if _snapshot_size(snapshot) <= budget.max_chars:
         return snapshot
 
@@ -197,54 +197,54 @@ def _apply_size_budget(
     return trimmed
 
 
-def build_simulation_snapshot(
-    simulation: Simulation,
+def build_execution_snapshot(
+    execution: Execution,
     *,
     max_chars: int | None = None,
-) -> SimulationSnapshot:
-    merged_links = merge_simulation_and_case_links(
-        simulation.links,
-        simulation.case.links,
+) -> ExecutionSnapshot:
+    merged_links = merge_execution_and_case_links(
+        execution.links,
+        execution.case.links,
     )
-    snapshot = SimulationSnapshot(
-        simulation=SnapshotSimulationFields(
-            id=str(simulation.id),
-            execution_id=simulation.execution_id,
-            description=simulation.description,
-            compset=simulation.compset,
-            compset_alias=simulation.compset_alias,
-            grid_name=simulation.grid_name,
-            grid_resolution=simulation.grid_resolution,
-            simulation_type=_enum_value(simulation.simulation_type) or "unknown",
-            status=_enum_value(simulation.status) or "unknown",
-            campaign=simulation.campaign,
-            experiment_type=simulation.experiment_type,
-            initialization_type=simulation.initialization_type,
-            simulation_start_date=_isoformat(simulation.simulation_start_date),
-            simulation_end_date=_isoformat(simulation.simulation_end_date),
-            run_start_date=_isoformat(simulation.run_start_date),
-            run_end_date=_isoformat(simulation.run_end_date),
-            compiler=simulation.compiler,
-            key_features=simulation.key_features,
-            known_issues=simulation.known_issues,
-            notes_markdown=simulation.notes_markdown,
-            git_repository_url=simulation.git_repository_url,
-            git_branch=simulation.git_branch,
-            git_tag=simulation.git_tag,
-            git_commit_hash=simulation.git_commit_hash,
-            case_hash=simulation.case_hash,
-            extra=dict(simulation.extra or {}),
+    snapshot = ExecutionSnapshot(
+        execution=SnapshotExecutionFields(
+            id=str(execution.id),
+            execution_id=execution.execution_id,
+            description=execution.description,
+            compset=execution.compset,
+            compset_alias=execution.compset_alias,
+            grid_name=execution.grid_name,
+            grid_resolution=execution.grid_resolution,
+            simulation_type=_enum_value(execution.simulation_type) or "unknown",
+            status=_enum_value(execution.status) or "unknown",
+            campaign=execution.campaign,
+            experiment_type=execution.experiment_type,
+            initialization_type=execution.initialization_type,
+            simulation_start_date=_isoformat(execution.simulation_start_date),
+            simulation_end_date=_isoformat(execution.simulation_end_date),
+            run_start_date=_isoformat(execution.run_start_date),
+            run_end_date=_isoformat(execution.run_end_date),
+            compiler=execution.compiler,
+            key_features=execution.key_features,
+            known_issues=execution.known_issues,
+            notes_markdown=execution.notes_markdown,
+            git_repository_url=execution.git_repository_url,
+            git_branch=execution.git_branch,
+            git_tag=execution.git_tag,
+            git_commit_hash=execution.git_commit_hash,
+            case_hash=execution.case_hash,
+            extra=dict(execution.extra or {}),
         ),
         case=SnapshotCaseFields(
-            name=simulation.case.name,
-            case_group=simulation.case.case_group,
+            name=execution.case.name,
+            case_group=execution.case.case_group,
         ),
         machine=(
-            SnapshotMachineFields(name=simulation.case.machine.name)
-            if simulation.case.machine is not None
+            SnapshotMachineFields(name=execution.case.machine.name)
+            if execution.case.machine is not None
             else None
         ),
-        artifacts=_sorted_artifacts(simulation.artifacts),
+        artifacts=_sorted_artifacts(execution.artifacts),
         links=_sorted_links(merged_links),
         snapshot_caveats=[],
     )

@@ -15,12 +15,13 @@ from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.enums import (
+    ExecutionStatus,
     ExternalLinkKind,
     SimulationStatus,
     SimulationType,
 )
-from app.features.simulation.link_utils import merge_simulation_and_case_links
-from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.link_utils import merge_execution_and_case_links
+from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
 from app.features.simulation.schemas import (
     CaseDetailOut,
     CaseFilterOptionsOut,
@@ -97,28 +98,30 @@ def list_cases(  # noqa: C901
     simulation_predicates: list[ColumnElement[bool]] = []
     if execution_id:
         simulation_predicates.append(
-            Simulation.execution_id.ilike(f"%{execution_id.strip()}%")
+            Execution.execution_id.ilike(f"%{execution_id.strip()}%")
         )
     if status_filter:
-        simulation_predicates.append(Simulation.status == status_filter)
+        simulation_predicates.append(
+            Execution.status == ExecutionStatus(status_filter.value)
+        )
     if simulation_type:
-        simulation_predicates.append(Simulation.simulation_type == simulation_type)
+        simulation_predicates.append(Execution.simulation_type == simulation_type)
     for column, value in (
-        (Simulation.campaign, campaign),
-        (Simulation.initialization_type, initialization_type),
-        (Simulation.compiler, compiler),
-        (Simulation.git_tag, git_tag),
-        (Simulation.created_by, created_by),
+        (Execution.campaign, campaign),
+        (Execution.initialization_type, initialization_type),
+        (Execution.compiler, compiler),
+        (Execution.git_tag, git_tag),
+        (Execution.created_by, created_by),
     ):
         if value is not None:
             simulation_predicates.append(column == value)
     if simulation_predicates:
-        query = query.filter(Case.simulations.any(and_(*simulation_predicates)))
+        query = query.filter(Case.executions.any(and_(*simulation_predicates)))
 
     total = query.order_by(None).count()
     simulation_count = (
-        db.query(func.count(Simulation.id))
-        .filter(Simulation.case_id == Case.id)
+        db.query(func.count(Execution.id))
+        .filter(Execution.case_id == Case.id)
         .correlate(Case)
         .scalar_subquery()
     )
@@ -163,8 +166,8 @@ def get_catalog_overview(
 ) -> CatalogOverviewOut:
     """Return fixed-size aggregate data used by homepage."""
     total_cases = db.query(func.count(Case.id)).scalar() or 0
-    total_simulations = db.query(func.count(Simulation.id)).scalar() or 0
-    latest_submission = db.query(func.max(Simulation.created_at)).scalar()
+    total_simulations = db.query(func.count(Execution.id)).scalar() or 0
+    latest_submission = db.query(func.max(Execution.created_at)).scalar()
     machine_count_rows = (
         db.query(Case.machine_id, func.count(Case.id)).group_by(Case.machine_id).all()
     )
@@ -172,14 +175,14 @@ def get_catalog_overview(
         machine_id: count for machine_id, count in machine_count_rows
     }
     simulation_count = (
-        db.query(func.count(Simulation.id))
-        .filter(Simulation.case_id == Case.id)
+        db.query(func.count(Execution.id))
+        .filter(Execution.case_id == Case.id)
         .correlate(Case)
         .scalar_subquery()
     )
     latest_simulation_activity = (
-        db.query(func.max(func.greatest(Simulation.created_at, Simulation.updated_at)))
-        .filter(Simulation.case_id == Case.id)
+        db.query(func.max(func.greatest(Execution.created_at, Execution.updated_at)))
+        .filter(Execution.case_id == Case.id)
         .correlate(Case)
         .scalar_subquery()
     )
@@ -224,13 +227,13 @@ def get_case_filter_options(
         hpc_usernames=_distinct_values(db, Case.hpc_username),
         machine_ids=_distinct_values(db, Case.machine_id),
         machines=_machine_filter_options(db),
-        statuses=_distinct_values(db, Simulation.status),
-        simulation_types=_distinct_values(db, Simulation.simulation_type),
-        campaigns=_distinct_values(db, Simulation.campaign),
-        initialization_types=_distinct_values(db, Simulation.initialization_type),
-        compilers=_distinct_values(db, Simulation.compiler),
-        git_tags=_distinct_values(db, Simulation.git_tag),
-        created_by_ids=_distinct_values(db, Simulation.created_by),
+        statuses=_distinct_values(db, Execution.status),
+        simulation_types=_distinct_values(db, Execution.simulation_type),
+        campaigns=_distinct_values(db, Execution.campaign),
+        initialization_types=_distinct_values(db, Execution.initialization_type),
+        compilers=_distinct_values(db, Execution.compiler),
+        git_tags=_distinct_values(db, Execution.git_tag),
+        created_by_ids=_distinct_values(db, Execution.created_by),
         creators=_creator_filter_options(db),
     )
 
@@ -294,7 +297,7 @@ def get_case(
     """
     case = (
         db.query(Case)
-        .options(selectinload(Case.machine), selectinload(Case.simulations))
+        .options(selectinload(Case.machine), selectinload(Case.executions))
         .options(selectinload(Case.links))
         .filter(Case.id == case_id)
         .first()
@@ -340,7 +343,7 @@ def update_case(
         db.query(Case)
         .options(
             selectinload(Case.machine),
-            selectinload(Case.simulations),
+            selectinload(Case.executions),
             selectinload(Case.links),
         )
         .filter(Case.id == case_id)
@@ -369,7 +372,7 @@ def update_case(
         db.query(Case)
         .options(
             selectinload(Case.machine),
-            selectinload(Case.simulations),
+            selectinload(Case.executions),
             selectinload(Case.links),
         )
         .filter(Case.id == case_id)
@@ -413,12 +416,14 @@ def create_simulation(
             detail=f"Case '{payload.case_id}' not found.",
         )
 
-    sim = Simulation(
-        **payload.model_dump(
-            by_alias=False,
-            exclude={"artifacts", "links"},
-            exclude_unset=True,
-        ),
+    execution_data = payload.model_dump(
+        by_alias=False,
+        exclude={"artifacts", "links"},
+        exclude_unset=True,
+    )
+    execution_data["status"] = ExecutionStatus(payload.status.value)
+    sim = Execution(
+        **execution_data,
         created_by=user.id,
         last_updated_by=user.id,
         created_at=now,
@@ -452,7 +457,7 @@ def create_simulation(
 
     # Re-query with relationships loaded
     sim_loaded = (
-        _simulation_detail_query(db).filter(Simulation.id == sim.id).one_or_none()
+        _execution_detail_query(db).filter(Execution.id == sim.id).one_or_none()
     )
 
     if sim_loaded is None:
@@ -461,7 +466,7 @@ def create_simulation(
             detail="Failed to load newly created simulation.",
         )
 
-    result = _simulation_to_out(sim_loaded)
+    result = _execution_to_legacy_out(sim_loaded)
 
     return result
 
@@ -551,8 +556,8 @@ def list_simulations(  # noqa: C901
 ) -> SimulationPageOut:
     """Return one lightweight, server-filtered simulation page."""
     query = (
-        db.query(Simulation)
-        .join(Case, Case.id == Simulation.case_id)
+        db.query(Execution)
+        .join(Case, Case.id == Execution.case_id)
         .join(Machine, Machine.id == Case.machine_id)
     )
 
@@ -560,105 +565,109 @@ def list_simulations(  # noqa: C901
         term = f"%{search.strip()}%"
         query = query.filter(
             or_(
-                Simulation.execution_id.ilike(term),
+                Execution.execution_id.ilike(term),
                 Case.name.ilike(term),
-                Simulation.git_branch.ilike(term),
-                Simulation.git_tag.ilike(term),
-                Simulation.git_commit_hash.ilike(term),
-                Simulation.grid_name.ilike(term),
-                Simulation.grid_resolution.ilike(term),
-                Simulation.compset.ilike(term),
-                Simulation.compset_alias.ilike(term),
+                Execution.git_branch.ilike(term),
+                Execution.git_tag.ilike(term),
+                Execution.git_commit_hash.ilike(term),
+                Execution.grid_name.ilike(term),
+                Execution.grid_resolution.ilike(term),
+                Execution.compset.ilike(term),
+                Execution.compset_alias.ilike(term),
                 Machine.name.ilike(term),
             )
         )
     if case_id is not None:
-        query = query.filter(Simulation.case_id == case_id)
+        query = query.filter(Execution.case_id == case_id)
     if case_name:
         query = query.filter(Case.name.in_(case_name))
     if case_group:
         query = query.filter(Case.case_group.in_(case_group))
     if status_filter:
-        query = query.filter(Simulation.status.in_(status_filter))
+        query = query.filter(
+            Execution.status.in_(
+                [ExecutionStatus(value.value) for value in status_filter]
+            )
+        )
     if simulation_type:
-        query = query.filter(Simulation.simulation_type.in_(simulation_type))
+        query = query.filter(Execution.simulation_type.in_(simulation_type))
     if machine_id:
         query = query.filter(Case.machine_id.in_(machine_id))
     if hpc_username:
         query = query.filter(Case.hpc_username.in_(hpc_username))
     for column, values in (
-        (Simulation.campaign, campaign),
-        (Simulation.experiment_type, experiment_type),
-        (Simulation.compset, compset),
-        (Simulation.grid_name, grid_name),
-        (Simulation.grid_resolution, grid_resolution),
-        (Simulation.initialization_type, initialization_type),
-        (Simulation.compiler, compiler),
-        (Simulation.git_tag, git_tag),
-        (Simulation.created_by, created_by),
+        (Execution.campaign, campaign),
+        (Execution.experiment_type, experiment_type),
+        (Execution.compset, compset),
+        (Execution.grid_name, grid_name),
+        (Execution.grid_resolution, grid_resolution),
+        (Execution.initialization_type, initialization_type),
+        (Execution.compiler, compiler),
+        (Execution.git_tag, git_tag),
+        (Execution.created_by, created_by),
     ):
         if values:
             query = query.filter(column.in_(values))
 
     total = query.order_by(None).count()
     rows_query = query.with_entities(
-        Simulation.id,
-        Simulation.case_id,
+        Execution.id,
+        Execution.case_id,
         Case.name.label("case_name"),
         Case.case_group,
-        Simulation.execution_id,
-        Simulation.case_hash,
-        Simulation.simulation_type,
-        Simulation.status,
-        Simulation.campaign,
-        Simulation.experiment_type,
-        Simulation.compset,
-        Simulation.compset_alias,
-        Simulation.grid_name,
-        Simulation.grid_resolution,
-        Simulation.initialization_type,
-        Simulation.simulation_start_date,
-        Simulation.simulation_end_date,
-        Simulation.run_start_date,
-        Simulation.run_end_date,
-        Simulation.compiler,
-        Simulation.compute_type,
-        Simulation.git_branch,
-        Simulation.git_tag,
-        Simulation.git_commit_hash,
+        Execution.execution_id,
+        Execution.case_hash,
+        Execution.simulation_type,
+        Execution.status,
+        Execution.campaign,
+        Execution.experiment_type,
+        Execution.compset,
+        Execution.compset_alias,
+        Execution.grid_name,
+        Execution.grid_resolution,
+        Execution.initialization_type,
+        Execution.simulation_start_date,
+        Execution.simulation_end_date,
+        Execution.run_start_date,
+        Execution.run_end_date,
+        Execution.compiler,
+        Execution.compute_type,
+        Execution.git_branch,
+        Execution.git_tag,
+        Execution.git_commit_hash,
         Case.machine_id,
         Machine.name.label("machine_name"),
         Case.hpc_username,
-        Simulation.created_by,
-        Simulation.last_updated_by,
-        Simulation.created_at,
-        Simulation.updated_at,
+        Execution.created_by,
+        Execution.last_updated_by,
+        Execution.created_at,
+        Execution.updated_at,
     )
     sort_column = {
-        "created_at": Simulation.created_at,
-        "updated_at": Simulation.updated_at,
-        "execution_id": Simulation.execution_id,
+        "created_at": Execution.created_at,
+        "updated_at": Execution.updated_at,
+        "execution_id": Execution.execution_id,
         "case_name": Case.name,
         "case_group": Case.case_group,
-        "case_hash": Simulation.case_hash,
-        "campaign": Simulation.campaign,
-        "experiment_type": Simulation.experiment_type,
-        "simulation_type": Simulation.simulation_type,
-        "status": Simulation.status,
-        "git_branch": Simulation.git_branch,
-        "git_tag": Simulation.git_tag,
-        "git_commit_hash": Simulation.git_commit_hash,
-        "simulation_start_date": Simulation.simulation_start_date,
-        "simulation_end_date": Simulation.simulation_end_date,
-        "run_start_date": Simulation.run_start_date,
-        "grid_resolution": Simulation.grid_resolution,
-        "compset": Simulation.compset,
-        "grid_name": Simulation.grid_name,
+        "case_hash": Execution.case_hash,
+        "campaign": Execution.campaign,
+        "experiment_type": Execution.experiment_type,
+        "simulation_type": Execution.simulation_type,
+        "status": Execution.status,
+        "git_branch": Execution.git_branch,
+        "git_tag": Execution.git_tag,
+        "git_commit_hash": Execution.git_commit_hash,
+        "simulation_start_date": Execution.simulation_start_date,
+        "simulation_end_date": Execution.simulation_end_date,
+        "run_start_date": Execution.run_start_date,
+        "grid_resolution": Execution.grid_resolution,
+        "compset": Execution.compset,
+        "grid_name": Execution.grid_name,
         "machine_name": Machine.name,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
     rows = (
-        rows_query.order_by(ordering, Simulation.id.asc())
+        rows_query.order_by(ordering, Execution.id.asc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -682,17 +691,17 @@ def get_simulation_filter_options(
         machine_ids=_distinct_values(db, Case.machine_id),
         machines=_machine_filter_options(db),
         hpc_usernames=_distinct_values(db, Case.hpc_username),
-        campaigns=_distinct_values(db, Simulation.campaign),
-        experiment_types=_distinct_values(db, Simulation.experiment_type),
-        compsets=_distinct_values(db, Simulation.compset),
-        grid_names=_distinct_values(db, Simulation.grid_name),
-        grid_resolutions=_distinct_values(db, Simulation.grid_resolution),
-        simulation_types=_distinct_values(db, Simulation.simulation_type),
-        initialization_types=_distinct_values(db, Simulation.initialization_type),
-        compilers=_distinct_values(db, Simulation.compiler),
-        statuses=_distinct_values(db, Simulation.status),
-        git_tags=_distinct_values(db, Simulation.git_tag),
-        created_by_ids=_distinct_values(db, Simulation.created_by),
+        campaigns=_distinct_values(db, Execution.campaign),
+        experiment_types=_distinct_values(db, Execution.experiment_type),
+        compsets=_distinct_values(db, Execution.compset),
+        grid_names=_distinct_values(db, Execution.grid_name),
+        grid_resolutions=_distinct_values(db, Execution.grid_resolution),
+        simulation_types=_distinct_values(db, Execution.simulation_type),
+        initialization_types=_distinct_values(db, Execution.initialization_type),
+        compilers=_distinct_values(db, Execution.compiler),
+        statuses=_distinct_values(db, Execution.status),
+        git_tags=_distinct_values(db, Execution.git_tag),
+        created_by_ids=_distinct_values(db, Execution.created_by),
         creators=_creator_filter_options(db),
     )
 
@@ -725,7 +734,7 @@ def update_simulation(
             ),
         )
 
-    sim = db.query(Simulation).filter(Simulation.id == sim_id).one_or_none()
+    sim = db.query(Execution).filter(Execution.id == sim_id).one_or_none()
 
     if sim is None:
         raise HTTPException(status_code=404, detail="Simulation not found")
@@ -736,6 +745,8 @@ def update_simulation(
     updates.pop("links", None)
 
     for field, value in updates.items():
+        if field == "status":
+            value = ExecutionStatus(value.value)
         setattr(sim, field, value)
 
     if "artifacts" in payload.model_fields_set:
@@ -753,7 +764,7 @@ def update_simulation(
 
     db.expire_all()
     sim_loaded = (
-        _simulation_detail_query(db).filter(Simulation.id == sim_id).one_or_none()
+        _execution_detail_query(db).filter(Execution.id == sim_id).one_or_none()
     )
 
     if sim_loaded is None:
@@ -762,7 +773,7 @@ def update_simulation(
             detail="Failed to load updated simulation.",
         )
 
-    return _simulation_to_out(sim_loaded)
+    return _execution_to_legacy_out(sim_loaded)
 
 
 def _resolve_case_id_for_diagnostics_link(
@@ -866,12 +877,12 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     HTTPException
         If the simulation with the given ID is not found, raises a 404 HTTP exception.
     """
-    sim = _simulation_detail_query(db).filter(Simulation.id == sim_id).one_or_none()
+    sim = _execution_detail_query(db).filter(Execution.id == sim_id).one_or_none()
 
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    return _simulation_to_out(sim)
+    return _execution_to_legacy_out(sim)
 
 
 def _build_case_summary(case: Case) -> dict:
@@ -888,7 +899,7 @@ def _build_case_summary(case: Case) -> dict:
         key=lambda username: username.lower(),
     )
 
-    for sim in case.simulations:
+    for sim in case.executions:
         summaries.append(
             SimulationSummaryOut(
                 id=sim.id,
@@ -962,7 +973,7 @@ def _creator_filter_options(db: Session) -> list[FilterOptionOut]:
     """Return simulation creators with stable IDs and email labels."""
     rows = (
         db.query(User.id, User.email)
-        .join(Simulation, Simulation.created_by == User.id)
+        .join(Execution, Execution.created_by == User.id)
         .distinct()
         .order_by(User.email, User.id)
         .all()
@@ -1039,24 +1050,24 @@ def _external_link_to_out(link: ExternalLink) -> dict:
     }
 
 
-def _simulation_detail_query(db: Session):
-    return db.query(Simulation).options(
-        joinedload(Simulation.case).joinedload(Case.machine),
-        joinedload(Simulation.case).selectinload(Case.links),
-        selectinload(Simulation.artifacts),
-        selectinload(Simulation.links),
+def _execution_detail_query(db: Session):
+    return db.query(Execution).options(
+        joinedload(Execution.case).joinedload(Case.machine),
+        joinedload(Execution.case).selectinload(Case.links),
+        selectinload(Execution.artifacts),
+        selectinload(Execution.links),
     )
 
 
-def _simulation_to_out(sim: Simulation) -> SimulationOut:
-    """Convert a Simulation ORM instance to a SimulationOut schema.
+def _execution_to_legacy_out(sim: Execution) -> SimulationOut:
+    """Convert a Execution ORM instance to a SimulationOut schema.
 
     Derives ``case_name`` and ``case_group`` from the associated Case relationship.
 
     Parameters
     ----------
-    sim : Simulation
-        The Simulation ORM instance to convert.
+    sim : Execution
+        The Execution ORM instance to convert.
 
     Returns
     -------
@@ -1066,7 +1077,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     """
     case = sim.case
     llm_available = is_summary_llm_available()
-    merged_links = merge_simulation_and_case_links(sim.links, case.links)
+    merged_links = merge_execution_and_case_links(sim.links, case.links)
     serialized_links = [_external_link_to_out(link) for link in merged_links]
 
     result = SimulationOut.model_validate(

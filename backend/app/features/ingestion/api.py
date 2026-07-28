@@ -49,8 +49,8 @@ from app.features.ingestion.schemas import (
     IngestionStatus,
 )
 from app.features.machine.utils import resolve_machine_by_name
-from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate
+from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
+from app.features.simulation.schemas import ExecutionCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
@@ -620,9 +620,9 @@ def _build_ingestion_state_response(
         execution_ids_by_case[case_path].update(normalized_execution_ids)
 
     if requires_legacy_fallback:
-        simulation_rows = (
-            db.query(Ingestion.source_reference, Simulation.execution_id)
-            .join(Simulation, Simulation.ingestion_id == Ingestion.id)
+        execution_rows = (
+            db.query(Ingestion.source_reference, Execution.execution_id)
+            .join(Execution, Execution.ingestion_id == Ingestion.id)
             .filter(
                 Ingestion.source_type.in_(STATEFUL_INGESTION_SOURCE_TYPES),
                 Ingestion.machine_id == machine_id,
@@ -631,11 +631,11 @@ def _build_ingestion_state_response(
                     func.jsonb_typeof(Ingestion.processed_execution_ids) == "null",
                 ),
             )
-            .order_by(Ingestion.source_reference.asc(), Simulation.execution_id.asc())
+            .order_by(Ingestion.source_reference.asc(), Execution.execution_id.asc())
             .all()
         )
 
-        for case_path, execution_id in simulation_rows:
+        for case_path, execution_id in execution_rows:
             if not case_path or not execution_id:
                 continue
             execution_ids_by_case[case_path].add(execution_id)
@@ -789,9 +789,9 @@ def _validate_single_case_upload_ingest_result(
     case_path: str,
 ) -> None:
     created_case_ids = {
-        simulation.case_id
-        for simulation in ingest_result.simulations
-        if simulation.case_id is not None
+        execution.case_id
+        for execution in ingest_result.executions
+        if execution.case_id is not None
     }
     if len(created_case_ids) <= 1:
         return
@@ -819,7 +819,7 @@ def _process_ingestion(
     """Finalize and persist an ingestion operation.
 
     This function completes the ingestion workflow after archive parsing has
-    succeeded. It determines ingestion status, persists simulation records and
+    succeeded. It determines ingestion status, persists execution records and
     ingestion metadata within a transactional boundary, and returns a structured
     response model.
 
@@ -827,7 +827,7 @@ def _process_ingestion(
     ----------
     ingest_result : IngestArchiveResult
         Structured result produced by the archive ingestion step, including
-        parsed simulations, duplicate counts, and per-execution errors.
+        parsed executions, duplicate counts, and per-execution errors.
     source_type : IngestionSourceType
         Enumeration indicating the ingestion source (e.g., HPC_PATH,
         HPC_UPLOAD).
@@ -874,14 +874,14 @@ def _process_ingestion(
         db.add(ingestion)
         db.flush()
 
-        created_sims = _persist_simulations(
-            ingestion.id, ingest_result.simulations, db, user, hpc_username
+        created_executions = _persist_executions(
+            ingestion.id, ingest_result.executions, db, user, hpc_username
         )
 
     return IngestionResponse(
         created_count=ingest_result.created_count,
         duplicate_count=ingest_result.duplicate_count,
-        simulations=_build_ingestion_simulation_summaries(created_sims, db),
+        simulations=_build_ingestion_execution_summaries(created_executions, db),
         errors=ingest_result.errors,
     )
 
@@ -896,36 +896,36 @@ def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
     return IngestionStatus.FAILED.value
 
 
-def _persist_simulations(
+def _persist_executions(
     ingestion_id: UUID,
-    simulations: list[SimulationCreate],
+    executions: list[ExecutionCreate],
     db: Session,
     user: User,
     hpc_username: str | None = None,
-) -> list[Simulation]:
-    """Persist simulation records with artifacts and links to the database.
+) -> list[Execution]:
+    """Persist execution records with artifacts and links to the database.
 
     Parameters
     ----------
     ingestion_id : UUID
         Identifier of the parent ingestion record to associate with each
-        simulation.
-    simulations : list[SimulationCreate]
-        List of simulation data to persist, including nested artifacts and
+        execution.
+    executions : list[ExecutionCreate]
+        List of execution data to persist, including nested artifacts and
         links.
     db : Session
         Active SQLAlchemy database session used for persistence.
     user : User
         Authenticated user who initiated the ingestion, set as creator and
-        last updater of each simulation record.
+        last updater of each execution record.
     hpc_username : str | None, optional
         HPC username for provenance (trusted, informational only)
     """
     now = datetime.now(timezone.utc)
-    created_sims: list[Simulation] = []
+    created_executions: list[Execution] = []
 
-    for sim_create in simulations:
-        data = sim_create.model_dump(
+    for execution_create in executions:
+        data = execution_create.model_dump(
             by_alias=False,
             exclude={"artifacts", "links", "created_by", "last_updated_by"},
             exclude_unset=True,
@@ -934,7 +934,7 @@ def _persist_simulations(
         if data.get("git_repository_url") is not None:
             data["git_repository_url"] = str(data["git_repository_url"])
 
-        sim = Simulation(
+        execution = Execution(
             **data,
             ingestion_id=ingestion_id,
             created_by=user.id,
@@ -943,49 +943,49 @@ def _persist_simulations(
             updated_at=now,
         )
 
-        if sim_create.artifacts:
-            for artifact in sim_create.artifacts:
+        if execution_create.artifacts:
+            for artifact in execution_create.artifacts:
                 artifact_data = artifact.model_dump(
                     by_alias=False,
                     exclude_unset=True,
                 )
                 artifact_data["uri"] = str(artifact.uri)
-                sim.artifacts.append(Artifact(**artifact_data))
+                execution.artifacts.append(Artifact(**artifact_data))
 
-        if sim_create.links:
-            for link in sim_create.links:
+        if execution_create.links:
+            for link in execution_create.links:
                 link_data = link.model_dump(
                     by_alias=False,
                     exclude_unset=True,
                 )
                 link_data["url"] = str(link.url)
-                sim.links.append(ExternalLink(**link_data))
+                execution.links.append(ExternalLink(**link_data))
 
-        db.add(sim)
-        created_sims.append(sim)
+        db.add(execution)
+        created_executions.append(execution)
 
     db.flush()
-    return created_sims
+    return created_executions
 
 
-def _build_ingestion_simulation_summaries(
-    created_sims: list[Simulation], db: Session
+def _build_ingestion_execution_summaries(
+    created_executions: list[Execution], db: Session
 ) -> list[IngestionSimulationSummary]:
-    if not created_sims:
+    if not created_executions:
         return []
 
-    case_ids = list({sim.case_id for sim in created_sims})
+    case_ids = list({execution.case_id for execution in created_executions})
     cases = {
         case.id: case for case in db.query(Case).filter(Case.id.in_(case_ids)).all()
     }
 
     return [
         IngestionSimulationSummary(
-            id=sim.id,
-            case_id=sim.case_id,
-            case_name=cases[sim.case_id].name,
-            execution_id=sim.execution_id,
+            id=execution.id,
+            case_id=execution.case_id,
+            case_name=cases[execution.case_id].name,
+            execution_id=execution.execution_id,
         )
-        for sim in created_sims
-        if sim.id is not None and sim.case_id in cases
+        for execution in created_executions
+        if execution.id is not None and execution.case_id in cases
     ]

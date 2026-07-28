@@ -43,10 +43,10 @@ from app.features.ingestion.parsers.git_info import (
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
-from app.features.ingestion.parsers.types import ParsedSimulation
-from app.features.simulation.enums import SimulationStatus
+from app.features.ingestion.parsers.types import ParsedExecution
+from app.features.simulation.enums import ExecutionStatus
 
-SimulationFiles = dict[str, str | None]
+ExecutionFiles = dict[str, str | None]
 
 logger = _setup_custom_logger(__name__)
 
@@ -149,7 +149,7 @@ def main_parser(
     output_dir: str | Path,
     *,
     strict_validation: bool = False,
-) -> tuple[list[ParsedSimulation], int]:
+) -> tuple[list[ParsedExecution], int]:
     """Main entrypoint for parser workflow.
 
     Parses case directories from a performance archive, handling incomplete or
@@ -169,7 +169,7 @@ def main_parser(
 
     Returns
     -------
-    tuple[list[ParsedSimulation], int]
+    tuple[list[ParsedExecution], int]
         Parsed simulations in deterministic execution-directory order and the
         count of skipped incomplete runs. Only directories that contain all
         required metadata files and a timing-file LID are included.
@@ -199,7 +199,7 @@ def main_parser(
             "directories matching pattern: <digits>.<digits>-<digits>"
         )
 
-    results: list[ParsedSimulation] = []
+    results: list[ParsedExecution] = []
     skipped_count = 0
 
     validation_errors: list[dict[str, str]] = []
@@ -212,14 +212,14 @@ def main_parser(
         )
 
         for exec_dir in sorted_exec_dirs:
-            parsed_simulation, exec_validation_errors, exec_skipped_count = (
+            parsed_execution, exec_validation_errors, exec_skipped_count = (
                 _process_execution_dir(exec_dir, strict_validation=strict_validation)
             )
             skipped_count += exec_skipped_count
             validation_errors.extend(exec_validation_errors)
 
-            if parsed_simulation is not None:
-                results.append(parsed_simulation)
+            if parsed_execution is not None:
+                results.append(parsed_execution)
 
     if validation_errors:
         raise ArchiveValidationError(validation_errors)
@@ -236,7 +236,7 @@ def main_parser(
 
 def _process_execution_dir(
     exec_dir: str, *, strict_validation: bool
-) -> tuple[ParsedSimulation | None, list[dict[str, str]], int]:
+) -> tuple[ParsedExecution | None, list[dict[str, str]], int]:
     try:
         metadata_files = _locate_metadata_files(exec_dir)
         return _parse_all_files(exec_dir, metadata_files), [], 0
@@ -383,9 +383,9 @@ def _map_case_to_execution_dirs(root_dir: str) -> dict[str, list[str]]:
     return grouped_matches
 
 
-def _locate_metadata_files(exp_dir: str) -> SimulationFiles:
+def _locate_metadata_files(exp_dir: str) -> ExecutionFiles:
     """Locate required and optional files in the execution directory."""
-    files: SimulationFiles = {key: None for key in FILE_SPECS}
+    files: ExecutionFiles = {key: None for key in FILE_SPECS}
     invalid_archive_errors: list[dict[str, str]] = []
     missing_required_errors: list[dict[str, str]] = []
     missing_optional: list[str] = []
@@ -511,7 +511,7 @@ def _build_missing_timing_lid_error(exec_dir: str) -> dict[str, str]:
     }
 
 
-def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:
+def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecution:
     """Pass discovered files to their respective parser functions.
 
     Parameters
@@ -521,7 +521,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
 
     Returns
     -------
-    ParsedSimulation
+    ParsedExecution
         Typed archive-derived metadata for one execution directory.
     """
     metadata: dict[str, str | None] = {}
@@ -561,7 +561,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
 
     execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
 
-    return ParsedSimulation(
+    return ParsedExecution(
         execution_dir=exec_dir,
         execution_id=execution_id,
         case_name=metadata.get("case_name"),
@@ -584,7 +584,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimul
         git_branch=metadata.get("git_branch"),
         git_tag=metadata.get("git_tag"),
         git_commit_hash=metadata.get("git_commit_hash"),
-        status=metadata.get("status") or SimulationStatus.UNKNOWN.value,
+        status=metadata.get("status") or ExecutionStatus.UNKNOWN.value,
         output_path=metadata.get("output_path"),
         archive_path=metadata.get("archive_path"),
         case_root=metadata.get("case_root"),
