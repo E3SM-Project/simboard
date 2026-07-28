@@ -12,14 +12,16 @@ import { Toaster } from './components/ui/toaster';
 
 const App = () => {
   // -------------------- Constants --------------------
-  const LOCAL_STORAGE_KEY = 'selectedSimulationIds';
+  const LOCAL_STORAGE_KEY = 'selectedExecutionIds';
+  const LEGACY_LOCAL_STORAGE_KEY = 'selectedSimulationIds';
 
   // -------------------- Local State --------------------
   const { data: machines = [] } = useMachines();
   const { data: sites = [] } = useSites();
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const stored =
+      localStorage.getItem(LOCAL_STORAGE_KEY) ?? localStorage.getItem(LEGACY_LOCAL_STORAGE_KEY);
     return stored ? normalizeSelectedSimulationIds(JSON.parse(stored)) : [];
   });
   const [selectedCaseSimulationIdsByCase, setSelectedCaseSimulationIdsByCase] = useState<

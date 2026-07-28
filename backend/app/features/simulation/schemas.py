@@ -174,6 +174,26 @@ class ExternalLinkOut(CamelOutBaseModel):
     ]
 
 
+class ExecutionExternalLinkOut(CamelOutBaseModel):
+    """Canonical external-link contract for execution and case owners."""
+
+    id: UUID
+    kind: ExternalLinkKind
+    url: HttpUrl
+    label: str | None = None
+    owner_type: Annotated[
+        Literal["execution", "case"],
+        Field(
+            description=(
+                "Owner of this link. Execution-owned links are editable from execution "
+                "PATCH; case-owned links are read-only there."
+            )
+        ),
+    ]
+    created_at: datetime
+    updated_at: datetime
+
+
 class DiagnosticsLinkItem(CamelInBaseModel):
     """Schema for one diagnostic link to attach to a case."""
 
@@ -649,9 +669,14 @@ class CaseListItemOut(CamelOutBaseModel):
     machine_id: UUID
     machine_name: str
     hpc_username: str
-    simulation_count: int
+    simulation_count: Annotated[int, Field(deprecated=True)]
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    def execution_count(self) -> int:
+        """Canonical alias retained alongside deprecated simulationCount."""
+        return self.__dict__["simulation_count"]
 
 
 class CasePageOut(CamelOutBaseModel):
@@ -780,10 +805,15 @@ class CatalogOverviewOut(CamelOutBaseModel):
     """Fixed-size homepage catalog summary."""
 
     total_cases: int
-    total_simulations: int
+    total_simulations: Annotated[int, Field(deprecated=True)]
     latest_submission: datetime | None = None
     machine_counts: dict[UUID, int]
     recent_cases: list[CaseListItemOut]
+
+    @computed_field
+    def total_executions(self) -> int:
+        """Canonical alias retained alongside deprecated totalSimulations."""
+        return self.__dict__["total_simulations"]
 
 
 class CaseSummaryOut(CamelOutBaseModel):
@@ -807,6 +837,7 @@ class CaseSummaryOut(CamelOutBaseModel):
             default_factory=list,
             description="Simulation executions belonging to this case.",
             validation_alias=AliasChoices("simulations", "executions"),
+            deprecated=True,
         ),
     ]
     machine_names: Annotated[
@@ -836,6 +867,14 @@ class CaseSummaryOut(CamelOutBaseModel):
     updated_at: Annotated[
         datetime, Field(..., description="Timestamp when the case was last updated")
     ]
+
+    @computed_field
+    def executions(self) -> list[ExecutionSummaryOut]:
+        """Canonical alias retained alongside deprecated simulations."""
+        return [
+            ExecutionSummaryOut.model_validate(summary.model_dump())
+            for summary in self.__dict__["simulations"]
+        ]
 
 
 class CaseDetailOut(CaseSummaryOut):
@@ -1129,10 +1168,10 @@ class ExecutionOut(CamelOutBaseModel):
         ),
     ]
     links: Annotated[
-        list[ExternalLinkOut],
+        list[ExecutionExternalLinkOut],
         Field(
             default_factory=list,
-            description="Optional list of external links associated with the simulation",
+            description="Optional list of external links associated with the execution",
         ),
     ]
 
@@ -1142,8 +1181,8 @@ class ExecutionOut(CamelOutBaseModel):
     def grouped_artifacts(self) -> dict[str, list[ArtifactOut]]:
         return self._group_by_kind(self.artifacts)
 
-    @computed_field(return_type=dict[str, list[ExternalLinkOut]])
-    def grouped_links(self) -> dict[str, list[ExternalLinkOut]]:
+    @computed_field(return_type=dict[str, list[ExecutionExternalLinkOut]])
+    def grouped_links(self) -> dict[str, list[ExecutionExternalLinkOut]]:
         return self._group_by_kind(self.links)
 
     def _group_by_kind(self, items: list[Any]) -> dict[str, list[Any]]:
@@ -1169,3 +1208,16 @@ class SimulationOut(ExecutionOut):
             )
         ),
     ]
+    links: Annotated[  # type: ignore[assignment]
+        list[ExternalLinkOut],
+        Field(
+            default_factory=list,
+            description="Optional list of external links associated with the simulation",
+        ),
+    ]
+
+    @computed_field(return_type=dict[str, list[ExternalLinkOut]])
+    def grouped_links(  # type: ignore[override]
+        self,
+    ) -> dict[str, list[ExternalLinkOut]]:
+        return self._group_by_kind(self.links)

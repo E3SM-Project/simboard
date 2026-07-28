@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getSimulationById } from '@/api/catalog';
+import { getExecutionById } from '@/api/catalog';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 export const useSimulation = (id: string, enabled = true) => {
   const query = useQuery({
-    queryKey: catalogQueryKeys.simulations.detail(id),
-    queryFn: () => getSimulationById(id),
+    queryKey: catalogQueryKeys.executions.detail(id),
+    queryFn: () => getExecutionById(id),
     enabled: enabled && Boolean(id),
   });
   return {

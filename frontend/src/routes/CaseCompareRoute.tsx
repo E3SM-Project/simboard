@@ -32,7 +32,7 @@ export const CaseCompareRoute = ({
   const { data: caseRecord, error, loading } = useCase(caseId ?? '');
 
   const caseSimulationIdSet = useMemo(
-    () => new Set(caseRecord?.simulations.map((simulation) => simulation.id) ?? []),
+    () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
     [caseRecord],
   );
 
@@ -46,7 +46,7 @@ export const CaseCompareRoute = ({
   );
   const detailQueries = useQueries({
     queries: caseSelectedSimulationIds.map((simulationId) => ({
-      queryKey: catalogQueryKeys.simulations.detail(simulationId),
+      queryKey: catalogQueryKeys.executions.detail(simulationId),
       queryFn: () => getSimulationById(simulationId),
     })),
   });

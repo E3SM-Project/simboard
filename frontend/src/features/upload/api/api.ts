@@ -16,6 +16,8 @@ export interface ArchiveUploadValidationDetail {
 export interface IngestionUploadResponse {
   created_count: number;
   duplicate_count: number;
+  executions: IngestionUploadExecutionSummary[];
+  /** @deprecated Use executions. */
   simulations: IngestionUploadSimulationSummary[];
   errors: Record<string, string>[];
 }
@@ -26,6 +28,8 @@ export interface IngestionUploadSimulationSummary {
   case_name: string;
   execution_id: string;
 }
+
+export type IngestionUploadExecutionSummary = IngestionUploadSimulationSummary;
 
 interface UploadSimulationArchiveParams {
   file: File;

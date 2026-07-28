@@ -232,7 +232,7 @@ export const SimulationResultCard = ({
                 className="w-full sm:w-40"
                 onClick={(event) => {
                   event.stopPropagation();
-                  navigate(`/simulations/${simulation.id}`, { state: { from: currentPath } });
+                  navigate(`/executions/${simulation.id}`, { state: { from: currentPath } });
                 }}
               >
                 All Details

@@ -112,7 +112,7 @@ class TestSummarizeSimulationEndpoint:
         )
 
         response = await authenticated_client.post(
-            f"{API_BASE}/simulations/{simulation.id}/summary"
+            f"{API_BASE}/executions/{simulation.id}/summary"
         )
 
         assert response.status_code == 200
@@ -131,8 +131,12 @@ class TestSummarizeSimulationEndpoint:
         assert UUID(data["traceId"])
         assert data["fallbackUsed"] is False
         assert {citation["path"] for citation in data["citations"]} >= {
-            "simulation.execution_id",
+            "execution.execution_id",
             "case.name",
+        }
+        assert {citation["sourceType"] for citation in data["citations"]} >= {
+            "execution_field",
+            "case_field",
         }
 
     @pytest.mark.asyncio
@@ -194,6 +198,17 @@ class TestSummarizeSimulationEndpoint:
 
         assert response.status_code == 404
         assert response.json() == {"detail": "Simulation not found"}
+
+    @pytest.mark.asyncio
+    async def test_unknown_execution_returns_canonical_404(
+        self, authenticated_client: AsyncClient
+    ) -> None:
+        response = await authenticated_client.post(
+            f"{API_BASE}/executions/{uuid4()}/summary"
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Execution not found"}
 
 
 class _FakeScalarResult:

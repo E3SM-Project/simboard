@@ -23,6 +23,23 @@ class SummaryCitationOut(CamelOutBaseModel):
     label: str = Field(..., description="Human-readable label for the cited source.")
 
 
+class ExecutionSummaryCitationOut(CamelOutBaseModel):
+    """Metadata citation using canonical execution terminology."""
+
+    source_type: Literal[
+        "execution_field",
+        "case_field",
+        "machine_field",
+        "artifact",
+        "external_link",
+    ] = Field(..., description="Kind of SimBoard record referenced by the summary.")
+    path: str = Field(
+        ...,
+        description="Stable field path or related-record selector used by the summary.",
+    )
+    label: str = Field(..., description="Human-readable label for the cited source.")
+
+
 SummaryGenerationMode = Literal["llm", "deterministic"]
 SummaryGenerationProvider = Literal["livai", "ollama"]
 
@@ -75,6 +92,14 @@ class ExecutionSummaryResponse(ExecutionSummaryContent):
         description="Configured provider model when LLM generation succeeds; otherwise null.",
     )
     trace_id: UUID = Field(..., description="Trace ID for request review and logs.")
+
+
+class ExecutionApiSummaryResponse(ExecutionSummaryResponse):
+    """Canonical execution summary API response."""
+
+    citations: list[ExecutionSummaryCitationOut] = Field(  # type: ignore[assignment]
+        default_factory=list
+    )
 
 
 # Phase 2 public-contract adapters. Remove with legacy schemas in Phase 5.

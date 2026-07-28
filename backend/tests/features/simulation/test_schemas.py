@@ -17,6 +17,7 @@ from app.features.simulation.schemas import (
     CaseSummaryOut,
     CaseUpdate,
     ExecutionCreate,
+    ExecutionExternalLinkOut,
     ExecutionFilterOptionsOut,
     ExecutionListItemOut,
     ExecutionOut,
@@ -672,7 +673,7 @@ class TestExecutionOutSchema:
                     "kind": "diagnostic",
                     "url": HttpUrl("http://example.com/link1"),
                     "label": "link1",
-                    "owner_type": "simulation",
+                    "owner_type": "execution",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
                     "updated_at": datetime(2023, 1, 2, 0, 0, 0),
@@ -811,20 +812,20 @@ class TestExecutionOutSchema:
                 updated_at=datetime(2023, 1, 2, 0, 0, 0),
             ),
             links=[
-                ExternalLinkOut(
+                ExecutionExternalLinkOut(
                     kind=ExternalLinkKind.DIAGNOSTIC,
                     url=HttpUrl("http://example.com/link1"),
                     label="link1",
-                    owner_type="simulation",
+                    owner_type="execution",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
                 ),
-                ExternalLinkOut(
+                ExecutionExternalLinkOut(
                     kind=ExternalLinkKind.PERFORMANCE,
                     url=HttpUrl("http://example.com/link2"),
                     label="link2",
-                    owner_type="simulation",
+                    owner_type="execution",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),

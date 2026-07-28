@@ -5,12 +5,12 @@ import type {
   CasePageOut,
   CaseUpdate,
   CatalogOverviewOut,
-  SimulationCreate,
-  SimulationFilterOptionsOut,
-  SimulationOut,
-  SimulationPageOut,
-  SimulationSummaryResponseOut,
-  SimulationUpdate,
+  ExecutionCreate,
+  ExecutionFilterOptionsOut,
+  ExecutionOut,
+  ExecutionPageOut,
+  ExecutionSummaryResponseOut,
+  ExecutionUpdate,
 } from '@/types';
 
 export interface PageParams {
@@ -35,7 +35,9 @@ const toQueryParams = (params: PageParams) => {
   return query;
 };
 
-export const SIMULATIONS_URL = '/simulations';
+export const EXECUTIONS_URL = '/executions';
+/** @deprecated Use EXECUTIONS_URL. */
+export const SIMULATIONS_URL = EXECUTIONS_URL;
 export const CASES_URL = '/cases';
 export const PACE_URL = '/pace';
 const SUMMARY_REQUEST_TIMEOUT_MS = 120_000;
@@ -45,14 +47,14 @@ export interface PaceResolutionOut {
   experimentId: string | null;
 }
 
-export const createSimulation = async (data: SimulationCreate): Promise<SimulationOut> => {
-  const res = await api.post<SimulationOut>(SIMULATIONS_URL, data);
+export const createExecution = async (data: ExecutionCreate): Promise<ExecutionOut> => {
+  const res = await api.post<ExecutionOut>(EXECUTIONS_URL, data);
 
   return res.data;
 };
 
-export const listSimulations = async (params: PageParams = {}): Promise<SimulationPageOut> => {
-  const res = await api.get<SimulationPageOut>(SIMULATIONS_URL, {
+export const listExecutions = async (params: PageParams = {}): Promise<ExecutionPageOut> => {
+  const res = await api.get<ExecutionPageOut>(EXECUTIONS_URL, {
     headers: { 'Cache-Control': 'no-cache' },
     params: toQueryParams(params),
   });
@@ -60,28 +62,28 @@ export const listSimulations = async (params: PageParams = {}): Promise<Simulati
   return res.data;
 };
 
-export const getSimulationById = async (id: string): Promise<SimulationOut> => {
-  const res = await api.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
+export const getExecutionById = async (id: string): Promise<ExecutionOut> => {
+  const res = await api.get<ExecutionOut>(`${EXECUTIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
   return res.data;
 };
 
-export const updateSimulation = async (
+export const updateExecution = async (
   id: string,
-  data: SimulationUpdate,
-): Promise<SimulationOut> => {
-  const res = await api.patch<SimulationOut>(`${SIMULATIONS_URL}/${id}`, data);
+  data: ExecutionUpdate,
+): Promise<ExecutionOut> => {
+  const res = await api.patch<ExecutionOut>(`${EXECUTIONS_URL}/${id}`, data);
 
   return res.data;
 };
 
-export const generateSimulationSummary = async (
+export const generateExecutionSummary = async (
   id: string,
-): Promise<SimulationSummaryResponseOut> => {
-  const res = await api.post<SimulationSummaryResponseOut>(
-    `${SIMULATIONS_URL}/${id}/summary`,
+): Promise<ExecutionSummaryResponseOut> => {
+  const res = await api.post<ExecutionSummaryResponseOut>(
+    `${EXECUTIONS_URL}/${id}/summary`,
     undefined,
     { timeout: SUMMARY_REQUEST_TIMEOUT_MS },
   );
@@ -117,8 +119,8 @@ export const getCaseFilterOptions = async (): Promise<CaseFilterOptionsOut> => {
   return res.data;
 };
 
-export const getSimulationFilterOptions = async (): Promise<SimulationFilterOptionsOut> => {
-  const res = await api.get<SimulationFilterOptionsOut>(`${SIMULATIONS_URL}/filter-options`);
+export const getExecutionFilterOptions = async (): Promise<ExecutionFilterOptionsOut> => {
+  const res = await api.get<ExecutionFilterOptionsOut>(`${EXECUTIONS_URL}/filter-options`);
   return res.data;
 };
 
@@ -134,6 +136,17 @@ export const updateCase = async (id: string, data: CaseUpdate): Promise<CaseDeta
   const res = await api.patch<CaseDetailOut>(`${CASES_URL}/${id}`, data);
 
   return res.data;
+};
+
+// Phase 3 compatibility exports. Remove after remaining callers use canonical
+// execution symbols.
+export {
+  createExecution as createSimulation,
+  generateExecutionSummary as generateSimulationSummary,
+  getExecutionById as getSimulationById,
+  getExecutionFilterOptions as getSimulationFilterOptions,
+  listExecutions as listSimulations,
+  updateExecution as updateSimulation,
 };
 
 export const listCaseNames = async (): Promise<string[]> => {

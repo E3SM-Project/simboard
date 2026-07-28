@@ -84,7 +84,7 @@ const CASE_SORT_FIELDS: Record<string, string> = {
   name: 'name',
   hpcUsers: 'hpc_username',
   machines: 'machine_name',
-  simulationCount: 'simulation_count',
+  simulationCount: 'execution_count',
   caseGroup: 'case_group',
   createdAt: 'created_at',
   updatedAt: 'updated_at',
@@ -348,7 +348,7 @@ export const CasesPage = () => {
   }, [caseGroupFilter, cases, caseNameFilter]);
 
   const visibleRunCount = useMemo(
-    () => filteredCases.reduce((count, caseRecord) => count + caseRecord.simulationCount, 0),
+    () => filteredCases.reduce((count, caseRecord) => count + caseRecord.executionCount, 0),
     [filteredCases],
   );
 
@@ -414,9 +414,9 @@ export const CasesPage = () => {
       {
         id: 'simulationCount',
         header: 'Total Executions',
-        accessorFn: (caseRecord) => caseRecord.simulationCount,
+        accessorFn: (caseRecord) => caseRecord.executionCount,
         cell: ({ row }) => {
-          return <Badge variant="secondary">{row.original.simulationCount}</Badge>;
+          return <Badge variant="secondary">{row.original.executionCount}</Badge>;
         },
       },
       {
@@ -524,7 +524,7 @@ export const CasesPage = () => {
                   <TableRow key={simulation.id}>
                     <TableCell className="align-top">
                       <Link
-                        to={`/simulations/${simulation.id}`}
+                        to={`/executions/${simulation.id}`}
                         state={{ from: currentPath }}
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >

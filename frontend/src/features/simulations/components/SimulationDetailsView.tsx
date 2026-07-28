@@ -197,10 +197,10 @@ const groupLinksByKind = (
   other: links.filter((link) => link.kind === 'other'),
 });
 
-type ExternalResourceSource = 'simulation' | 'case' | 'derived';
+type ExternalResourceSource = 'execution' | 'case' | 'derived';
 
 const EXTERNAL_RESOURCE_SOURCE_LABELS: Record<ExternalResourceSource, string> = {
-  simulation: 'Execution',
+  execution: 'Execution',
   case: 'Case',
   derived: 'Derived',
 };
@@ -247,7 +247,7 @@ const ExternalResourceLinkRow = ({
 const ExternalResourceLegend = () => (
   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
     <div className="flex items-center gap-2">
-      <ExternalResourceSourceBadge source="simulation" />
+      <ExternalResourceSourceBadge source="execution" />
       <span>saved on this execution</span>
     </div>
     <div className="flex items-center gap-2">
@@ -581,7 +581,7 @@ const buildUpdatePayload = (
   }
 
   const nextLinks = normalizeLinkRows(linkRows);
-  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
+  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation.links, 'execution'));
   if (!areResourceListsEqual(nextLinks, currentLinks)) {
     payload.links = nextLinks;
   }
@@ -632,7 +632,7 @@ export const SimulationDetailsView = ({
     toEditableArtifactRows(simulation),
   );
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() =>
-    toEditableLinkRows(simulation.links, 'simulation'),
+    toEditableLinkRows(simulation.links, 'execution'),
   );
   const [serverRowErrors, setServerRowErrors] = useState<ResourceRowErrorsState>({
     artifacts: [],
@@ -640,7 +640,7 @@ export const SimulationDetailsView = ({
   });
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
   const inheritedCaseLinks = toInheritedCaseLinks(simulation);
-  const simulationOwnedLinks = simulation.links.filter((link) => link.ownerType === 'simulation');
+  const simulationOwnedLinks = simulation.links.filter((link) => link.ownerType === 'execution');
   const groupedSimulationOwnedLinks = groupLinksByKind(simulationOwnedLinks);
   const groupedInheritedCaseLinks = groupLinksByKind(inheritedCaseLinks);
   const externalResourceKinds: ExternalLinkKind[] = ['diagnostic', 'performance', 'docs', 'other'];
@@ -698,7 +698,7 @@ export const SimulationDetailsView = ({
   useEffect(() => {
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
+    setLinkRows(toEditableLinkRows(simulation.links, 'execution'));
     setIsEditing(false);
   }, [simulation]);
 
@@ -706,7 +706,7 @@ export const SimulationDetailsView = ({
     if (!canEdit) {
       setFormState(toEditableFormState(simulation));
       setArtifactRows(toEditableArtifactRows(simulation));
-      setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
+      setLinkRows(toEditableLinkRows(simulation.links, 'execution'));
       setIsEditing(false);
     }
   }, [canEdit, simulation]);
@@ -778,7 +778,7 @@ export const SimulationDetailsView = ({
     onClearSaveError?.();
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
+    setLinkRows(toEditableLinkRows(simulation.links, 'execution'));
     setIsEditing(false);
   };
 
@@ -1480,7 +1480,7 @@ export const SimulationDetailsView = ({
                                       key={link.id}
                                       href={link.url}
                                       label={link.label || link.url}
-                                      source="simulation"
+                                      source="execution"
                                     />
                                   ))}
                                   {caseLinksForKind.map((link) => (
