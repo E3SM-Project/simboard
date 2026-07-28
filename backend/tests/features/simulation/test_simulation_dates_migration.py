@@ -9,6 +9,7 @@ from sqlalchemy import text
 from tests.conftest import ALEMBIC_INI_PATH, TEST_DB_URL, engine
 
 PREVIOUS_REVISION = "20260721_120000"
+MIGRATION_REVISION = "20260722_000000"
 
 
 def test_simulation_date_migration_is_timezone_independent_and_reversible(
@@ -119,7 +120,7 @@ def test_simulation_date_migration_is_timezone_independent_and_reversible(
                 {"new_id": null_end_simulation_id, "source_id": simulation_id},
             )
 
-        command.upgrade(alembic_config, "head")
+        command.upgrade(alembic_config, MIGRATION_REVISION)
         with engine.connect() as connection:
             connection.execute(text("SET TIME ZONE 'America/Los_Angeles'"))
             upgraded = connection.execute(

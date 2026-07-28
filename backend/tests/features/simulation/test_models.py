@@ -167,8 +167,8 @@ def _create_execution(
 
 
 class TestExecutionModelCreateAllSchema:
-    def test_execution_uses_legacy_simulations_table_and_alias(self) -> None:
-        assert Execution.__tablename__ == "simulations"
+    def test_execution_uses_executions_table_and_legacy_alias(self) -> None:
+        assert Execution.__tablename__ == "executions"
         assert Simulation is Execution
 
     def test_create_all_schema_rejects_invalid_compute_type(
@@ -187,7 +187,7 @@ class TestExecutionModelCreateAllSchema:
             simulation_create_all_db.execute(
                 text(
                     """
-                    UPDATE simulations
+                    UPDATE executions
                     SET compute_type = 'tpu'
                     WHERE id = :simulation_id
                     """
@@ -267,7 +267,7 @@ class TestExternalLinkOwnership:
         )
 
         link = ExternalLink(
-            simulation_id=simulation.id,
+            execution_id=simulation.id,
             kind=ExternalLinkKind.DIAGNOSTIC,
             url="https://example.com/sim-owned",
             label="Simulation-owned",
@@ -342,7 +342,7 @@ class TestExternalLinkOwnership:
 
         db.add(
             ExternalLink(
-                simulation_id=simulation.id,
+                execution_id=simulation.id,
                 case_id=case.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/dual-owned",

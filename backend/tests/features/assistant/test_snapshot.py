@@ -246,7 +246,7 @@ class TestSnapshotHelpers:
         simulation.links = [
             ExternalLink(
                 execution=simulation,
-                simulation_id=simulation.id,
+                execution_id=simulation.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/shared",
                 label="Simulation shared",

@@ -93,7 +93,7 @@ def _create_execution(
     if with_diagnostics:
         db.add(
             ExternalLink(
-                simulation_id=execution.id,
+                execution_id=execution.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/diag",
                 label="Diagnostics Dashboard",
@@ -102,7 +102,7 @@ def _create_execution(
 
     db.add(
         Artifact(
-            simulation_id=execution.id,
+            execution_id=execution.id,
             kind=ArtifactKind.OUTPUT,
             uri="/archive/output.nc",
             label="Primary output",
