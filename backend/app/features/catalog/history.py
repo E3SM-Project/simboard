@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
@@ -18,7 +18,8 @@ def snapshot_metadata(entity: AuditedEntity, field_names: set[str]) -> dict[str,
     for field_name in field_names:
         if field_name == "artifacts":
             snapshot[field_name] = [
-                _artifact_value(artifact) for artifact in entity.artifacts
+                _artifact_value(artifact)
+                for artifact in cast(Execution, entity).artifacts
             ]
         elif field_name == "links":
             snapshot[field_name] = [_link_value(link) for link in entity.links]

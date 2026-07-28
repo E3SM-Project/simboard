@@ -2848,10 +2848,18 @@ class TestUpdateExecution:
             .all()
         )
         assert [entry.field_name for entry in history] == ["artifacts", "links"]
-        assert history[0].old_value[0]["uri"] == "/tmp/output-old"
-        assert history[0].new_value[0]["uri"] == "/tmp/output-new"
-        assert history[1].old_value[0]["url"].endswith("diagnostic-old")
-        assert history[1].new_value[0]["url"].endswith("diagnostic-new")
+        artifact_old_value = history[0].old_value
+        artifact_new_value = history[0].new_value
+        link_old_value = history[1].old_value
+        link_new_value = history[1].new_value
+        assert isinstance(artifact_old_value, list)
+        assert isinstance(artifact_new_value, list)
+        assert isinstance(link_old_value, list)
+        assert isinstance(link_new_value, list)
+        assert artifact_old_value[0]["uri"] == "/tmp/output-old"
+        assert artifact_new_value[0]["uri"] == "/tmp/output-new"
+        assert link_old_value[0]["url"].endswith("diagnostic-old")
+        assert link_new_value[0]["url"].endswith("diagnostic-new")
 
     def test_endpoint_can_clear_artifacts_and_links(
         self, client, db: Session, normal_user_sync
