@@ -13,11 +13,11 @@ from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.enums import (
+    ExecutionStatus,
     ExternalLinkKind,
-    SimulationStatus,
     SimulationType,
 )
-from app.features.simulation.models import Case, ExternalLink, Simulation
+from app.features.simulation.models import Case, Execution, ExternalLink, Simulation
 from app.features.site.models import Site
 from app.features.user.models import User
 from tests.conftest import engine
@@ -34,7 +34,7 @@ def simulation_create_all_db() -> Generator[Session, None, None]:
         cast(Table, Machine.__table__),
         cast(Table, Ingestion.__table__),
         cast(Table, Case.__table__),
-        cast(Table, Simulation.__table__),
+        cast(Table, Execution.__table__),
     ]
 
     with engine.connect() as connection:
@@ -137,15 +137,15 @@ def _create_dependencies(session: Session) -> tuple[User, Machine, Ingestion]:
     return user, machine, ingestion
 
 
-def _create_simulation(
+def _create_execution(
     db: Session,
     *,
     case_id: UUID,
     ingestion_id: UUID,
     user_id: UUID,
     execution_id: str,
-) -> Simulation:
-    simulation = Simulation(
+) -> Execution:
+    execution = Execution(
         case_id=case_id,
         execution_id=execution_id,
         compset="AQUAPLANET",
@@ -153,7 +153,7 @@ def _create_simulation(
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
         simulation_type=SimulationType.EXPERIMENTAL,
-        status=SimulationStatus.CREATED,
+        status=ExecutionStatus.CREATED,
         initialization_type="startup",
         simulation_start_date=date(2023, 1, 1),
         created_by=user_id,
@@ -161,18 +161,22 @@ def _create_simulation(
         ingestion_id=ingestion_id,
         extra={},
     )
-    db.add(simulation)
+    db.add(execution)
     db.flush()
-    return simulation
+    return execution
 
 
-class TestSimulationModelCreateAllSchema:
+class TestExecutionModelCreateAllSchema:
+    def test_execution_uses_legacy_simulations_table_and_alias(self) -> None:
+        assert Execution.__tablename__ == "simulations"
+        assert Simulation is Execution
+
     def test_create_all_schema_rejects_invalid_compute_type(
         self, simulation_create_all_db: Session
     ) -> None:
         user, machine, ingestion = _create_dependencies(simulation_create_all_db)
         case = _create_case(simulation_create_all_db, machine=machine)
-        simulation = _create_simulation(
+        simulation = _create_execution(
             simulation_create_all_db,
             case_id=case.id,
             ingestion_id=ingestion.id,
@@ -212,7 +216,7 @@ class TestSimulationModelCreateAllSchema:
             hpc_username="schema-user",
         )
 
-        _create_simulation(
+        _create_execution(
             simulation_create_all_db,
             case_id=case_one.id,
             ingestion_id=ingestion.id,
@@ -221,7 +225,7 @@ class TestSimulationModelCreateAllSchema:
         )
         simulation_create_all_db.commit()
 
-        _create_simulation(
+        _create_execution(
             simulation_create_all_db,
             case_id=case_two.id,
             ingestion_id=ingestion.id,
@@ -231,7 +235,7 @@ class TestSimulationModelCreateAllSchema:
         simulation_create_all_db.commit()
 
         with pytest.raises(IntegrityError):
-            _create_simulation(
+            _create_execution(
                 simulation_create_all_db,
                 case_id=case_one.id,
                 ingestion_id=ingestion.id,
@@ -254,7 +258,7 @@ class TestExternalLinkOwnership:
             user_id=normal_user_sync["id"],
             source_reference="simulation-owned-external-link",
         )
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             case_id=case.id,
             ingestion_id=ingestion.id,
@@ -270,9 +274,14 @@ class TestExternalLinkOwnership:
         )
         db.add(link)
         db.commit()
+        db.refresh(case)
+        db.refresh(ingestion)
         db.refresh(simulation)
 
+        assert case.executions == [simulation]
+        assert ingestion.executions == [simulation]
         assert simulation.links[0].id == link.id
+        assert link.execution is simulation
 
     def test_case_owned_external_link_is_valid(
         self, db: Session, normal_user_sync
@@ -323,7 +332,7 @@ class TestExternalLinkOwnership:
             user_id=normal_user_sync["id"],
             source_reference="dual-owned-external-link",
         )
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             case_id=case.id,
             ingestion_id=ingestion.id,

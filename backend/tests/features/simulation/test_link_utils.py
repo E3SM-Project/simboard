@@ -1,5 +1,5 @@
 from app.features.simulation.enums import ExternalLinkKind
-from app.features.simulation.link_utils import merge_simulation_and_case_links
+from app.features.simulation.link_utils import merge_execution_and_case_links
 from app.features.simulation.models import ExternalLink
 
 
@@ -20,7 +20,7 @@ def test_merge_simulation_and_case_links_deduplicates_simulation_links_first() -
         label="Case only",
     )
 
-    merged = merge_simulation_and_case_links(
+    merged = merge_execution_and_case_links(
         [primary_simulation_link, duplicate_simulation_link],
         [case_link],
     )
@@ -45,7 +45,7 @@ def test_merge_simulation_and_case_links_deduplicates_case_links() -> None:
         label="Case duplicate",
     )
 
-    merged = merge_simulation_and_case_links(
+    merged = merge_execution_and_case_links(
         [simulation_link],
         [primary_case_link, duplicate_case_link],
     )

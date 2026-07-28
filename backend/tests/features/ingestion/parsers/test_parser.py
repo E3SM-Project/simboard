@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from app.features.ingestion.parsers import parser
-from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.ingestion.parsers.types import ParsedExecution
 
 
 class TestMainParser:
@@ -191,7 +191,7 @@ class TestMainParser:
 
         assert len(result) > 0
         assert skipped == 0
-        assert isinstance(result[0], ParsedSimulation)
+        assert isinstance(result[0], ParsedExecution)
         assert any("1.0-0" in parsed.execution_dir for parsed in result)
 
     def test_supports_single_execution_archive_at_root(self, tmp_path: Path) -> None:
@@ -387,11 +387,11 @@ class TestMainParser:
                 "app.features.ingestion.parsers.parser.logger.warning"
             ) as mock_warning,
         ):
-            parsed_simulation, errors, skipped = parser._process_execution_dir(
+            parsed_execution, errors, skipped = parser._process_execution_dir(
                 exec_dir, strict_validation=False
             )
 
-        assert parsed_simulation is None
+        assert parsed_execution is None
         assert errors == []
         assert skipped == 1
         mock_warning.assert_called_once_with(
@@ -415,11 +415,11 @@ class TestMainParser:
                 side_effect=FileNotFoundError("metadata file disappeared"),
             ),
         ):
-            parsed_simulation, errors, skipped = parser._process_execution_dir(
+            parsed_execution, errors, skipped = parser._process_execution_dir(
                 exec_dir, strict_validation=True
             )
 
-        assert parsed_simulation is None
+        assert parsed_execution is None
         assert errors == [
             {
                 "code": "file_not_found",
@@ -469,11 +469,11 @@ class TestMainParser:
                 "app.features.ingestion.parsers.parser.logger.warning"
             ) as mock_warning,
         ):
-            parsed_simulation, errors, skipped = parser._process_execution_dir(
+            parsed_execution, errors, skipped = parser._process_execution_dir(
                 exec_dir, strict_validation=False
             )
 
-        assert parsed_simulation is None
+        assert parsed_execution is None
         assert errors == []
         assert skipped == 1
         mock_warning.assert_called_once_with(

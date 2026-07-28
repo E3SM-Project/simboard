@@ -10,9 +10,12 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database_async import get_async_session
 from app.core.logger import _setup_custom_logger
-from app.features.assistant.orchestrator import generate_simulation_summary
-from app.features.assistant.schemas import SimulationSummaryResponse
-from app.features.simulation.models import Case, Simulation
+from app.features.assistant.orchestrator import generate_execution_summary
+from app.features.assistant.schemas import (
+    ExecutionSummaryResponse,
+    SimulationSummaryResponse,
+)
+from app.features.simulation.models import Case, Execution
 from app.features.user.manager import optional_current_user
 from app.features.user.models import User
 
@@ -33,26 +36,26 @@ async def summarize_simulation(
     sim_id: UUID,
     db: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_current_user),
-) -> SimulationSummaryResponse:
+) -> ExecutionSummaryResponse:
     """Generate a metadata-grounded read-only summary for one simulation."""
 
     start = perf_counter()
     trace_id = uuid4()
 
     stmt = (
-        select(Simulation)
+        select(Execution)
         .options(
-            joinedload(Simulation.case).joinedload(Case.machine),
-            joinedload(Simulation.case).selectinload(Case.links),
-            selectinload(Simulation.artifacts),
-            selectinload(Simulation.links),
+            joinedload(Execution.case).joinedload(Case.machine),
+            joinedload(Execution.case).selectinload(Case.links),
+            selectinload(Execution.artifacts),
+            selectinload(Execution.links),
         )
-        .where(Simulation.id == sim_id)
+        .where(Execution.id == sim_id)
     )
     result = await db.execute(stmt)
-    simulation = result.scalars().unique().one_or_none()
+    execution = result.scalars().unique().one_or_none()
 
-    if simulation is None:
+    if execution is None:
         duration_ms = (perf_counter() - start) * 1000
         user_id = user.id if user is not None else "null"
         logger.info(
@@ -72,9 +75,7 @@ async def summarize_simulation(
         )
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    generation = await generate_simulation_summary(
-        simulation, allow_llm=user is not None
-    )
+    generation = await generate_execution_summary(execution, allow_llm=user is not None)
     llm_success = generation.summary.generation_mode == "llm"
     fallback_used = (
         not llm_success
@@ -95,7 +96,7 @@ async def summarize_simulation(
         "llm_success=%s fallback_used=%s latency_ms=%.2f llm_latency_ms=%.2f generation_mode=%s "
         "generation_provider=%s generation_model=%s fallback_reason=%s citation_count=%d caveat_count=%d",
         trace_id,
-        simulation.id,
+        execution.id,
         user_id,
         str(llm_success).lower(),
         str(fallback_used).lower(),

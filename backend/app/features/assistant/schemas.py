@@ -27,7 +27,7 @@ SummaryGenerationMode = Literal["llm", "deterministic"]
 SummaryGenerationProvider = Literal["livai", "ollama"]
 
 
-class SimulationSummaryContent(CamelOutBaseModel):
+class ExecutionSummaryContent(CamelOutBaseModel):
     """Structured simulation summary content."""
 
     answer: str = Field(
@@ -55,7 +55,7 @@ class SimulationSummaryContent(CamelOutBaseModel):
     )
 
 
-class SimulationSummaryResponse(SimulationSummaryContent):
+class ExecutionSummaryResponse(ExecutionSummaryContent):
     """Structured response returned by the simulation summary endpoint."""
 
     generation_mode: SummaryGenerationMode = Field(
@@ -75,3 +75,12 @@ class SimulationSummaryResponse(SimulationSummaryContent):
         description="Configured provider model when LLM generation succeeds; otherwise null.",
     )
     trace_id: UUID = Field(..., description="Trace ID for request review and logs.")
+
+
+# Phase 2 public-contract adapters. Remove with legacy schemas in Phase 5.
+class SimulationSummaryContent(ExecutionSummaryContent):
+    """Structured simulation summary content."""
+
+
+class SimulationSummaryResponse(ExecutionSummaryResponse):
+    """Structured response returned by the simulation summary endpoint."""

@@ -1,7 +1,7 @@
 """
 SimBoard Development Seeder
 -----------------------------
-Seeds the database with case, simulation, artifact, and external link data
+Seeds the database with case, execution, artifact, and external link data
 from a JSON file. Safe to run only in non-production environments.
 
 Usage:
@@ -24,11 +24,11 @@ from app.core.database import SessionLocal
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
 from app.features.simulation.schemas import (
     ArtifactCreate,
+    ExecutionCreate,
     ExternalLinkCreate,
-    SimulationCreate,
 )
 from app.features.user.models import OAuthAccount, User
 from app.scripts.db.rollback_seed import rollback_seed
@@ -151,7 +151,7 @@ def seed_from_json(db: Session, json_path: str):
 
     first_user_id = first_user.id
 
-    total_sims = 0
+    total_executions = 0
 
     for case_entry in data:
         case_name = case_entry.get("caseName")
@@ -159,11 +159,11 @@ def seed_from_json(db: Session, json_path: str):
             raise ValueError(f"Missing 'caseName' in JSON case entry: {case_entry}")
 
         case_group = case_entry.get("caseGroup")
-        simulations_data = case_entry.get("simulations", [])
-        if not simulations_data:
-            raise ValueError(f"No simulations for case '{case_name}'")
+        executions_data = case_entry.get("simulations", [])
+        if not executions_data:
+            raise ValueError(f"No executions for case '{case_name}'")
 
-        case_machine = _resolve_seed_case_machine(db, simulations_data, case_name)
+        case_machine = _resolve_seed_case_machine(db, executions_data, case_name)
 
         # Create the Case record
         case = Case(
@@ -175,15 +175,15 @@ def seed_from_json(db: Session, json_path: str):
         db.add(case)
         db.flush()
 
-        for sim_entry in simulations_data:
-            _ = _seed_simulation(db, sim_entry, case, case_name, first_user_id)
+        for execution_entry in executions_data:
+            _ = _seed_execution(db, execution_entry, case, case_name, first_user_id)
 
-            total_sims += 1
+            total_executions += 1
 
     db.commit()
     print(
         f"✅ Done! Inserted {len(data)} cases with "
-        f"{total_sims} simulations, artifacts, and links."
+        f"{total_executions} executions, artifacts, and links."
     )
 
 
@@ -202,13 +202,13 @@ def _parse_date(value) -> date | None:
 
 
 def _resolve_seed_case_machine(
-    db: Session, simulations_data: list[dict], case_name: str
+    db: Session, executions_data: list[dict], case_name: str
 ) -> Machine:
-    first_simulation = simulations_data[0]
-    machine_name = first_simulation.get("machine", {}).get("name")
+    first_execution = executions_data[0]
+    machine_name = first_execution.get("machine", {}).get("name")
     if not machine_name:
         raise ValueError(
-            f"Missing 'machine.name' in first simulation entry for case '{case_name}'"
+            f"Missing 'machine.name' in first execution entry for case '{case_name}'"
         )
 
     machine = db.query(Machine).filter(Machine.name == machine_name).one_or_none()
@@ -217,11 +217,11 @@ def _resolve_seed_case_machine(
             f"No machine found in DB with name '{machine_name}' for case '{case_name}'"
         )
 
-    for sim_entry in simulations_data[1:]:
-        current_machine_name = sim_entry.get("machine", {}).get("name")
+    for execution_entry in executions_data[1:]:
+        current_machine_name = execution_entry.get("machine", {}).get("name")
         if not current_machine_name:
             raise ValueError(
-                f"Missing 'machine.name' in simulation entry for case '{case_name}'"
+                f"Missing 'machine.name' in execution entry for case '{case_name}'"
             )
         if current_machine_name != machine_name:
             raise ValueError(
@@ -232,34 +232,34 @@ def _resolve_seed_case_machine(
     return machine
 
 
-def _seed_simulation(
-    db: Session, sim_entry: dict, case: Case, case_name: str, user_id
-) -> Simulation:
-    """Create a single Simulation, Ingestion, and related entities from seed data.
+def _seed_execution(
+    db: Session, execution_entry: dict, case: Case, case_name: str, user_id
+) -> Execution:
+    """Create a single Execution, Ingestion, and related entities from seed data.
 
     Parameters
     ----------
     db : Session
         SQLAlchemy database session
-    sim_entry : dict
-        Dictionary containing simulation data from JSON
+    execution_entry : dict
+        Dictionary containing execution data from the legacy JSON contract
     case : Case
-        The Case object this simulation belongs to (must be added to session)
+        The Case object this execution belongs to (must be added to session)
     case_name : str
         Name of the case (used for error messages)
     user_id : int
-        ID of the user to set as createdBy/lastUpdatedBy for the simulation and
+        ID of the user to set as createdBy/lastUpdatedBy for the execution and
         ingestion
 
     Returns
     -------
-    Simulation
-        The created Simulation object (not yet committed to DB)
+    Execution
+        The created Execution object (not yet committed to DB)
     """
-    machine_name = sim_entry.get("machine", {}).get("name")
+    machine_name = execution_entry.get("machine", {}).get("name")
     if not machine_name:
         raise ValueError(
-            f"Missing 'machine.name' in simulation entry for case '{case_name}'"
+            f"Missing 'machine.name' in execution entry for case '{case_name}'"
         )
 
     machine = db.query(Machine).filter(Machine.name == machine_name).one_or_none()
@@ -270,40 +270,44 @@ def _seed_simulation(
 
     seed_payload = {
         key: value
-        for key, value in sim_entry.items()
+        for key, value in execution_entry.items()
         if key not in {"machine", "machineId", "hpcUsername"}
     }
 
-    sim_in = SimulationCreate(
+    execution_in = ExecutionCreate(
         **{
             **seed_payload,
             "caseId": case.id,
-            "simulationStartDate": _parse_date(sim_entry.get("simulationStartDate")),
-            "simulationEndDate": _parse_date(sim_entry.get("simulationEndDate")),
-            "runStartDate": _parse_datetime(sim_entry.get("runStartDate")),
-            "runEndDate": _parse_datetime(sim_entry.get("runEndDate")),
+            "simulationStartDate": _parse_date(
+                execution_entry.get("simulationStartDate")
+            ),
+            "simulationEndDate": _parse_date(execution_entry.get("simulationEndDate")),
+            "runStartDate": _parse_datetime(execution_entry.get("runStartDate")),
+            "runEndDate": _parse_datetime(execution_entry.get("runEndDate")),
             "createdBy": user_id,
             "lastUpdatedBy": user_id,
-            "artifacts": [ArtifactCreate(**a) for a in sim_entry.get("artifacts", [])],
+            "artifacts": [
+                ArtifactCreate(**a) for a in execution_entry.get("artifacts", [])
+            ],
             "links": [
-                ExternalLinkCreate(**link) for link in sim_entry.get("links", [])
+                ExternalLinkCreate(**link) for link in execution_entry.get("links", [])
             ],
         }
     )
 
-    sim = Simulation(
+    execution = Execution(
         **{
-            **sim_in.model_dump(exclude={"artifacts", "links"}),
-            "git_repository_url": str(sim_in.git_repository_url)
-            if isinstance(sim_in.git_repository_url, HttpUrl)
-            else sim_in.git_repository_url,
+            **execution_in.model_dump(exclude={"artifacts", "links"}),
+            "git_repository_url": str(execution_in.git_repository_url)
+            if isinstance(execution_in.git_repository_url, HttpUrl)
+            else execution_in.git_repository_url,
         }
     )
 
-    execution_id = sim_entry.get("executionId")
+    execution_id = execution_entry.get("executionId")
     if not execution_id:
         raise ValueError(
-            f"Missing 'executionId' in simulation entry for case '{case_name}'"
+            f"Missing 'executionId' in execution entry for case '{case_name}'"
         )
 
     ingestion = Ingestion(
@@ -320,14 +324,14 @@ def _seed_simulation(
     db.add(ingestion)
     db.flush()
 
-    sim.ingestion_id = ingestion.id
-    db.add(sim)
+    execution.ingestion_id = ingestion.id
+    db.add(execution)
     db.flush()
 
-    for a in sim_in.artifacts or []:
+    for a in execution_in.artifacts or []:
         db.add(
             Artifact(
-                simulation_id=sim.id,
+                simulation_id=execution.id,
                 **{
                     **a.model_dump(),
                     "uri": str(a.uri) if isinstance(a.uri, AnyUrl) else a.uri,
@@ -335,10 +339,10 @@ def _seed_simulation(
             )
         )
 
-    for link in sim_in.links or []:
+    for link in execution_in.links or []:
         db.add(
             ExternalLink(
-                simulation_id=sim.id,
+                simulation_id=execution.id,
                 **{
                     **link.model_dump(),
                     "url": str(link.url) if isinstance(link.url, HttpUrl) else link.url,
@@ -346,7 +350,7 @@ def _seed_simulation(
             )
         )
 
-    return sim
+    return execution
 
 
 if __name__ == "__main__":

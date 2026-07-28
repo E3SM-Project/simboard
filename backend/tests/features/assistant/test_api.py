@@ -9,11 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.version import API_BASE
 from app.core.config import settings
 from app.features.assistant import api as assistant_api
-from app.features.assistant.schemas import SimulationSummaryResponse
+from app.features.assistant.schemas import ExecutionSummaryResponse
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.models import Case, Simulation
+from app.features.simulation.models import Case, Execution
 from app.features.user.manager import current_active_user, optional_current_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -45,13 +45,13 @@ async def _create_case(db: AsyncSession, name: str = "assistant_api_case") -> Ca
     return case
 
 
-async def _create_simulation(
+async def _create_execution(
     db: AsyncSession,
     normal_user: dict[str, str],
     admin_user: dict[str, str],
     *,
     execution_id: str = "assistant-api-exec-1",
-) -> Simulation:
+) -> Execution:
     machine = (await db.execute(select(Machine))).scalars().first()
     assert machine is not None
 
@@ -69,7 +69,7 @@ async def _create_simulation(
     db.add(ingestion)
     await db.flush()
 
-    simulation = Simulation(
+    execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
         compset="AQUAPLANET",
@@ -85,11 +85,11 @@ async def _create_simulation(
         last_updated_by=UUID(admin_user["id"]),
         ingestion_id=ingestion.id,
     )
-    db.add(simulation)
+    db.add(execution)
     await db.flush()
     await db.commit()
-    await db.refresh(simulation)
-    return simulation
+    await db.refresh(execution)
+    return execution
 
 
 class TestSummarizeSimulationEndpoint:
@@ -105,7 +105,7 @@ class TestSummarizeSimulationEndpoint:
         normal_user,
         admin_user,
     ) -> None:
-        simulation = await _create_simulation(
+        simulation = await _create_execution(
             async_db,
             normal_user,
             admin_user,
@@ -143,7 +143,7 @@ class TestSummarizeSimulationEndpoint:
         normal_user,
         admin_user,
     ) -> None:
-        simulation = await _create_simulation(
+        simulation = await _create_execution(
             async_db,
             normal_user,
             admin_user,
@@ -168,7 +168,7 @@ class TestSummarizeSimulationEndpoint:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(settings, "assistant_llm_enabled", True)
-        simulation = await _create_simulation(
+        simulation = await _create_execution(
             async_db,
             normal_user,
             admin_user,
@@ -242,7 +242,7 @@ class TestSummarizeSimulationUnit:
             AsyncSession,
             _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
         )
-        summary = SimulationSummaryResponse(
+        summary = ExecutionSummaryResponse(
             answer="Deterministic assistant summary.",
             citations=[],
             assumptions=[],
@@ -271,7 +271,7 @@ class TestSummarizeSimulationUnit:
                 },
             )()
 
-        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "generate_execution_summary", fake_generate)
         monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
         monkeypatch.setattr(
             assistant_api.logger,
@@ -311,7 +311,7 @@ class TestSummarizeSimulationUnit:
             AsyncSession,
             _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
         )
-        summary = SimulationSummaryResponse(
+        summary = ExecutionSummaryResponse(
             answer="Deterministic fallback summary.",
             citations=[],
             assumptions=[],
@@ -340,7 +340,7 @@ class TestSummarizeSimulationUnit:
                 },
             )()
 
-        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "generate_execution_summary", fake_generate)
         monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
         monkeypatch.setattr(
             assistant_api.logger,
@@ -377,7 +377,7 @@ class TestSummarizeSimulationUnit:
             AsyncSession,
             _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
         )
-        summary = SimulationSummaryResponse(
+        summary = ExecutionSummaryResponse(
             answer="LLM assistant summary.",
             citations=[],
             assumptions=[],
@@ -406,7 +406,7 @@ class TestSummarizeSimulationUnit:
                 },
             )()
 
-        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "generate_execution_summary", fake_generate)
         monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
         monkeypatch.setattr(
             assistant_api.logger,
@@ -472,7 +472,7 @@ class TestSummarizeSimulationUnit:
             AsyncSession,
             _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
         )
-        summary = SimulationSummaryResponse(
+        summary = ExecutionSummaryResponse(
             answer="Deterministic anonymous summary.",
             citations=[],
             assumptions=[],
@@ -501,7 +501,7 @@ class TestSummarizeSimulationUnit:
                 },
             )()
 
-        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "generate_execution_summary", fake_generate)
         monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
         monkeypatch.setattr(
             assistant_api.logger,

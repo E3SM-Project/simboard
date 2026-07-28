@@ -28,7 +28,7 @@ from app.features.ingestion.enums import (
 )
 
 if TYPE_CHECKING:
-    from app.features.simulation.models import Simulation
+    from app.features.simulation.models import Execution
 
 
 class Ingestion(Base):
@@ -84,8 +84,8 @@ class Ingestion(Base):
     )
 
     user = relationship("User")
-    simulations: Mapped[list[Simulation]] = relationship(
-        "Simulation", back_populates="ingestion"
+    executions: Mapped[list[Execution]] = relationship(
+        "Execution", back_populates="ingestion"
     )
 
     def __repr__(self) -> str:

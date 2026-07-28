@@ -4,12 +4,12 @@ from collections import OrderedDict
 
 from app.features.assistant.registry import get_citation_entry
 from app.features.assistant.schemas import (
-    SimulationSummaryResponse,
+    ExecutionSummaryResponse,
     SummaryCitationOut,
 )
 from app.features.assistant.snapshot import (
-    SimulationSnapshot,
-    build_simulation_snapshot,
+    ExecutionSnapshot,
+    build_execution_snapshot,
 )
 
 DETERMINISTIC_LIMITATIONS = [
@@ -40,31 +40,31 @@ class SummaryDraft:
 
 
 def _add_identity_and_status(
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
     draft: SummaryDraft,
 ) -> None:
     draft.add_citation("simulation.execution_id")
     draft.add_citation("case.name")
     draft.sentences.append(
-        f"Simulation {snapshot.simulation.execution_id} belongs to case {snapshot.case.name}."
+        f"Simulation {snapshot.execution.execution_id} belongs to case {snapshot.case.name}."
     )
 
-    if snapshot.simulation.case_hash:
+    if snapshot.execution.case_hash:
         draft.sentences.append(
-            f"It is grouped under CASE_HASH {snapshot.simulation.case_hash} within this case."
+            f"It is grouped under CASE_HASH {snapshot.execution.case_hash} within this case."
         )
         draft.add_citation("simulation.case_hash")
 
     if snapshot.machine and snapshot.machine.name:
         draft.sentences.append(
-            f"It is recorded as a {snapshot.simulation.simulation_type} simulation on "
-            f"machine {snapshot.machine.name} with status {snapshot.simulation.status}."
+            f"It is recorded as a {snapshot.execution.simulation_type} simulation on "
+            f"machine {snapshot.machine.name} with status {snapshot.execution.status}."
         )
         draft.add_citation("machine.name")
     else:
         draft.sentences.append(
-            f"It is recorded as a {snapshot.simulation.simulation_type} simulation "
-            f"with status {snapshot.simulation.status}."
+            f"It is recorded as a {snapshot.execution.simulation_type} simulation "
+            f"with status {snapshot.execution.status}."
         )
         draft.caveats.append("Machine information is not recorded for this simulation.")
 
@@ -72,11 +72,11 @@ def _add_identity_and_status(
     draft.add_citation("simulation.status")
 
 
-def _add_configuration(snapshot: SimulationSnapshot, draft: SummaryDraft) -> None:
+def _add_configuration(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None:
     draft.sentences.append(
-        f"It uses compset {snapshot.simulation.compset} ({snapshot.simulation.compset_alias}) "
-        f"on grid {snapshot.simulation.grid_name} at {snapshot.simulation.grid_resolution} "
-        f"resolution with {snapshot.simulation.initialization_type} initialization."
+        f"It uses compset {snapshot.execution.compset} ({snapshot.execution.compset_alias}) "
+        f"on grid {snapshot.execution.grid_name} at {snapshot.execution.grid_resolution} "
+        f"resolution with {snapshot.execution.initialization_type} initialization."
     )
     draft.add_citation("simulation.compset")
     draft.add_citation("simulation.compset_alias")
@@ -85,16 +85,16 @@ def _add_configuration(snapshot: SimulationSnapshot, draft: SummaryDraft) -> Non
     draft.add_citation("simulation.initialization_type")
 
 
-def _add_version_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) -> None:
+def _add_version_metadata(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None:
     version_bits: list[str] = []
-    if snapshot.simulation.git_tag:
-        version_bits.append(f"tag {snapshot.simulation.git_tag}")
+    if snapshot.execution.git_tag:
+        version_bits.append(f"tag {snapshot.execution.git_tag}")
         draft.add_citation("simulation.git_tag")
-    if snapshot.simulation.git_branch:
-        version_bits.append(f"branch {snapshot.simulation.git_branch}")
+    if snapshot.execution.git_branch:
+        version_bits.append(f"branch {snapshot.execution.git_branch}")
         draft.add_citation("simulation.git_branch")
-    if snapshot.simulation.git_commit_hash:
-        version_bits.append(f"commit {snapshot.simulation.git_commit_hash}")
+    if snapshot.execution.git_commit_hash:
+        version_bits.append(f"commit {snapshot.execution.git_commit_hash}")
         draft.add_citation("simulation.git_commit_hash")
 
     if version_bits:
@@ -105,9 +105,9 @@ def _add_version_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) -> 
         draft.caveats.append("Version metadata is not recorded for this simulation.")
 
 
-def _add_timeline_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) -> None:
-    start_date = snapshot.simulation.simulation_start_date
-    end_date = snapshot.simulation.simulation_end_date
+def _add_timeline_metadata(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None:
+    start_date = snapshot.execution.simulation_start_date
+    end_date = snapshot.execution.simulation_end_date
 
     if start_date and end_date:
         draft.sentences.append(
@@ -131,18 +131,18 @@ def _add_timeline_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) ->
     draft.caveats.append("Simulation start date is not recorded in SimBoard metadata.")
 
 
-def _add_optional_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) -> None:
-    if snapshot.simulation.campaign:
+def _add_optional_metadata(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None:
+    if snapshot.execution.campaign:
         draft.sentences.append(
-            f"Campaign metadata identifies this run as {snapshot.simulation.campaign}."
+            f"Campaign metadata identifies this run as {snapshot.execution.campaign}."
         )
         draft.add_citation("simulation.campaign")
     else:
         draft.caveats.append("Campaign metadata is not recorded for this simulation.")
 
-    if snapshot.simulation.experiment_type:
+    if snapshot.execution.experiment_type:
         draft.sentences.append(
-            f"Experiment type metadata records {snapshot.simulation.experiment_type}."
+            f"Experiment type metadata records {snapshot.execution.experiment_type}."
         )
         draft.add_citation("simulation.experiment_type")
     else:
@@ -150,28 +150,28 @@ def _add_optional_metadata(snapshot: SimulationSnapshot, draft: SummaryDraft) ->
             "Experiment type metadata is not recorded for this simulation."
         )
 
-    if snapshot.simulation.description:
+    if snapshot.execution.description:
         draft.sentences.append(
-            f"Recorded description: {snapshot.simulation.description.strip()}"
+            f"Recorded description: {snapshot.execution.description.strip()}"
         )
         draft.add_citation("simulation.description")
-    if snapshot.simulation.key_features:
+    if snapshot.execution.key_features:
         draft.sentences.append(
-            f"Key features: {snapshot.simulation.key_features.strip()}"
+            f"Key features: {snapshot.execution.key_features.strip()}"
         )
         draft.add_citation("simulation.key_features")
-    if snapshot.simulation.known_issues:
+    if snapshot.execution.known_issues:
         draft.sentences.append(
-            f"Known issues: {snapshot.simulation.known_issues.strip()}"
+            f"Known issues: {snapshot.execution.known_issues.strip()}"
         )
         draft.add_citation("simulation.known_issues")
-    if snapshot.simulation.notes_markdown:
+    if snapshot.execution.notes_markdown:
         draft.sentences.append("Additional notes are recorded for this simulation.")
         draft.add_citation("simulation.notes_markdown")
 
 
 def _add_diagnostics_and_followups(
-    snapshot: SimulationSnapshot,
+    snapshot: ExecutionSnapshot,
     draft: SummaryDraft,
 ) -> None:
     diagnostic_links = [link for link in snapshot.links if link.kind == "diagnostic"]
@@ -189,12 +189,12 @@ def _add_diagnostics_and_followups(
             "No diagnostic links are recorded for this simulation in SimBoard."
         )
 
-    if snapshot.simulation.case_hash:
+    if snapshot.execution.case_hash:
         draft.followups.append(
             "Open the case details page to compare this run with other executions in the same CASE_HASH subgroup."
         )
 
-    if snapshot.simulation.known_issues:
+    if snapshot.execution.known_issues:
         draft.followups.append(
             "Review the recorded known issues before drawing conclusions from this run."
         )
@@ -214,17 +214,17 @@ def _add_diagnostics_and_followups(
         )
 
 
-def build_simulation_summary(
-    simulation_or_snapshot,
+def build_execution_summary(
+    execution_or_snapshot,
     *,
     include_fallback_caveat: bool = False,
-) -> SimulationSummaryResponse:
+) -> ExecutionSummaryResponse:
     """Build a deterministic summary from authoritative SimBoard metadata."""
 
     snapshot = (
-        simulation_or_snapshot
-        if isinstance(simulation_or_snapshot, SimulationSnapshot)
-        else build_simulation_snapshot(simulation_or_snapshot)
+        execution_or_snapshot
+        if isinstance(execution_or_snapshot, ExecutionSnapshot)
+        else build_execution_snapshot(execution_or_snapshot)
     )
     draft = SummaryDraft()
     draft.caveats.extend(snapshot.snapshot_caveats)
@@ -238,7 +238,7 @@ def build_simulation_summary(
     if include_fallback_caveat and LLM_FALLBACK_CAVEAT not in draft.caveats:
         draft.caveats.append(LLM_FALLBACK_CAVEAT)
 
-    return SimulationSummaryResponse(
+    return ExecutionSummaryResponse(
         answer=" ".join(draft.sentences),
         citations=list(draft.citations.values()),
         assumptions=[],

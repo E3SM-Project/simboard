@@ -23,11 +23,11 @@ from app.features.simulation.api import (
     update_simulation,
 )
 from app.features.simulation.enums import (
+    ExecutionStatus,
     ExternalLinkKind,
-    SimulationStatus,
     SimulationType,
 )
-from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
 from app.features.simulation.schemas import (
     CaseUpdate,
     SimulationCreate,
@@ -150,7 +150,7 @@ def _create_matching_simulation(
     execution_id: str,
     hpc_username: str,
     source_reference: str,
-) -> tuple[Case, Simulation]:
+) -> tuple[Case, Execution]:
     case = _create_case(
         db,
         case_name,
@@ -164,7 +164,7 @@ def _create_matching_simulation(
         source_reference=source_reference,
     )
 
-    simulation = Simulation(
+    simulation = Execution(
         case_id=case.id,
         execution_id=execution_id,
         compset="AQUAPLANET",
@@ -173,7 +173,7 @@ def _create_matching_simulation(
         grid_resolution="1.9x2.5",
         initialization_type="startup",
         simulation_type=SimulationType.EXPERIMENTAL,
-        status=SimulationStatus.CREATED,
+        status=ExecutionStatus.CREATED,
         simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
         created_by=user_id,
         last_updated_by=user_id,
@@ -184,6 +184,85 @@ def _create_matching_simulation(
     db.commit()
 
     return case, simulation
+
+
+def test_phase_two_preserves_legacy_simulation_openapi_contract(client) -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    components = schema["components"]["schemas"]
+    expected_components = {
+        "SimulationCreate",
+        "SimulationFilterOptionsOut",
+        "SimulationListItemOut",
+        "SimulationOut",
+        "SimulationPageOut",
+        "SimulationStatus",
+        "SimulationSummaryCapabilitiesOut",
+        "SimulationSummaryOut",
+        "SimulationSummaryResponse",
+        "SimulationType",
+        "SimulationUpdate",
+    }
+
+    assert expected_components <= components.keys()
+    assert "ExecutionStatus" not in components
+    assert f"{API_BASE}/simulations" in schema["paths"]
+    assert f"{API_BASE}/simulations/{{sim_id}}" in schema["paths"]
+    expected_descriptions = {
+        "SimulationCreate": "Schema for creating a new Simulation.",
+        "SimulationFilterOptionsOut": (
+            "Distinct scalar options supported by simulation catalog filters."
+        ),
+        "SimulationListItemOut": (
+            "Scalar-only simulation row for paginated catalog views."
+        ),
+        "SimulationOut": (
+            "Schema for representing a Simulation with related entities."
+        ),
+        "SimulationPageOut": "Paginated simulation catalog response.",
+        "SimulationStatus": "Enumeration of possible simulation statuses.",
+        "SimulationSummaryCapabilitiesOut": (
+            "Summary-generation capabilities available for this deployment."
+        ),
+        "SimulationSummaryOut": (
+            "Lightweight schema for simulation summaries nested inside case responses.\n\n"
+            "Only includes the fields needed for case-level overview — avoids loading\n"
+            "heavy relationships (machine, artifacts, links, user objects)."
+        ),
+        "SimulationSummaryResponse": (
+            "Structured response returned by the simulation summary endpoint."
+        ),
+        "SimulationUpdate": "Schema for narrow v1 simulation metadata updates.",
+        "IngestionSimulationSummary": (
+            "Lightweight summary of a persisted simulation created by ingestion."
+        ),
+    }
+    assert {
+        name: components[name]["description"] for name in expected_descriptions
+    } == expected_descriptions
+
+    simulation_collection = schema["paths"][f"{API_BASE}/simulations"]
+    simulation_detail = schema["paths"][f"{API_BASE}/simulations/{{sim_id}}"]
+    assert simulation_collection["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]["$ref"].endswith("/SimulationCreate")
+    assert simulation_collection["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"].endswith("/SimulationPageOut")
+    assert simulation_detail["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"].endswith("/SimulationOut")
+    assert "\nSimulation\n" in simulation_detail["get"]["description"]
+
+    for path in (
+        f"{API_BASE}/ingestions/from-upload",
+        f"{API_BASE}/ingestions/from-hpc-upload",
+    ):
+        description = schema["paths"][path]["post"]["description"]
+        assert "created Simulation records" in description
+        assert "created Execution records" not in description
 
 
 def _create_ingestion(
@@ -222,9 +301,9 @@ def _create_simulation_record(
     updated_at: datetime | None = None,
     campaign: str | None = "campaign-original",
     compiler: str | None = "gcc",
-    simulation_status: SimulationStatus = SimulationStatus.CREATED,
-) -> Simulation:
-    sim = Simulation(
+    simulation_status: ExecutionStatus = ExecutionStatus.CREATED,
+) -> Execution:
+    sim = Execution(
         case_id=case.id,
         execution_id=execution_id,
         description=description,
@@ -301,7 +380,7 @@ class TestListCases:
         db.flush()
 
         # Create two simulations under the same case
-        sim1 = Simulation(
+        sim1 = Execution(
             case_id=case.id,
             execution_id="case-nested-exec-1",
             case_hash="nested-hash-1",
@@ -317,7 +396,7 @@ class TestListCases:
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
         )
-        sim2 = Simulation(
+        sim2 = Execution(
             case_id=case.id,
             execution_id="case-nested-exec-2",
             case_hash="nested-hash-2",
@@ -416,7 +495,7 @@ class TestListCases:
                 "machine_id": str(machine.id),
                 "hpc_username": matching_case.hpc_username,
                 "execution_id": "combined-match",
-                "status": SimulationStatus.CREATED.value,
+                "status": ExecutionStatus.CREATED.value,
                 "simulation_type": SimulationType.EXPERIMENTAL.value,
                 "campaign": "campaign-a",
                 "compiler": "gcc",
@@ -697,7 +776,7 @@ class TestGetCase:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="case-detail-exec-1",
             case_hash="detail-hash-1",
@@ -757,7 +836,7 @@ class TestGetCase:
         db.flush()
 
         db.add(
-            Simulation(
+            Execution(
                 case_id=case.id,
                 execution_id="case-detail-links-exec-1",
                 case_hash="detail-links-hash-1",
@@ -1494,7 +1573,7 @@ class TestListSimulations:
             (second_case, "exact-b"),
         ):
             db.add(
-                Simulation(
+                Execution(
                     case_id=case.id,
                     execution_id=execution_id,
                     compset="AQUAPLANET",
@@ -1533,9 +1612,9 @@ class TestListSimulations:
         case = _create_case(db, "multi-filter-case")
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
         for execution_id, campaign, simulation_status in (
-            ("campaign-a-created", "campaign-a", SimulationStatus.CREATED),
-            ("campaign-b-running", "campaign-b", SimulationStatus.RUNNING),
-            ("campaign-c-created", "campaign-c", SimulationStatus.CREATED),
+            ("campaign-a-created", "campaign-a", ExecutionStatus.CREATED),
+            ("campaign-b-running", "campaign-b", ExecutionStatus.RUNNING),
+            ("campaign-c-created", "campaign-c", ExecutionStatus.CREATED),
         ):
             _create_simulation_record(
                 db,
@@ -1677,7 +1756,7 @@ class TestListSimulations:
             last_updated_by=admin_user_sync["id"],
             execution_id="z-simulation-sort",
             campaign="z-campaign",
-            simulation_status=SimulationStatus.RUNNING,
+            simulation_status=ExecutionStatus.RUNNING,
         )
         second = _create_simulation_record(
             db,
@@ -1687,7 +1766,7 @@ class TestListSimulations:
             last_updated_by=admin_user_sync["id"],
             execution_id="a-simulation-sort",
             campaign="a-campaign",
-            simulation_status=SimulationStatus.CREATED,
+            simulation_status=ExecutionStatus.CREATED,
         )
         early = datetime(2026, 1, 1, tzinfo=timezone.utc)
         late = datetime(2026, 2, 1, tzinfo=timezone.utc)
@@ -1788,7 +1867,7 @@ class TestListSimulations:
         case = _create_case(db, "filter-option-case")
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
         db.add(
-            Simulation(
+            Execution(
                 case_id=case.id,
                 execution_id="filter-options",
                 compset="AQUAPLANET",
@@ -1840,7 +1919,7 @@ class TestListSimulations:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="list-test-exec-1",
             compset="AQUAPLANET",
@@ -1906,7 +1985,7 @@ class TestListSimulations:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="list-test-exec-misconfigured",
             compset="AQUAPLANET",
@@ -1953,7 +2032,7 @@ class TestListSimulations:
 
         for case, exec_id in [(case_a, "exec-a"), (case_b, "exec-b")]:
             db.add(
-                Simulation(
+                Execution(
                     case_id=case.id,
                     execution_id=exec_id,
                     compset="AQUAPLANET",
@@ -2015,7 +2094,7 @@ class TestListSimulations:
 
         for case, exec_id in [(case_g1, "exec-g1"), (case_g2, "exec-g2")]:
             db.add(
-                Simulation(
+                Execution(
                     case_id=case.id,
                     execution_id=exec_id,
                     compset="AQUAPLANET",
@@ -2079,7 +2158,7 @@ class TestListSimulations:
 
         db.add_all(
             [
-                Simulation(
+                Execution(
                     case_id=first_case.id,
                     execution_id="normalized-exec-1",
                     compset="AQUAPLANET",
@@ -2094,7 +2173,7 @@ class TestListSimulations:
                     last_updated_by=admin_user_sync["id"],
                     ingestion_id=ingestion.id,
                 ),
-                Simulation(
+                Execution(
                     case_id=second_case.id,
                     execution_id="normalized-exec-2",
                     compset="AQUAPLANET",
@@ -2149,7 +2228,7 @@ class TestListSimulations:
 
         for c, exec_id in [(case, "exec-combo"), (case_other, "exec-other")]:
             db.add(
-                Simulation(
+                Execution(
                     case_id=c.id,
                     execution_id=exec_id,
                     compset="AQUAPLANET",
@@ -2200,7 +2279,7 @@ class TestListSimulations:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="list-links-exec-1",
             compset="AQUAPLANET",
@@ -2279,7 +2358,7 @@ class TestGetSimulation:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="get-test-exec-1",
             case_hash="abc123casehash",
@@ -2341,7 +2420,7 @@ class TestGetSimulation:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="get-test-exec-misconfigured",
             compset="AQUAPLANET",
@@ -2395,7 +2474,7 @@ class TestGetSimulation:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="get-links-exec-1",
             compset="AQUAPLANET",
@@ -2512,7 +2591,7 @@ class TestUpdateSimulation:
         assert data["updatedAt"] != original_updated_at.isoformat()
 
         db.expire_all()
-        updated_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        updated_sim = db.query(Execution).filter(Execution.id == sim.id).one()
         assert updated_sim.simulation_type == payload["simulationType"]
         assert updated_sim.status == payload["status"]
         assert updated_sim.description == payload["description"]
@@ -2615,7 +2694,7 @@ class TestUpdateSimulation:
         assert data["groupedLinks"]["docs"][0]["label"] == "Docs"
 
         db.expire_all()
-        updated_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        updated_sim = db.query(Execution).filter(Execution.id == sim.id).one()
         assert {
             (artifact.kind.value, artifact.uri) for artifact in updated_sim.artifacts
         } == {
@@ -2923,7 +3002,7 @@ class TestUpdateSimulation:
         assert res.status_code == 422
 
         db.expire_all()
-        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        unchanged_sim = db.query(Execution).filter(Execution.id == sim.id).one()
         assert unchanged_sim.description == "Original description"
         assert unchanged_sim.compiler == "gcc"
         assert unchanged_sim.case_id == case.id
@@ -2960,8 +3039,8 @@ class TestUpdateSimulation:
         assert res.status_code == 422
 
         db.expire_all()
-        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
-        assert unchanged_sim.status == SimulationStatus.CREATED
+        unchanged_sim = db.query(Execution).filter(Execution.id == sim.id).one()
+        assert unchanged_sim.status == ExecutionStatus.CREATED
         assert unchanged_sim.simulation_type == SimulationType.EXPERIMENTAL
         assert unchanged_sim.updated_at == original_updated_at
 
@@ -3048,7 +3127,7 @@ class TestUpdateSimulation:
         assert res.status_code == 422
 
         db.expire_all()
-        unchanged_sim = db.query(Simulation).filter(Simulation.id == sim.id).one()
+        unchanged_sim = db.query(Execution).filter(Execution.id == sim.id).one()
         assert unchanged_sim.case_id == case.id
 
     def test_update_simulation_raises_500_when_reload_fails(self) -> None:
@@ -3077,7 +3156,7 @@ class TestUpdateSimulation:
         db.query.return_value = sim_query
 
         with patch(
-            "app.features.simulation.api._simulation_detail_query",
+            "app.features.simulation.api._execution_detail_query",
             return_value=detail_query,
         ):
             with patch(
@@ -3119,7 +3198,7 @@ class TestSimulationBrowserIncludesCaseMetadata:
         db.add(ingestion)
         db.flush()
 
-        sim = Simulation(
+        sim = Execution(
             case_id=case.id,
             execution_id="browser-exec-1",
             compset="AQUAPLANET",
@@ -3390,8 +3469,8 @@ class TestLinkCaseDiagnostics:
                 )
             )
             cleanup_session.execute(
-                delete(Simulation).where(
-                    Simulation.execution_id == locals().get("execution_id")
+                delete(Execution).where(
+                    Execution.execution_id == locals().get("execution_id")
                 )
             )
             cleanup_session.execute(

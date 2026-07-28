@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.core.logger import _setup_custom_logger
 from app.features.ingestion.parsers.utils import _open_text
-from app.features.simulation.enums import SimulationStatus
+from app.features.simulation.enums import ExecutionStatus
 
 logger = _setup_custom_logger(__name__)
 
@@ -27,7 +27,7 @@ def parse_case_status(file_path: str | Path) -> dict[str, str | None]:
     result: dict[str, str | None] = {
         "run_start_date": None,
         "run_end_date": None,
-        "status": SimulationStatus.UNKNOWN.value,
+        "status": ExecutionStatus.UNKNOWN.value,
     }
 
     try:
@@ -57,11 +57,11 @@ def parse_case_status(file_path: str | Path) -> dict[str, str | None]:
 
         result["run_end_date"] = terminal_match.group("timestamp")
         result["status"] = (
-            SimulationStatus.COMPLETED.value
+            ExecutionStatus.COMPLETED.value
             if terminal_match.group("state") == "success"
-            else SimulationStatus.FAILED.value
+            else ExecutionStatus.FAILED.value
         )
         return result
 
-    result["status"] = SimulationStatus.RUNNING.value
+    result["status"] = ExecutionStatus.RUNNING.value
     return result

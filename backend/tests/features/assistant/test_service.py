@@ -2,17 +2,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.features.assistant.service import build_simulation_summary
+from app.features.assistant.service import build_execution_summary
 from app.features.assistant.snapshot import (
-    SimulationSnapshot,
+    ExecutionSnapshot,
     SnapshotCaseFields,
-    SnapshotSimulationFields,
+    SnapshotExecutionFields,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.simulation.enums import ArtifactKind, ExternalLinkKind
-from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
+from app.features.simulation.models import Artifact, Case, Execution, ExternalLink
 
 
 def _create_case(db: Session, name: str = "assistant_case") -> Case:
@@ -25,7 +25,7 @@ def _create_case(db: Session, name: str = "assistant_case") -> Case:
     return case
 
 
-def _create_simulation(
+def _create_execution(
     db: Session,
     normal_user_sync: dict[str, UUID | str],
     admin_user_sync: dict[str, UUID | str],
@@ -35,7 +35,7 @@ def _create_simulation(
     case_hash: str | None = "assistant-hash-1",
     with_diagnostics: bool = True,
     with_optional_metadata: bool = True,
-) -> Simulation:
+) -> Execution:
     machine = db.query(Machine).first()
     assert machine is not None
 
@@ -54,7 +54,7 @@ def _create_simulation(
     db.add(ingestion)
     db.flush()
 
-    simulation = Simulation(
+    execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
         description="Control simulation for deterministic summary."
@@ -87,13 +87,13 @@ def _create_simulation(
         last_updated_by=admin_user_sync["id"],
         ingestion_id=ingestion.id,
     )
-    db.add(simulation)
+    db.add(execution)
     db.flush()
 
     if with_diagnostics:
         db.add(
             ExternalLink(
-                simulation_id=simulation.id,
+                simulation_id=execution.id,
                 kind=ExternalLinkKind.DIAGNOSTIC,
                 url="https://example.com/diag",
                 label="Diagnostics Dashboard",
@@ -102,7 +102,7 @@ def _create_simulation(
 
     db.add(
         Artifact(
-            simulation_id=simulation.id,
+            simulation_id=execution.id,
             kind=ArtifactKind.OUTPUT,
             uri="/archive/output.nc",
             label="Primary output",
@@ -110,22 +110,22 @@ def _create_simulation(
     )
 
     db.commit()
-    db.refresh(simulation)
-    return simulation
+    db.refresh(execution)
+    return execution
 
 
-class TestBuildSimulationSummary:
+class TestBuildExecutionSummary:
     def test_complete_metadata_produces_stable_summary_and_citations(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
             execution_id="assistant-complete",
         )
 
-        summary = build_simulation_summary(simulation)
+        summary = build_execution_summary(simulation)
 
         assert (
             "Simulation assistant-complete belongs to case assistant_case."
@@ -146,7 +146,7 @@ class TestBuildSimulationSummary:
     def test_missing_optional_metadata_yields_caveats_not_fabrication(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -155,7 +155,7 @@ class TestBuildSimulationSummary:
             with_optional_metadata=False,
         )
 
-        summary = build_simulation_summary(simulation)
+        summary = build_execution_summary(simulation)
 
         assert "Recorded description:" not in summary.answer
         assert (
@@ -172,7 +172,7 @@ class TestBuildSimulationSummary:
     def test_case_hash_grouping_is_reflected_in_summary(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -180,7 +180,7 @@ class TestBuildSimulationSummary:
             case_hash="assistant-grouped-hash",
         )
 
-        summary = build_simulation_summary(simulation)
+        summary = build_execution_summary(simulation)
 
         assert (
             "It is grouped under CASE_HASH assistant-grouped-hash within this case."
@@ -193,7 +193,7 @@ class TestBuildSimulationSummary:
     def test_absent_diagnostics_adds_limitation_not_interpretation(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -201,7 +201,7 @@ class TestBuildSimulationSummary:
             with_diagnostics=False,
         )
 
-        summary = build_simulation_summary(simulation)
+        summary = build_execution_summary(simulation)
 
         assert "interpret diagnostic outputs" not in summary.answer
         assert (
@@ -215,7 +215,7 @@ class TestBuildSimulationSummary:
     def test_case_owned_diagnostics_are_visible_to_summary_and_citations(
         self, db: Session, normal_user_sync, admin_user_sync
     ) -> None:
-        simulation = _create_simulation(
+        simulation = _create_execution(
             db,
             normal_user_sync,
             admin_user_sync,
@@ -233,7 +233,7 @@ class TestBuildSimulationSummary:
         db.commit()
         db.refresh(simulation)
 
-        summary = build_simulation_summary(simulation)
+        summary = build_execution_summary(simulation)
 
         assert "SimBoard records 1 diagnostic link(s) for this run" in summary.answer
         assert "links[kind=diagnostic]" in {
@@ -241,9 +241,9 @@ class TestBuildSimulationSummary:
         }
 
     def test_snapshot_without_case_hash_omits_grouping_sentence(self) -> None:
-        summary = build_simulation_summary(
-            SimulationSnapshot(
-                simulation=SnapshotSimulationFields(
+        summary = build_execution_summary(
+            ExecutionSnapshot(
+                execution=SnapshotExecutionFields(
                     id="simulation-1",
                     execution_id="assistant-no-case-hash",
                     compset="AQUAPLANET",
@@ -262,9 +262,9 @@ class TestBuildSimulationSummary:
         assert "CASE_HASH" not in summary.answer
 
     def test_missing_start_date_adds_caveat_and_default_followup(self) -> None:
-        summary = build_simulation_summary(
-            SimulationSnapshot(
-                simulation=SnapshotSimulationFields(
+        summary = build_execution_summary(
+            ExecutionSnapshot(
+                execution=SnapshotExecutionFields(
                     id="simulation-1",
                     execution_id="assistant-no-start-date",
                     compset="AQUAPLANET",

@@ -1,8 +1,8 @@
 from enum import StrEnum
 
 
-class SimulationStatus(StrEnum):
-    """Enumeration of possible simulation statuses."""
+class ExecutionStatus(StrEnum):
+    """Enumeration of possible execution statuses."""
 
     UNKNOWN = "unknown"
     CREATED = "created"
@@ -10,6 +10,18 @@ class SimulationStatus(StrEnum):
     RUNNING = "running"
     FAILED = "failed"
     COMPLETED = "completed"
+
+
+class SimulationStatus(StrEnum):
+    """Enumeration of possible simulation statuses."""
+
+    # Phase 2 public-contract adapter. Remove with legacy schemas in Phase 5.
+    UNKNOWN = ExecutionStatus.UNKNOWN.value
+    CREATED = ExecutionStatus.CREATED.value
+    QUEUED = ExecutionStatus.QUEUED.value
+    RUNNING = ExecutionStatus.RUNNING.value
+    FAILED = ExecutionStatus.FAILED.value
+    COMPLETED = ExecutionStatus.COMPLETED.value
 
 
 class SimulationType(StrEnum):
