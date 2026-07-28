@@ -84,12 +84,12 @@ class Case(Base, IDMixin, TimestampMixin):
 
 
 class Execution(Base, IDMixin, TimestampMixin):
-    __tablename__ = "simulations"
+    __tablename__ = "executions"
     __table_args__ = (
         UniqueConstraint(
             "case_id",
             "execution_id",
-            name="uq_simulations_case_id_execution_id",
+            name="uq_executions_case_id_execution_id",
         ),
         CheckConstraint(
             "compute_type IS NULL OR compute_type IN ('cpu', 'gpu')",
@@ -201,9 +201,9 @@ class Execution(Base, IDMixin, TimestampMixin):
 class Artifact(Base, IDMixin, TimestampMixin):
     __tablename__ = "artifacts"
 
-    simulation_id: Mapped[UUID] = mapped_column(
+    execution_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("simulations.id", ondelete="CASCADE"),
+        ForeignKey("executions.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
     )
@@ -225,7 +225,7 @@ class Artifact(Base, IDMixin, TimestampMixin):
 
     execution: Mapped[Execution] = relationship(
         back_populates="artifacts",
-        primaryjoin="Artifact.simulation_id==Execution.id",
+        primaryjoin="Artifact.execution_id==Execution.id",
         passive_deletes=True,
     )
 
@@ -234,7 +234,7 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     __tablename__ = "external_links"
     __table_args__ = (
         CheckConstraint(
-            "(simulation_id IS NOT NULL) <> (case_id IS NOT NULL)",
+            "(execution_id IS NOT NULL) <> (case_id IS NOT NULL)",
             name="exactly_one_owner",
         ),
         Index(
@@ -247,9 +247,9 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
         ),
     )
 
-    simulation_id: Mapped[UUID | None] = mapped_column(
+    execution_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("simulations.id", ondelete="CASCADE"),
+        ForeignKey("executions.id", ondelete="CASCADE"),
         nullable=True,
     )
     case_id: Mapped[UUID | None] = mapped_column(
@@ -273,8 +273,8 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
 
     execution: Mapped[Execution | None] = relationship(
         back_populates="links",
-        primaryjoin="ExternalLink.simulation_id==Execution.id",
-        foreign_keys=[simulation_id],
+        primaryjoin="ExternalLink.execution_id==Execution.id",
+        foreign_keys=[execution_id],
         passive_deletes=True,
     )
     case: Mapped[Case | None] = relationship(
@@ -285,5 +285,5 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
     )
 
 
-# Phase 2 compatibility alias. Database and public API terminology change later.
+# Phase 2 compatibility alias. Remove with legacy simulation contracts.
 Simulation = Execution

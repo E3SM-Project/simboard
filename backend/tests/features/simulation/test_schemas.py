@@ -362,7 +362,7 @@ class TestExternalLinkOutSchema:
     def test_populate_owner_type_sets_simulation_owner_for_dict_input(self):
         payload = {
             "id": uuid4(),
-            "simulation_id": uuid4(),
+            "execution_id": uuid4(),
         }
 
         assert _populate_external_link_owner_type(payload) == {
@@ -394,7 +394,7 @@ class TestExternalLinkOutSchema:
     def test_populate_owner_type_returns_attributes_unchanged_without_owner_source(
         self,
     ):
-        link = SimpleNamespace(simulation_id=None, case_id=None)
+        link = SimpleNamespace(execution_id=None, case_id=None)
 
         assert _populate_external_link_owner_type(link) is link
 
@@ -419,7 +419,7 @@ class TestExternalLinkOutSchema:
             "kind": ExternalLinkKind.DIAGNOSTIC,
             "url": "https://example.com/simulation-dict",
             "label": "Simulation dict",
-            "simulation_id": uuid4(),
+            "execution_id": uuid4(),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
         }
@@ -450,7 +450,7 @@ class TestExternalLinkOutSchema:
             url="https://example.com/prepopulated-owner-type",
             label="Prepopulated owner type",
             owner_type="case",
-            simulation_id=None,
+            execution_id=None,
             case_id=uuid4(),
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -466,7 +466,7 @@ class TestExternalLinkOutSchema:
             kind=ExternalLinkKind.DIAGNOSTIC,
             url="https://example.com/missing-owner",
             label="Missing owner",
-            simulation_id=None,
+            execution_id=None,
             case_id=None,
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -481,7 +481,7 @@ class TestExternalLinkOutSchema:
             kind=ExternalLinkKind.DIAGNOSTIC,
             url="https://example.com/simulation-owned",
             label="Simulation-owned",
-            simulation_id=uuid4(),
+            execution_id=uuid4(),
             case_id=None,
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -499,7 +499,7 @@ class TestExternalLinkOutSchema:
             kind=ExternalLinkKind.DIAGNOSTIC,
             url="https://example.com/case-owned",
             label="Case-owned",
-            simulation_id=None,
+            execution_id=None,
             case_id=uuid4(),
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),

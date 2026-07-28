@@ -331,7 +331,7 @@ def _seed_execution(
     for a in execution_in.artifacts or []:
         db.add(
             Artifact(
-                simulation_id=execution.id,
+                execution_id=execution.id,
                 **{
                     **a.model_dump(),
                     "uri": str(a.uri) if isinstance(a.uri, AnyUrl) else a.uri,
@@ -342,7 +342,7 @@ def _seed_execution(
     for link in execution_in.links or []:
         db.add(
             ExternalLink(
-                simulation_id=execution.id,
+                execution_id=execution.id,
                 **{
                     **link.model_dump(),
                     "url": str(link.url) if isinstance(link.url, HttpUrl) else link.url,

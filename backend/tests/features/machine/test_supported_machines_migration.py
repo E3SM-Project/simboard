@@ -62,14 +62,14 @@ def test_supported_machine_migration_state(db: Session) -> None:
     )
 
     columns = {
-        column["name"] for column in inspect(db.connection()).get_columns("simulations")
+        column["name"] for column in inspect(db.connection()).get_columns("executions")
     }
     constraints = {
         constraint["name"]
-        for constraint in inspect(db.connection()).get_check_constraints("simulations")
+        for constraint in inspect(db.connection()).get_check_constraints("executions")
     }
     assert "compute_type" in columns
-    assert "ck_simulations_compute_type" in constraints
+    assert "ck_executions_compute_type" in constraints
 
 
 def test_upgrade_refuses_to_remove_referenced_anvil() -> None:

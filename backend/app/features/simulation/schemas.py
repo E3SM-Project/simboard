@@ -106,8 +106,8 @@ class ExternalLinkOut(CamelOutBaseModel):
                 return value
 
             if (
-                value.get("simulation_id") is not None
-                or value.get("simulationId") is not None
+                value.get("execution_id") is not None
+                or value.get("executionId") is not None
             ):
                 return {**value, "owner_type": "simulation"}
 
@@ -119,11 +119,11 @@ class ExternalLinkOut(CamelOutBaseModel):
         if getattr(value, "owner_type", None) is not None:
             return value
 
-        simulation_id = getattr(value, "simulation_id", None)
+        execution_id = getattr(value, "execution_id", None)
         case_id = getattr(value, "case_id", None)
         owner_type = (
             "simulation"
-            if simulation_id is not None
+            if execution_id is not None
             else "case"
             if case_id is not None
             else None

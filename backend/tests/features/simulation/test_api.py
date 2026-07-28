@@ -2351,7 +2351,7 @@ class TestListSimulations:
                     label="Case shared diagnostic",
                 ),
                 ExternalLink(
-                    simulation_id=sim.id,
+                    execution_id=sim.id,
                     kind=ExternalLinkKind.DIAGNOSTIC,
                     url="https://example.com/shared-diagnostic",
                     label="Simulation shared diagnostic",
@@ -2545,7 +2545,7 @@ class TestGetSimulation:
                     label="Case duplicate",
                 ),
                 ExternalLink(
-                    simulation_id=sim.id,
+                    execution_id=sim.id,
                     kind=ExternalLinkKind.DIAGNOSTIC,
                     url="https://example.com/shared-diagnostic-detail",
                     label="Simulation duplicate",
@@ -2744,9 +2744,9 @@ class TestUpdateSimulation:
             ("diagnostic", "https://example.com/diagnostic-new"),
             ("docs", "https://example.com/docs/new"),
         }
-        assert db.query(Artifact).filter(Artifact.simulation_id == sim.id).count() == 2
+        assert db.query(Artifact).filter(Artifact.execution_id == sim.id).count() == 2
         assert (
-            db.query(ExternalLink).filter(ExternalLink.simulation_id == sim.id).count()
+            db.query(ExternalLink).filter(ExternalLink.execution_id == sim.id).count()
             == 2
         )
 
@@ -2797,9 +2797,9 @@ class TestUpdateSimulation:
         assert data["groupedLinks"] == {}
 
         db.expire_all()
-        assert db.query(Artifact).filter(Artifact.simulation_id == sim.id).count() == 0
+        assert db.query(Artifact).filter(Artifact.execution_id == sim.id).count() == 0
         assert (
-            db.query(ExternalLink).filter(ExternalLink.simulation_id == sim.id).count()
+            db.query(ExternalLink).filter(ExternalLink.execution_id == sim.id).count()
             == 0
         )
 
@@ -2876,7 +2876,7 @@ class TestUpdateSimulation:
         )
         simulation_links = (
             db.query(ExternalLink)
-            .filter(ExternalLink.simulation_id == sim.id)
+            .filter(ExternalLink.execution_id == sim.id)
             .order_by(ExternalLink.url.asc())
             .all()
         )

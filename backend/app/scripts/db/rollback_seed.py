@@ -63,12 +63,12 @@ def rollback_seed(db: Session):
 
                 db.execute(
                     delete(ExternalLink).where(
-                        ExternalLink.__table__.c.simulation_id.in_(execution_ids)
+                        ExternalLink.__table__.c.execution_id.in_(execution_ids)
                     )
                 )
                 db.execute(
                     delete(Artifact).where(
-                        Artifact.__table__.c.simulation_id.in_(execution_ids)
+                        Artifact.__table__.c.execution_id.in_(execution_ids)
                     )
                 )
 

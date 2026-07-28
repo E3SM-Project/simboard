@@ -1277,7 +1277,7 @@ def _replace_case_links(case: Case, links: list) -> None:
 
 
 def _external_link_to_out(link: ExternalLink) -> dict:
-    owner_type = "simulation" if link.simulation_id is not None else "case"
+    owner_type = "simulation" if link.execution_id is not None else "case"
 
     return {
         "id": link.id,
@@ -1309,7 +1309,7 @@ def _execution_to_out(execution: Execution) -> ExecutionOut:
             {
                 **_external_link_to_out(link),
                 "owner_type": (
-                    "execution" if link.simulation_id is not None else "case"
+                    "execution" if link.execution_id is not None else "case"
                 ),
             }
         )
