@@ -13,6 +13,7 @@ from app.features.catalog.models import (
     Case,
     Execution,
     ExternalLink,
+    MetadataChange,
 )
 from app.features.ingestion.models import Ingestion
 from app.features.user.models import OAuthAccount, User
@@ -71,6 +72,12 @@ def rollback_seed(db: Session):
                         Artifact.__table__.c.execution_id.in_(execution_ids)
                     )
                 )
+                db.execute(
+                    delete(MetadataChange).where(
+                        MetadataChange.__table__.c.entity_type == "execution",
+                        MetadataChange.__table__.c.entity_id.in_(execution_ids),
+                    )
+                )
 
                 db.execute(
                     delete(Execution).where(Execution.__table__.c.id.in_(execution_ids))
@@ -97,6 +104,14 @@ def rollback_seed(db: Session):
                 orphan_case_ids = set(case_ids) - set(cases_with_executions)
                 if orphan_case_ids:
                     db.execute(
+                        delete(MetadataChange).where(
+                            MetadataChange.__table__.c.entity_type == "case",
+                            MetadataChange.__table__.c.entity_id.in_(
+                                list(orphan_case_ids)
+                            ),
+                        )
+                    )
+                    db.execute(
                         delete(Case).where(
                             Case.__table__.c.id.in_(list(orphan_case_ids))
                         )
@@ -108,6 +123,11 @@ def rollback_seed(db: Session):
         ).scalar_one_or_none()
 
         if dev_user_id:
+            db.execute(
+                delete(MetadataChange).where(
+                    MetadataChange.__table__.c.editor_id == dev_user_id
+                )
+            )
             db.execute(
                 delete(OAuthAccount).where(
                     OAuthAccount.__table__.c.user_id == dev_user_id,

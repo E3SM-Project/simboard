@@ -37,6 +37,7 @@ import {
   ExecutionSummaryRail,
 } from '@/features/catalog/components/ExecutionSummaryPanel';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
+import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
 import { SimulationTypeBadge } from '@/features/catalog/components/SimulationTypeBadge';
 import {
   areResourceListsEqual,
@@ -63,6 +64,7 @@ import type {
   ExecutionUpdate,
   ExternalLinkKind,
   ExternalLinkOut,
+  MetadataChangeOut,
   SimulationTypeValue,
 } from '@/types';
 import { EXECUTION_EDITABLE_FIELDS } from '@/types';
@@ -104,6 +106,15 @@ interface ExecutionDetailsViewProps {
   showLoginForAiSummary?: boolean;
   isCheckingAuth?: boolean;
   onLoginForSummary?: () => void;
+  historyEntries?: MetadataChangeOut[];
+  historyTotal?: number;
+  historyLoading?: boolean;
+  historyLoadingMore?: boolean;
+  historyLoaded?: boolean;
+  historyError?: string | null;
+  historyCanLoadMore?: boolean;
+  onHistoryLoadMore?: () => void;
+  onHistoryOpenChange?: (open: boolean) => void;
 }
 
 export interface ExecutionSaveError {
@@ -621,6 +632,15 @@ export const ExecutionDetailsView = ({
   showLoginForAiSummary = false,
   isCheckingAuth = false,
   onLoginForSummary,
+  historyEntries = [],
+  historyTotal = 0,
+  historyLoading = false,
+  historyLoadingMore = false,
+  historyLoaded = false,
+  historyError = null,
+  historyCanLoadMore = false,
+  onHistoryLoadMore,
+  onHistoryOpenChange,
 }: ExecutionDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isEditing, setIsEditing] = useState(false);
@@ -639,6 +659,7 @@ export const ExecutionDetailsView = ({
     links: [],
   });
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
   const inheritedCaseLinks = toInheritedCaseLinks(execution);
   const executionOwnedLinks = execution.links.filter((link) => link.ownerType === 'execution');
   const groupedExecutionOwnedLinks = groupLinksByKind(executionOwnedLinks);
@@ -699,6 +720,7 @@ export const ExecutionDetailsView = ({
     setFormState(toEditableFormState(execution));
     setArtifactRows(toEditableArtifactRows(execution));
     setLinkRows(toEditableLinkRows(execution.links, 'execution'));
+    setEditReason('');
     setIsEditing(false);
   }, [execution]);
 
@@ -707,6 +729,7 @@ export const ExecutionDetailsView = ({
       setFormState(toEditableFormState(execution));
       setArtifactRows(toEditableArtifactRows(execution));
       setLinkRows(toEditableLinkRows(execution.links, 'execution'));
+      setEditReason('');
       setIsEditing(false);
     }
   }, [canEdit, execution]);
@@ -779,6 +802,7 @@ export const ExecutionDetailsView = ({
     setFormState(toEditableFormState(execution));
     setArtifactRows(toEditableArtifactRows(execution));
     setLinkRows(toEditableLinkRows(execution.links, 'execution'));
+    setEditReason('');
     setIsEditing(false);
   };
 
@@ -795,10 +819,15 @@ export const ExecutionDetailsView = ({
       setIsEditing(false);
       return;
     }
+    const normalizedReason = editReason.trim();
+    if (normalizedReason) {
+      payload.editReason = normalizedReason;
+    }
 
     const saved = await onSave(payload);
 
     if (saved) {
+      setEditReason('');
       setIsEditing(false);
     }
   };
@@ -1581,20 +1610,34 @@ export const ExecutionDetailsView = ({
                     </p>
                   )}
                   {canEdit && isEditing && (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs text-muted-foreground">
-                        Save updates metadata, notes, artifacts, and external links together.
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="execution-edit-reason" className="mb-1 block text-xs">
+                          Edit reason (optional)
+                        </Label>
+                        <Textarea
+                          id="execution-edit-reason"
+                          value={editReason}
+                          onChange={(event) => setEditReason(event.target.value)}
+                          placeholder="Why are these metadata changes needed?"
+                          className="min-h-20"
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handleSave}
-                          disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
-                        >
-                          {isSaving ? 'Saving…' : 'Save Changes'}
-                        </Button>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          Save updates metadata, notes, artifacts, and external links together.
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleSave}
+                            disabled={isSaving || !hasUnsavedChanges || hasClientResourceErrors}
+                          >
+                            {isSaving ? 'Saving…' : 'Save Changes'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1611,6 +1654,18 @@ export const ExecutionDetailsView = ({
                   ) : null}
                 </CardContent>
               </Card>
+
+              <MetadataHistory
+                entries={historyEntries}
+                total={historyTotal}
+                loading={historyLoading}
+                loadingMore={historyLoadingMore}
+                loaded={historyLoaded}
+                error={historyError}
+                canLoadMore={historyCanLoadMore}
+                onLoadMore={onHistoryLoadMore}
+                onOpenChange={onHistoryOpenChange}
+              />
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold tracking-tight">Comments</h3>

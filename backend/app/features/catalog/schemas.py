@@ -463,6 +463,15 @@ class ExecutionUpdate(CamelInBaseModel):
             description="Full replacement list of external links associated with the execution",
         ),
     ]
+    edit_reason: Annotated[
+        str | None,
+        Field(None, description="Optional reason recorded with metadata changes"),
+    ]
+
+    @field_validator("edit_reason", mode="before")
+    @classmethod
+    def normalize_edit_reason(cls, value: Any) -> Any:
+        return _normalize_optional_text(value)
 
     @field_validator("artifacts")
     @classmethod
@@ -775,6 +784,15 @@ class CaseUpdate(CamelInBaseModel):
             description="Full replacement list of external links associated with the case",
         ),
     ]
+    edit_reason: Annotated[
+        str | None,
+        Field(None, description="Optional reason recorded with metadata changes"),
+    ]
+
+    @field_validator("edit_reason", mode="before")
+    @classmethod
+    def normalize_edit_reason(cls, value: Any) -> Any:
+        return _normalize_optional_text(value)
 
     @field_validator(
         "description", "key_features", "known_issues", "notes_markdown", mode="before"
@@ -791,6 +809,30 @@ class CaseUpdate(CamelInBaseModel):
         if value is None:
             return value
         return _validate_unique_resources(value, value_attr="url")
+
+
+class MetadataChangeOut(CamelOutBaseModel):
+    """Append-only record for one managed metadata field change."""
+
+    id: UUID
+    entity_type: Literal["case", "execution"]
+    entity_id: UUID
+    field_name: str
+    old_value: Any
+    new_value: Any
+    editor_id: UUID
+    editor: UserPreview
+    changed_at: datetime
+    reason: str | None = None
+
+
+class MetadataHistoryPageOut(CamelOutBaseModel):
+    """Paginated metadata history, with page size measured in change events."""
+
+    items: list[MetadataChangeOut]
+    total: int
+    page: int
+    page_size: int
 
 
 class ExecutionOut(CamelOutBaseModel):

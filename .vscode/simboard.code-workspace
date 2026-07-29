@@ -11,7 +11,8 @@
     }
   ],
   "settings": {
-    "debug.javascript.unmapMissingSources": true
+    "debug.javascript.unmapMissingSources": true,
+    "python.defaultInterpreterPath": "${workspaceFolder:Backend}/.venv/bin/python"
   },
   "tasks": {
     "version": "2.0.0",

@@ -311,6 +311,14 @@ class TestCaseUpdateSchema:
         assert update.model_dump(exclude_unset=True) == {"description": None}
         assert "description" in update.model_fields_set
 
+    def test_edit_reason_is_trimmed_and_exposed_by_alias(self):
+        update = CaseUpdate(editReason="  corrected metadata  ")
+
+        assert update.edit_reason == "corrected metadata"
+        assert update.model_dump(by_alias=True, exclude_unset=True) == {
+            "editReason": "corrected metadata"
+        }
+
     @pytest.mark.parametrize(
         ("input_field", "model_field"),
         [

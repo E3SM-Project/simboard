@@ -9,6 +9,19 @@ export interface ExecutionUserPreview {
   full_name?: string | null;
 }
 
+export interface MetadataChangeOut {
+  id: string;
+  entityType: 'case' | 'execution';
+  entityId: string;
+  fieldName: string;
+  oldValue: unknown;
+  newValue: unknown;
+  editorId: string;
+  editor: ExecutionUserPreview;
+  changedAt: string;
+  reason: string | null;
+}
+
 export type SimulationTypeValue = 'unknown' | 'production' | 'experimental' | 'test' | 'master';
 export type ExecutionStatusValue =
   | 'unknown'
@@ -93,6 +106,7 @@ export interface PageOut<T> {
 }
 
 export type CasePageOut = PageOut<CaseListItemOut>;
+export type MetadataHistoryPageOut = PageOut<MetadataChangeOut>;
 
 export interface FilterOptionOut {
   value: string;
@@ -134,6 +148,7 @@ export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
 
 export type CaseUpdate = Partial<Record<CaseEditableField, string | null>> & {
   links?: ExternalLinkIn[];
+  editReason?: string | null;
 };
 
 /**
@@ -227,6 +242,7 @@ export type ExecutionEditableField = (typeof EXECUTION_EDITABLE_FIELDS)[number];
 export interface ExecutionUpdate extends Partial<Pick<ExecutionCreate, ExecutionEditableField>> {
   artifacts?: ArtifactIn[];
   links?: ExternalLinkIn[];
+  editReason?: string | null;
 }
 
 // UI-only create form shape. Extends API create payload with optional identity

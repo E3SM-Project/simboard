@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy import (
@@ -35,6 +35,7 @@ from app.features.catalog.enums import (
 if TYPE_CHECKING:
     from app.features.ingestion.models import Ingestion
     from app.features.machine.models import Machine
+    from app.features.user.models import User
 
 
 class Case(Base, IDMixin, TimestampMixin):
@@ -196,6 +197,44 @@ class Execution(Base, IDMixin, TimestampMixin):
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="execution", cascade="all, delete-orphan"
     )
+
+
+class MetadataChange(Base, IDMixin):
+    """One append-only field change made through a managed metadata edit."""
+
+    __tablename__ = "metadata_changes"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('case', 'execution')",
+            name="entity_type",
+        ),
+        Index(
+            "ix_metadata_changes_entity_history",
+            "entity_type",
+            "entity_id",
+            "changed_at",
+            "id",
+        ),
+    )
+
+    entity_type: Mapped[Literal["case", "execution"]] = mapped_column(
+        String(20), nullable=False
+    )
+    entity_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    old_value: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    new_value: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    editor_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    editor: Mapped[User] = relationship("User", foreign_keys=[editor_id], lazy="joined")
 
 
 class Artifact(Base, IDMixin, TimestampMixin):
