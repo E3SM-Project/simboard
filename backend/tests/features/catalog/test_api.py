@@ -1053,7 +1053,9 @@ class TestUpdateCase:
 
         assert res.status_code == 200
         db.expire_all()
-        assert db.get(Case, case.id).updated_at == original_updated_at
+        unchanged_case = db.get(Case, case.id)
+        assert unchanged_case is not None
+        assert unchanged_case.updated_at == original_updated_at
         assert (
             db.query(MetadataChange)
             .filter(
@@ -1063,6 +1065,24 @@ class TestUpdateCase:
             .count()
             == 0
         )
+
+    def test_history_returns_empty_page_when_case_has_no_changes(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_metadata_empty_history")
+
+        history_res = client.get(
+            f"{API_BASE}/cases/{case.id}/history",
+            params={"page": 2, "page_size": 5},
+        )
+
+        assert history_res.status_code == 200
+        assert history_res.json() == {
+            "items": [],
+            "total": 0,
+            "page": 2,
+            "pageSize": 5,
+        }
 
     def test_history_is_reverse_chronological(self, client, db: Session):
         case = _create_case(db, "test_case_metadata_history_order")
