@@ -826,6 +826,15 @@ class MetadataChangeOut(CamelOutBaseModel):
     reason: str | None = None
 
 
+class MetadataHistoryPageOut(CamelOutBaseModel):
+    """Paginated metadata history, with page size measured in change events."""
+
+    items: list[MetadataChangeOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class ExecutionOut(CamelOutBaseModel):
     """Schema for representing an execution with related entities."""
 

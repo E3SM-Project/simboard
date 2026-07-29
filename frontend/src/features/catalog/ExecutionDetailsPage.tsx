@@ -76,7 +76,8 @@ export const ExecutionDetailsPage = ({
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { data: fetchedExecution, loading, error } = useExecution(id ?? '');
-  const history = useMetadataHistory('execution', id ?? '');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const history = useMetadataHistory('execution', id ?? '', isHistoryOpen);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [execution, setExecution] = useState<ExecutionOut | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -162,7 +163,7 @@ export const ExecutionDetailsPage = ({
       const updatedExecution = await updateExecution(id, payload);
       setExecution(updatedExecution);
       await invalidateCatalog(queryClient);
-      await history.refetch();
+      await history.reset();
       return true;
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));
@@ -275,8 +276,14 @@ export const ExecutionDetailsPage = ({
       isCheckingAuth={authLoading && llmSummaryAvailable}
       onLoginForSummary={loginWithGithub}
       historyEntries={history.data}
+      historyTotal={history.total}
       historyLoading={history.loading}
+      historyLoadingMore={history.isFetchingNextPage}
+      historyLoaded={history.loaded}
       historyError={history.error}
+      historyCanLoadMore={history.hasNextPage}
+      onHistoryLoadMore={() => void history.fetchNextPage()}
+      onHistoryOpenChange={setIsHistoryOpen}
     />
   );
 };

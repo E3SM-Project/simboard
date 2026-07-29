@@ -360,7 +360,8 @@ export const CaseDetailsPage = ({
   const [caseHashQuery, setCaseHashQuery] = useState('');
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
-  const history = useMetadataHistory('case', id ?? '');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const history = useMetadataHistory('case', id ?? '', isHistoryOpen);
   const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
   const [formState, setFormState] = useState<EditableFormState | null>(null);
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>([]);
@@ -693,7 +694,7 @@ export const CaseDetailsPage = ({
       setEditReason('');
       setIsEditing(false);
       await invalidateCatalog(queryClient);
-      await history.refetch();
+      await history.reset();
     } catch (saveErr) {
       setSaveError(getUpdateError(saveErr));
     } finally {
@@ -1103,7 +1104,17 @@ export const CaseDetailsPage = ({
       </section>
 
       <section>
-        <MetadataHistory entries={history.data} loading={history.loading} error={history.error} />
+        <MetadataHistory
+          entries={history.data}
+          total={history.total}
+          loading={history.loading}
+          loadingMore={history.isFetchingNextPage}
+          loaded={history.loaded}
+          error={history.error}
+          canLoadMore={history.hasNextPage}
+          onLoadMore={() => void history.fetchNextPage()}
+          onOpenChange={setIsHistoryOpen}
+        />
       </section>
 
       <section className="space-y-4">

@@ -11,7 +11,7 @@ import type {
   ExecutionPageOut,
   ExecutionSummaryResponseOut,
   ExecutionUpdate,
-  MetadataChangeOut,
+  MetadataHistoryPageOut,
 } from '@/types';
 
 export interface PageParams {
@@ -75,9 +75,13 @@ export const updateExecution = async (id: string, data: ExecutionUpdate): Promis
   return res.data;
 };
 
-export const getExecutionHistory = async (id: string): Promise<MetadataChangeOut[]> => {
-  const res = await api.get<MetadataChangeOut[]>(`${EXECUTIONS_URL}/${id}/history`, {
+export const getExecutionHistory = async (
+  id: string,
+  params: Pick<PageParams, 'page' | 'pageSize'> = {},
+): Promise<MetadataHistoryPageOut> => {
+  const res = await api.get<MetadataHistoryPageOut>(`${EXECUTIONS_URL}/${id}/history`, {
     headers: { 'Cache-Control': 'no-cache' },
+    params: toQueryParams(params),
   });
 
   return res.data;
@@ -142,9 +146,13 @@ export const updateCase = async (id: string, data: CaseUpdate): Promise<CaseDeta
   return res.data;
 };
 
-export const getCaseHistory = async (id: string): Promise<MetadataChangeOut[]> => {
-  const res = await api.get<MetadataChangeOut[]>(`${CASES_URL}/${id}/history`, {
+export const getCaseHistory = async (
+  id: string,
+  params: Pick<PageParams, 'page' | 'pageSize'> = {},
+): Promise<MetadataHistoryPageOut> => {
+  const res = await api.get<MetadataHistoryPageOut>(`${CASES_URL}/${id}/history`, {
     headers: { 'Cache-Control': 'no-cache' },
+    params: toQueryParams(params),
   });
 
   return res.data;

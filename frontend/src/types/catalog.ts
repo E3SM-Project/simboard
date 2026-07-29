@@ -106,6 +106,7 @@ export interface PageOut<T> {
 }
 
 export type CasePageOut = PageOut<CaseListItemOut>;
+export type MetadataHistoryPageOut = PageOut<MetadataChangeOut>;
 
 export interface FilterOptionOut {
   value: string;

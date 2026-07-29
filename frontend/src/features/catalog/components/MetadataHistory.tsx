@@ -3,11 +3,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -22,8 +18,14 @@ import { formatDate } from '@/utils/utils';
 
 interface MetadataHistoryProps {
   entries: MetadataChangeOut[];
+  total?: number;
   loading?: boolean;
+  loadingMore?: boolean;
+  loaded?: boolean;
   error?: string | null;
+  canLoadMore?: boolean;
+  onLoadMore?: () => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface MetadataChangeEvent {
@@ -127,66 +129,85 @@ const ChangeDetailsDialog = ({ entry }: { entry: MetadataChangeOut }) => (
 
 export const MetadataHistory = ({
   entries,
+  total = 0,
   loading = false,
+  loadingMore = false,
+  loaded = false,
   error = null,
+  canLoadMore = false,
+  onLoadMore,
+  onOpenChange,
 }: MetadataHistoryProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const events = groupEntries(entries);
-  const canExpand = !loading && !error && events.length > 0;
   const latestEvent = events[0];
 
-  const summary = loading
-    ? 'Loading change history…'
-    : error
-      ? `Could not load change history: ${error}`
-      : latestEvent
-        ? `${latestEvent.editorName} changed ${latestEvent.entries.length} field${
-            latestEvent.entries.length === 1 ? '' : 's'
-          } · ${formatDate(latestEvent.changedAt)}`
-        : 'No user-managed changes recorded yet.';
+  const summary =
+    !loaded && !loading
+      ? 'Open to load change history.'
+      : loading
+        ? 'Loading change history…'
+        : error
+          ? `Could not load change history: ${error}`
+          : latestEvent
+            ? `${latestEvent.editorName} changed ${latestEvent.entries.length} field${
+                latestEvent.entries.length === 1 ? '' : 's'
+              } · ${formatDate(latestEvent.changedAt)}`
+            : 'No user-managed changes recorded yet.';
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible
+      open={isOpen}
+      onOpenChange={(open) => {
+        setIsOpen(open);
+        onOpenChange?.(open);
+      }}
+    >
       <Card>
         <CardHeader className="p-0">
-          <CollapsibleTrigger asChild disabled={!canExpand}>
+          <CollapsibleTrigger asChild>
             <button
               type="button"
               className={cn(
                 'flex w-full items-center gap-3 rounded-xl p-5 text-left',
-                canExpand &&
-                  'transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                'transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               )}
             >
               <div className="min-w-0 flex-1">
                 <CardTitle className="text-base">
-                  Change History{events.length > 0 ? ` (${events.length})` : ''}
+                  Change History{loaded ? ` (${total})` : ''}
                 </CardTitle>
                 <p
                   className={cn(
                     'mt-1 truncate text-sm text-muted-foreground',
-                    error && 'text-red-600'
+                    error && 'text-red-600',
                   )}
                 >
                   {summary}
                 </p>
               </div>
-              {canExpand ? (
-                <ChevronDown
-                  aria-hidden="true"
-                  className={cn(
-                    'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                    isOpen && 'rotate-180'
-                  )}
-                />
-              ) : null}
+              <ChevronDown
+                aria-hidden="true"
+                className={cn(
+                  'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                  isOpen && 'rotate-180',
+                )}
+              />
             </button>
           </CollapsibleTrigger>
         </CardHeader>
 
-        {canExpand ? (
-          <CollapsibleContent>
-            <CardContent className="border-t p-0">
+        <CollapsibleContent>
+          <CardContent className="border-t p-0">
+            {loading ? (
+              <p className="p-4 text-sm text-muted-foreground">Loading change history…</p>
+            ) : error ? (
+              <p className="p-4 text-sm text-red-600">Could not load change history: {error}</p>
+            ) : events.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">
+                No user-managed changes recorded yet.
+              </p>
+            ) : (
               <ol className="max-h-96 space-y-3 overflow-y-auto p-4">
                 {events.map((event) => (
                   <li key={event.key} className="rounded-lg border border-border/70">
@@ -195,9 +216,7 @@ export const MetadataHistory = ({
                         {event.editorName} changed {event.entries.length} field
                         {event.entries.length === 1 ? '' : 's'}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(event.changedAt)}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{formatDate(event.changedAt)}</p>
                       {event.reason ? (
                         <p className="w-full text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">Reason:</span>{' '}
@@ -211,9 +230,7 @@ export const MetadataHistory = ({
                           key={entry.id}
                           className="grid gap-1 py-2 sm:grid-cols-[minmax(8rem,0.6fr)_minmax(0,1fr)] sm:items-center sm:gap-3"
                         >
-                          <p className="text-sm font-medium">
-                            {formatFieldName(entry.fieldName)}
-                          </p>
+                          <p className="text-sm font-medium">{formatFieldName(entry.fieldName)}</p>
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="line-clamp-2 min-w-0 flex-1 break-words rounded bg-muted/40 px-2 py-1 font-mono text-xs">
                               {summarizeValue(entry.oldValue)}
@@ -233,10 +250,23 @@ export const MetadataHistory = ({
                     </ul>
                   </li>
                 ))}
+                {canLoadMore ? (
+                  <li className="flex justify-center pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={loadingMore}
+                      onClick={onLoadMore}
+                    >
+                      {loadingMore ? 'Loading…' : 'Load more'}
+                    </Button>
+                  </li>
+                ) : null}
               </ol>
-            </CardContent>
-          </CollapsibleContent>
-        ) : null}
+            )}
+          </CardContent>
+        </CollapsibleContent>
       </Card>
     </Collapsible>
   );

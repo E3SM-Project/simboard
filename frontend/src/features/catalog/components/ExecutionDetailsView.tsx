@@ -107,8 +107,14 @@ interface ExecutionDetailsViewProps {
   isCheckingAuth?: boolean;
   onLoginForSummary?: () => void;
   historyEntries?: MetadataChangeOut[];
+  historyTotal?: number;
   historyLoading?: boolean;
+  historyLoadingMore?: boolean;
+  historyLoaded?: boolean;
   historyError?: string | null;
+  historyCanLoadMore?: boolean;
+  onHistoryLoadMore?: () => void;
+  onHistoryOpenChange?: (open: boolean) => void;
 }
 
 export interface ExecutionSaveError {
@@ -627,8 +633,14 @@ export const ExecutionDetailsView = ({
   isCheckingAuth = false,
   onLoginForSummary,
   historyEntries = [],
+  historyTotal = 0,
   historyLoading = false,
+  historyLoadingMore = false,
+  historyLoaded = false,
   historyError = null,
+  historyCanLoadMore = false,
+  onHistoryLoadMore,
+  onHistoryOpenChange,
 }: ExecutionDetailsViewProps) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isEditing, setIsEditing] = useState(false);
@@ -1645,8 +1657,14 @@ export const ExecutionDetailsView = ({
 
               <MetadataHistory
                 entries={historyEntries}
+                total={historyTotal}
                 loading={historyLoading}
+                loadingMore={historyLoadingMore}
+                loaded={historyLoaded}
                 error={historyError}
+                canLoadMore={historyCanLoadMore}
+                onLoadMore={onHistoryLoadMore}
+                onOpenChange={onHistoryOpenChange}
               />
 
               <div>
