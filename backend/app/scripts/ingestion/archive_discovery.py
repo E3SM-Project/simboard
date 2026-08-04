@@ -6,6 +6,7 @@ import os
 import re
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -43,6 +44,21 @@ from app.scripts.ingestion.archive_layout import (
 )
 
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
+
+
+@dataclass(frozen=True)
+class _CaseCollectionOutcome:
+    """Purely computed collection outcome for one case log block."""
+
+    valid_execution_ids: list[str]
+    existing_ids: list[str]
+    new_ids: set[str]
+    selected_new_ids: set[str]
+    deferred_ids: list[str]
+    rejected_incomplete: int
+    rejected_invalid: int
+    transient: int
+    decisions_by_execution_id: dict[str, ExecutionCollectionDecision]
 
 
 def _scan_archive(
@@ -84,15 +100,8 @@ def _scan_archive(
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
     case_path_filter = _build_case_path_filter(config)
-    snapshot_scan = ArchiveSnapshotScan(archive_name=config.archive_root.name)
-
-    if config.scan_mode == "archive":
-        snapshot_scan.eligible_keys = _enumerate_archive_snapshot_keys(config)
-        snapshot_scan.completed_keys = (
-            set() if completed_snapshot_keys is None else completed_snapshot_keys
-        ) & snapshot_scan.eligible_keys
-
-    selected_snapshot_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
+    snapshot_scan = _initialize_snapshot_scan(config, completed_snapshot_keys)
+    selected_snapshot_keys = _selected_snapshot_keys(snapshot_scan)
     walk_dir_filter = _build_walk_dir_filter(
         config,
         selected_snapshot_keys=(
@@ -119,24 +128,8 @@ def _scan_archive(
         discovery_results=discovery_results,
         discovery_results_by_key=_build_discovery_results_by_key(state),
         staging_root_basename=staging_root_basename,
-        walk_error_handler=(
-            partial(
-                _handle_archive_walk_error,
-                config=config,
-                snapshot_scan=snapshot_scan,
-            )
-            if config.scan_mode == "archive"
-            else None
-        ),
-        execution_observer=(
-            partial(
-                _record_archive_snapshot_reference,
-                archive_root=config.archive_root.resolve(),
-                references_by_key=snapshot_scan.references_by_key,
-            )
-            if config.scan_mode == "archive"
-            else None
-        ),
+        walk_error_handler=_build_walk_error_handler(config, snapshot_scan),
+        execution_observer=_build_execution_observer(config, snapshot_scan),
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
@@ -167,6 +160,55 @@ def _scan_archive(
         len(all_candidates),
         discovery_stats,
         snapshot_scan,
+    )
+
+
+def _initialize_snapshot_scan(
+    config: IngestorConfig,
+    completed_snapshot_keys: set[str] | None,
+) -> ArchiveSnapshotScan:
+    """Initialize snapshot scan state for one filesystem scan."""
+    snapshot_scan = ArchiveSnapshotScan(archive_name=config.archive_root.name)
+    if config.scan_mode != "archive":
+        return snapshot_scan
+
+    snapshot_scan.eligible_keys = _enumerate_archive_snapshot_keys(config)
+    snapshot_scan.completed_keys = (
+        set() if completed_snapshot_keys is None else completed_snapshot_keys
+    ) & snapshot_scan.eligible_keys
+    return snapshot_scan
+
+
+def _selected_snapshot_keys(snapshot_scan: ArchiveSnapshotScan) -> set[str]:
+    """Return eligible snapshot keys not already checkpointed."""
+    return snapshot_scan.eligible_keys - snapshot_scan.completed_keys
+
+
+def _build_walk_error_handler(
+    config: IngestorConfig,
+    snapshot_scan: ArchiveSnapshotScan,
+) -> Callable[[OSError], None] | None:
+    """Build archive traversal error callback when snapshot tracking applies."""
+    if config.scan_mode != "archive":
+        return None
+    return partial(
+        _handle_archive_walk_error,
+        config=config,
+        snapshot_scan=snapshot_scan,
+    )
+
+
+def _build_execution_observer(
+    config: IngestorConfig,
+    snapshot_scan: ArchiveSnapshotScan,
+) -> Callable[[Path, str], None] | None:
+    """Build archive snapshot reference callback when snapshot tracking applies."""
+    if config.scan_mode != "archive":
+        return None
+    return partial(
+        _record_archive_snapshot_reference,
+        archive_root=config.archive_root.resolve(),
+        references_by_key=snapshot_scan.references_by_key,
     )
 
 
@@ -348,7 +390,7 @@ def _initialize_discovery_stats(stats: DiscoveryStats | None) -> None:
     stats.setdefault("deferred_execution_ids", 0)
 
 
-def _collect_case_execution(  # noqa: C901
+def _collect_case_execution(
     grouped: dict[str, set[str]],
     case_dir: Path,
     execution_id: str,
@@ -379,18 +421,7 @@ def _collect_case_execution(  # noqa: C901
         else processed_ids_by_key[case_identity_key]
     )
     if execution_id in known_processed_ids:
-        if stats is not None:
-            stats["rejected_existing_execution_ids"] += 1
-        if log_data is not None:
-            log_data.rejected_decisions.append(
-                ExecutionCollectionDecision(
-                    case_path=case_path,
-                    execution_id=execution_id,
-                    decision="rejected",
-                    reason="already_processed",
-                )
-            )
-
+        _record_already_processed_execution(case_path, execution_id, log_data, stats)
         return
 
     stored_outcome = (
@@ -398,36 +429,99 @@ def _collect_case_execution(  # noqa: C901
         if discovery_results_by_key is None
         else discovery_results_by_key.get((case_identity_key, execution_id))
     )
-    if stored_outcome == "accepted":
-        if stats is not None:
-            stats["execution_dirs_accepted"] += 1
-
-        grouped.setdefault(case_path, set()).add(execution_id)
-
-        if log_data is not None:
-            log_data.valid_execution_ids.add(execution_id)
-
+    if _record_stored_discovery_outcome(
+        stored_outcome,
+        grouped=grouped,
+        case_path=case_path,
+        execution_id=execution_id,
+        log_data=log_data,
+        stats=stats,
+    ):
         return
-    if stored_outcome in {"rejected_incomplete", "rejected_invalid"}:
-        reason = "incomplete" if stored_outcome == "rejected_incomplete" else "invalid"
 
-        if stats is not None:
-            stats[f"skipped_{reason}"] += 1  # type: ignore[literal-required]
-            stats[f"rejected_{reason}_execution_ids"] += 1  # type: ignore[literal-required]
+    _collect_fresh_execution(
+        grouped,
+        case_dir,
+        case_path,
+        case_identity_key,
+        execution_id,
+        metadata_locator=metadata_locator,
+        stats=stats,
+        log_data=log_data,
+        discovery_results=discovery_results,
+    )
 
-        if log_data is not None:
-            log_data.rejected_decisions.append(
-                ExecutionCollectionDecision(
-                    case_path=case_path,
-                    execution_id=execution_id,
-                    decision="rejected",
-                    reason=reason,
-                    detail="stored_discovery_result",
-                )
+
+def _record_already_processed_execution(
+    case_path: str,
+    execution_id: str,
+    log_data: CaseCollectionLogData | None,
+    stats: DiscoveryStats | None,
+) -> None:
+    """Record one execution rejected from persisted processed state."""
+    if stats is not None:
+        stats["rejected_existing_execution_ids"] += 1
+    if log_data is not None:
+        log_data.rejected_decisions.append(
+            ExecutionCollectionDecision(
+                case_path=case_path,
+                execution_id=execution_id,
+                decision="rejected",
+                reason="already_processed",
             )
+        )
 
-        return
 
+def _record_stored_discovery_outcome(
+    stored_outcome: str | None,
+    *,
+    grouped: dict[str, set[str]],
+    case_path: str,
+    execution_id: str,
+    log_data: CaseCollectionLogData | None,
+    stats: DiscoveryStats | None,
+) -> bool:
+    """Record immutable stored discovery outcome, returning whether handled."""
+    if stored_outcome == "accepted":
+        _record_accepted_execution(grouped, case_path, execution_id, log_data, stats)
+        return True
+    if stored_outcome not in {"rejected_incomplete", "rejected_invalid"}:
+        return False
+
+    reason = "incomplete" if stored_outcome == "rejected_incomplete" else "invalid"
+    if stats is not None:
+        if reason == "incomplete":
+            stats["skipped_incomplete"] += 1
+            stats["rejected_incomplete_execution_ids"] += 1
+        else:
+            stats["skipped_invalid"] += 1
+            stats["rejected_invalid_execution_ids"] += 1
+    if log_data is not None:
+        log_data.rejected_decisions.append(
+            ExecutionCollectionDecision(
+                case_path=case_path,
+                execution_id=execution_id,
+                decision="rejected",
+                reason=reason,
+                detail="stored_discovery_result",
+            )
+        )
+    return True
+
+
+def _collect_fresh_execution(
+    grouped: dict[str, set[str]],
+    case_dir: Path,
+    case_path: str,
+    case_identity_key: str,
+    execution_id: str,
+    *,
+    metadata_locator: MetadataLocator,
+    stats: DiscoveryStats | None,
+    log_data: CaseCollectionLogData | None,
+    discovery_results: list[ExecutionDiscoveryResult] | None,
+) -> None:
+    """Validate and record one execution without a stored outcome."""
     if stats is not None:
         stats["execution_dirs_scanned"] += 1
 
@@ -438,28 +532,15 @@ def _collect_case_execution(  # noqa: C901
         stats=stats,
     )
     if rejection_decision is not None:
-        if discovery_results is not None and rejection_decision.reason in {
-            "incomplete",
-            "invalid",
-        }:
-            discovery_results.append(
-                ExecutionDiscoveryResult(
-                    case_identity=case_identity_key,
-                    execution_id=execution_id,
-                    outcome=(
-                        "rejected_incomplete"
-                        if rejection_decision.reason == "incomplete"
-                        else "rejected_invalid"
-                    ),
-                )
-            )
+        _record_rejected_discovery_result(
+            discovery_results,
+            case_identity_key,
+            execution_id,
+            rejection_decision,
+        )
         if log_data is not None:
             log_data.rejected_decisions.append(rejection_decision)
-
         return
-
-    if stats is not None:
-        stats["execution_dirs_accepted"] += 1
 
     if discovery_results is not None:
         discovery_results.append(
@@ -470,6 +551,44 @@ def _collect_case_execution(  # noqa: C901
             )
         )
 
+    _record_accepted_execution(grouped, case_path, execution_id, log_data, stats)
+
+
+def _record_rejected_discovery_result(
+    discovery_results: list[ExecutionDiscoveryResult] | None,
+    case_identity_key: str,
+    execution_id: str,
+    rejection_decision: ExecutionCollectionDecision,
+) -> None:
+    """Persist an immutable fresh rejection in the pending result list."""
+    if discovery_results is None or rejection_decision.reason not in {
+        "incomplete",
+        "invalid",
+    }:
+        return
+    discovery_results.append(
+        ExecutionDiscoveryResult(
+            case_identity=case_identity_key,
+            execution_id=execution_id,
+            outcome=(
+                "rejected_incomplete"
+                if rejection_decision.reason == "incomplete"
+                else "rejected_invalid"
+            ),
+        )
+    )
+
+
+def _record_accepted_execution(
+    grouped: dict[str, set[str]],
+    case_path: str,
+    execution_id: str,
+    log_data: CaseCollectionLogData | None,
+    stats: DiscoveryStats | None,
+) -> None:
+    """Record accepted execution consistently across scan outputs."""
+    if stats is not None:
+        stats["execution_dirs_accepted"] += 1
     grouped.setdefault(case_path, set()).add(execution_id)
     if log_data is not None:
         log_data.valid_execution_ids.add(execution_id)
@@ -585,106 +704,146 @@ def _log_execution_collection_outcomes(
                 staging_root_basename=staging_root_basename,
             )
         ]
-        valid_execution_ids = sorted(log_data.valid_execution_ids)
-        existing_rejected_ids = {
-            decision.execution_id
-            for decision in log_data.rejected_decisions
-            if decision.reason == "already_processed"
-        }
-        new_ids = set(valid_execution_ids) - processed_ids
         selected_new_ids = selected_new_ids_by_case.get(case_path, set())
-        existing_ids = sorted(
-            existing_rejected_ids | (set(valid_execution_ids) & processed_ids)
-        )
-        deferred_ids = sorted(new_ids - selected_new_ids)
-        rejected_incomplete = sum(
-            1
-            for decision in log_data.rejected_decisions
-            if decision.reason == "incomplete"
-        )
-        rejected_invalid = sum(
-            1
-            for decision in log_data.rejected_decisions
-            if decision.reason == "invalid"
-        )
-        transient = sum(
-            1
-            for decision in log_data.rejected_decisions
-            if decision.reason == "transient"
+        outcome = _calculate_case_collection_outcome(
+            log_data,
+            processed_ids,
+            selected_new_ids,
         )
 
         _log_event(
             "case_collection_begin",
-            {
-                "case": case_label,
-                "execution_count_total": log_data.execution_count_total,
-                "execution_count_valid": len(valid_execution_ids),
-                "execution_count_rejected_incomplete": rejected_incomplete,
-                "execution_count_rejected_invalid": rejected_invalid,
-                "execution_count_transient": transient,
-                "execution_count_existing": len(existing_ids),
-                "execution_count_new": len(new_ids),
-                "execution_count_selected_new": len(selected_new_ids),
-                "execution_count_deferred": len(deferred_ids),
-            },
+            _case_collection_begin_fields(case_label, log_data, outcome),
         )
-
-        decisions_by_execution_id = {
-            decision.execution_id: decision for decision in log_data.rejected_decisions
-        }
-
-        for execution_id in valid_execution_ids:
-            if execution_id in existing_rejected_ids:
-                continue
-
-            if execution_id in processed_ids:
-                discovery_stats["rejected_existing_execution_ids"] += 1
-                decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
-                    case_path=case_path,
-                    execution_id=execution_id,
-                    decision="rejected",
-                    reason="already_processed",
-                )
-                continue
-
-            if execution_id in selected_new_ids:
-                discovery_stats["accepted_execution_ids"] += 1
-                decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
-                    case_path=case_path,
-                    execution_id=execution_id,
-                    decision="accepted",
-                    reason="new_execution",
-                )
-                continue
-
-            if execution_id in new_ids:
-                discovery_stats["deferred_execution_ids"] += 1
-                decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
-                    case_path=case_path,
-                    execution_id=execution_id,
-                    decision="deferred",
-                    reason="max_cases_per_run",
-                )
-
-        for execution_id in sorted(decisions_by_execution_id):
+        _update_collection_decision_stats(discovery_stats, outcome)
+        for execution_id in sorted(outcome.decisions_by_execution_id):
             _log_execution_collection_decision(
-                decisions_by_execution_id[execution_id],
+                outcome.decisions_by_execution_id[execution_id],
                 case=case_label,
             )
-
         _log_event(
             "case_collection_summary",
-            {
-                "case": case_label,
-                "accepted": len(selected_new_ids),
-                "rejected_existing": len(existing_ids),
-                "rejected_incomplete": rejected_incomplete,
-                "rejected_invalid": rejected_invalid,
-                "transient": transient,
-                "deferred": len(deferred_ids),
-            },
+            _case_collection_summary_fields(case_label, outcome),
         )
-        processed_ids.update(valid_execution_ids)
+        processed_ids.update(outcome.valid_execution_ids)
+
+
+def _calculate_case_collection_outcome(
+    log_data: CaseCollectionLogData,
+    processed_ids: set[str],
+    selected_new_ids: set[str],
+) -> _CaseCollectionOutcome:
+    """Compute sets, counts, and decisions for one case without side effects."""
+    valid_execution_ids = sorted(log_data.valid_execution_ids)
+    valid_execution_id_set = set(valid_execution_ids)
+    existing_rejected_ids = {
+        decision.execution_id
+        for decision in log_data.rejected_decisions
+        if decision.reason == "already_processed"
+    }
+    new_ids = valid_execution_id_set - processed_ids
+    existing_ids = sorted(
+        existing_rejected_ids | (valid_execution_id_set & processed_ids)
+    )
+    deferred_ids = sorted(new_ids - selected_new_ids)
+    decisions_by_execution_id = {
+        decision.execution_id: decision for decision in log_data.rejected_decisions
+    }
+
+    for execution_id in valid_execution_ids:
+        if execution_id in existing_rejected_ids:
+            continue
+        if execution_id in processed_ids:
+            decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
+                case_path=log_data.case_path,
+                execution_id=execution_id,
+                decision="rejected",
+                reason="already_processed",
+            )
+        elif execution_id in selected_new_ids:
+            decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
+                case_path=log_data.case_path,
+                execution_id=execution_id,
+                decision="accepted",
+                reason="new_execution",
+            )
+        elif execution_id in new_ids:
+            decisions_by_execution_id[execution_id] = ExecutionCollectionDecision(
+                case_path=log_data.case_path,
+                execution_id=execution_id,
+                decision="deferred",
+                reason="max_cases_per_run",
+            )
+
+    return _CaseCollectionOutcome(
+        valid_execution_ids=valid_execution_ids,
+        existing_ids=existing_ids,
+        new_ids=new_ids,
+        selected_new_ids=selected_new_ids,
+        deferred_ids=deferred_ids,
+        rejected_incomplete=_count_rejected_decisions(log_data, "incomplete"),
+        rejected_invalid=_count_rejected_decisions(log_data, "invalid"),
+        transient=_count_rejected_decisions(log_data, "transient"),
+        decisions_by_execution_id=decisions_by_execution_id,
+    )
+
+
+def _count_rejected_decisions(log_data: CaseCollectionLogData, reason: str) -> int:
+    """Count precomputed discovery rejections for one reason."""
+    return sum(
+        1 for decision in log_data.rejected_decisions if decision.reason == reason
+    )
+
+
+def _update_collection_decision_stats(
+    discovery_stats: DiscoveryStats,
+    outcome: _CaseCollectionOutcome,
+) -> None:
+    """Apply newly calculated valid-execution decisions to discovery counters."""
+    for execution_id in outcome.valid_execution_ids:
+        decision = outcome.decisions_by_execution_id[execution_id]
+        if decision.reason == "already_processed":
+            discovery_stats["rejected_existing_execution_ids"] += 1
+        elif decision.decision == "accepted":
+            discovery_stats["accepted_execution_ids"] += 1
+        elif decision.decision == "deferred":
+            discovery_stats["deferred_execution_ids"] += 1
+
+
+def _case_collection_begin_fields(
+    case_label: str,
+    log_data: CaseCollectionLogData,
+    outcome: _CaseCollectionOutcome,
+) -> dict[str, Any]:
+    """Build ordered fields for a case collection begin event."""
+    return {
+        "case": case_label,
+        "execution_count_total": log_data.execution_count_total,
+        "execution_count_valid": len(outcome.valid_execution_ids),
+        "execution_count_rejected_incomplete": outcome.rejected_incomplete,
+        "execution_count_rejected_invalid": outcome.rejected_invalid,
+        "execution_count_transient": outcome.transient,
+        "execution_count_existing": len(outcome.existing_ids),
+        "execution_count_new": len(outcome.new_ids),
+        "execution_count_selected_new": len(outcome.selected_new_ids),
+        "execution_count_deferred": len(outcome.deferred_ids),
+    }
+
+
+def _case_collection_summary_fields(
+    case_label: str,
+    outcome: _CaseCollectionOutcome,
+) -> dict[str, Any]:
+    """Build ordered fields for a case collection summary event."""
+    return {
+        "case": case_label,
+        "accepted": len(outcome.selected_new_ids),
+        "rejected_existing": len(outcome.existing_ids),
+        "rejected_incomplete": outcome.rejected_incomplete,
+        "rejected_invalid": outcome.rejected_invalid,
+        "transient": outcome.transient,
+        "deferred": len(outcome.deferred_ids),
+    }
 
 
 def _log_execution_collection_decision(
