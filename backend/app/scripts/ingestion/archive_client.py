@@ -65,6 +65,12 @@ def _read_json_response(response: _ReadableResponse) -> Any:
     return json.loads(raw_body) if raw_body else {}
 
 
+def _read_json_object_response(response: _ReadableResponse) -> dict[str, Any]:
+    """Read a JSON object response, replacing other JSON values with an empty object."""
+    parsed_body = _read_json_response(response)
+    return parsed_body if isinstance(parsed_body, dict) else {}
+
+
 def _http_request_error(exc: urllib.error.HTTPError) -> IngestionRequestError:
     """Convert a shared HTTP failure into ingestion retry metadata."""
     response_text = exc.read().decode("utf-8", errors="replace")
@@ -198,7 +204,7 @@ def _fetch_ingestion_state(
         raise _timeout_request_error() from exc
 
 
-def _normalize_remote_state(body: dict[str, Any]) -> dict[str, Any]:
+def _normalize_remote_state(body: object) -> dict[str, Any]:
     """Normalize API state response into runner-compatible structure."""
     if not isinstance(body, dict):
         raise IngestionRequestError(
@@ -378,7 +384,7 @@ def _post_discovery_results_request(
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            parsed_body = _read_json_response(response)
+            parsed_body = _read_json_object_response(response)
             return {"status_code": response.status, "body": parsed_body}
     except urllib.error.HTTPError as exc:
         raise _http_request_error(exc) from exc
@@ -480,7 +486,7 @@ def _post_ingestion_request(
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            parsed_body = _read_json_response(response)
+            parsed_body = _read_json_object_response(response)
             return {
                 "status_code": response.status,
                 "body": parsed_body,
@@ -564,7 +570,7 @@ def _post_archive_checkpoints_request(
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return {
                 "status_code": response.status,
-                "body": _read_json_response(response),
+                "body": _read_json_object_response(response),
             }
     except urllib.error.HTTPError as exc:
         raise _http_request_error(exc) from exc

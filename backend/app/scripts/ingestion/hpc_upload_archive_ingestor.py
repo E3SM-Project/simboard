@@ -5,12 +5,16 @@ that is not mounted in the SimBoard backend environment. Runtime configuration
 is read from environment variables (for example ``SIMBOARD_API_BASE_URL``,
 ``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-Each run executes four phases:
+Each ingest run executes these phases:
 
-    1. Discover and collect parseable execution directories grouped by case path.
+    1. In archive mode, fetch completed snapshot checkpoints.
     2. Fetch persisted per-case state from SimBoard API.
-    3. Package each changed case and submit it with retry/backoff.
-    4. Rely on DB writes from successful ingestions for future idempotent runs.
+    3. Discover and collect parseable execution directories grouped by case path.
+    4. Persist discovery results, then package and submit each changed case.
+    5. In archive mode, settle and persist completed snapshot checkpoints.
+
+Dry runs stop after discovery and emit a summary. Successful ingestions update
+database state used to keep future runs idempotent.
 
 Structured log metric definitions for this runner live in
 ``docs/architecture/metadata-ingestion.md``. This module emits those field names
@@ -38,7 +42,7 @@ from app.scripts.ingestion.archive_client import (
     _fetch_ingestion_state,
     _http_request_error,
     _normalized_api_base_url,
-    _read_json_response,
+    _read_json_object_response,
     _timeout_request_error,
     _url_request_error,
 )
@@ -348,7 +352,7 @@ def _post_hpc_upload_ingestion_request(
 
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                parsed_body = _read_json_response(response)
+                parsed_body = _read_json_object_response(response)
                 return {
                     "status_code": response.status,
                     "body": parsed_body,

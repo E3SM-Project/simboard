@@ -106,7 +106,7 @@ def test_retry_backoff_seconds(attempt: int, expected: int) -> None:
 
 @pytest.mark.parametrize(
     ("response_body", "expected_body"),
-    [('{"stored_count": 2}', {"stored_count": 2}), ("", {})],
+    [('{"stored_count": 2}', {"stored_count": 2}), ("", {}), ("[]", {})],
 )
 def test_post_discovery_results_request_preserves_wire_contract(
     monkeypatch,
@@ -415,7 +415,7 @@ def test_archive_checkpoint_persistence_skips_empty_set() -> None:
 
 @pytest.mark.parametrize(
     ("response_body", "expected_body"),
-    [('{"stored_count": 2}', {"stored_count": 2}), ("", {})],
+    [('{"stored_count": 2}', {"stored_count": 2}), ("", {}), ("42", {})],
 )
 def test_post_archive_checkpoints_request_preserves_wire_contract(
     monkeypatch,
@@ -724,6 +724,7 @@ def test_ingest_case_with_retries_returns_exhausted_retries_when_zero_attempts()
     [
         (json.dumps({"created_count": 1}), {"created_count": 1}),
         ("", {}),
+        ('"unexpected"', {}),
     ],
 )
 def test_post_ingestion_request_preserves_wire_contract(
@@ -830,7 +831,7 @@ def test_normalize_remote_state_rejects_non_dict_payload() -> None:
         IngestionRequestError,
         match="Invalid ingestion state response payload.",
     ):
-        _normalize_remote_state([])  # type: ignore[arg-type]
+        _normalize_remote_state([])
 
 
 def test_normalize_remote_state_sanitizes_cases() -> None:

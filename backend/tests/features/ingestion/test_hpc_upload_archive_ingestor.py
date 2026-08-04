@@ -127,7 +127,11 @@ def test_create_case_archive_rejects_non_directory(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("response_body", "expected_body"),
-    [(json.dumps({"created_count": 1}), {"created_count": 1}), ("", {})],
+    [
+        (json.dumps({"created_count": 1}), {"created_count": 1}),
+        ("", {}),
+        ("null", {}),
+    ],
 )
 def test_post_hpc_upload_ingestion_request_preserves_wire_contract(
     tmp_path: Path,
