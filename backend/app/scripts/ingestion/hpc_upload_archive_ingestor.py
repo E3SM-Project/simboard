@@ -22,6 +22,10 @@ from pathlib import Path
 from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
+from app.scripts.ingestion.archive_discovery import (
+    _scan_archive,
+    _settled_archive_snapshot_keys,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     ExecutionDiscoveryResult,
     IngestionRequestError,
@@ -43,8 +47,6 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _normalized_api_base_url,
     _persist_archive_checkpoints_with_retries,
     _persist_discovery_results_with_retries,
-    _scan_archive,
-    _settled_archive_snapshot_keys,
 )
 
 

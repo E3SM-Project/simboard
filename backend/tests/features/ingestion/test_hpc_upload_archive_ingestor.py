@@ -15,6 +15,7 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
 from app.scripts.ingestion import nersc_archive_ingestor as nersc_ingestor_module
@@ -442,6 +443,7 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         upload_ingestor_module,
         "_fetch_ingestion_state",
@@ -489,6 +491,7 @@ def test_run_ingestor_missing_archive_root_returns_failure(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -519,6 +522,7 @@ def test_run_ingestor_without_token_returns_config_error(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -549,6 +553,7 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         upload_ingestor_module,
         "_fetch_ingestion_state",
@@ -640,6 +645,7 @@ def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -
         lambda: (_ for _ in ()).throw(ValueError("bad config")),
     )
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     exit_code = upload_ingestor_module.main()
 
@@ -669,6 +675,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
     )
     monkeypatch.setattr(upload_ingestor_module, "_run_ingestor", lambda cfg: 0)
     monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         upload_ingestor_module.time,
         "monotonic",

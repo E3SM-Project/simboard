@@ -16,9 +16,16 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_layout as layout_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
+from app.scripts.ingestion.archive_discovery import (
+    _build_case_scan_results,
+    _build_ingestion_candidates,
+    _discover_case_executions,
+    _validate_execution_dir,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     CaseScanResult,
     IngestionCandidate,
@@ -42,10 +49,7 @@ from app.scripts.ingestion.archive_layout import (
     _build_walk_dir_filter,
 )
 from app.scripts.ingestion.nersc_archive_ingestor import (
-    _build_case_scan_results,
-    _build_ingestion_candidates,
     _build_state_endpoint_url,
-    _discover_case_executions,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _ingest_case_with_retries,
@@ -53,7 +57,6 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _normalized_api_base_url,
     _post_ingestion_request,
     _run_ingestor,
-    _validate_execution_dir,
 )
 
 
@@ -111,7 +114,7 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
     complete_exec.mkdir(parents=True)
     unreadable_exec.mkdir(parents=True)
 
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     def fake_locator(execution_dir: str) -> dict[str, str]:
         if execution_dir.endswith("101.1-1"):
@@ -147,9 +150,9 @@ def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         logged_events.append((event, {} if fields is None else fields))
 
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
-    case_collection_data: dict[str, ingestor_module.CaseCollectionLogData] = {}
+    case_collection_data: dict[str, discovery_module.CaseCollectionLogData] = {}
     grouped = _discover_case_executions(
         archive_root,
         metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
@@ -186,8 +189,8 @@ def test_discover_case_executions_logs_scan_progress(
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         logged_events.append((event, {} if fields is None else fields))
 
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    monkeypatch.setattr(ingestor_module, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2)
 
     grouped = _discover_case_executions(archive_root, metadata_locator=lambda *_: {})
 
@@ -261,8 +264,8 @@ def test_discover_case_executions_skips_previously_processed_archive_ids(
 
     locator_calls: list[str] = []
     discovery_results: list[ingestor_module.ExecutionDiscoveryResult] = []
-    stats = ingestor_module._new_discovery_stats()
-    processed_ids_by_key = ingestor_module._build_processed_ids_by_key(
+    stats = discovery_module._new_discovery_stats()
+    processed_ids_by_key = discovery_module._build_processed_ids_by_key(
         {
             "cases": {
                 "/performance_archive/user_a/case_a": {
@@ -324,6 +327,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -792,7 +796,7 @@ def test_discover_case_executions_filters_archive_year_range(tmp_path: Path) -> 
         archive_year_start="2025-02",
         archive_year_end="2025-02",
     )
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
         archive_root,
@@ -881,7 +885,7 @@ def test_discover_case_executions_ignores_root_symlink_for_year_filter(
         archive_year_start="2025-01",
         archive_year_end="2025-01",
     )
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
         archive_root,
@@ -944,7 +948,7 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
         archive_year_start=None,
         archive_year_end=None,
     )
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
         archive_root,
@@ -995,7 +999,7 @@ def test_discover_case_executions_ignores_non_year_root_dirs_without_year_filter
         archive_year_start=None,
         archive_year_end=None,
     )
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
         archive_root,
@@ -1046,7 +1050,7 @@ def test_discover_case_executions_skips_unsupported_layout_when_year_filtered(
         archive_year_start="2025-01",
         archive_year_end="2025-01",
     )
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     grouped = _discover_case_executions(
         archive_root,
@@ -1118,7 +1122,7 @@ def test_validate_execution_dir_treats_plain_file_not_found_as_transient(
 ) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     decision = _validate_execution_dir(
         case_dir,
@@ -1146,7 +1150,7 @@ def test_validate_execution_dir_counts_archive_validation_error_with_stats(
 ) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     validation_error = ArchiveValidationError([])
     validation_error.args = ("invalid",)
@@ -1477,6 +1481,7 @@ def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1529,6 +1534,7 @@ def test_run_ingestor_dry_run_without_token_returns_config_error(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1563,6 +1569,7 @@ def test_run_ingestor_without_token_returns_config_error(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1594,6 +1601,7 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -1632,6 +1640,7 @@ def test_run_ingestor_returns_config_error_for_unsupported_archive_year_layout(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -1671,6 +1680,7 @@ def test_run_ingestor_fails_on_unexpected_scan_value_error(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module,
         "_scan_archive",
@@ -1711,6 +1721,7 @@ def test_run_ingestor_missing_archive_root_returns_failure_without_ingestion(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1753,6 +1764,7 @@ def test_run_ingestor_unreadable_archive_root_returns_config_error(
         return original_iterdir(self)
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -1796,6 +1808,7 @@ def test_dry_run_candidate_suppression_event_emitted_once(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1844,6 +1857,7 @@ def test_completion_events_include_summary_counters(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     dry_run_config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -2098,6 +2112,7 @@ def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -
         lambda: (_ for _ in ()).throw(ValueError("bad config")),
     )
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     exit_code = ingestor_module.main()
 
@@ -2124,6 +2139,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
     monkeypatch.setattr(ingestor_module, "_build_config_from_env", lambda: config)
     monkeypatch.setattr(ingestor_module, "_run_ingestor", lambda cfg: 0)
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     monkeypatch.setattr(
         ingestor_module.time, "monotonic", lambda: 10.0 if not logged_events else 12.5
     )
@@ -2738,7 +2754,7 @@ def test_transient_os_errors_are_counted_but_not_persisted(
     archive_root = tmp_path / "archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
     results: list[ingestor_module.ExecutionDiscoveryResult] = []
 
     _discover_case_executions(
@@ -3101,7 +3117,7 @@ def test_validate_execution_dir_compacts_incomplete_archive_errors(
 ) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     decision = _validate_execution_dir(
         case_dir,
@@ -3143,7 +3159,7 @@ def test_validate_execution_dir_compacts_archive_validation_errors(
 ) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
-    stats = ingestor_module._new_discovery_stats()
+    stats = discovery_module._new_discovery_stats()
 
     decision = _validate_execution_dir(
         case_dir,
@@ -3196,6 +3212,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
     config = IngestorConfig(
         api_base_url="http://backend:8000",
         api_token="token",
@@ -3342,6 +3359,7 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -3480,7 +3498,7 @@ def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None
         archive_year_start="2025-01",
     )
 
-    results = ingestor_module._scan_archive(
+    results = discovery_module._scan_archive(
         config,
         _fresh_state(),
         metadata_locator=lambda path: visited.append(path),
@@ -3515,7 +3533,7 @@ def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
         archive_year_start="2025-01",
     )
 
-    results = ingestor_module._scan_archive(
+    results = discovery_module._scan_archive(
         config,
         _fresh_state(),
         metadata_locator=lambda path: visited.append(path),
@@ -3530,7 +3548,7 @@ def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
 
 def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
-    snapshot_scan = ingestor_module.ArchiveSnapshotScan(
+    snapshot_scan = discovery_module.ArchiveSnapshotScan(
         archive_name="OLD_PERF",
         eligible_keys={snapshot_key},
         references_by_key={
@@ -3559,12 +3577,12 @@ def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     ]
 
     assert (
-        ingestor_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        discovery_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
         == set()
     )
 
     state["cases"]["case-a"]["processed_execution_ids"].append("102.1-1")
-    assert ingestor_module._settled_archive_snapshot_keys(
+    assert discovery_module._settled_archive_snapshot_keys(
         snapshot_scan, state, results
     ) == {snapshot_key}
 
@@ -3602,14 +3620,14 @@ def test_snapshot_settlement_uses_order_independent_discovery_precedence(
     results: list[ingestor_module.ExecutionDiscoveryResult],
 ) -> None:
     snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
-    snapshot_scan = ingestor_module.ArchiveSnapshotScan(
+    snapshot_scan = discovery_module.ArchiveSnapshotScan(
         archive_name="OLD_PERF",
         eligible_keys={snapshot_key},
         references_by_key={snapshot_key: {("case-a", "100.1-1")}},
     )
 
     assert (
-        ingestor_module._settled_archive_snapshot_keys(
+        discovery_module._settled_archive_snapshot_keys(
             snapshot_scan,
             _fresh_state(),
             results,
@@ -3644,14 +3662,14 @@ def test_archive_traversal_error_prevents_snapshot_settlement(
         onerror(PermissionError("permission denied"))
         return iter(())
 
-    monkeypatch.setattr(ingestor_module.os, "walk", failing_walk)
+    monkeypatch.setattr(discovery_module.os, "walk", failing_walk)
     checkpoint_calls: list[dict[str, Any]] = []
 
     def record_checkpoint(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
         checkpoint_calls.append(kwargs)
         return {"status_code": 201, "body": {}}
 
-    snapshot_scan = ingestor_module._scan_archive(
+    snapshot_scan = discovery_module._scan_archive(
         config,
         _fresh_state(),
         metadata_locator=lambda *_: {},
@@ -3659,7 +3677,7 @@ def test_archive_traversal_error_prevents_snapshot_settlement(
 
     assert snapshot_scan.traversal_complete is False
     assert (
-        ingestor_module._settled_archive_snapshot_keys(
+        discovery_module._settled_archive_snapshot_keys(
             snapshot_scan,
             _fresh_state(),
             [],
