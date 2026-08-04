@@ -17,17 +17,24 @@ from app.scripts.ingestion.archive_client import (
     _build_endpoint_url,
     _build_state_endpoint_url,
     _fetch_archive_checkpoints,
+    _fetch_ingestion_state,
+    _ingest_case_with_retries,
+    _normalize_remote_state,
     _persist_archive_checkpoints_with_retries,
     _persist_discovery_results_with_retries,
     _post_archive_checkpoints_request,
     _post_discovery_results_request,
+    _post_ingestion_request,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_RESULT_BATCH_SIZE,
     ExecutionDiscoveryResult,
+    IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    _case_state_processed_ids,
+    _is_transient_status,
 )
 
 
@@ -92,12 +99,25 @@ def test_endpoint_builders_normalize_api_base_url() -> None:
     )
 
 
-def test_post_discovery_results_request_preserves_wire_contract(monkeypatch) -> None:
+@pytest.mark.parametrize(("attempt", "expected"), [(1, 1), (2, 2), (3, 4)])
+def test_retry_backoff_seconds(attempt: int, expected: int) -> None:
+    assert client_module._retry_backoff_seconds(attempt) == expected
+
+
+@pytest.mark.parametrize(
+    ("response_body", "expected_body"),
+    [('{"stored_count": 2}', {"stored_count": 2}), ("", {})],
+)
+def test_post_discovery_results_request_preserves_wire_contract(
+    monkeypatch,
+    response_body: str,
+    expected_body: dict[str, int],
+) -> None:
     captured: list[tuple[urllib.request.Request, int]] = []
 
     def fake_urlopen(request: urllib.request.Request, timeout: int):
         captured.append((request, timeout))
-        return _FakeHttpResponse(201, '{"stored_count": 2}')
+        return _FakeHttpResponse(201, response_body)
 
     monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
 
@@ -113,13 +133,14 @@ def test_post_discovery_results_request_preserves_wire_contract(monkeypatch) -> 
     )
 
     request, timeout = captured[0]
-    assert response == {"status_code": 201, "body": {"stored_count": 2}}
+    assert response == {"status_code": 201, "body": expected_body}
     assert timeout == 12
+    assert request.full_url == ("http://backend/api/v1/ingestions/discovery-results")
     assert request.method == "POST"
     assert request.headers["Authorization"] == "Bearer token"
     assert request.headers["Content-type"] == "application/json"
     assert isinstance(request.data, bytes)
-    assert json.loads(request.data) == {
+    expected_payload = {
         "machine_name": "perlmutter",
         "results": [
             {
@@ -134,6 +155,7 @@ def test_post_discovery_results_request_preserves_wire_contract(monkeypatch) -> 
             },
         ],
     }
+    assert request.data == json.dumps(expected_payload).encode("utf-8")
 
 
 @pytest.mark.parametrize(
@@ -325,9 +347,15 @@ def test_fetch_archive_checkpoints_maps_invalid_json(monkeypatch) -> None:
         )
 
 
-def test_archive_checkpoint_persistence_retries_and_sorts_keys() -> None:
+def test_archive_checkpoint_persistence_retries_and_sorts_keys(monkeypatch) -> None:
     attempts: list[list[str]] = []
     sleeps: list[float] = []
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        client_module,
+        "_log_event",
+        lambda event, fields: logged_events.append((event, fields)),
+    )
 
     def persist(
         *args,
@@ -355,6 +383,17 @@ def test_archive_checkpoint_persistence_retries_and_sorts_keys() -> None:
         ["2025-01/snap-a", "2025-02/snap-b"],
     ]
     assert sleeps == [1]
+    assert logged_events == [
+        (
+            "archive_checkpoint_persistence_failed",
+            {
+                "attempt": 1,
+                "status_code": 503,
+                "retrying": True,
+                "error": "temporary",
+            },
+        )
+    ]
 
 
 def test_archive_checkpoint_persistence_skips_empty_set() -> None:
@@ -374,12 +413,20 @@ def test_archive_checkpoint_persistence_skips_empty_set() -> None:
     )
 
 
-def test_post_archive_checkpoints_request_preserves_wire_contract(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("response_body", "expected_body"),
+    [('{"stored_count": 2}', {"stored_count": 2}), ("", {})],
+)
+def test_post_archive_checkpoints_request_preserves_wire_contract(
+    monkeypatch,
+    response_body: str,
+    expected_body: dict[str, int],
+) -> None:
     captured: list[tuple[urllib.request.Request, int]] = []
 
     def fake_urlopen(request: urllib.request.Request, timeout: int):
         captured.append((request, timeout))
-        return _FakeHttpResponse(201, '{"stored_count": 2}')
+        return _FakeHttpResponse(201, response_body)
 
     monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
 
@@ -393,13 +440,14 @@ def test_post_archive_checkpoints_request_preserves_wire_contract(monkeypatch) -
     )
 
     request, timeout = captured[0]
-    assert response == {"status_code": 201, "body": {"stored_count": 2}}
+    assert response == {"status_code": 201, "body": expected_body}
     assert timeout == 12
+    assert request.full_url == "http://backend/checkpoints"
     assert request.method == "POST"
     assert request.headers["Authorization"] == "Bearer token"
     assert request.headers["Content-type"] == "application/json"
     assert isinstance(request.data, bytes)
-    assert json.loads(request.data) == {
+    expected_payload = {
         "machine_name": "perlmutter",
         "archive_name": "OLD_PERF",
         "snapshots": [
@@ -407,6 +455,7 @@ def test_post_archive_checkpoints_request_preserves_wire_contract(monkeypatch) -
             {"archive_month": "2025-02", "snapshot_name": "snap-b"},
         ],
     }
+    assert request.data == json.dumps(expected_payload).encode("utf-8")
 
 
 @pytest.mark.parametrize(
@@ -465,3 +514,627 @@ def test_post_archive_checkpoints_request_preserves_invalid_json_error(
             snapshot_keys=["2025-01/snap-a"],
             timeout_seconds=12,
         )
+
+
+def test_ingest_case_with_retries_retries_transient_errors(monkeypatch) -> None:
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+    attempts: list[int] = []
+    sleep_calls: list[float] = []
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        client_module,
+        "_log_event",
+        lambda event, fields: logged_events.append((event, fields)),
+    )
+
+    def fake_post_request(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise IngestionRequestError(
+                "temporary error",
+                status_code=503,
+                transient=True,
+            )
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    result = _ingest_case_with_retries(
+        candidate,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        api_token="token",
+        machine_name="perlmutter",
+        max_attempts=3,
+        timeout_seconds=10,
+        sleep_fn=sleep_calls.append,
+        post_request_fn=fake_post_request,
+    )
+
+    assert result["ok"] is True
+    assert result["attempts"] == 2
+    assert sleep_calls == [1]
+    assert logged_events == [
+        (
+            "case_ingestion_request_failed",
+            {
+                "case_path": "/performance_archive/case_a",
+                "attempt": 1,
+                "status_code": 503,
+                "transient": True,
+                "retrying": True,
+                "error": "temporary error",
+            },
+        )
+    ]
+
+
+def test_ingest_case_with_retries_does_not_retry_non_transient_errors() -> None:
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+    call_count = 0
+
+    def fake_post_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        raise IngestionRequestError(
+            "bad request",
+            status_code=400,
+            transient=False,
+        )
+
+    result = _ingest_case_with_retries(
+        candidate,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        api_token="token",
+        machine_name="perlmutter",
+        max_attempts=3,
+        timeout_seconds=10,
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert result["ok"] is False
+    assert result["attempts"] == 1
+    assert call_count == 1
+
+
+def test_ingest_case_with_retries_uses_default_post_request_fn(monkeypatch) -> None:
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+    captured: list[tuple[str, str, str, str, str, int]] = []
+
+    def fake_post(
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        *,
+        processed_execution_ids: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse:
+        captured.append(
+            (
+                endpoint_url,
+                api_token,
+                archive_path,
+                machine_name,
+                ",".join(processed_execution_ids),
+                timeout_seconds,
+            )
+        )
+        return {"status_code": 201, "body": {"created_count": 1}}
+
+    monkeypatch.setattr(client_module, "_post_ingestion_request", fake_post)
+
+    result = _ingest_case_with_retries(
+        candidate,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        api_token="token",
+        machine_name="pm",
+        max_attempts=1,
+        timeout_seconds=5,
+        sleep_fn=lambda *_: None,
+    )
+
+    assert result["ok"] is True
+    assert captured == [
+        (
+            "http://backend:8000/api/v1/ingestions/from-path",
+            "token",
+            "/performance_archive/case_a",
+            "pm",
+            "100.1-1",
+            5,
+        )
+    ]
+
+
+def test_ingest_case_with_retries_normalizes_non_dict_body() -> None:
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+
+    def fake_post_request(*args, **kwargs) -> IngestionRequestResponse:
+        return {"status_code": 201, "body": "bad"}  # type: ignore[typeddict-item]
+
+    result = _ingest_case_with_retries(
+        candidate,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        api_token="token",
+        machine_name="pm",
+        max_attempts=1,
+        timeout_seconds=5,
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert result["ok"] is True
+    assert result["body"] == {}
+
+
+def test_ingest_case_with_retries_returns_exhausted_retries_when_zero_attempts() -> (
+    None
+):
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+
+    def fake_post_request(*args, **kwargs) -> IngestionRequestResponse:
+        return {"status_code": 201, "body": {}}
+
+    result = _ingest_case_with_retries(
+        candidate,
+        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
+        api_token="token",
+        machine_name="pm",
+        max_attempts=0,
+        timeout_seconds=5,
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert result == {
+        "ok": False,
+        "attempts": 0,
+        "status_code": None,
+        "body": None,
+        "error": "Exhausted retries",
+    }
+
+
+@pytest.mark.parametrize(
+    ("response_body", "expected_body"),
+    [
+        (json.dumps({"created_count": 1}), {"created_count": 1}),
+        ("", {}),
+    ],
+)
+def test_post_ingestion_request_preserves_wire_contract(
+    monkeypatch,
+    response_body: str,
+    expected_body: dict[str, int],
+) -> None:
+    captured: list[tuple[urllib.request.Request, int]] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        captured.append((request, timeout))
+        return _FakeHttpResponse(201, response_body)
+
+    monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
+
+    response = _post_ingestion_request(
+        "http://backend:8000/api/v1/ingestions/from-path",
+        "token",
+        "/archive/case_a",
+        "pm",
+        processed_execution_ids=["100.1-1", "101.1-1"],
+        timeout_seconds=12,
+    )
+
+    request, timeout = captured[0]
+    assert response == {"status_code": 201, "body": expected_body}
+    assert timeout == 12
+    assert request.full_url == ("http://backend:8000/api/v1/ingestions/from-path")
+    assert request.method == "POST"
+    assert request.headers["Authorization"] == "Bearer token"
+    assert request.headers["Content-type"] == "application/json"
+    assert isinstance(request.data, bytes)
+    expected_payload = {
+        "archive_path": "/archive/case_a",
+        "machine_name": "pm",
+        "processed_execution_ids": ["100.1-1", "101.1-1"],
+    }
+    assert request.data == json.dumps(expected_payload).encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("error", "match", "status_code"),
+    [
+        (
+            _FakeHttpError("http://backend/from-path", 503, "error", b"busy"),
+            "HTTP 503: busy",
+            503,
+        ),
+        (urllib.error.URLError("network down"), "URL error: network down", None),
+        (TimeoutError(), "Request timed out", None),
+    ],
+)
+def test_post_ingestion_request_maps_transport_errors(
+    monkeypatch,
+    error: BaseException,
+    match: str,
+    status_code: int | None,
+) -> None:
+    monkeypatch.setattr(
+        client_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _raise(error),
+    )
+
+    with pytest.raises(IngestionRequestError, match=match) as exc_info:
+        _post_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-path",
+            "token",
+            "/archive/case_a",
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.transient is True
+
+
+def test_post_ingestion_request_preserves_invalid_json_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        client_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(201, "{invalid"),
+    )
+
+    with pytest.raises(json.JSONDecodeError):
+        _post_ingestion_request(
+            "http://backend/from-path",
+            "token",
+            "/archive/case_a",
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+
+def test_is_transient_status() -> None:
+    assert _is_transient_status(503) is True
+    assert _is_transient_status(400) is False
+
+
+def test_normalize_remote_state_rejects_non_dict_payload() -> None:
+    with pytest.raises(
+        IngestionRequestError,
+        match="Invalid ingestion state response payload.",
+    ):
+        _normalize_remote_state([])  # type: ignore[arg-type]
+
+
+def test_normalize_remote_state_sanitizes_cases() -> None:
+    state = _normalize_remote_state(
+        {
+            "cases": {
+                "/archive/case_a": {
+                    "processed_execution_ids": ["101.1-1", "100.1-1", "100.1-1"],
+                },
+                "/archive/case_b": {"processed_execution_ids": "bad"},
+                123: {"processed_execution_ids": ["skip"]},
+            }
+        }
+    )
+
+    assert state["cases"]["/archive/case_a"]["processed_execution_ids"] == [
+        "100.1-1",
+        "101.1-1",
+    ]
+    assert state["cases"]["/archive/case_b"]["processed_execution_ids"] == []
+    assert "/archive/case_a" in state["cases"]
+    assert 123 not in state["cases"]
+
+
+def test_normalize_remote_state_replaces_non_dict_cases_root() -> None:
+    state = _normalize_remote_state({"cases": []})
+
+    assert state["cases"] == {}
+
+
+def test_case_state_processed_ids_ignores_non_list() -> None:
+    assert _case_state_processed_ids({"processed_execution_ids": "bad"}) == set()
+
+
+@pytest.mark.parametrize(
+    ("response_body", "expected_execution_ids"),
+    [
+        (
+            json.dumps(
+                {
+                    "machine_name": "pm",
+                    "cases": {
+                        "/archive/case_a": {
+                            "processed_execution_ids": ["100.1-1"],
+                            "fingerprint": "fp-1",
+                        }
+                    },
+                }
+            ),
+            ["100.1-1"],
+        ),
+        ("", None),
+    ],
+)
+def test_fetch_ingestion_state_preserves_wire_contract(
+    monkeypatch,
+    response_body: str,
+    expected_execution_ids: list[str] | None,
+) -> None:
+    captured: list[tuple[urllib.request.Request, int]] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        captured.append((request, timeout))
+        return _FakeHttpResponse(200, response_body)
+
+    monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
+
+    state = _fetch_ingestion_state(
+        "http://backend:8000/api/v1/ingestions/state",
+        "token",
+        "pm",
+        timeout_seconds=12,
+    )
+
+    request, timeout = captured[0]
+    if expected_execution_ids is None:
+        assert state["cases"] == {}
+    else:
+        assert state["cases"]["/archive/case_a"]["processed_execution_ids"] == (
+            expected_execution_ids
+        )
+    assert timeout == 12
+    assert request.method == "GET"
+    assert urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query) == {
+        "machine_name": ["pm"]
+    }
+    assert request.headers["Authorization"] == "Bearer token"
+
+
+@pytest.mark.parametrize(
+    ("error", "match", "status_code"),
+    [
+        (
+            _FakeHttpError("http://backend/state", 503, "error", b"busy"),
+            "HTTP 503: busy",
+            503,
+        ),
+        (urllib.error.URLError("network down"), "URL error: network down", None),
+        (TimeoutError(), "Request timed out", None),
+    ],
+)
+def test_fetch_ingestion_state_maps_transport_errors(
+    monkeypatch,
+    error: BaseException,
+    match: str,
+    status_code: int | None,
+) -> None:
+    monkeypatch.setattr(
+        client_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _raise(error),
+    )
+
+    with pytest.raises(IngestionRequestError, match=match) as exc_info:
+        _fetch_ingestion_state(
+            "http://backend/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.transient is True
+
+
+def test_fetch_ingestion_state_wraps_invalid_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        client_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(200, "{invalid"),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Invalid JSON response:"):
+        _fetch_ingestion_state(
+            "http://backend/state",
+            "token",
+            "pm",
+            timeout_seconds=12,
+        )
+
+
+@pytest.mark.parametrize("payload", [[], {}, {"snapshots": "bad"}])
+def test_fetch_archive_checkpoints_rejects_invalid_payload(
+    monkeypatch,
+    payload: object,
+) -> None:
+    monkeypatch.setattr(
+        client_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(200, json.dumps(payload)),
+    )
+
+    with pytest.raises(
+        IngestionRequestError,
+        match="Invalid checkpoint response payload.",
+    ) as exc_info:
+        _fetch_archive_checkpoints(
+            "http://backend/checkpoints",
+            "token",
+            "pm",
+            "OLD_PERF",
+            archive_start=None,
+            archive_end=None,
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.transient is False
+
+
+def test_discovery_persistence_retries_transient_failure(monkeypatch) -> None:
+    attempts: list[int] = []
+    sleeps: list[float] = []
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        client_module,
+        "_log_event",
+        lambda event, fields: logged_events.append((event, fields)),
+    )
+
+    def persist(*args, **kwargs) -> IngestionRequestResponse:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise IngestionRequestError("temporary", status_code=503, transient=True)
+        return {"status_code": 201, "body": {}}
+
+    ok = _persist_discovery_results_with_retries(
+        [ExecutionDiscoveryResult("case_a", "100.1-1", "accepted")],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=2,
+        timeout_seconds=30,
+        sleep_fn=sleeps.append,
+        post_request_fn=persist,
+    )
+
+    assert ok is True
+    assert len(attempts) == 2
+    assert sleeps == [1]
+    assert logged_events == [
+        (
+            "discovery_results_persistence_failed",
+            {
+                "attempt": 1,
+                "status_code": 503,
+                "transient": True,
+                "retrying": True,
+                "error": "temporary",
+            },
+        )
+    ]
+
+
+def test_discovery_persistence_stops_on_terminal_failure(monkeypatch) -> None:
+    attempts: list[int] = []
+    sleeps: list[float] = []
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        client_module,
+        "_log_event",
+        lambda event, fields: logged_events.append((event, fields)),
+    )
+
+    def persist(*args, **kwargs) -> IngestionRequestResponse:
+        attempts.append(1)
+        raise IngestionRequestError("invalid", status_code=400, transient=False)
+
+    ok = _persist_discovery_results_with_retries(
+        [ExecutionDiscoveryResult("case_a", "100.1-1", "accepted")],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=3,
+        timeout_seconds=30,
+        sleep_fn=sleeps.append,
+        post_request_fn=persist,
+    )
+
+    assert ok is False
+    assert len(attempts) == 1
+    assert sleeps == []
+    assert logged_events == [
+        (
+            "discovery_results_persistence_failed",
+            {
+                "attempt": 1,
+                "status_code": 400,
+                "transient": False,
+                "retrying": False,
+                "error": "invalid",
+            },
+        )
+    ]
+
+
+def test_discovery_persistence_skips_empty_results() -> None:
+    def unexpected_request(*args, **kwargs) -> IngestionRequestResponse:
+        raise AssertionError("empty discovery results must not be persisted")
+
+    assert _persist_discovery_results_with_retries(
+        [],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=3,
+        timeout_seconds=30,
+        sleep_fn=lambda _: None,
+        post_request_fn=unexpected_request,
+    )
+
+
+def test_discovery_persistence_deduplicates_snapshot_outcomes_by_precedence() -> None:
+    persisted: list[ExecutionDiscoveryResult] = []
+
+    def persist(
+        *args,
+        results: list[ExecutionDiscoveryResult],
+        **kwargs,
+    ) -> IngestionRequestResponse:
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    result = _persist_discovery_results_with_retries(
+        [
+            ExecutionDiscoveryResult("case_a", "100.1-1", "rejected_incomplete"),
+            ExecutionDiscoveryResult("case_a", "100.1-1", "rejected_invalid"),
+            ExecutionDiscoveryResult("case_a", "100.1-1", "accepted"),
+            ExecutionDiscoveryResult("case_a", "100.1-1", "rejected_incomplete"),
+            ExecutionDiscoveryResult("case_b", "200.1-1", "rejected_invalid"),
+            ExecutionDiscoveryResult("case_b", "200.1-1", "rejected_incomplete"),
+        ],
+        "http://backend/discovery-results",
+        "token",
+        "perlmutter",
+        max_attempts=1,
+        timeout_seconds=30,
+        sleep_fn=lambda _: None,
+        post_request_fn=persist,
+    )
+
+    assert result is True
+    assert [
+        (item.case_identity, item.execution_id, item.outcome) for item in persisted
+    ] == [
+        ("case_a", "100.1-1", "accepted"),
+        ("case_b", "200.1-1", "rejected_invalid"),
+    ]

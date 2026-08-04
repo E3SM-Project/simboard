@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from email.message import Message
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -124,19 +125,37 @@ def test_create_case_archive_rejects_non_directory(tmp_path: Path) -> None:
         _create_case_archive(str(not_a_directory), tmp_path)
 
 
-def test_post_hpc_upload_ingestion_request_sends_case_path_and_processed_execution_ids(
+@pytest.mark.parametrize(
+    ("response_body", "expected_body"),
+    [(json.dumps({"created_count": 1}), {"created_count": 1}), ("", {})],
+)
+def test_post_hpc_upload_ingestion_request_preserves_wire_contract(
     tmp_path: Path,
     monkeypatch,
+    response_body: str,
+    expected_body: dict[str, int],
 ) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "100.1-1" / "metadata.txt").write_text("payload")
+    staged_archive = tmp_path / "case-a.tar.gz"
+    staged_archive.write_bytes(b"archive-bytes")
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_create_case_archive",
+        lambda *args: staged_archive,
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module.uuid,
+        "uuid4",
+        lambda: SimpleNamespace(hex="fixed"),
+    )
     captured_request: list[urllib.request.Request] = []
 
     def fake_urlopen(request: urllib.request.Request, timeout: int):
         captured_request.append(request)
         assert timeout == 12
-        return _FakeHttpResponse(201, json.dumps({"created_count": 1}))
+        return _FakeHttpResponse(201, response_body)
 
     monkeypatch.setattr(upload_ingestor_module.urllib.request, "urlopen", fake_urlopen)
 
@@ -149,20 +168,53 @@ def test_post_hpc_upload_ingestion_request_sends_case_path_and_processed_executi
         timeout_seconds=12,
     )
 
-    assert response == {"status_code": 201, "body": {"created_count": 1}}
-    assert captured_request[0].headers["Authorization"] == "Bearer token"
-    content_type = captured_request[0].headers.get(
-        "Content-type",
-        captured_request[0].headers.get("Content-Type", ""),
+    assert response == {"status_code": 201, "body": expected_body}
+    request = captured_request[0]
+    boundary = "----SimBoardBoundaryfixed"
+    assert request.full_url == ("http://backend:8000/api/v1/ingestions/from-hpc-upload")
+    assert request.method == "POST"
+    assert request.headers["Authorization"] == "Bearer token"
+    assert request.headers["Content-type"] == (
+        f"multipart/form-data; boundary={boundary}"
     )
-    assert "multipart/form-data; boundary=" in content_type
-    request_body = captured_request[0].data
-    assert isinstance(request_body, bytes)
-    assert b'name="case_path"' in request_body
-    assert str(case_dir).encode("utf-8") in request_body
-    assert b'name="processed_execution_ids"' in request_body
-    assert b"100.1-1" in request_body
-    assert b"101.1-1" in request_body
+    expected_request_body = (
+        (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="machine_name"'
+            f"\r\n\r\npm\r\n--{boundary}\r\nContent-Disposition: form-data; "
+            f'name="case_path"\r\n\r\n{case_dir}\r\n--{boundary}\r\n'
+            'Content-Disposition: form-data; name="processed_execution_ids"'
+            f"\r\n\r\n100.1-1\r\n--{boundary}\r\nContent-Disposition: form-data; "
+            'name="processed_execution_ids"\r\n\r\n101.1-1\r\n'
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
+            f'filename="{staged_archive.name}"\r\nContent-Type: application/gzip\r\n\r\n'
+        ).encode("utf-8")
+        + b"archive-bytes\r\n"
+        + f"--{boundary}--\r\n".encode()
+    )
+    assert request.data == expected_request_body
+
+
+def test_post_hpc_upload_ingestion_request_preserves_invalid_json_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: _FakeHttpResponse(201, "{invalid"),
+    )
+
+    with pytest.raises(json.JSONDecodeError):
+        _post_hpc_upload_ingestion_request(
+            "http://backend/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
 
 
 def test_post_hpc_upload_ingestion_request_handles_http_error(

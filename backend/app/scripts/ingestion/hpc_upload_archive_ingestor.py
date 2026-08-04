@@ -20,7 +20,6 @@ verbatim in discovery, selection, and run-summary events.
 from __future__ import annotations
 
 import hashlib
-import json
 import tarfile
 import tempfile
 import time
@@ -31,12 +30,17 @@ from pathlib import Path
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
+    _authorization_headers,
     _build_archive_checkpoints_endpoint_url,
     _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
+    _http_request_error,
     _normalized_api_base_url,
+    _read_json_response,
+    _timeout_request_error,
+    _url_request_error,
 )
 from app.scripts.ingestion.archive_discovery import _scan_archive
 from app.scripts.ingestion.archive_ingestor_core import (
@@ -50,7 +54,6 @@ from app.scripts.ingestion.archive_ingestor_core import (
     MetadataLocator,
     SleepCallback,
     _build_config_from_env,
-    _is_transient_status,
     _log_event,
 )
 from app.scripts.ingestion.archive_workflow import (
@@ -337,7 +340,7 @@ def _post_hpc_upload_ingestion_request(
             endpoint_url,
             data=body,
             headers={
-                "Authorization": f"Bearer {api_token}",
+                **_authorization_headers(api_token),
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
             },
             method="POST",
@@ -345,31 +348,17 @@ def _post_hpc_upload_ingestion_request(
 
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                raw_body = response.read().decode("utf-8")
-                parsed_body = json.loads(raw_body) if raw_body else {}
+                parsed_body = _read_json_response(response)
                 return {
                     "status_code": response.status,
                     "body": parsed_body,
                 }
         except urllib.error.HTTPError as exc:
-            response_text = exc.read().decode("utf-8", errors="replace")
-            raise IngestionRequestError(
-                f"HTTP {exc.code}: {response_text}",
-                status_code=exc.code,
-                transient=_is_transient_status(exc.code),
-            ) from exc
+            raise _http_request_error(exc) from exc
         except urllib.error.URLError as exc:
-            raise IngestionRequestError(
-                f"URL error: {exc.reason}",
-                status_code=None,
-                transient=True,
-            ) from exc
+            raise _url_request_error(exc) from exc
         except TimeoutError as exc:
-            raise IngestionRequestError(
-                "Request timed out",
-                status_code=None,
-                transient=True,
-            ) from exc
+            raise _timeout_request_error() from exc
 
 
 if __name__ == "__main__":

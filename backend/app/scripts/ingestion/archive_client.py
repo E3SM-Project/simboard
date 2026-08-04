@@ -6,7 +6,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, Protocol
 
 from app.api.version import API_BASE
 from app.scripts.ingestion.archive_ingestor_core import (
@@ -29,6 +29,108 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
     _utc_now_iso,
 )
+
+
+class _ReadableResponse(Protocol):
+    """Response contract needed by JSON body decoding."""
+
+    def read(self) -> bytes: ...
+
+
+def _authorization_headers(api_token: str) -> dict[str, str]:
+    """Build authorization headers shared by ingestion API requests."""
+    return {"Authorization": f"Bearer {api_token}"}
+
+
+def _build_json_request(
+    endpoint_url: str,
+    api_token: str,
+    payload: dict[str, Any],
+) -> urllib.request.Request:
+    """Build one authenticated JSON POST request."""
+    return urllib.request.Request(
+        endpoint_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            **_authorization_headers(api_token),
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+
+def _read_json_response(response: _ReadableResponse) -> Any:
+    """Read and decode a response body, preserving raw JSON errors."""
+    raw_body = response.read().decode("utf-8")
+    return json.loads(raw_body) if raw_body else {}
+
+
+def _http_request_error(exc: urllib.error.HTTPError) -> IngestionRequestError:
+    """Convert a shared HTTP failure into ingestion retry metadata."""
+    response_text = exc.read().decode("utf-8", errors="replace")
+    return IngestionRequestError(
+        f"HTTP {exc.code}: {response_text}",
+        status_code=exc.code,
+        transient=_is_transient_status(exc.code),
+    )
+
+
+def _url_request_error(exc: urllib.error.URLError) -> IngestionRequestError:
+    """Convert a standard request URL failure."""
+    return IngestionRequestError(
+        f"URL error: {exc.reason}",
+        status_code=None,
+        transient=True,
+    )
+
+
+def _timeout_request_error() -> IngestionRequestError:
+    """Convert a standard request timeout."""
+    return IngestionRequestError(
+        "Request timed out",
+        status_code=None,
+        transient=True,
+    )
+
+
+def _checkpoint_request_error(
+    exc: urllib.error.URLError | TimeoutError,
+) -> IngestionRequestError:
+    """Convert a checkpoint transport failure with its stable message."""
+    return IngestionRequestError(
+        f"Checkpoint request failed: {exc}",
+        status_code=None,
+        transient=True,
+    )
+
+
+def _retry_failure_event_fields(
+    exc: IngestionRequestError,
+    attempt: int,
+    max_attempts: int,
+    *,
+    include_transient: bool,
+) -> tuple[bool, dict[str, Any]]:
+    """Build stable retry failure fields and return whether to retry."""
+    retrying = exc.transient and attempt < max_attempts
+    fields: dict[str, Any] = {
+        "attempt": attempt,
+        "status_code": exc.status_code,
+    }
+    if include_transient:
+        fields["transient"] = exc.transient
+    fields.update(
+        {
+            "retrying": retrying,
+            "error": str(exc),
+        }
+    )
+    return retrying, fields
+
+
+def _retry_backoff_seconds(attempt: int) -> int:
+    """Return deterministic exponential backoff for a failed attempt."""
+    return 2 ** (attempt - 1)
 
 
 def _build_endpoint_url(config: IngestorConfig) -> str:
@@ -72,15 +174,14 @@ def _fetch_ingestion_state(
     query = urllib.parse.urlencode({"machine_name": machine_name})
     request = urllib.request.Request(
         f"{endpoint_url}?{query}",
-        headers={"Authorization": f"Bearer {api_token}"},
+        headers=_authorization_headers(api_token),
         method="GET",
     )
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            raw_body = response.read().decode("utf-8")
             try:
-                parsed_body = json.loads(raw_body) if raw_body else {}
+                parsed_body = _read_json_response(response)
             except json.JSONDecodeError as exc:
                 raise IngestionRequestError(
                     f"Invalid JSON response: {exc}",
@@ -90,20 +191,11 @@ def _fetch_ingestion_state(
 
             return _normalize_remote_state(parsed_body)
     except urllib.error.HTTPError as exc:
-        response_text = exc.read().decode("utf-8", errors="replace")
-        raise IngestionRequestError(
-            f"HTTP {exc.code}: {response_text}",
-            status_code=exc.code,
-            transient=_is_transient_status(exc.code),
-        ) from exc
+        raise _http_request_error(exc) from exc
     except urllib.error.URLError as exc:
-        raise IngestionRequestError(
-            f"URL error: {exc.reason}", status_code=None, transient=True
-        ) from exc
+        raise _url_request_error(exc) from exc
     except TimeoutError as exc:
-        raise IngestionRequestError(
-            "Request timed out", status_code=None, transient=True
-        ) from exc
+        raise _timeout_request_error() from exc
 
 
 def _normalize_remote_state(body: dict[str, Any]) -> dict[str, Any]:
@@ -181,26 +273,16 @@ def _fetch_archive_checkpoints(
         query_values["archive_end"] = archive_end
     request = urllib.request.Request(
         f"{endpoint_url}?{urllib.parse.urlencode(query_values)}",
-        headers={"Authorization": f"Bearer {api_token}"},
+        headers=_authorization_headers(api_token),
         method="GET",
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            raw_body = response.read().decode("utf-8")
-            body = json.loads(raw_body) if raw_body else {}
+            body = _read_json_response(response)
     except urllib.error.HTTPError as exc:
-        response_text = exc.read().decode("utf-8", errors="replace")
-        raise IngestionRequestError(
-            f"HTTP {exc.code}: {response_text}",
-            status_code=exc.code,
-            transient=_is_transient_status(exc.code),
-        ) from exc
+        raise _http_request_error(exc) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
-        raise IngestionRequestError(
-            f"Checkpoint request failed: {exc}",
-            status_code=None,
-            transient=True,
-        ) from exc
+        raise _checkpoint_request_error(exc) from exc
     except json.JSONDecodeError as exc:
         raise IngestionRequestError(
             f"Invalid checkpoint response: {exc}",
@@ -255,20 +337,19 @@ def _persist_discovery_results_with_retries(
                 )
                 break
             except IngestionRequestError as exc:
-                retrying = exc.transient and attempt < max_attempts
+                retrying, failure_fields = _retry_failure_event_fields(
+                    exc,
+                    attempt,
+                    max_attempts,
+                    include_transient=True,
+                )
                 _log_event(
                     "discovery_results_persistence_failed",
-                    {
-                        "attempt": attempt,
-                        "status_code": exc.status_code,
-                        "transient": exc.transient,
-                        "retrying": retrying,
-                        "error": str(exc),
-                    },
+                    failure_fields,
                 )
                 if not retrying:
                     return False
-                sleep_fn(2 ** (attempt - 1))
+                sleep_fn(_retry_backoff_seconds(attempt))
 
     return True
 
@@ -282,53 +363,29 @@ def _post_discovery_results_request(
     timeout_seconds: int,
 ) -> IngestionRequestResponse:
     """POST one JSON discovery-result batch."""
-    body = json.dumps(
-        {
-            "machine_name": machine_name,
-            "results": [
-                {
-                    "case_identity": result.case_identity,
-                    "execution_id": result.execution_id,
-                    "outcome": result.outcome,
-                }
-                for result in results
-            ],
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        endpoint_url,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    payload = {
+        "machine_name": machine_name,
+        "results": [
+            {
+                "case_identity": result.case_identity,
+                "execution_id": result.execution_id,
+                "outcome": result.outcome,
+            }
+            for result in results
+        ],
+    }
+    request = _build_json_request(endpoint_url, api_token, payload)
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            raw_body = response.read().decode("utf-8")
-            parsed_body = json.loads(raw_body) if raw_body else {}
+            parsed_body = _read_json_response(response)
             return {"status_code": response.status, "body": parsed_body}
     except urllib.error.HTTPError as exc:
-        response_text = exc.read().decode("utf-8", errors="replace")
-        raise IngestionRequestError(
-            f"HTTP {exc.code}: {response_text}",
-            status_code=exc.code,
-            transient=_is_transient_status(exc.code),
-        ) from exc
+        raise _http_request_error(exc) from exc
     except urllib.error.URLError as exc:
-        raise IngestionRequestError(
-            f"URL error: {exc.reason}",
-            status_code=None,
-            transient=True,
-        ) from exc
+        raise _url_request_error(exc) from exc
     except TimeoutError as exc:
-        raise IngestionRequestError(
-            "Request timed out",
-            status_code=None,
-            transient=True,
-        ) from exc
+        raise _timeout_request_error() from exc
 
 
 def _ingest_case_with_retries(
@@ -368,23 +425,23 @@ def _ingest_case_with_retries(
                 "error": None,
             }
         except IngestionRequestError as exc:
-            should_retry = exc.transient and attempt < max_attempts
+            should_retry, failure_fields = _retry_failure_event_fields(
+                exc,
+                attempt,
+                max_attempts,
+                include_transient=True,
+            )
 
             _log_event(
                 "case_ingestion_request_failed",
                 {
                     "case_path": candidate.case_path,
-                    "attempt": attempt,
-                    "status_code": exc.status_code,
-                    "transient": exc.transient,
-                    "retrying": should_retry,
-                    "error": str(exc),
+                    **failure_fields,
                 },
             )
 
             if should_retry:
-                backoff_seconds = 2 ** (attempt - 1)
-                sleep_fn(backoff_seconds)
+                sleep_fn(_retry_backoff_seconds(attempt))
                 continue
 
             return {
@@ -419,42 +476,21 @@ def _post_ingestion_request(
         "machine_name": machine_name,
         "processed_execution_ids": processed_execution_ids,
     }
-    body = json.dumps(payload).encode("utf-8")
-
-    request = urllib.request.Request(
-        endpoint_url,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    request = _build_json_request(endpoint_url, api_token, payload)
 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            raw_body = response.read().decode("utf-8")
-            parsed_body = json.loads(raw_body) if raw_body else {}
+            parsed_body = _read_json_response(response)
             return {
                 "status_code": response.status,
                 "body": parsed_body,
             }
     except urllib.error.HTTPError as exc:
-        response_text = exc.read().decode("utf-8", errors="replace")
-
-        raise IngestionRequestError(
-            f"HTTP {exc.code}: {response_text}",
-            status_code=exc.code,
-            transient=_is_transient_status(exc.code),
-        ) from exc
+        raise _http_request_error(exc) from exc
     except urllib.error.URLError as exc:
-        raise IngestionRequestError(
-            f"URL error: {exc.reason}", status_code=None, transient=True
-        ) from exc
+        raise _url_request_error(exc) from exc
     except TimeoutError as exc:
-        raise IngestionRequestError(
-            "Request timed out", status_code=None, transient=True
-        ) from exc
+        raise _timeout_request_error() from exc
 
 
 def _persist_archive_checkpoints_with_retries(
@@ -486,19 +522,19 @@ def _persist_archive_checkpoints_with_retries(
             )
             return True
         except IngestionRequestError as exc:
-            retrying = exc.transient and attempt < max_attempts
+            retrying, failure_fields = _retry_failure_event_fields(
+                exc,
+                attempt,
+                max_attempts,
+                include_transient=False,
+            )
             _log_event(
                 "archive_checkpoint_persistence_failed",
-                {
-                    "attempt": attempt,
-                    "status_code": exc.status_code,
-                    "retrying": retrying,
-                    "error": str(exc),
-                },
+                failure_fields,
             )
             if not retrying:
                 return False
-            sleep_fn(2 ** (attempt - 1))
+            sleep_fn(_retry_backoff_seconds(attempt))
     return False
 
 
@@ -512,45 +548,25 @@ def _post_archive_checkpoints_request(
     timeout_seconds: int,
 ) -> IngestionRequestResponse:
     """POST one completed archive-checkpoint batch."""
-    body = json.dumps(
-        {
-            "machine_name": machine_name,
-            "archive_name": archive_name,
-            "snapshots": [
-                {
-                    "archive_month": key.split("/", 1)[0],
-                    "snapshot_name": key.split("/", 1)[1],
-                }
-                for key in snapshot_keys
-            ],
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        endpoint_url,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    payload = {
+        "machine_name": machine_name,
+        "archive_name": archive_name,
+        "snapshots": [
+            {
+                "archive_month": key.split("/", 1)[0],
+                "snapshot_name": key.split("/", 1)[1],
+            }
+            for key in snapshot_keys
+        ],
+    }
+    request = _build_json_request(endpoint_url, api_token, payload)
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            raw_body = response.read().decode("utf-8")
             return {
                 "status_code": response.status,
-                "body": json.loads(raw_body) if raw_body else {},
+                "body": _read_json_response(response),
             }
     except urllib.error.HTTPError as exc:
-        response_text = exc.read().decode("utf-8", errors="replace")
-        raise IngestionRequestError(
-            f"HTTP {exc.code}: {response_text}",
-            status_code=exc.code,
-            transient=_is_transient_status(exc.code),
-        ) from exc
+        raise _http_request_error(exc) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
-        raise IngestionRequestError(
-            f"Checkpoint request failed: {exc}",
-            status_code=None,
-            transient=True,
-        ) from exc
+        raise _checkpoint_request_error(exc) from exc
