@@ -55,6 +55,7 @@ DEFAULT_API_BASE_URL = "http://backend:8000"
 DEFAULT_PERF_ARCHIVE_ROOT = "/performance_archive"
 DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
 DEFAULT_MACHINE_NAME = "perlmutter"
+DEFAULT_SCAN_MODE = "staging"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 DISCOVERY_RESULT_BATCH_SIZE = 500
@@ -451,13 +452,14 @@ def _build_config_from_env() -> IngestorConfig:
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
 
-    scan_mode = os.getenv("SCAN_MODE", "staging").strip().lower()
+    scan_mode = os.getenv("SCAN_MODE", DEFAULT_SCAN_MODE).strip().lower()
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
     staging_root = Path(
         os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_PERF_ARCHIVE_ROOT)
     ).resolve()
+
     configured_archive_root = Path(
         os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_PERF_ARCHIVE_ROOT)
     ).resolve()
