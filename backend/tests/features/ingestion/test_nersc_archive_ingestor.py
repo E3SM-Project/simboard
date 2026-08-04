@@ -16,10 +16,20 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_layout as layout_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
+from app.scripts.ingestion.archive_client import (
+    _build_state_endpoint_url,
+    _fetch_archive_checkpoints,
+    _fetch_ingestion_state,
+    _ingest_case_with_retries,
+    _normalize_remote_state,
+    _normalized_api_base_url,
+    _post_ingestion_request,
+)
 from app.scripts.ingestion.archive_discovery import (
     _build_case_scan_results,
     _build_ingestion_candidates,
@@ -49,13 +59,6 @@ from app.scripts.ingestion.archive_layout import (
     _build_walk_dir_filter,
 )
 from app.scripts.ingestion.nersc_archive_ingestor import (
-    _build_state_endpoint_url,
-    _fetch_archive_checkpoints,
-    _fetch_ingestion_state,
-    _ingest_case_with_retries,
-    _normalize_remote_state,
-    _normalized_api_base_url,
-    _post_ingestion_request,
     _run_ingestor,
 )
 
@@ -68,7 +71,7 @@ def _stub_remote_state(monkeypatch) -> None:
         lambda *args, **kwargs: _fresh_state(),
     )
     monkeypatch.setattr(
-        ingestor_module,
+        client_module,
         "_post_discovery_results_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
@@ -78,7 +81,7 @@ def _stub_remote_state(monkeypatch) -> None:
         lambda *args, **kwargs: set(),
     )
     monkeypatch.setattr(
-        ingestor_module,
+        client_module,
         "_post_archive_checkpoints_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
@@ -2218,7 +2221,7 @@ def test_ingest_case_with_retries_uses_default_post_request_fn(monkeypatch) -> N
         )
         return {"status_code": 201, "body": {"created_count": 1}}
 
-    monkeypatch.setattr(ingestor_module, "_post_ingestion_request", fake_post)
+    monkeypatch.setattr(client_module, "_post_ingestion_request", fake_post)
 
     result = _ingest_case_with_retries(
         candidate,
@@ -2334,7 +2337,7 @@ def test_post_ingestion_request_success(monkeypatch) -> None:
         assert timeout == 12
         return _FakeHttpResponse(201, json.dumps({"created_count": 1}))
 
-    monkeypatch.setattr(ingestor_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
 
     response = _post_ingestion_request(
         "http://backend:8000/api/v1/ingestions/from-path",
@@ -2366,7 +2369,7 @@ def test_post_ingestion_request_handles_http_error(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(error),
     )
@@ -2387,7 +2390,7 @@ def test_post_ingestion_request_handles_http_error(monkeypatch) -> None:
 
 def test_post_ingestion_request_handles_url_error(monkeypatch) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             urllib.error.URLError("network down")
@@ -2407,7 +2410,7 @@ def test_post_ingestion_request_handles_url_error(monkeypatch) -> None:
 
 def test_post_ingestion_request_handles_timeout(monkeypatch) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError()),
     )
@@ -2479,7 +2482,7 @@ def test_fetch_ingestion_state_success(monkeypatch) -> None:
             ),
         )
 
-    monkeypatch.setattr(ingestor_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(client_module.urllib.request, "urlopen", fake_urlopen)
 
     state = _fetch_ingestion_state(
         "http://backend:8000/api/v1/ingestions/state",
@@ -2503,7 +2506,7 @@ def test_fetch_ingestion_state_handles_http_error(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(error),
     )
@@ -2522,7 +2525,7 @@ def test_fetch_ingestion_state_handles_http_error(monkeypatch) -> None:
 
 def test_fetch_ingestion_state_handles_url_error(monkeypatch) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             urllib.error.URLError("network down")
@@ -2540,7 +2543,7 @@ def test_fetch_ingestion_state_handles_url_error(monkeypatch) -> None:
 
 def test_fetch_ingestion_state_handles_timeout(monkeypatch) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError()),
     )
@@ -2556,7 +2559,7 @@ def test_fetch_ingestion_state_handles_timeout(monkeypatch) -> None:
 
 def test_fetch_ingestion_state_handles_invalid_json(monkeypatch) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: _FakeHttpResponse(200, "{invalid"),
     )
@@ -2576,7 +2579,7 @@ def test_fetch_archive_checkpoints_rejects_invalid_payload(
     payload: object,
 ) -> None:
     monkeypatch.setattr(
-        ingestor_module.urllib.request,
+        client_module.urllib.request,
         "urlopen",
         lambda *args, **kwargs: _FakeHttpResponse(200, json.dumps(payload)),
     )
@@ -2954,7 +2957,7 @@ def test_discovery_persistence_retries_transient_failure() -> None:
             raise IngestionRequestError("temporary", status_code=503, transient=True)
         return {"status_code": 201, "body": {}}
 
-    ok = ingestor_module._persist_discovery_results_with_retries(
+    ok = client_module._persist_discovery_results_with_retries(
         [
             ingestor_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
@@ -2983,7 +2986,7 @@ def test_discovery_persistence_deduplicates_snapshot_outcomes_by_precedence() ->
         persisted.extend(results)
         return {"status_code": 201, "body": {}}
 
-    result = ingestor_module._persist_discovery_results_with_retries(
+    result = client_module._persist_discovery_results_with_retries(
         [
             ingestor_module.ExecutionDiscoveryResult(
                 case_identity="case_a",

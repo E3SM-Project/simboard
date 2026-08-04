@@ -15,6 +15,7 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
@@ -36,7 +37,7 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import (
 @pytest.fixture(autouse=True)
 def _stub_discovery_result_persistence(monkeypatch) -> None:
     monkeypatch.setattr(
-        nersc_ingestor_module,
+        client_module,
         "_post_discovery_results_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
@@ -46,7 +47,7 @@ def _stub_discovery_result_persistence(monkeypatch) -> None:
         lambda *args, **kwargs: set(),
     )
     monkeypatch.setattr(
-        nersc_ingestor_module,
+        client_module,
         "_post_archive_checkpoints_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
     )
