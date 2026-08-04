@@ -16,35 +16,39 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
-from app.scripts.ingestion.nersc_archive_ingestor import (
+from app.scripts.ingestion.archive_ingestor_core import (
     CaseScanResult,
     IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
-    _build_case_path_filter,
-    _build_case_scan_results,
     _build_config_from_env,
-    _build_ingestion_candidates,
-    _build_state_endpoint_url,
-    _build_walk_dir_filter,
     _case_state_processed_ids,
-    _discover_case_executions,
-    _fetch_archive_checkpoints,
-    _fetch_ingestion_state,
+    _compute_case_fingerprint,
     _fresh_state,
-    _ingest_case_with_retries,
     _is_transient_status,
     _log_event,
     _log_startup_configuration,
-    _normalize_remote_state,
-    _normalized_api_base_url,
     _parse_bool,
     _parse_optional_int,
-    _post_ingestion_request,
     _record_successful_case,
     _render_log_value,
+)
+from app.scripts.ingestion.nersc_archive_ingestor import (
+    _build_case_path_filter,
+    _build_case_scan_results,
+    _build_ingestion_candidates,
+    _build_state_endpoint_url,
+    _build_walk_dir_filter,
+    _discover_case_executions,
+    _fetch_archive_checkpoints,
+    _fetch_ingestion_state,
+    _ingest_case_with_retries,
+    _normalize_remote_state,
+    _normalized_api_base_url,
+    _post_ingestion_request,
     _run_ingestor,
     _validate_execution_dir,
 )
@@ -1279,7 +1283,7 @@ def test_run_ingestor_uses_remote_state_and_builds_expected_payload(
                 case_path=archive_path,
                 execution_ids=["100.1-1"],
                 new_execution_ids=["100.1-1"],
-                fingerprint=ingestor_module._compute_case_fingerprint(["100.1-1"]),
+                fingerprint=_compute_case_fingerprint(["100.1-1"]),
             ),
         )
         return {
@@ -3372,7 +3376,7 @@ def test_log_startup_configuration_emits_structured_block(
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         logged_events.append((event, {} if fields is None else fields))
 
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(core_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -3428,7 +3432,7 @@ def test_log_event_uses_event_specific_field_order(monkeypatch) -> None:
     logged_messages: list[str] = []
 
     monkeypatch.setattr(
-        ingestor_module.logger,
+        core_module.logger,
         "info",
         lambda message: logged_messages.append(message),
     )
@@ -3492,9 +3496,7 @@ def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
     tmp_path: Path,
 ) -> None:
     archive_root = tmp_path / "OLD_PERF"
-    execution_dir = (
-        archive_root / "2025-01" / "user-a" / "case-a" / "100.1-1"
-    )
+    execution_dir = archive_root / "2025-01" / "user-a" / "case-a" / "100.1-1"
     execution_dir.mkdir(parents=True)
     visited: list[str] = []
     config = IngestorConfig(

@@ -15,18 +15,21 @@ from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
 )
+from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
 from app.scripts.ingestion import nersc_archive_ingestor as nersc_ingestor_module
-from app.scripts.ingestion.hpc_upload_archive_ingestor import (
+from app.scripts.ingestion.archive_ingestor_core import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    _fresh_state,
+)
+from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _build_endpoint_url,
     _create_case_archive,
     _post_hpc_upload_ingestion_request,
     _run_ingestor,
 )
-from app.scripts.ingestion.nersc_archive_ingestor import _fresh_state
 
 
 @pytest.fixture(autouse=True)
@@ -702,7 +705,7 @@ def test_hpc_persists_accepted_deferred_execution_before_upload_limit(
     archive_root = tmp_path / "performance_archive"
     (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
     (archive_root / "case_b" / "200.1-1").mkdir(parents=True)
-    persisted: list[nersc_ingestor_module.ExecutionDiscoveryResult] = []
+    persisted: list[core_module.ExecutionDiscoveryResult] = []
     uploads: list[str] = []
     monkeypatch.setattr(
         upload_ingestor_module,
@@ -753,7 +756,7 @@ def test_hpc_rejected_only_case_persists_typed_result_but_not_transient_error(
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "101.1-1").mkdir(parents=True)
     (case_dir / "102.1-1").mkdir(parents=True)
-    persisted: list[nersc_ingestor_module.ExecutionDiscoveryResult] = []
+    persisted: list[core_module.ExecutionDiscoveryResult] = []
     uploads: list[str] = []
     logged_events: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
