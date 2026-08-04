@@ -17,6 +17,7 @@ from app.features.ingestion.parsers.parser import (
     IncompleteArchiveError,
 )
 from app.scripts.ingestion import archive_ingestor_core as core_module
+from app.scripts.ingestion import archive_layout as layout_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.archive_ingestor_core import (
     CaseScanResult,
@@ -36,12 +37,14 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _record_successful_case,
     _render_log_value,
 )
-from app.scripts.ingestion.nersc_archive_ingestor import (
+from app.scripts.ingestion.archive_layout import (
     _build_case_path_filter,
+    _build_walk_dir_filter,
+)
+from app.scripts.ingestion.nersc_archive_ingestor import (
     _build_case_scan_results,
     _build_ingestion_candidates,
     _build_state_endpoint_url,
-    _build_walk_dir_filter,
     _discover_case_executions,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
@@ -1755,7 +1758,7 @@ def test_run_ingestor_unreadable_archive_root_returns_config_error(
         "_fetch_ingestion_state",
         lambda *args, **kwargs: _fresh_state(),
     )
-    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+    monkeypatch.setattr(layout_module.Path, "iterdir", fake_iterdir)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -3691,10 +3694,10 @@ def test_snapshot_enumeration_finds_late_snapshot_in_old_month(tmp_path: Path) -
         scan_mode="archive",
         archive_year_start="2024-01",
     )
-    assert ingestor_module._enumerate_archive_snapshot_keys(config) == {old_key}
+    assert layout_module._enumerate_archive_snapshot_keys(config) == {old_key}
 
     (archive_root / late_key).mkdir(parents=True)
 
-    assert ingestor_module._enumerate_archive_snapshot_keys(config) - {old_key} == {
+    assert layout_module._enumerate_archive_snapshot_keys(config) - {old_key} == {
         late_key
     }
