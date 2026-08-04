@@ -1,17 +1,29 @@
-"""Scan archives and upload cases to SimBoard as single-case archives.
+"""Scan HPC archives and upload cases to SimBoard as single-case archives.
 
-This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
-of sending a filesystem path it packages each submission-qualified case
-into a temporary ``.tar.gz`` archive and uploads it to the dedicated
-``/api/v1/ingestions/from-hpc-upload`` endpoint.
+This script is intended for scheduled execution against a performance archive
+that is not mounted in the SimBoard backend environment. Runtime configuration
+is read from environment variables (for example ``SIMBOARD_API_BASE_URL``,
+``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-More information can be found in ``nersc_archive_ingestor.py``.
+Each ingest run executes these phases:
+
+    1. In archive mode, fetch completed snapshot checkpoints.
+    2. Fetch persisted per-case state from SimBoard API.
+    3. Discover and collect parseable execution directories grouped by case path.
+    4. Persist discovery results, then package and submit each changed case.
+    5. In archive mode, settle and persist completed snapshot checkpoints.
+
+Dry runs stop after discovery and emit a summary. Successful ingestions update
+database state used to keep future runs idempotent.
+
+Structured log metric definitions for this runner live in
+``docs/architecture/metadata-ingestion.md``. This module emits those field names
+verbatim in discovery, selection, and run-summary events.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import tarfile
 import tempfile
 import time
@@ -19,30 +31,43 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
-from app.scripts.ingestion.nersc_archive_ingestor import (
-    ExecutionDiscoveryResult,
-    IngestionRequestError,
-    IngestionRequestResponse,
-    IngestorConfig,
+from app.scripts.ingestion.archive_client import (
+    _authorization_headers,
     _build_archive_checkpoints_endpoint_url,
-    _build_config_from_env,
     _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
+    _http_request_error,
+    _normalized_api_base_url,
+    _read_json_object_response,
+    _timeout_request_error,
+    _url_request_error,
+)
+from app.scripts.ingestion.archive_discovery import _scan_archive
+from app.scripts.ingestion.archive_ingestor_core import (
+    ArchiveCheckpointPersistenceCallback,
+    CaseSubmissionCallback,
+    DiscoveryResultsPersistenceCallback,
+    ExecutionDiscoveryResult,
+    IngestionRequestError,
+    IngestionRequestResponse,
+    IngestorConfig,
+    MetadataLocator,
+    SleepCallback,
+    _build_config_from_env,
+    _log_event,
+)
+from app.scripts.ingestion.archive_workflow import (
+    _finalize_archive_checkpoints,
     _handle_dry_run,
     _handle_ingest_run,
-    _is_transient_status,
-    _log_event,
+    _log_scan_completed,
     _log_startup_configuration,
-    _normalized_api_base_url,
-    _persist_archive_checkpoints_with_retries,
-    _persist_discovery_results_with_retries,
-    _scan_archive,
-    _settled_archive_snapshot_keys,
+    _persist_discovery_results,
+    _validate_run_preconditions,
 )
 
 
@@ -76,17 +101,27 @@ def main() -> int:
     return exit_code
 
 
-def _run_ingestor(  # noqa: C901
+def _case_submission_callback(
+    post_request_fn: CaseSubmissionCallback | None,
+) -> CaseSubmissionCallback:
+    """Resolve the HPC upload transport for this run."""
+    return (
+        _post_hpc_upload_ingestion_request
+        if post_request_fn is None
+        else post_request_fn
+    )
+
+
+def _run_ingestor(
     config: IngestorConfig,
-    metadata_locator: Callable[[str], object] = _locate_metadata_files,
-    sleep_fn: Callable[[float], None] = time.sleep,
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
+    sleep_fn: SleepCallback = time.sleep,
+    post_request_fn: CaseSubmissionCallback | None = None,
+    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
+    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
-    if post_request_fn is None:
-        post_request_fn = _post_hpc_upload_ingestion_request
+    post_request_fn = _case_submission_callback(post_request_fn)
 
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
@@ -94,17 +129,10 @@ def _run_ingestor(  # noqa: C901
         config,
         endpoint_url=endpoint_url,
         state_endpoint_url=state_endpoint_url,
+        log_event_fn=_log_event,
     )
 
-    if not config.archive_root.is_dir():
-        _log_event(
-            "archive_root_missing",
-            {"archive_root": str(config.archive_root)},
-        )
-        return 1
-
-    if not config.api_token:
-        _log_event("configuration_error", {"error": "SIMBOARD_API_TOKEN is required"})
+    if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1
 
     completed_snapshot_keys: set[str] = set()
@@ -166,32 +194,13 @@ def _run_ingestor(  # noqa: C901
         )
         return 1
 
-    _log_event(
-        "scan_completed",
-        {
-            "scan_mode": config.scan_mode,
-            "archive_root": str(config.archive_root),
-            "discovered_cases": len(scan_results),
-            "submission_qualified_cases": submission_qualified_case_count,
-            "selected_submission_cases": len(candidates),
-            "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
-            "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
-            "skipped_incomplete": discovery_stats["skipped_incomplete"],
-            "skipped_invalid": discovery_stats["skipped_invalid"],
-            "skipped_transient": discovery_stats["skipped_transient"],
-            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
-            "rejected_existing_execution_ids": discovery_stats[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": discovery_stats[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": discovery_stats[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": discovery_stats["transient_execution_ids"],
-            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
-        },
+    _log_scan_completed(
+        config,
+        scan_results,
+        candidates,
+        submission_qualified_case_count,
+        discovery_stats,
+        log_event_fn=_log_event,
     )
 
     if config.dry_run:
@@ -201,17 +210,15 @@ def _run_ingestor(  # noqa: C901
             submission_qualified_case_count,
             discovery_stats,
             archive_root=config.archive_root,
+            log_event_fn=_log_event,
         )
 
-    if not _persist_discovery_results_with_retries(
+    if not _persist_discovery_results(
         new_discovery_results,
         _build_discovery_results_endpoint_url(config),
-        config.api_token,
-        config.machine_name,
-        max_attempts=config.max_attempts,
-        timeout_seconds=config.request_timeout_seconds,
-        sleep_fn=sleep_fn,
-        post_request_fn=discovery_post_request_fn,
+        config,
+        sleep_fn,
+        discovery_post_request_fn,
     ):
         return 1
 
@@ -225,23 +232,16 @@ def _run_ingestor(  # noqa: C901
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
+        log_event_fn=_log_event,
     )
-    if config.scan_mode != "archive":
-        return ingest_exit_code
-
-    settled_snapshot_keys = _settled_archive_snapshot_keys(
-        snapshot_scan, state, new_discovery_results
-    )
-    if not _persist_archive_checkpoints_with_retries(
-        settled_snapshot_keys,
+    if not _finalize_archive_checkpoints(
+        snapshot_scan,
+        state,
+        new_discovery_results,
         _build_archive_checkpoints_endpoint_url(config),
-        config.api_token,
-        config.machine_name,
-        snapshot_scan.archive_name,
-        max_attempts=config.max_attempts,
-        timeout_seconds=config.request_timeout_seconds,
-        sleep_fn=sleep_fn,
-        post_request_fn=checkpoint_post_request_fn,
+        config,
+        sleep_fn,
+        checkpoint_post_request_fn,
     ):
         return 1
 
@@ -281,18 +281,15 @@ def _encode_multipart_form_data(
     boundary = f"----SimBoardBoundary{uuid.uuid4().hex}"
     body = bytearray()
 
-    def _append_text_part(name: str, value: str) -> None:
-        body.extend(f"--{boundary}\r\n".encode("utf-8"))
-        body.extend(
-            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
-        )
-        body.extend(value.encode("utf-8"))
-        body.extend(b"\r\n")
-
-    _append_text_part("machine_name", machine_name)
-    _append_text_part("case_path", case_path)
+    _append_multipart_text_part(body, boundary, "machine_name", machine_name)
+    _append_multipart_text_part(body, boundary, "case_path", case_path)
     for execution_id in processed_execution_ids:
-        _append_text_part("processed_execution_ids", execution_id)
+        _append_multipart_text_part(
+            body,
+            boundary,
+            "processed_execution_ids",
+            execution_id,
+        )
 
     body.extend(f"--{boundary}\r\n".encode("utf-8"))
     body.extend(
@@ -307,6 +304,21 @@ def _encode_multipart_form_data(
     body.extend(f"--{boundary}--\r\n".encode("utf-8"))
 
     return bytes(body), boundary
+
+
+def _append_multipart_text_part(
+    body: bytearray,
+    boundary: str,
+    name: str,
+    value: str,
+) -> None:
+    """Append one UTF-8 text field to a multipart request buffer."""
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
+    )
+    body.extend(value.encode("utf-8"))
+    body.extend(b"\r\n")
 
 
 def _post_hpc_upload_ingestion_request(
@@ -332,7 +344,7 @@ def _post_hpc_upload_ingestion_request(
             endpoint_url,
             data=body,
             headers={
-                "Authorization": f"Bearer {api_token}",
+                **_authorization_headers(api_token),
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
             },
             method="POST",
@@ -340,31 +352,17 @@ def _post_hpc_upload_ingestion_request(
 
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                raw_body = response.read().decode("utf-8")
-                parsed_body = json.loads(raw_body) if raw_body else {}
+                parsed_body = _read_json_object_response(response)
                 return {
                     "status_code": response.status,
                     "body": parsed_body,
                 }
         except urllib.error.HTTPError as exc:
-            response_text = exc.read().decode("utf-8", errors="replace")
-            raise IngestionRequestError(
-                f"HTTP {exc.code}: {response_text}",
-                status_code=exc.code,
-                transient=_is_transient_status(exc.code),
-            ) from exc
+            raise _http_request_error(exc) from exc
         except urllib.error.URLError as exc:
-            raise IngestionRequestError(
-                f"URL error: {exc.reason}",
-                status_code=None,
-                transient=True,
-            ) from exc
+            raise _url_request_error(exc) from exc
         except TimeoutError as exc:
-            raise IngestionRequestError(
-                "Request timed out",
-                status_code=None,
-                transient=True,
-            ) from exc
+            raise _timeout_request_error() from exc
 
 
 if __name__ == "__main__":
