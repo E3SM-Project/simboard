@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 from app.core.logger import _setup_custom_logger
 
@@ -353,6 +353,75 @@ class ArchiveSnapshotScan:
     completed_keys: set[str] = field(default_factory=set)
     references_by_key: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
     traversal_complete: bool = True
+
+
+class CaseSubmissionCallback(Protocol):
+    """Submit one case for ingestion."""
+
+    def __call__(
+        self,
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        /,
+        *,
+        processed_execution_ids: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse: ...
+
+
+class DiscoveryResultsPersistenceCallback(Protocol):
+    """Persist one batch of execution discovery results."""
+
+    def __call__(
+        self,
+        endpoint_url: str,
+        api_token: str,
+        machine_name: str,
+        /,
+        *,
+        results: list[ExecutionDiscoveryResult],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse: ...
+
+
+class ArchiveCheckpointPersistenceCallback(Protocol):
+    """Persist one batch of completed archive snapshot checkpoints."""
+
+    def __call__(
+        self,
+        endpoint_url: str,
+        api_token: str,
+        machine_name: str,
+        /,
+        *,
+        archive_name: str,
+        snapshot_keys: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse: ...
+
+
+class MetadataLocator(Protocol):
+    """Validate and locate metadata for one execution directory."""
+
+    def __call__(self, execution_dir: str, /) -> object: ...
+
+
+class SleepCallback(Protocol):
+    """Pause execution for a retry delay."""
+
+    def __call__(self, seconds: float, /) -> None: ...
+
+
+class StructuredLogCallback(Protocol):
+    """Emit one structured ingestion event."""
+
+    def __call__(
+        self,
+        event: str,
+        fields: dict[str, Any] | None = None,
+    ) -> None: ...
 
 
 # Entrypoint and Configuration

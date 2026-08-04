@@ -6,18 +6,22 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from typing import Any
 
 from app.api.version import API_BASE
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_RESULT_BATCH_SIZE,
     STATE_VERSION,
+    ArchiveCheckpointPersistenceCallback,
+    CaseSubmissionCallback,
+    DiscoveryResultsPersistenceCallback,
     ExecutionDiscoveryResult,
     IngestionAttemptResult,
     IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    SleepCallback,
     _case_state_processed_ids,
     _compute_case_fingerprint,
     _deduplicate_discovery_results,
@@ -228,8 +232,8 @@ def _persist_discovery_results_with_retries(
     *,
     max_attempts: int,
     timeout_seconds: int,
-    sleep_fn: Callable[[float], None],
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    sleep_fn: SleepCallback,
+    post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
 ) -> bool:
     """Persist discovery results in bounded batches before any ingestion."""
     deduplicated_results = _deduplicate_discovery_results(results)
@@ -334,8 +338,8 @@ def _ingest_case_with_retries(
     machine_name: str,
     max_attempts: int,
     timeout_seconds: int,
-    sleep_fn: Callable[[float], None],
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    sleep_fn: SleepCallback,
+    post_request_fn: CaseSubmissionCallback | None = None,
 ) -> IngestionAttemptResult:
     """Ingest one case with exponential-backoff retries."""
     if post_request_fn is None:
@@ -462,8 +466,8 @@ def _persist_archive_checkpoints_with_retries(
     *,
     max_attempts: int,
     timeout_seconds: int,
-    sleep_fn: Callable[[float], None],
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    sleep_fn: SleepCallback,
+    post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> bool:
     """Persist settled immutable snapshot keys with bounded retries."""
     if not snapshot_keys:

@@ -26,6 +26,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     ExecutionDiscoveryResult,
     IngestionCandidate,
     IngestorConfig,
+    MetadataLocator,
     _build_discovery_results_by_key,
     _case_log_label,
     _case_state_processed_ids,
@@ -47,7 +48,7 @@ EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
 def _scan_archive(
     config: IngestorConfig,
     state: dict[str, Any],
-    metadata_locator: Callable[[str], object],
+    metadata_locator: MetadataLocator,
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     completed_snapshot_keys: set[str] | None = None,
 ) -> tuple[
@@ -106,17 +107,6 @@ def _scan_archive(
         staging_root_basename=staging_root_basename,
     )
 
-    def handle_walk_error(exc: OSError) -> None:
-        snapshot_scan.traversal_complete = False
-        _log_event(
-            "archive_scan_failed",
-            {
-                "scan_mode": config.scan_mode,
-                "archive_root": str(config.archive_root),
-                "error": f"{exc.__class__.__name__}: {exc}",
-            },
-        )
-
     grouped_executions = _discover_case_executions(
         config.archive_root,
         metadata_locator,
@@ -130,7 +120,13 @@ def _scan_archive(
         discovery_results_by_key=_build_discovery_results_by_key(state),
         staging_root_basename=staging_root_basename,
         walk_error_handler=(
-            handle_walk_error if config.scan_mode == "archive" else None
+            partial(
+                _handle_archive_walk_error,
+                config=config,
+                snapshot_scan=snapshot_scan,
+            )
+            if config.scan_mode == "archive"
+            else None
         ),
         execution_observer=(
             partial(
@@ -174,9 +170,27 @@ def _scan_archive(
     )
 
 
+def _handle_archive_walk_error(
+    exc: OSError,
+    *,
+    config: IngestorConfig,
+    snapshot_scan: ArchiveSnapshotScan,
+) -> None:
+    """Mark an archive traversal incomplete and log its walk error."""
+    snapshot_scan.traversal_complete = False
+    _log_event(
+        "archive_scan_failed",
+        {
+            "scan_mode": config.scan_mode,
+            "archive_root": str(config.archive_root),
+            "error": f"{exc.__class__.__name__}: {exc}",
+        },
+    )
+
+
 def _discover_case_executions(
     archive_root: Path,
-    metadata_locator: Callable[[str], object] = _locate_metadata_files,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
     stats: DiscoveryStats | None = None,
     case_collection_data: dict[str, CaseCollectionLogData] | None = None,
     *,
@@ -339,7 +353,7 @@ def _collect_case_execution(  # noqa: C901
     case_dir: Path,
     execution_id: str,
     *,
-    metadata_locator: Callable[[str], object],
+    metadata_locator: MetadataLocator,
     stats: DiscoveryStats | None,
     case_collection_data: dict[str, CaseCollectionLogData] | None,
     processed_ids_by_key: defaultdict[str, set[str]] | None,
@@ -478,7 +492,7 @@ def _get_case_collection_log_data(
 def _validate_execution_dir(
     case_dir: Path,
     execution_id: str,
-    metadata_locator: Callable[[str], object],
+    metadata_locator: MetadataLocator,
     stats: DiscoveryStats | None,
 ) -> ExecutionCollectionDecision | None:
     """Validate execution directory metadata and return rejection details.
@@ -874,7 +888,7 @@ def _build_ingestion_candidates(
         staging_root_basename=staging_root_basename,
     )
 
-    for scan in sorted(scan_results, key=lambda item: item.case_path):
+    for scan in sorted(scan_results, key=_case_scan_result_sort_key):
         processed_ids = processed_ids_by_key[
             _case_identity_key(
                 scan.case_path,
@@ -902,6 +916,11 @@ def _build_ingestion_candidates(
             break
 
     return candidates
+
+
+def _case_scan_result_sort_key(scan_result: CaseScanResult) -> str:
+    """Return deterministic case-path ordering key for scan results."""
+    return scan_result.case_path
 
 
 # Discovery Statistics

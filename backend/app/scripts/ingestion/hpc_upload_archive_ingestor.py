@@ -28,7 +28,6 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -46,10 +45,15 @@ from app.scripts.ingestion.archive_discovery import (
     _settled_archive_snapshot_keys,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
+    ArchiveCheckpointPersistenceCallback,
+    CaseSubmissionCallback,
+    DiscoveryResultsPersistenceCallback,
     ExecutionDiscoveryResult,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    MetadataLocator,
+    SleepCallback,
     _build_config_from_env,
     _is_transient_status,
     _log_event,
@@ -93,11 +97,11 @@ def main() -> int:
 
 def _run_ingestor(  # noqa: C901
     config: IngestorConfig,
-    metadata_locator: Callable[[str], object] = _locate_metadata_files,
-    sleep_fn: Callable[[float], None] = time.sleep,
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
+    sleep_fn: SleepCallback = time.sleep,
+    post_request_fn: CaseSubmissionCallback | None = None,
+    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
+    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     if post_request_fn is None:
@@ -299,18 +303,15 @@ def _encode_multipart_form_data(
     boundary = f"----SimBoardBoundary{uuid.uuid4().hex}"
     body = bytearray()
 
-    def _append_text_part(name: str, value: str) -> None:
-        body.extend(f"--{boundary}\r\n".encode("utf-8"))
-        body.extend(
-            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
-        )
-        body.extend(value.encode("utf-8"))
-        body.extend(b"\r\n")
-
-    _append_text_part("machine_name", machine_name)
-    _append_text_part("case_path", case_path)
+    _append_multipart_text_part(body, boundary, "machine_name", machine_name)
+    _append_multipart_text_part(body, boundary, "case_path", case_path)
     for execution_id in processed_execution_ids:
-        _append_text_part("processed_execution_ids", execution_id)
+        _append_multipart_text_part(
+            body,
+            boundary,
+            "processed_execution_ids",
+            execution_id,
+        )
 
     body.extend(f"--{boundary}\r\n".encode("utf-8"))
     body.extend(
@@ -325,6 +326,21 @@ def _encode_multipart_form_data(
     body.extend(f"--{boundary}--\r\n".encode("utf-8"))
 
     return bytes(body), boundary
+
+
+def _append_multipart_text_part(
+    body: bytearray,
+    boundary: str,
+    name: str,
+    value: str,
+) -> None:
+    """Append one UTF-8 text field to a multipart request buffer."""
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
+    )
+    body.extend(value.encode("utf-8"))
+    body.extend(b"\r\n")
 
 
 def _post_hpc_upload_ingestion_request(

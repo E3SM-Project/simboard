@@ -36,8 +36,8 @@ def _build_case_path_filter(
     ):
         return None
 
-    return lambda case_path: _archive_case_path_matches_range(
-        case_path,
+    return partial(
+        _archive_case_path_matches_range,
         archive_root=config.archive_root,
         archive_start=config.archive_year_start,
         archive_end=config.archive_year_end,

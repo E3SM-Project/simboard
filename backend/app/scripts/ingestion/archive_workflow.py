@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.scripts.ingestion.archive_client import _ingest_case_with_retries
 from app.scripts.ingestion.archive_ingestor_core import (
     MAX_DRY_RUN_CANDIDATE_LOGS,
     CaseScanResult,
+    CaseSubmissionCallback,
     DiscoveryStats,
     IngestionCandidate,
-    IngestionRequestResponse,
     IngestorConfig,
+    SleepCallback,
+    StructuredLogCallback,
     _case_log_label,
     _log_event,
     _record_successful_case,
 )
-
-LogEvent = Callable[[str, dict[str, Any] | None], None]
 
 
 def _log_startup_configuration(
@@ -26,7 +26,7 @@ def _log_startup_configuration(
     endpoint_url: str,
     state_endpoint_url: str,
     *,
-    log_event_fn: LogEvent | None = None,
+    log_event_fn: StructuredLogCallback | None = None,
 ) -> None:
     """Log sanitized runtime configuration for one ingestor run."""
     log_event_fn = log_event_fn or _log_event
@@ -72,7 +72,7 @@ def _handle_dry_run(
     discovery_stats: DiscoveryStats,
     *,
     archive_root: Path,
-    log_event_fn: LogEvent | None = None,
+    log_event_fn: StructuredLogCallback | None = None,
 ) -> int:
     """Emit dry-run candidate logs and completion summaries."""
     log_event_fn = log_event_fn or _log_event
@@ -131,10 +131,10 @@ def _handle_ingest_run(
     state: dict[str, Any],
     submission_qualified_case_count: int,
     discovery_stats: DiscoveryStats,
-    sleep_fn: Callable[[float], None],
-    post_request_fn: Callable[..., IngestionRequestResponse],
+    sleep_fn: SleepCallback,
+    post_request_fn: CaseSubmissionCallback,
     *,
-    log_event_fn: LogEvent | None = None,
+    log_event_fn: StructuredLogCallback | None = None,
 ) -> int:
     """Execute candidate ingestion loop and emit completion summaries."""
     log_event_fn = log_event_fn or _log_event
@@ -237,7 +237,7 @@ def _log_dry_run_summary(
     discovery_stats: DiscoveryStats,
     candidate_logs_emitted: int,
     candidate_logs_suppressed: int,
-    log_event_fn: LogEvent | None = None,
+    log_event_fn: StructuredLogCallback | None = None,
 ) -> None:
     """Emit compact dry-run summary event block."""
     log_event_fn = log_event_fn or _log_event
@@ -285,7 +285,7 @@ def _log_run_summary(
     success_count: int,
     failure_count: int,
     discovery_stats: DiscoveryStats,
-    log_event_fn: LogEvent | None = None,
+    log_event_fn: StructuredLogCallback | None = None,
 ) -> None:
     """Emit compact ingest-run summary event block."""
     log_event_fn = log_event_fn or _log_event

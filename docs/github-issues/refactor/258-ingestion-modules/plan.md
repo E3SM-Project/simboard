@@ -7,7 +7,9 @@ Issue: [#258 — Split oversized NERSC archive ingestor module](https://github.c
 Split `backend/app/scripts/ingestion/nersc_archive_ingestor.py` into coherent
 internal modules while preserving current archive discovery, state, ingestion,
 logging, and command-line behavior. Update the HPC upload runner to use shared
-modules directly instead of treating the NERSC entrypoint as its library.
+modules directly instead of treating the NERSC entrypoint as its library. After
+the module split, simplify implementation control flow with named helpers and
+explicit contracts while preserving every runtime behavior.
 
 ## Scope
 
@@ -20,6 +22,8 @@ modules directly instead of treating the NERSC entrypoint as its library.
   archive-checkpoint persistence
 - Thin NERSC path-ingestion entrypoint and orchestration module
 - HPC upload runner import cleanup required by extracted shared modules
+- Post-extraction readability cleanup for anonymous callables, nested helpers,
+  complex discovery flow, runner orchestration, and HTTP plumbing
 - Existing test updates needed to preserve behavior through each phase
 
 ### Out of scope
@@ -75,6 +79,18 @@ full backend tests must pass before starting the next phase.
 5. [Phase 5: Runner Integration and HPC Cleanup](phase-5-runner-integration.md)
    - Extract remaining shared workflow helpers, thin both entrypoints, and
      remove HPC imports from the NERSC module.
+6. [Phase 6: Named Callables and Explicit Contracts](phase-6-named-callables-and-contracts.md)
+   - Replace production lambdas, nested helpers, and broad callback annotations
+     with small named callables and precise protocols.
+7. [Phase 7: Discovery Control-Flow Simplification](phase-7-discovery-control-flow.md)
+   - Decompose discovery classification and outcome logging into readable,
+     single-purpose helpers without changing counters or ordering.
+8. [Phase 8: Runner Workflow Readability](phase-8-runner-workflow-readability.md)
+   - Shorten both runner loops with shared phase helpers while keeping their
+     different operation order and failure classification visible.
+9. [Phase 9: HTTP Client Simplification](phase-9-http-client-simplification.md)
+   - Reduce repeated request construction, response decoding, and error mapping
+     without changing wire or retry contracts.
 
 Do not leave a phase with temporary duplicate implementations. Move one
 responsibility, update all in-repository consumers, then validate it before
@@ -95,7 +111,7 @@ uv run pytest -q \
   tests/features/ingestion/test_hpc_upload_archive_ingestor.py
 ```
 
-Run before each phase handoff and after Phase 5:
+Run before each phase handoff and after Phase 9:
 
 ```bash
 make backend-test
