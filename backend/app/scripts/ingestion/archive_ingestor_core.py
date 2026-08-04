@@ -424,10 +424,6 @@ class StructuredLogCallback(Protocol):
     ) -> None: ...
 
 
-# Entrypoint and Configuration
-# ----------------------------
-
-
 # Configuration
 # -------------
 
@@ -599,10 +595,6 @@ def _parse_optional_archive_bound(
     return f"{year}-{month}"
 
 
-# Runner Orchestration
-# --------------------
-
-
 # Immutable Discovery Results
 # ---------------------------
 
@@ -768,10 +760,6 @@ def _build_discovery_results_by_key(
                 lookup[(case_identity, execution_id)] = cast(str, outcome)
 
     return lookup
-
-
-# General Utilities and Logging
-# -----------------------------
 
 
 # Logging

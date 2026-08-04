@@ -1082,10 +1082,6 @@ def _case_scan_result_sort_key(scan_result: CaseScanResult) -> str:
     return scan_result.case_path
 
 
-# Discovery Statistics
-# --------------------
-
-
 def _new_discovery_stats() -> DiscoveryStats:
     """Return an initialized discovery stats dictionary."""
     return {
