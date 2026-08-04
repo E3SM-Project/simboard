@@ -55,6 +55,7 @@ DEFAULT_API_BASE_URL = "http://backend:8000"
 DEFAULT_PERF_ARCHIVE_ROOT = "/performance_archive"
 DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
 DEFAULT_MACHINE_NAME = "perlmutter"
+DEFAULT_SCAN_MODE = "staging"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 DISCOVERY_RESULT_BATCH_SIZE = 500
@@ -451,13 +452,14 @@ def _build_config_from_env() -> IngestorConfig:
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
 
-    scan_mode = os.getenv("SCAN_MODE", "staging").strip().lower()
+    scan_mode = os.getenv("SCAN_MODE", DEFAULT_SCAN_MODE).strip().lower()
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
     staging_root = Path(
         os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_PERF_ARCHIVE_ROOT)
     ).resolve()
+
     configured_archive_root = Path(
         os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_PERF_ARCHIVE_ROOT)
     ).resolve()
@@ -470,13 +472,15 @@ def _build_config_from_env() -> IngestorConfig:
     if max_cases_per_run is not None and max_cases_per_run <= 0:
         raise ValueError("MAX_CASES_PER_RUN must be greater than 0 when provided")
 
-    max_attempts = int(os.getenv("MAX_ATTEMPTS", str(DEFAULT_MAX_ATTEMPTS)))
+    max_attempts = _parse_optional_int(os.getenv("MAX_ATTEMPTS"))
+    if max_attempts is None:
+        max_attempts = DEFAULT_MAX_ATTEMPTS
     if max_attempts <= 0:
         raise ValueError("MAX_ATTEMPTS must be greater than 0")
 
-    timeout_seconds = int(
-        os.getenv("REQUEST_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
-    )
+    timeout_seconds = _parse_optional_int(os.getenv("REQUEST_TIMEOUT_SECONDS"))
+    if timeout_seconds is None:
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
     if timeout_seconds <= 0:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
@@ -867,16 +871,20 @@ def _scan_archive(
     )
     case_path_filter = _build_case_path_filter(config)
     snapshot_scan = ArchiveSnapshotScan(archive_name=config.archive_root.name)
+
     if config.scan_mode == "archive":
         snapshot_scan.eligible_keys = _enumerate_archive_snapshot_keys(config)
         snapshot_scan.completed_keys = (
             set() if completed_snapshot_keys is None else completed_snapshot_keys
         ) & snapshot_scan.eligible_keys
+
     selected_snapshot_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
     walk_dir_filter = _build_walk_dir_filter(
         config,
         selected_snapshot_keys=(
-            selected_snapshot_keys if config.scan_mode == "archive" else None
+            selected_snapshot_keys
+            if config.scan_mode == "archive" and snapshot_scan.eligible_keys
+            else None
         ),
     )
     processed_ids_by_key = _build_processed_ids_by_key(
