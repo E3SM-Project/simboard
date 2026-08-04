@@ -586,6 +586,99 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
 
 
+def test_run_ingestor_fetches_archive_checkpoints_before_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    archive_root.mkdir()
+    request_order: list[str] = []
+
+    def fetch_checkpoints(*args: Any, **kwargs: Any) -> set[str]:
+        request_order.append("checkpoints")
+        return set()
+
+    def fetch_state(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        request_order.append("state")
+        return _fresh_state()
+
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_archive_checkpoints",
+        fetch_checkpoints,
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        fetch_state,
+    )
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 0
+    assert request_order == ["checkpoints", "state"]
+
+
+def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    state_fetches = 0
+
+    def fetch_state(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal state_fetches
+        state_fetches += 1
+        return _fresh_state()
+
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_log_event",
+        lambda event, fields=None: logged_events.append((event, fields or {})),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            IngestionRequestError("boom", status_code=503, transient=True)
+        ),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        fetch_state,
+    )
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
+    assert (
+        "archive_checkpoint_fetch_failed",
+        {"status_code": 503, "error": "boom"},
+    ) in logged_events
+    assert state_fetches == 0
+
+
 def test_run_ingestor_retries_transient_upload_errors(
     tmp_path: Path,
     monkeypatch,

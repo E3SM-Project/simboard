@@ -20,7 +20,6 @@ verbatim in discovery, selection, and run-summary events.
 from __future__ import annotations
 
 import time
-from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -30,27 +29,30 @@ from app.scripts.ingestion.archive_client import (
     _build_state_endpoint_url,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
-    _persist_archive_checkpoints_with_retries,
-    _persist_discovery_results_with_retries,
     _post_ingestion_request,
 )
-from app.scripts.ingestion.archive_discovery import (
-    _scan_archive,
-    _settled_archive_snapshot_keys,
-)
+from app.scripts.ingestion.archive_discovery import _scan_archive
 from app.scripts.ingestion.archive_ingestor_core import (
+    ArchiveCheckpointPersistenceCallback,
+    CaseSubmissionCallback,
+    DiscoveryResultsPersistenceCallback,
     ExecutionDiscoveryResult,
     IngestionRequestError,
-    IngestionRequestResponse,
     IngestorConfig,
+    MetadataLocator,
+    SleepCallback,
     UnsupportedArchiveLayoutError,
     _build_config_from_env,
     _log_event,
 )
 from app.scripts.ingestion.archive_workflow import (
+    _finalize_archive_checkpoints,
     _handle_dry_run,
     _handle_ingest_run,
+    _log_scan_completed,
     _log_startup_configuration,
+    _persist_discovery_results,
+    _validate_run_preconditions,
 )
 
 
@@ -91,13 +93,20 @@ def main() -> int:
     return exit_code
 
 
-def _run_ingestor(  # noqa: C901
+def _case_submission_callback(
+    post_request_fn: CaseSubmissionCallback | None,
+) -> CaseSubmissionCallback:
+    """Resolve the NERSC path-ingestion transport for this run."""
+    return _post_ingestion_request if post_request_fn is None else post_request_fn
+
+
+def _run_ingestor(
     config: IngestorConfig,
-    metadata_locator: Callable[[str], object] = _locate_metadata_files,
-    sleep_fn: Callable[[float], None] = time.sleep,
-    post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    discovery_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
-    checkpoint_post_request_fn: Callable[..., IngestionRequestResponse] | None = None,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
+    sleep_fn: SleepCallback = time.sleep,
+    post_request_fn: CaseSubmissionCallback | None = None,
+    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
+    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> int:
     """Execute one complete archive scan-and-ingest cycle.
 
@@ -115,8 +124,7 @@ def _run_ingestor(  # noqa: C901
     int
         Process exit code (``0`` success, ``1`` failure).
     """
-    if post_request_fn is None:
-        post_request_fn = _post_ingestion_request
+    post_request_fn = _case_submission_callback(post_request_fn)
 
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
@@ -127,12 +135,7 @@ def _run_ingestor(  # noqa: C901
         log_event_fn=_log_event,
     )
 
-    if not config.archive_root.is_dir():
-        _log_event("archive_root_missing", {"archive_root": str(config.archive_root)})
-        return 1
-
-    if not config.api_token:
-        _log_event("configuration_error", {"error": "SIMBOARD_API_TOKEN is required"})
+    if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1
 
     try:
@@ -197,32 +200,13 @@ def _run_ingestor(  # noqa: C901
         )
         return 1
 
-    _log_event(
-        "scan_completed",
-        {
-            "scan_mode": config.scan_mode,
-            "archive_root": str(config.archive_root),
-            "discovered_cases": len(scan_results),
-            "submission_qualified_cases": submission_qualified_case_count,
-            "selected_submission_cases": len(candidates),
-            "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
-            "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
-            "skipped_incomplete": discovery_stats["skipped_incomplete"],
-            "skipped_invalid": discovery_stats["skipped_invalid"],
-            "skipped_transient": discovery_stats["skipped_transient"],
-            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
-            "rejected_existing_execution_ids": discovery_stats[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": discovery_stats[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": discovery_stats[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": discovery_stats["transient_execution_ids"],
-            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
-        },
+    _log_scan_completed(
+        config,
+        scan_results,
+        candidates,
+        submission_qualified_case_count,
+        discovery_stats,
+        log_event_fn=_log_event,
     )
 
     if config.dry_run:
@@ -235,16 +219,12 @@ def _run_ingestor(  # noqa: C901
             log_event_fn=_log_event,
         )
 
-    discovery_endpoint_url = _build_discovery_results_endpoint_url(config)
-    if not _persist_discovery_results_with_retries(
+    if not _persist_discovery_results(
         new_discovery_results,
-        discovery_endpoint_url,
-        config.api_token,
-        config.machine_name,
-        max_attempts=config.max_attempts,
-        timeout_seconds=config.request_timeout_seconds,
-        sleep_fn=sleep_fn,
-        post_request_fn=discovery_post_request_fn,
+        _build_discovery_results_endpoint_url(config),
+        config,
+        sleep_fn,
+        discovery_post_request_fn,
     ):
         return 1
 
@@ -260,24 +240,14 @@ def _run_ingestor(  # noqa: C901
         post_request_fn=post_request_fn,
         log_event_fn=_log_event,
     )
-    if config.scan_mode != "archive":
-        return ingest_exit_code
-
-    settled_snapshot_keys = _settled_archive_snapshot_keys(
+    if not _finalize_archive_checkpoints(
         snapshot_scan,
         state,
         new_discovery_results,
-    )
-    if not _persist_archive_checkpoints_with_retries(
-        settled_snapshot_keys,
         _build_archive_checkpoints_endpoint_url(config),
-        config.api_token,
-        config.machine_name,
-        snapshot_scan.archive_name,
-        max_attempts=config.max_attempts,
-        timeout_seconds=config.request_timeout_seconds,
-        sleep_fn=sleep_fn,
-        post_request_fn=checkpoint_post_request_fn,
+        config,
+        sleep_fn,
+        checkpoint_post_request_fn,
     ):
         return 1
     return ingest_exit_code

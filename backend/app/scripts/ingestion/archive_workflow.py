@@ -5,12 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.scripts.ingestion.archive_client import _ingest_case_with_retries
+from app.scripts.ingestion.archive_client import (
+    _ingest_case_with_retries,
+    _persist_archive_checkpoints_with_retries,
+    _persist_discovery_results_with_retries,
+)
+from app.scripts.ingestion.archive_discovery import _settled_archive_snapshot_keys
 from app.scripts.ingestion.archive_ingestor_core import (
     MAX_DRY_RUN_CANDIDATE_LOGS,
+    ArchiveCheckpointPersistenceCallback,
+    ArchiveSnapshotScan,
     CaseScanResult,
     CaseSubmissionCallback,
+    DiscoveryResultsPersistenceCallback,
     DiscoveryStats,
+    ExecutionDiscoveryResult,
     IngestionCandidate,
     IngestorConfig,
     SleepCallback,
@@ -19,6 +28,30 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
     _record_successful_case,
 )
+
+
+def _validate_run_preconditions(
+    config: IngestorConfig,
+    *,
+    log_event_fn: StructuredLogCallback | None = None,
+) -> bool:
+    """Validate filesystem and authentication requirements for one run."""
+    log_event_fn = log_event_fn or _log_event
+    if not config.archive_root.is_dir():
+        log_event_fn(
+            "archive_root_missing",
+            {"archive_root": str(config.archive_root)},
+        )
+        return False
+
+    if not config.api_token:
+        log_event_fn(
+            "configuration_error",
+            {"error": "SIMBOARD_API_TOKEN is required"},
+        )
+        return False
+
+    return True
 
 
 def _log_startup_configuration(
@@ -63,6 +96,81 @@ def _log_startup_configuration(
         {"has_api_token": bool(config.api_token)},
     )
     log_event_fn("startup_configuration_end", None)
+
+
+def _log_scan_completed(
+    config: IngestorConfig,
+    scan_results: list[CaseScanResult],
+    candidates: list[IngestionCandidate],
+    submission_qualified_case_count: int,
+    discovery_stats: DiscoveryStats,
+    *,
+    log_event_fn: StructuredLogCallback | None = None,
+) -> None:
+    """Log stable discovery fields after a successful archive scan."""
+    log_event_fn = log_event_fn or _log_event
+    log_event_fn(
+        "scan_completed",
+        {
+            "scan_mode": config.scan_mode,
+            "archive_root": str(config.archive_root),
+            "discovered_cases": len(scan_results),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
+            **_common_summary_fields(discovery_stats),
+        },
+    )
+
+
+def _persist_discovery_results(
+    discovery_results: list[ExecutionDiscoveryResult],
+    endpoint_url: str,
+    config: IngestorConfig,
+    sleep_fn: SleepCallback,
+    post_request_fn: DiscoveryResultsPersistenceCallback | None,
+) -> bool:
+    """Persist discovery outcomes before candidate ingestion begins."""
+    return _persist_discovery_results_with_retries(
+        discovery_results,
+        endpoint_url,
+        config.api_token,
+        config.machine_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=post_request_fn,
+    )
+
+
+def _finalize_archive_checkpoints(
+    snapshot_scan: ArchiveSnapshotScan,
+    state: dict[str, Any],
+    discovery_results: list[ExecutionDiscoveryResult],
+    endpoint_url: str,
+    config: IngestorConfig,
+    sleep_fn: SleepCallback,
+    post_request_fn: ArchiveCheckpointPersistenceCallback | None,
+) -> bool:
+    """Settle and persist archive checkpoints after candidate ingestion."""
+    if config.scan_mode != "archive":
+        return True
+
+    settled_snapshot_keys = _settled_archive_snapshot_keys(
+        snapshot_scan,
+        state,
+        discovery_results,
+    )
+    return _persist_archive_checkpoints_with_retries(
+        settled_snapshot_keys,
+        endpoint_url,
+        config.api_token,
+        config.machine_name,
+        snapshot_scan.archive_name,
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.request_timeout_seconds,
+        sleep_fn=sleep_fn,
+        post_request_fn=post_request_fn,
+    )
 
 
 def _handle_dry_run(

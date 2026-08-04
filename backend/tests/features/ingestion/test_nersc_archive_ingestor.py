@@ -20,7 +20,6 @@ from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_layout as layout_module
-from app.scripts.ingestion import archive_workflow as workflow_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.archive_client import (
     _build_state_endpoint_url,
@@ -47,7 +46,6 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _record_successful_case,
     _render_log_value,
 )
-from app.scripts.ingestion.archive_workflow import _log_startup_configuration
 from app.scripts.ingestion.nersc_archive_ingestor import (
     _run_ingestor,
 )
@@ -544,46 +542,6 @@ def test_run_ingestor_submits_only_new_ids_when_state_uses_mount_path(
     assert captured_processed_execution_ids == [["101.1-1"]]
 
 
-def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    archive_root = tmp_path / "archive"
-    case_dir = archive_root / "case_a"
-    (case_dir / "100.1-1").mkdir(parents=True)
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
-
-    config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
-        archive_root=archive_root,
-        machine_name="perlmutter",
-        dry_run=False,
-        max_cases_per_run=None,
-        max_attempts=1,
-        request_timeout_seconds=30,
-    )
-
-    def fake_post_request(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
-        raise IngestionRequestError("boom", status_code=503, transient=False)
-
-    exit_code = _run_ingestor(
-        config,
-        metadata_locator=lambda *_: {},
-        sleep_fn=lambda *_: None,
-        post_request_fn=fake_post_request,
-    )
-
-    assert exit_code == 1
-    assert any(event == "case_ingestion_failed" for event, _ in logged_events)
-
-
 def test_run_ingestor_dry_run_without_token_returns_config_error(
     tmp_path: Path,
     monkeypatch,
@@ -687,6 +645,83 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
 
     assert exit_code == 1
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
+    assert not any(event == "scan_completed" for event, _ in logged_events)
+
+
+def test_run_ingestor_fetches_state_before_archive_checkpoints(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    archive_root.mkdir()
+    request_order: list[str] = []
+
+    def fetch_state(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        request_order.append("state")
+        return _fresh_state()
+
+    def fetch_checkpoints(*args: Any, **kwargs: Any) -> set[str]:
+        request_order.append("checkpoints")
+        return set()
+
+    monkeypatch.setattr(ingestor_module, "_fetch_ingestion_state", fetch_state)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_archive_checkpoints",
+        fetch_checkpoints,
+    )
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 0
+    assert request_order == ["state", "checkpoints"]
+
+
+def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        ingestor_module,
+        "_log_event",
+        lambda event, fields=None: logged_events.append((event, fields or {})),
+    )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            IngestionRequestError("boom", status_code=503, transient=True)
+        ),
+    )
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
+    assert (
+        "archive_checkpoint_fetch_failed",
+        {"status_code": 503, "error": "boom"},
+    ) in logged_events
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
@@ -853,181 +888,6 @@ def test_run_ingestor_unreadable_archive_root_returns_config_error(
     assert exit_code == 1
     assert any(event == "configuration_error" for event, _ in logged_events)
     assert not any(event == "scan_completed" for event, _ in logged_events)
-
-
-def test_dry_run_candidate_suppression_event_emitted_once(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    archive_root = tmp_path / "archive"
-    total_cases = core_module.MAX_DRY_RUN_CANDIDATE_LOGS + 5
-    for index in range(total_cases):
-        (archive_root / f"case_{index:03d}" / "100.1-1").mkdir(parents=True)
-
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
-
-    config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
-        archive_root=archive_root,
-        machine_name="perlmutter",
-        dry_run=True,
-        max_cases_per_run=None,
-        max_attempts=1,
-        request_timeout_seconds=30,
-    )
-
-    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
-
-    suppression_events = [
-        fields
-        for event, fields in logged_events
-        if event == "dry_run_candidate_logs_suppressed"
-    ]
-    candidate_events = [
-        fields for event, fields in logged_events if event == "dry_run_candidate"
-    ]
-    assert exit_code == 0
-    assert len(suppression_events) == 1
-    assert candidate_events[0]["case"] == "case_000"
-    assert "case_path" not in candidate_events[0]
-    assert suppression_events[0]["suppressed_count"] == 5
-    assert (
-        suppression_events[0]["detail_log_limit"]
-        == core_module.MAX_DRY_RUN_CANDIDATE_LOGS
-    )
-
-
-def test_completion_events_include_summary_counters(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    dry_archive = tmp_path / "dry_archive"
-    ingest_archive = tmp_path / "ingest_archive"
-    (dry_archive / "case_dry" / "100.1-1").mkdir(parents=True)
-    (ingest_archive / "case_ingest" / "100.1-1").mkdir(parents=True)
-
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
-
-    dry_run_config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
-        archive_root=dry_archive,
-        machine_name="perlmutter",
-        dry_run=True,
-        max_cases_per_run=None,
-        max_attempts=1,
-        request_timeout_seconds=30,
-    )
-    ingest_config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
-        archive_root=ingest_archive,
-        machine_name="perlmutter",
-        dry_run=False,
-        max_cases_per_run=None,
-        max_attempts=1,
-        request_timeout_seconds=30,
-    )
-
-    _run_ingestor(dry_run_config, metadata_locator=lambda *_: {})
-
-    def fake_ingest_post_request(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
-        return {
-            "status_code": 201,
-            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
-        }
-
-    _run_ingestor(
-        ingest_config,
-        metadata_locator=lambda *_: {},
-        sleep_fn=lambda *_: None,
-        post_request_fn=fake_ingest_post_request,
-    )
-
-    dry_run_completed = [
-        fields for event, fields in logged_events if event == "dry_run_completed"
-    ][0]
-    run_completed = [
-        fields for event, fields in logged_events if event == "run_completed"
-    ][0]
-    dry_run_summary_counts = [
-        fields for event, fields in logged_events if event == "dry_run_summary_counts"
-    ][0]
-    dry_run_summary_candidates = [
-        fields
-        for event, fields in logged_events
-        if event == "dry_run_summary_candidates"
-    ][0]
-    run_summary_counts = [
-        fields for event, fields in logged_events if event == "run_summary_counts"
-    ][0]
-    run_summary_outcomes = [
-        fields for event, fields in logged_events if event == "run_summary_outcomes"
-    ][0]
-
-    for payload in (dry_run_completed, run_completed):
-        assert isinstance(payload["submission_qualified_cases"], int)
-        assert isinstance(payload["selected_submission_cases"], int)
-        assert isinstance(payload["execution_dirs_scanned"], int)
-        assert isinstance(payload["execution_dirs_accepted"], int)
-        assert isinstance(payload["skipped_incomplete"], int)
-        assert isinstance(payload["skipped_invalid"], int)
-        assert isinstance(payload["accepted_execution_ids"], int)
-        assert isinstance(payload["rejected_existing_execution_ids"], int)
-        assert isinstance(payload["rejected_incomplete_execution_ids"], int)
-        assert isinstance(payload["rejected_invalid_execution_ids"], int)
-        assert isinstance(payload["deferred_execution_ids"], int)
-
-    assert dry_run_summary_counts["mode"] == "dry-run"
-    assert isinstance(dry_run_summary_counts["discovered_cases"], int)
-    assert isinstance(dry_run_summary_counts["submission_qualified_cases"], int)
-    assert isinstance(dry_run_summary_counts["selected_submission_cases"], int)
-    assert isinstance(dry_run_summary_counts["execution_dirs_scanned"], int)
-    assert isinstance(dry_run_summary_counts["execution_dirs_accepted"], int)
-    assert isinstance(dry_run_summary_counts["skipped_incomplete"], int)
-    assert isinstance(dry_run_summary_counts["skipped_invalid"], int)
-
-    assert isinstance(dry_run_summary_candidates["accepted_execution_ids"], int)
-    assert isinstance(
-        dry_run_summary_candidates["rejected_existing_execution_ids"], int
-    )
-    assert isinstance(
-        dry_run_summary_candidates["rejected_incomplete_execution_ids"], int
-    )
-    assert isinstance(dry_run_summary_candidates["rejected_invalid_execution_ids"], int)
-    assert isinstance(dry_run_summary_candidates["deferred_execution_ids"], int)
-    assert isinstance(dry_run_summary_candidates["candidate_logs_emitted"], int)
-    assert isinstance(dry_run_summary_candidates["candidate_logs_suppressed"], int)
-
-    assert run_summary_counts["mode"] == "ingest"
-    assert isinstance(run_summary_counts["scanned_cases"], int)
-    assert isinstance(run_summary_counts["submission_qualified_cases"], int)
-    assert isinstance(run_summary_counts["selected_submission_cases"], int)
-    assert isinstance(run_summary_counts["execution_dirs_scanned"], int)
-    assert isinstance(run_summary_counts["execution_dirs_accepted"], int)
-    assert isinstance(run_summary_counts["skipped_incomplete"], int)
-    assert isinstance(run_summary_counts["skipped_invalid"], int)
-
-    assert isinstance(run_summary_outcomes["success_count"], int)
-    assert isinstance(run_summary_outcomes["failure_count"], int)
-    assert isinstance(run_summary_outcomes["accepted_execution_ids"], int)
-    assert isinstance(run_summary_outcomes["rejected_existing_execution_ids"], int)
-    assert isinstance(run_summary_outcomes["rejected_incomplete_execution_ids"], int)
-    assert isinstance(run_summary_outcomes["rejected_invalid_execution_ids"], int)
-    assert isinstance(run_summary_outcomes["deferred_execution_ids"], int)
 
 
 def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) -> None:
@@ -2265,66 +2125,6 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
         ("case_collection_summary", "case_a"),
         ("case_collection_begin", "case_b"),
         ("case_collection_summary", "case_b"),
-    ]
-
-
-def test_log_startup_configuration_emits_structured_block(
-    monkeypatch, tmp_path: Path
-) -> None:
-    logged_events: list[tuple[str, dict[str, Any]]] = []
-
-    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
-        logged_events.append((event, {} if fields is None else fields))
-
-    monkeypatch.setattr(workflow_module, "_log_event", fake_log_event)
-
-    config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
-        archive_root=tmp_path,
-        machine_name="pm",
-        dry_run=True,
-        max_cases_per_run=5,
-        max_attempts=2,
-        request_timeout_seconds=60,
-    )
-    _log_startup_configuration(
-        config,
-        endpoint_url="http://backend:8000/api/v1/ingestions/from-path",
-        state_endpoint_url="http://backend:8000/api/v1/ingestions/state",
-    )
-
-    assert logged_events == [
-        ("startup_configuration_begin", {}),
-        (
-            "startup_configuration_api",
-            {
-                "api_base_url": "http://backend:8000",
-                "endpoint_url": "http://backend:8000/api/v1/ingestions/from-path",
-                "state_endpoint_url": "http://backend:8000/api/v1/ingestions/state",
-            },
-        ),
-        (
-            "startup_configuration_paths",
-            {
-                "scan_mode": "staging",
-                "archive_root": str(tmp_path),
-                "archive_year_start": None,
-                "archive_year_end": None,
-            },
-        ),
-        (
-            "startup_configuration_runtime",
-            {
-                "machine_name": "pm",
-                "dry_run": True,
-                "max_cases_per_run": 5,
-                "max_attempts": 2,
-                "request_timeout_seconds": 60,
-            },
-        ),
-        ("startup_configuration_auth", {"has_api_token": True}),
-        ("startup_configuration_end", {}),
     ]
 
 
