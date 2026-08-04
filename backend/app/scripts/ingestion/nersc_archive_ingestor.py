@@ -5,12 +5,16 @@ against a bind-mounted performance archive. Runtime configuration is read
 from environment variables (for example ``SIMBOARD_API_BASE_URL``,
 ``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-Each run executes four phases:
+Each ingest run executes these phases:
 
-  1. Discover and collect parseable execution directories grouped by case path.
-  2. Fetch persisted per-case state from SimBoard API.
-  3. Submit one ingestion request per changed case with retry/backoff.
-  4. Rely on DB writes from successful ingestions for future idempotent runs.
+    1. Fetch persisted per-case state from SimBoard API.
+    2. In archive mode, fetch completed snapshot checkpoints.
+    3. Discover and collect parseable execution directories grouped by case path.
+    4. Persist discovery results, then submit each changed case with retry/backoff.
+    5. In archive mode, settle and persist completed snapshot checkpoints.
+
+Dry runs stop after discovery and emit a summary. Successful ingestions update
+database state used to keep future runs idempotent.
 
 Structured log metric definitions for this runner live in
 ``docs/architecture/metadata-ingestion.md``. This module emits those field names
