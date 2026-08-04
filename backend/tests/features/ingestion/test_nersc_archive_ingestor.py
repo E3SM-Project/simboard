@@ -3488,6 +3488,41 @@ def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None
     assert results[4].completed_keys == {first_key}
 
 
+def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    execution_dir = (
+        archive_root / "2025-01" / "user-a" / "case-a" / "100.1-1"
+    )
+    execution_dir.mkdir(parents=True)
+    visited: list[str] = []
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="chrysalis",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+    )
+
+    results = ingestor_module._scan_archive(
+        config,
+        _fresh_state(),
+        metadata_locator=lambda path: visited.append(path),
+    )
+
+    assert visited == [str(execution_dir)]
+    assert [result.case_path for result in results[0]] == [
+        str(execution_dir.parent.resolve())
+    ]
+    assert results[4].eligible_keys == set()
+
+
 def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
     snapshot_scan = ingestor_module.ArchiveSnapshotScan(
