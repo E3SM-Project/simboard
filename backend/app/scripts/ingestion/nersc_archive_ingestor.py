@@ -20,8 +20,7 @@ verbatim in discovery, selection, and run-summary events.
 from __future__ import annotations
 
 import time
-from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -31,7 +30,6 @@ from app.scripts.ingestion.archive_client import (
     _build_state_endpoint_url,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
-    _ingest_case_with_retries,
     _persist_archive_checkpoints_with_retries,
     _persist_discovery_results_with_retries,
     _post_ingestion_request,
@@ -41,20 +39,18 @@ from app.scripts.ingestion.archive_discovery import (
     _settled_archive_snapshot_keys,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
-    MAX_DRY_RUN_CANDIDATE_LOGS,
-    CaseScanResult,
-    DiscoveryStats,
     ExecutionDiscoveryResult,
-    IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
     UnsupportedArchiveLayoutError,
     _build_config_from_env,
-    _case_log_label,
     _log_event,
+)
+from app.scripts.ingestion.archive_workflow import (
+    _handle_dry_run,
+    _handle_ingest_run,
     _log_startup_configuration,
-    _record_successful_case,
 )
 
 
@@ -125,7 +121,10 @@ def _run_ingestor(  # noqa: C901
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
     _log_startup_configuration(
-        config, endpoint_url=endpoint_url, state_endpoint_url=state_endpoint_url
+        config,
+        endpoint_url=endpoint_url,
+        state_endpoint_url=state_endpoint_url,
+        log_event_fn=_log_event,
     )
 
     if not config.archive_root.is_dir():
@@ -233,6 +232,7 @@ def _run_ingestor(  # noqa: C901
             submission_qualified_case_count,
             discovery_stats,
             archive_root=config.archive_root,
+            log_event_fn=_log_event,
         )
 
     discovery_endpoint_url = _build_discovery_results_endpoint_url(config)
@@ -258,6 +258,7 @@ def _run_ingestor(  # noqa: C901
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
+        log_event_fn=_log_event,
     )
     if config.scan_mode != "archive":
         return ingest_exit_code
@@ -280,334 +281,6 @@ def _run_ingestor(  # noqa: C901
     ):
         return 1
     return ingest_exit_code
-
-
-def _handle_dry_run(
-    candidates: list[IngestionCandidate],
-    scan_results: list[CaseScanResult],
-    submission_qualified_case_count: int,
-    discovery_stats: DiscoveryStats,
-    *,
-    archive_root: Path,
-) -> int:
-    """Emit dry-run candidate logs and completion summaries.
-
-    Parameters
-    ----------
-    candidates : list[IngestionCandidate]
-        Selected ingestion candidates.
-    scan_results : list[CaseScanResult]
-        Discovered case scan results.
-    submission_qualified_case_count : int
-        Count of cases with at least one new execution before per-run limiting.
-    discovery_stats : DiscoveryStats
-        Archive discovery counters.
-
-    Returns
-    -------
-    int
-        Dry-run exit code (always ``0``).
-    """
-    logged_candidates = 0
-    suppressed_candidates = 0
-
-    for candidate in candidates:
-        if logged_candidates < MAX_DRY_RUN_CANDIDATE_LOGS:
-            _log_event(
-                "dry_run_candidate",
-                {
-                    "case": _case_log_label(candidate.case_path, archive_root),
-                    "execution_count": len(candidate.execution_ids),
-                    "new_execution_count": len(candidate.new_execution_ids),
-                },
-            )
-            logged_candidates += 1
-        else:
-            suppressed_candidates += 1
-
-    if suppressed_candidates:
-        _log_event(
-            "dry_run_candidate_logs_suppressed",
-            {
-                "suppressed_count": suppressed_candidates,
-                "detail_log_limit": MAX_DRY_RUN_CANDIDATE_LOGS,
-            },
-        )
-
-    _log_event(
-        "dry_run_completed",
-        {
-            "discovered_cases": len(scan_results),
-            "submission_qualified_cases": submission_qualified_case_count,
-            "selected_submission_cases": len(candidates),
-            "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
-            "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
-            "skipped_incomplete": discovery_stats["skipped_incomplete"],
-            "skipped_invalid": discovery_stats["skipped_invalid"],
-            "skipped_transient": discovery_stats["skipped_transient"],
-            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
-            "rejected_existing_execution_ids": discovery_stats[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": discovery_stats[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": discovery_stats[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": discovery_stats["transient_execution_ids"],
-            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
-        },
-    )
-    _log_dry_run_summary(
-        discovered_cases=len(scan_results),
-        submission_qualified_cases=submission_qualified_case_count,
-        selected_submission_cases=len(candidates),
-        discovery_stats=discovery_stats,
-        candidate_logs_emitted=logged_candidates,
-        candidate_logs_suppressed=suppressed_candidates,
-    )
-    return 0
-
-
-def _handle_ingest_run(
-    candidates: list[IngestionCandidate],
-    scan_results: list[CaseScanResult],
-    config: IngestorConfig,
-    endpoint_url: str,
-    state: dict[str, Any],
-    submission_qualified_case_count: int,
-    discovery_stats: DiscoveryStats,
-    sleep_fn: Callable[[float], None],
-    post_request_fn: Callable[..., IngestionRequestResponse],
-) -> int:
-    """Execute candidate ingestion loop and emit completion summaries.
-
-    Parameters
-    ----------
-    candidates : list[IngestionCandidate]
-        Selected ingestion candidates.
-    scan_results : list[CaseScanResult]
-        Discovered case scan results.
-    config : IngestorConfig
-        Runtime configuration values.
-    endpoint_url : str
-        Fully qualified ingestion endpoint URL.
-    state : dict[str, Any]
-        Mutable ingestion state payload.
-    submission_qualified_case_count : int
-        Count of cases with at least one new execution before per-run limiting.
-    discovery_stats : DiscoveryStats
-        Archive discovery counters.
-    sleep_fn : Callable[[float], None]
-        Sleep callable used for retry backoff.
-    post_request_fn : Callable[..., IngestionRequestResponse]
-        HTTP request callable used for ingestion submissions.
-
-    Returns
-    -------
-    int
-        Exit code (``0`` when all candidates succeeded, else ``1``).
-    """
-    success_count = 0
-    failure_count = 0
-
-    for candidate in candidates:
-        result = _ingest_case_with_retries(
-            candidate,
-            endpoint_url,
-            config.api_token,
-            config.machine_name,
-            max_attempts=config.max_attempts,
-            timeout_seconds=config.request_timeout_seconds,
-            sleep_fn=sleep_fn,
-            post_request_fn=post_request_fn,
-        )
-
-        if result["ok"]:
-            success_count += 1
-            body = result["body"] or {}
-
-            _log_event(
-                "case_ingested",
-                {
-                    "case_path": candidate.case_path,
-                    "attempts": result["attempts"],
-                    "created_count": body.get("created_count"),
-                    "duplicate_count": body.get("duplicate_count"),
-                    "error_count": len(body.get("errors", []))
-                    if isinstance(body.get("errors", []), list)
-                    else None,
-                },
-            )
-
-            _record_successful_case(state, candidate)
-
-            continue
-
-        failure_count += 1
-        _log_event(
-            "case_ingestion_failed",
-            {
-                "case_path": candidate.case_path,
-                "attempts": result["attempts"],
-                "status_code": result["status_code"],
-                "error": result["error"],
-            },
-        )
-
-    _log_event(
-        "run_completed",
-        {
-            "scanned_cases": len(scan_results),
-            "submission_qualified_cases": submission_qualified_case_count,
-            "selected_submission_cases": len(candidates),
-            "success_count": success_count,
-            "failure_count": failure_count,
-            "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
-            "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
-            "skipped_incomplete": discovery_stats["skipped_incomplete"],
-            "skipped_invalid": discovery_stats["skipped_invalid"],
-            "skipped_transient": discovery_stats["skipped_transient"],
-            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
-            "rejected_existing_execution_ids": discovery_stats[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": discovery_stats[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": discovery_stats[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": discovery_stats["transient_execution_ids"],
-            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
-        },
-    )
-    _log_run_summary(
-        scanned_cases=len(scan_results),
-        submission_qualified_cases=submission_qualified_case_count,
-        selected_submission_cases=len(candidates),
-        success_count=success_count,
-        failure_count=failure_count,
-        discovery_stats=discovery_stats,
-    )
-
-    return 1 if failure_count else 0
-
-
-def _common_summary_fields(discovery_stats: DiscoveryStats) -> dict[str, int]:
-    """Build summary fields shared by dry-run and ingest completion logs."""
-    return {
-        "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
-        "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
-        "skipped_incomplete": discovery_stats["skipped_incomplete"],
-        "skipped_invalid": discovery_stats["skipped_invalid"],
-        "skipped_transient": discovery_stats["skipped_transient"],
-        "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
-        "rejected_existing_execution_ids": discovery_stats[
-            "rejected_existing_execution_ids"
-        ],
-        "rejected_incomplete_execution_ids": discovery_stats[
-            "rejected_incomplete_execution_ids"
-        ],
-        "rejected_invalid_execution_ids": discovery_stats[
-            "rejected_invalid_execution_ids"
-        ],
-        "transient_execution_ids": discovery_stats["transient_execution_ids"],
-        "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
-    }
-
-
-def _log_dry_run_summary(
-    *,
-    discovered_cases: int,
-    submission_qualified_cases: int,
-    selected_submission_cases: int,
-    discovery_stats: DiscoveryStats,
-    candidate_logs_emitted: int,
-    candidate_logs_suppressed: int,
-) -> None:
-    """Emit compact dry-run summary event block."""
-    summary_fields = _common_summary_fields(discovery_stats)
-    _log_event(
-        "dry_run_summary_counts",
-        {
-            "mode": "dry-run",
-            "discovered_cases": discovered_cases,
-            "submission_qualified_cases": submission_qualified_cases,
-            "selected_submission_cases": selected_submission_cases,
-            "execution_dirs_scanned": summary_fields["execution_dirs_scanned"],
-            "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
-            "skipped_incomplete": summary_fields["skipped_incomplete"],
-            "skipped_invalid": summary_fields["skipped_invalid"],
-            "skipped_transient": summary_fields["skipped_transient"],
-        },
-    )
-    _log_event(
-        "dry_run_summary_candidates",
-        {
-            "accepted_execution_ids": summary_fields["accepted_execution_ids"],
-            "rejected_existing_execution_ids": summary_fields[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": summary_fields[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": summary_fields[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": summary_fields["transient_execution_ids"],
-            "deferred_execution_ids": summary_fields["deferred_execution_ids"],
-            "candidate_logs_emitted": candidate_logs_emitted,
-            "candidate_logs_suppressed": candidate_logs_suppressed,
-        },
-    )
-
-
-def _log_run_summary(
-    *,
-    scanned_cases: int,
-    submission_qualified_cases: int,
-    selected_submission_cases: int,
-    success_count: int,
-    failure_count: int,
-    discovery_stats: DiscoveryStats,
-) -> None:
-    """Emit compact ingest-run summary event block."""
-    summary_fields = _common_summary_fields(discovery_stats)
-    _log_event(
-        "run_summary_counts",
-        {
-            "mode": "ingest",
-            "scanned_cases": scanned_cases,
-            "submission_qualified_cases": submission_qualified_cases,
-            "selected_submission_cases": selected_submission_cases,
-            "execution_dirs_scanned": summary_fields["execution_dirs_scanned"],
-            "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
-            "skipped_incomplete": summary_fields["skipped_incomplete"],
-            "skipped_invalid": summary_fields["skipped_invalid"],
-            "skipped_transient": summary_fields["skipped_transient"],
-        },
-    )
-    _log_event(
-        "run_summary_outcomes",
-        {
-            "success_count": success_count,
-            "failure_count": failure_count,
-            "accepted_execution_ids": summary_fields["accepted_execution_ids"],
-            "rejected_existing_execution_ids": summary_fields[
-                "rejected_existing_execution_ids"
-            ],
-            "rejected_incomplete_execution_ids": summary_fields[
-                "rejected_incomplete_execution_ids"
-            ],
-            "rejected_invalid_execution_ids": summary_fields[
-                "rejected_invalid_execution_ids"
-            ],
-            "transient_execution_ids": summary_fields["transient_execution_ids"],
-            "deferred_execution_ids": summary_fields["deferred_execution_ids"],
-        },
-    )
 
 
 if __name__ == "__main__":

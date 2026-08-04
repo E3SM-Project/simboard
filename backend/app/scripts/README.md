@@ -13,6 +13,12 @@ Scripts are organized by domain:
 ```text
 scripts/
 ├── ingestion/
+│   ├── archive_client.py
+│   ├── archive_discovery.py
+│   ├── archive_ingestor_core.py
+│   ├── archive_layout.py
+│   ├── archive_workflow.py
+│   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   └── sites/
 │       └── nersc.sh

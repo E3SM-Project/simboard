@@ -20,6 +20,7 @@ from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_layout as layout_module
+from app.scripts.ingestion import archive_workflow as workflow_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.archive_client import (
     _build_state_endpoint_url,
@@ -48,7 +49,6 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _fresh_state,
     _is_transient_status,
     _log_event,
-    _log_startup_configuration,
     _parse_bool,
     _parse_optional_int,
     _record_successful_case,
@@ -58,6 +58,7 @@ from app.scripts.ingestion.archive_layout import (
     _build_case_path_filter,
     _build_walk_dir_filter,
 )
+from app.scripts.ingestion.archive_workflow import _log_startup_configuration
 from app.scripts.ingestion.nersc_archive_ingestor import (
     _run_ingestor,
 )
@@ -266,7 +267,7 @@ def test_discover_case_executions_skips_previously_processed_archive_ids(
     new_exec.mkdir(parents=True)
 
     locator_calls: list[str] = []
-    discovery_results: list[ingestor_module.ExecutionDiscoveryResult] = []
+    discovery_results: list[core_module.ExecutionDiscoveryResult] = []
     stats = discovery_module._new_discovery_stats()
     processed_ids_by_key = discovery_module._build_processed_ids_by_key(
         {
@@ -1801,7 +1802,7 @@ def test_dry_run_candidate_suppression_event_emitted_once(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "archive"
-    total_cases = ingestor_module.MAX_DRY_RUN_CANDIDATE_LOGS + 5
+    total_cases = core_module.MAX_DRY_RUN_CANDIDATE_LOGS + 5
     for index in range(total_cases):
         (archive_root / f"case_{index:03d}" / "100.1-1").mkdir(parents=True)
 
@@ -1841,7 +1842,7 @@ def test_dry_run_candidate_suppression_event_emitted_once(
     assert suppression_events[0]["suppressed_count"] == 5
     assert (
         suppression_events[0]["detail_log_limit"]
-        == ingestor_module.MAX_DRY_RUN_CANDIDATE_LOGS
+        == core_module.MAX_DRY_RUN_CANDIDATE_LOGS
     )
 
 
@@ -2663,7 +2664,7 @@ def test_discovery_results_capture_typed_outcomes_but_not_transient_errors(
     case_dir = archive_root / "case_a"
     for execution_id in ("100.1-1", "101.1-1", "102.1-1", "103.1-1"):
         (case_dir / execution_id).mkdir(parents=True)
-    results: list[ingestor_module.ExecutionDiscoveryResult] = []
+    results: list[core_module.ExecutionDiscoveryResult] = []
 
     def locator(path: str) -> object:
         if path.endswith("101.1-1"):
@@ -2758,7 +2759,7 @@ def test_transient_os_errors_are_counted_but_not_persisted(
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = discovery_module._new_discovery_stats()
-    results: list[ingestor_module.ExecutionDiscoveryResult] = []
+    results: list[core_module.ExecutionDiscoveryResult] = []
 
     _discover_case_executions(
         archive_root,
@@ -2783,7 +2784,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     (case_a / "100.1-1").mkdir(parents=True)
     (case_b / "200.1-1").mkdir(parents=True)
     state = _fresh_state()
-    persisted_batches: list[list[ingestor_module.ExecutionDiscoveryResult]] = []
+    persisted_batches: list[list[core_module.ExecutionDiscoveryResult]] = []
     ingested_paths: list[str] = []
     monkeypatch.setattr(
         ingestor_module,
@@ -2793,7 +2794,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
 
     def persist_results(
         *args: Any,
-        results: list[ingestor_module.ExecutionDiscoveryResult],
+        results: list[core_module.ExecutionDiscoveryResult],
         **kwargs: Any,
     ) -> IngestionRequestResponse:
         persisted_batches.append(results)
@@ -2896,7 +2897,7 @@ def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
     (rejected_case / "100.1-1").mkdir(parents=True)
     (mixed_case / "200.1-1").mkdir(parents=True)
     (mixed_case / "201.1-1").mkdir(parents=True)
-    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+    persisted: list[core_module.ExecutionDiscoveryResult] = []
     ingested: list[str] = []
     monkeypatch.setattr(
         ingestor_module,
@@ -2959,7 +2960,7 @@ def test_discovery_persistence_retries_transient_failure() -> None:
 
     ok = client_module._persist_discovery_results_with_retries(
         [
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
                 execution_id="100.1-1",
                 outcome="accepted",
@@ -2980,7 +2981,7 @@ def test_discovery_persistence_retries_transient_failure() -> None:
 
 
 def test_discovery_persistence_deduplicates_snapshot_outcomes_by_precedence() -> None:
-    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+    persisted: list[core_module.ExecutionDiscoveryResult] = []
 
     def persist(*args: Any, results, **kwargs: Any) -> IngestionRequestResponse:
         persisted.extend(results)
@@ -2988,32 +2989,32 @@ def test_discovery_persistence_deduplicates_snapshot_outcomes_by_precedence() ->
 
     result = client_module._persist_discovery_results_with_retries(
         [
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
                 execution_id="100.1-1",
                 outcome="rejected_incomplete",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
                 execution_id="100.1-1",
                 outcome="rejected_invalid",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
                 execution_id="100.1-1",
                 outcome="accepted",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_a",
                 execution_id="100.1-1",
                 outcome="rejected_incomplete",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_b",
                 execution_id="200.1-1",
                 outcome="rejected_invalid",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case_b",
                 execution_id="200.1-1",
                 outcome="rejected_incomplete",
@@ -3075,7 +3076,7 @@ def test_failed_ingestion_keeps_accepted_execution_unprocessed(
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     state = _fresh_state()
-    persisted: list[ingestor_module.ExecutionDiscoveryResult] = []
+    persisted: list[core_module.ExecutionDiscoveryResult] = []
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -3400,7 +3401,7 @@ def test_log_startup_configuration_emits_structured_block(
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         logged_events.append((event, {} if fields is None else fields))
 
-    monkeypatch.setattr(core_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(workflow_module, "_log_event", fake_log_event)
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -3567,12 +3568,12 @@ def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
         "case-a": {"processed_execution_ids": ["100.1-1"]},
     }
     results = [
-        ingestor_module.ExecutionDiscoveryResult(
+        core_module.ExecutionDiscoveryResult(
             case_identity="case-a",
             execution_id="101.1-1",
             outcome="rejected_invalid",
         ),
-        ingestor_module.ExecutionDiscoveryResult(
+        core_module.ExecutionDiscoveryResult(
             case_identity="case-a",
             execution_id="102.1-1",
             outcome="accepted",
@@ -3594,24 +3595,24 @@ def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     "results",
     [
         [
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case-a",
                 execution_id="100.1-1",
                 outcome="accepted",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case-a",
                 execution_id="100.1-1",
                 outcome="rejected_invalid",
             ),
         ],
         [
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case-a",
                 execution_id="100.1-1",
                 outcome="rejected_invalid",
             ),
-            ingestor_module.ExecutionDiscoveryResult(
+            core_module.ExecutionDiscoveryResult(
                 case_identity="case-a",
                 execution_id="100.1-1",
                 outcome="accepted",
@@ -3620,7 +3621,7 @@ def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     ],
 )
 def test_snapshot_settlement_uses_order_independent_discovery_precedence(
-    results: list[ingestor_module.ExecutionDiscoveryResult],
+    results: list[core_module.ExecutionDiscoveryResult],
 ) -> None:
     snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
     snapshot_scan = discovery_module.ArchiveSnapshotScan(

@@ -744,55 +744,6 @@ def _case_log_label(case_path: str, archive_root: Path | str) -> str:
         return case_path
 
 
-def _log_startup_configuration(
-    config: IngestorConfig,
-    endpoint_url: str,
-    state_endpoint_url: str,
-) -> None:
-    """Log sanitized runtime configuration for one ingestor run.
-
-    Parameters
-    ----------
-    config : IngestorConfig
-        Runtime configuration values.
-    endpoint_url : str
-        Fully qualified ingestion endpoint URL.
-    """
-    _log_event("startup_configuration_begin")
-    _log_event(
-        "startup_configuration_api",
-        {
-            "api_base_url": config.api_base_url,
-            "endpoint_url": endpoint_url,
-            "state_endpoint_url": state_endpoint_url,
-        },
-    )
-    _log_event(
-        "startup_configuration_paths",
-        {
-            "scan_mode": config.scan_mode,
-            "archive_root": str(config.archive_root),
-            "archive_year_start": config.archive_year_start,
-            "archive_year_end": config.archive_year_end,
-        },
-    )
-    _log_event(
-        "startup_configuration_runtime",
-        {
-            "machine_name": config.machine_name,
-            "dry_run": config.dry_run,
-            "max_cases_per_run": config.max_cases_per_run,
-            "max_attempts": config.max_attempts,
-            "request_timeout_seconds": config.request_timeout_seconds,
-        },
-    )
-    _log_event(
-        "startup_configuration_auth",
-        {"has_api_token": bool(config.api_token)},
-    )
-    _log_event("startup_configuration_end")
-
-
 def _ordered_event_fields(event: str, fields: dict[str, Any]) -> list[tuple[str, Any]]:
     """Return deterministic event fields using event-specific priority order."""
     ordered: list[tuple[str, Any]] = []

@@ -1,11 +1,20 @@
-"""Scan archives and upload cases to SimBoard as single-case archives.
+"""Scan HPC archives and upload cases to SimBoard as single-case archives.
 
-This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
-of sending a filesystem path it packages each submission-qualified case
-into a temporary ``.tar.gz`` archive and uploads it to the dedicated
-``/api/v1/ingestions/from-hpc-upload`` endpoint.
+This script is intended for scheduled execution against a performance archive
+that is not mounted in the SimBoard backend environment. Runtime configuration
+is read from environment variables (for example ``SIMBOARD_API_BASE_URL``,
+``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-More information can be found in ``nersc_archive_ingestor.py``.
+Each run executes four phases:
+
+    1. Discover and collect parseable execution directories grouped by case path.
+    2. Fetch persisted per-case state from SimBoard API.
+    3. Package each changed case and submit it with retry/backoff.
+    4. Rely on DB writes from successful ingestions for future idempotent runs.
+
+Structured log metric definitions for this runner live in
+``docs/architecture/metadata-ingestion.md``. This module emits those field names
+verbatim in discovery, selection, and run-summary events.
 """
 
 from __future__ import annotations
@@ -44,11 +53,11 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _build_config_from_env,
     _is_transient_status,
     _log_event,
-    _log_startup_configuration,
 )
-from app.scripts.ingestion.nersc_archive_ingestor import (
+from app.scripts.ingestion.archive_workflow import (
     _handle_dry_run,
     _handle_ingest_run,
+    _log_startup_configuration,
 )
 
 
@@ -100,6 +109,7 @@ def _run_ingestor(  # noqa: C901
         config,
         endpoint_url=endpoint_url,
         state_endpoint_url=state_endpoint_url,
+        log_event_fn=_log_event,
     )
 
     if not config.archive_root.is_dir():
@@ -207,6 +217,7 @@ def _run_ingestor(  # noqa: C901
             submission_qualified_case_count,
             discovery_stats,
             archive_root=config.archive_root,
+            log_event_fn=_log_event,
         )
 
     if not _persist_discovery_results_with_retries(
@@ -231,6 +242,7 @@ def _run_ingestor(  # noqa: C901
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
+        log_event_fn=_log_event,
     )
     if config.scan_mode != "archive":
         return ingest_exit_code

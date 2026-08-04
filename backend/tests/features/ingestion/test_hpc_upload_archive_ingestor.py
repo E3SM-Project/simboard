@@ -18,8 +18,8 @@ from app.features.ingestion.parsers.parser import (
 from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
+from app.scripts.ingestion import archive_workflow as workflow_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
-from app.scripts.ingestion import nersc_archive_ingestor as nersc_ingestor_module
 from app.scripts.ingestion.archive_ingestor_core import (
     IngestionRequestError,
     IngestionRequestResponse,
@@ -92,6 +92,12 @@ def test_build_endpoint_url() -> None:
     assert _build_endpoint_url(config) == (
         "http://backend:8000/api/v1/ingestions/from-hpc-upload"
     )
+
+
+def test_hpc_runner_does_not_import_nersc_entrypoint() -> None:
+    runner_source = Path(upload_ingestor_module.__file__).read_text()
+
+    assert "app.scripts.ingestion.nersc_archive_ingestor" not in runner_source
 
 
 def test_create_case_archive_packages_single_case_dir(tmp_path: Path) -> None:
@@ -773,7 +779,7 @@ def test_hpc_rejected_only_case_persists_typed_result_but_not_transient_error(
         lambda *args, **kwargs: _fresh_state(),
     )
     monkeypatch.setattr(
-        nersc_ingestor_module,
+        workflow_module,
         "_log_event",
         lambda event, fields=None: logged_events.append((event, fields or {})),
     )
