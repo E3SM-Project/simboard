@@ -10,6 +10,7 @@ from app.scripts.ingestion.diagnostics_archives import (
 from app.scripts.ingestion.diagnostics_link_scanner import (
     _discover,
     _parse_settings_bytes,
+    _read_settings_bytes,
     _request_with_retry,
     run,
 )
@@ -62,9 +63,11 @@ def test_parse_settings_rejects_duplicate_required_key(tmp_path: Path) -> None:
         _parse_settings_bytes(settings.read_bytes())
 
 
-def test_parse_settings_rejects_oversized_file() -> None:
+def test_settings_reader_rejects_oversized_file(tmp_path: Path) -> None:
+    settings = tmp_path / "provenance.settings"
+    settings.write_bytes(b"x" * (64 * 1024 + 1))
     with pytest.raises(ValueError):
-        _parse_settings_bytes(b"x" * (64 * 1024 + 1))
+        _read_settings_bytes(settings)
 
 
 def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None:
@@ -128,7 +131,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
     _case(tmp_path, "production/type/case")
     client = _Client(httpx.Response(200, json=None))
     monkeypatch.setattr(
-        "app.scripts.ingestion.diagnostics_link_scanner.resolve_archive",
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
         lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
     )
     monkeypatch.setattr(
@@ -156,7 +159,7 @@ def test_run_defers_after_exhausted_state_lookup(
         "app.scripts.ingestion.diagnostics_link_scanner.time.sleep", lambda _: None
     )
     monkeypatch.setattr(
-        "app.scripts.ingestion.diagnostics_link_scanner.resolve_archive",
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
         lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
     )
     monkeypatch.setattr(
