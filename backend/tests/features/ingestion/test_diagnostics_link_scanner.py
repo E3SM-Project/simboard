@@ -99,7 +99,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _case(tmp_path, "production/type/case")
-    client = _Client(httpx.Response(404))
+    client = _Client(httpx.Response(200, json=None))
     monkeypatch.setattr(
         "app.scripts.ingestion.diagnostics_link_scanner.resolve_archive",
         lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
@@ -112,6 +112,10 @@ def test_run_submits_exact_payload_and_bearer_auth(
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("DRY_RUN", "false")
     assert run() == 0
+    assert client.get_calls[0]["params"] == {
+        "machine": "perlmutter",
+        "archive_relative_case_path": "production/type/case",
+    }
     assert client.post_calls[0]["headers"] == {"Authorization": "Bearer token"}
     assert client.post_calls[0]["json"]["diagnostics"][0]["name"] == "zppy diagnostics"
 
