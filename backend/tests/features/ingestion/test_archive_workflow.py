@@ -74,8 +74,11 @@ def test_validate_run_preconditions_logs_failures(tmp_path: Path) -> None:
 
     archive_root = tmp_path / "archive"
     archive_root.mkdir()
-    config = replace(_config(archive_root), api_token="")
-    assert not _validate_run_preconditions(config, log_event_fn=log_event)
+    dry_run_config = replace(_config(archive_root, dry_run=True), api_token="")
+    assert _validate_run_preconditions(dry_run_config, log_event_fn=log_event)
+
+    ingest_config = replace(_config(archive_root), api_token="")
+    assert not _validate_run_preconditions(ingest_config, log_event_fn=log_event)
     assert logged_events[-1] == (
         "configuration_error",
         {"error": "SIMBOARD_API_TOKEN is required"},
