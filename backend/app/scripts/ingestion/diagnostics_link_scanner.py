@@ -46,6 +46,7 @@ def run() -> int:
         for candidate in candidates:
             relative = candidate.path.parent.relative_to(root).as_posix()
             LOGGER.info("Would link diagnostics for %s", relative)
+        print(f"Dry run complete: {len(candidates)} diagnostics candidate(s) found.")
         return 0
 
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
