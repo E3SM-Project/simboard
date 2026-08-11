@@ -27,3 +27,6 @@ OLD_PERF_ARCHIVE_ROOT=/global/cfs/projectdirs/e3sm/OLD_PERF
 
 # Diagnostics provenance scan: start dry-run, inspect logs, then set DRY_RUN=false.
 20 * * * * cd ${REPO_DIR} && ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.log 2>&1
+
+# Chrysalis diagnostics provenance scan; use its local checkout path for REPO_DIR.
+25 * * * * cd ${REPO_DIR} && ${REPO_DIR}/backend/app/scripts/ingestion/sites/chrysalis-diagnostics-scanner.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/chrysalis-diagnostics-scanner.log 2>&1

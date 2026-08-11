@@ -3,7 +3,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.scripts.ingestion.diagnostics_archives import DiagnosticsArchive
+from app.scripts.ingestion.diagnostics_archives import (
+    DIAGNOSTICS_ARCHIVES_BY_MACHINE,
+    DiagnosticsArchive,
+)
 from app.scripts.ingestion.diagnostics_link_scanner import (
     _request_with_retry,
     discover,
@@ -12,6 +15,15 @@ from app.scripts.ingestion.diagnostics_link_scanner import (
 )
 
 BASE_URL = "https://diagnostics.example.org/archive"
+
+
+def test_chrysalis_diagnostics_archive_settings() -> None:
+    archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE["chrysalis"]
+    assert archive.root == "/lcrc/group/e3sm/diagnostic_output"
+    assert (
+        archive.public_base_url
+        == "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output"
+    )
 
 
 def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -> Path:

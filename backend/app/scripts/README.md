@@ -171,6 +171,11 @@ DRY_RUN=true \
 backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
 ```
 
+For LCRC, use `sites/chrysalis-diagnostics-scanner.sh`; it defaults
+`MACHINE_NAME=chrysalis` and its reviewed registry entry maps
+`/lcrc/group/e3sm/diagnostic_output` to
+`https://web.lcrc.anl.gov/public/e3sm/diagnostic_output`.
+
 Required configuration: `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN`, and
 `MACHINE_NAME`. The archive root and public URL come only from
 `diagnostics_archives.py`. Start with `DRY_RUN=true`; it performs discovery and
