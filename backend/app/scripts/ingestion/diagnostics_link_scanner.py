@@ -22,6 +22,8 @@ from app.scripts.ingestion.diagnostics_archives import (
 LOGGER = logging.getLogger(__name__)
 TIMESTAMP_RE = re.compile(r"^provenance\.(\d{8}_\d{6}_\d{6})\.cfg$")
 REQUIRED_SETTINGS = {"case_name", "machine", "hpc_username", "diagnostics_url"}
+MAX_SETTINGS_BYTES = 64 * 1024
+MAX_SETTINGS_LINES = 200
 
 
 @dataclass(frozen=True)
@@ -151,11 +153,12 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                 settings.is_symlink()
                 or root not in settings.resolve().parents
                 or not settings.is_file()
-                or not _published_output(case_dir)
+                or not _published_output(case_dir, root)
             ):
                 continue
             try:
-                values = _parse_settings(settings)
+                settings_bytes = _read_settings_bytes(settings)
+                values = _parse_settings_bytes(settings_bytes)
                 url = urlparse(values["diagnostics_url"])
 
                 if (url.scheme, url.netloc) != (
@@ -167,7 +170,7 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                     )
                 _validate_layout(case_dir, root, values)
 
-                digest = hashlib.sha256(settings.read_bytes()).hexdigest()
+                digest = hashlib.sha256(settings_bytes).hexdigest()
                 candidates.append(Candidate(cfg, settings, timestamp, values, digest))
             except (OSError, UnicodeError, ValueError) as exc:
                 LOGGER.warning("Skipping invalid provenance %s: %s", cfg, exc)
@@ -194,10 +197,20 @@ def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
     return response
 
 
-def _parse_settings(path: Path) -> dict[str, str]:
+def _read_settings_bytes(path: Path) -> bytes:
+    with path.open("rb") as settings_file:
+        content = settings_file.read(MAX_SETTINGS_BYTES + 1)
+    if len(content) > MAX_SETTINGS_BYTES:
+        raise ValueError("Provenance settings file is too large")
+    return content
+
+
+def _parse_settings_bytes(content: bytes) -> dict[str, str]:
     values: dict[str, str] = {}
 
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line_number, line in enumerate(content.decode("utf-8").splitlines(), start=1):
+        if line_number > MAX_SETTINGS_LINES:
+            raise ValueError("Provenance settings file has too many lines")
         if not line.strip() or line.lstrip().startswith("#"):
             continue
 
@@ -217,9 +230,12 @@ def _parse_settings(path: Path) -> dict[str, str]:
     return values
 
 
-def _published_output(case_dir: Path) -> bool:
+def _published_output(case_dir: Path, root: Path) -> bool:
     for entry in case_dir.iterdir():
         if entry.name.startswith("provenance."):
+            continue
+
+        if entry.is_symlink() or root not in entry.resolve().parents:
             continue
 
         if entry.is_file() or (entry.is_dir() and any(entry.iterdir())):

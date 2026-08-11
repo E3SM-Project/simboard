@@ -18,10 +18,14 @@ scripts/
 │   ├── archive_ingestor_core.py
 │   ├── archive_layout.py
 │   ├── archive_workflow.py
+│   ├── diagnostics_archives.py
+│   ├── diagnostics_link_scanner.py
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   ├── sites/
-│       └── nersc.sh
+│   │   ├── chrysalis-diagnostics-scanner.sh
+│   │   ├── nersc-diagnostics-scanner.sh
+│   │   └── nersc.sh
 │   └── v3_data/
 │       ├── __init__.py
 │       ├── lcrc-v3.env.example
@@ -211,9 +215,8 @@ the documented Chrysalis archive root, and records uploads under machine
 scan scope are fixed.
 ## Diagnostics Provenance Scanner
 
-`diagnostics_link_scanner` discovers newest paired zppy provenance under the
-reviewed, static diagnostics-archive registry and creates case-scoped diagnostic
-links through the scanner API. It never reads Mache configuration at runtime.
+Scans newest paired zppy provenance from the reviewed static registry and creates
+case-scoped diagnostic links. It never reads Mache configuration at runtime.
 
 Run through the NERSC wrapper:
 
@@ -223,26 +226,15 @@ DRY_RUN=true \
 backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
 ```
 
-For LCRC, use `sites/chrysalis-diagnostics-scanner.sh`; it defaults
-`MACHINE_NAME=chrysalis` and its reviewed registry entry maps
-`/lcrc/group/e3sm/diagnostic_output` to
-`https://web.lcrc.anl.gov/public/e3sm/diagnostic_output`.
+Use `sites/chrysalis-diagnostics-scanner.sh` at LCRC. Required: API base URL,
+service-account token, and machine name. Roots and public URLs come only from
+`diagnostics_archives.py`.
 
-Required configuration: `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN`, and
-`MACHINE_NAME`. The archive root and public URL come only from
-`diagnostics_archives.py`. Start with `DRY_RUN=true`; it performs discovery and
-state-safe planning without link/state writes. After log review, schedule the
-provided cron example with `DRY_RUN=false`.
-
-Scanner account needs read/traverse access to archive `production/` and
-`development/` trees, including provenance `.settings` files and published
-diagnostic output. Transient network responses are retried; malformed,
-output-not-ready, or failed candidates remain unstated and retry next scan.
-
-When a site archive moves, maintainers generate candidate values from Mache
-`[web_portal]` cfg data during development, then update the checked-in registry
-in a reviewed SimBoard change. Do not add runtime environment overrides for
-archive roots or public URLs.
+Start with `DRY_RUN=true`; inspect logs, then schedule with `DRY_RUN=false`.
+Scanner account needs read/traverse access to `production/` and `development/`,
+provenance settings, and published output. Failed or not-ready candidates retry
+next run. Refresh registry entries from Mache `[web_portal]` cfg data only in a
+reviewed change; never add archive-path environment overrides.
 
 ## HPC Upload Archive Ingestor
 
