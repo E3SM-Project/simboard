@@ -230,7 +230,8 @@ Use `sites/chrysalis-diagnostics-scanner.sh` at LCRC. Required: API base URL,
 service-account token, and machine name. Roots and public URLs come only from
 `diagnostics_archives.py`.
 
-Start with `DRY_RUN=true`; inspect logs, then schedule with `DRY_RUN=false`.
+Start with `DRY_RUN=true`; it needs no API URL or token. Inspect logs, then
+schedule with `DRY_RUN=false`, which requires both API URL and service token.
 Scanner account needs read/traverse access to `production/` and `development/`,
 provenance settings, and published output. Failed or not-ready candidates retry
 next run. Refresh registry entries from Mache `[web_portal]` cfg data only in a

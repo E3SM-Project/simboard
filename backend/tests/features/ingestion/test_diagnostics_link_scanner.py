@@ -150,6 +150,20 @@ def test_run_submits_exact_payload_and_bearer_auth(
     assert client.post_calls[0]["json"]["diagnostics"][0]["name"] == "zppy diagnostics"
 
 
+def test_dry_run_requires_no_api_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _case(tmp_path, "production/type/case")
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
+        lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.delenv("SIMBOARD_API_BASE_URL", raising=False)
+    monkeypatch.delenv("SIMBOARD_API_TOKEN", raising=False)
+    monkeypatch.setenv("DRY_RUN", "true")
+    assert run() == 0
+
+
 def test_run_defers_after_exhausted_state_lookup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
