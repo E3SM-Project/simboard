@@ -27,4 +27,8 @@ DIAGNOSTICS_ARCHIVES_BY_MACHINE: dict[str, DiagnosticsArchive] = {
         root="/global/cfs/cdirs/e3sm/diagnostic_output",
         public_base_url="https://portal.nersc.gov/cfs/e3sm/diagnostic_output",
     ),
+    "chrysalis": DiagnosticsArchive(
+        root="/lcrc/group/e3sm/diagnostic_output",
+        public_base_url="https://web.lcrc.anl.gov/public/e3sm/diagnostic_output",
+    ),
 }
