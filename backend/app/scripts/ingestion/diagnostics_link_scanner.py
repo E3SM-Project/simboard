@@ -40,17 +40,21 @@ def run() -> int:
     archive = _resolve_archive(machine)
     root = Path(archive.root)
     dry_run = os.environ.get("DRY_RUN", "true").lower() in {"1", "true", "yes"}
+    candidates = _discover(root, archive.public_base_url)
+
+    if dry_run:
+        for candidate in candidates:
+            relative = candidate.path.parent.relative_to(root).as_posix()
+            LOGGER.info("Would link diagnostics for %s", relative)
+        return 0
+
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
     token = os.environ["SIMBOARD_API_TOKEN"]
     headers = {"Authorization": f"Bearer {token}"}
 
     with httpx.Client(timeout=30) as client:
-        for candidate in _discover(root, archive.public_base_url):
+        for candidate in candidates:
             relative = candidate.path.parent.relative_to(root).as_posix()
-
-            if dry_run:
-                LOGGER.info("Would link diagnostics for %s", relative)
-                continue
 
             state = _request_with_retry(
                 client.get,
