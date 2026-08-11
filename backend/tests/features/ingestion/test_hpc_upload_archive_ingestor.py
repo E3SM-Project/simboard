@@ -1,9 +1,7 @@
 """Tests for automated HPC upload archive ingestor runner."""
 
 import json
-import os
 import runpy
-import subprocess
 import tarfile
 import urllib.error
 import urllib.request
@@ -39,93 +37,6 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _prepared_hpc_case_submission,
     _run_ingestor,
 )
-
-
-def _chrysalis_wrapper_path() -> Path:
-    return (
-        Path(__file__).resolve().parents[3] / "app/scripts/ingestion/sites/chrysalis.sh"
-    )
-
-
-def _fake_python(tmp_path: Path) -> Path:
-    python_path = tmp_path / "python"
-    python_path.write_text(
-        "#!/usr/bin/env bash\n"
-        'printf \'%s\\n\' "${SCAN_MODE}" "${PERF_ARCHIVE_ROOT}" '
-        '"${ARCHIVE_YEAR_START-unset}" > "${CAPTURE_PATH}"\n',
-        encoding="utf-8",
-    )
-    python_path.chmod(0o755)
-    return python_path
-
-
-def test_chrysalis_wrapper_requires_api_base_url_for_ingestion(tmp_path: Path) -> None:
-    env = os.environ.copy()
-    env.pop("SIMBOARD_API_BASE_URL", None)
-    env["SIMBOARD_API_TOKEN"] = "token"
-    env["DRY_RUN"] = "false"
-    env["PYTHON_BIN"] = str(_fake_python(tmp_path))
-
-    result = subprocess.run(
-        [_chrysalis_wrapper_path()],
-        capture_output=True,
-        check=False,
-        env=env,
-        text=True,
-    )
-
-    assert result.returncode != 0
-    assert "SIMBOARD_API_BASE_URL must be set" in result.stderr
-
-
-@pytest.mark.parametrize("dry_run", ["true", "True", " true ", "maybe"])
-def test_chrysalis_wrapper_allows_dry_run_without_api_configuration(
-    tmp_path: Path,
-    dry_run: str,
-) -> None:
-    capture_path = tmp_path / "environment.txt"
-    env = os.environ.copy()
-    env.pop("SIMBOARD_API_BASE_URL", None)
-    env.pop("SIMBOARD_API_TOKEN", None)
-    env["CAPTURE_PATH"] = str(capture_path)
-    env["PYTHON_BIN"] = str(_fake_python(tmp_path))
-    env["DRY_RUN"] = dry_run
-
-    result = subprocess.run(
-        [_chrysalis_wrapper_path()],
-        capture_output=True,
-        check=False,
-        env=env,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
-def test_chrysalis_wrapper_defaults_to_staging(tmp_path: Path) -> None:
-    capture_path = tmp_path / "environment.txt"
-    env = os.environ.copy()
-    env.pop("ARCHIVE_YEAR_START", None)
-    env.pop("SCAN_MODE", None)
-    env["CAPTURE_PATH"] = str(capture_path)
-    env["PYTHON_BIN"] = str(_fake_python(tmp_path))
-    env["SIMBOARD_API_BASE_URL"] = "https://simboard.example"
-    env["SIMBOARD_API_TOKEN"] = "token"
-
-    result = subprocess.run(
-        [_chrysalis_wrapper_path()],
-        capture_output=True,
-        check=False,
-        env=env,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert capture_path.read_text(encoding="utf-8").splitlines() == [
-        "staging",
-        "/lcrc/group/e3sm/PERF_Chrysalis/performance_archive",
-        "unset",
-    ]
 
 
 @pytest.fixture(autouse=True)

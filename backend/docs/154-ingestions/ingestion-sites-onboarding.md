@@ -16,12 +16,13 @@ feature/154-ingestion-sites
 
 ## Current State
 
-The branch introduces a shared HPC ingestion entrypoint and a thin Chrysalis wrapper:
+The repository uses a config-driven host-side launcher for site collection:
 
-- `backend/app/scripts/ingestion/hpc_archive_ingestor.py` is the scheduler-agnostic entrypoint for HPC site wrappers. It currently delegates to the existing NERSC archive ingestor so Perlmutter behavior stays unchanged.
-- `backend/app/scripts/ingestion/sites/chrysalis.sh` is the Chrysalis Jenkins wrapper. It sets Chrysalis defaults, requires SimBoard API configuration from the caller, and runs the shared Python entrypoint.
-- `backend/app/scripts/README.md` documents how to run the shared ingestor and how site wrappers should be structured.
-- `backend/tests/features/ingestion/test_nersc_archive_ingestor.py` includes coverage for the generic entrypoint.
+- `backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh` loads a named site config and selects its ingestion runner.
+- `backend/app/scripts/ingestion/sites/chrysalis.config` and `nersc.config` provide site-specific paths, machine names, runner modules, and protected credential-file locations.
+- `backend/app/scripts/ingestion/hpc_upload_archive_ingestor.py` is the scheduler-agnostic upload runner for remote HPC sites; `nersc_archive_ingestor.py` handles NERSC path ingestion.
+- `backend/app/scripts/README.md` documents launcher use and site-config responsibilities.
+- `backend/tests/features/ingestion/test_site_collection_launcher.py` covers config-driven offline launcher behavior.
 
 PR 169 is an open draft for this Chrysalis work. Take it over from there rather than starting a new branch. The PR currently notes that local validation was blocked because PostgreSQL was unavailable at `127.0.0.1`, so backend tests still need to be rerun in a working local or CI environment.
 
@@ -34,18 +35,19 @@ The existing ingestor scans a performance archive directory, finds parseable exe
 The shared entrypoint is intended to be stable across schedulers:
 
 ```bash
-uv run python -m app.scripts.ingestion.hpc_archive_ingestor
+app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis staging
 ```
 
-Site wrappers should set only local defaults such as:
+Site configs should set only local defaults such as:
 
 - `MACHINE_NAME`
 - `PERF_ARCHIVE_ROOT`
-- `STATE_PATH`
 - `DRY_RUN`
-- `PYTHON_BIN`, when the site needs a specific Python executable
+- `SIMBOARD_INGESTOR_MODULE`
+- protected environment and token file locations
 
-The SimBoard API target and token must be provided by the runner environment:
+For non-dry-run execution, the launcher loads the API environment and token from
+the protected files referenced by the site config:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
@@ -56,17 +58,16 @@ See `docs/hpc_api_token_authentication.md` for service account and API token set
 
 Start with Chrysalis.
 
-Current wrapper:
+Current launcher invocation:
 
 ```bash
-backend/app/scripts/ingestion/sites/chrysalis.sh
+backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis staging
 ```
 
-The wrapper defaults to:
+The Chrysalis config defaults to:
 
 - `MACHINE_NAME=chrysalis`
 - `PERF_ARCHIVE_ROOT=/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`
-- `STATE_PATH=${PERF_ARCHIVE_ROOT}/../simboard-ingestion-state.json`
 - `DRY_RUN=true`
 
 Before enabling real ingestion, validate:
@@ -87,7 +88,7 @@ Do not set `DRY_RUN=false` until the dry-run behavior has been reviewed.
 3. Validate the Chrysalis archive path and Jenkins environment.
 4. Create or identify the SimBoard service account and API token for HPC ingestion.
 5. Configure Jenkins to provide `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` securely.
-6. Run the Chrysalis wrapper with the default dry-run mode.
+6. Run the Chrysalis launcher with the default dry-run mode.
 7. Review candidate counts, skipped cases, errors, and state-file behavior.
 8. Enable non-dry-run ingestion only after validation.
 9. Apply the same wrapper pattern to additional sites once access is available.

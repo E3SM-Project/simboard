@@ -1,9 +1,7 @@
 """Tests for the NERSC archive ingestion runner script."""
 
 import logging
-import os
 import runpy
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -35,29 +33,6 @@ from app.scripts.ingestion.archive_ingestor_core import (
 from app.scripts.ingestion.nersc_archive_ingestor import (
     _run_ingestor,
 )
-
-
-def _nersc_wrapper_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "app/scripts/ingestion/sites/nersc.sh"
-
-
-@pytest.mark.parametrize("dry_run", ["true", "True", " true ", "maybe"])
-def test_nersc_wrapper_allows_dry_run_without_api_configuration(dry_run: str) -> None:
-    env = os.environ.copy()
-    env.pop("SIMBOARD_API_BASE_URL", None)
-    env.pop("SIMBOARD_API_TOKEN", None)
-    env["DRY_RUN"] = dry_run
-    env["PYTHON_BIN"] = "/usr/bin/true"
-
-    result = subprocess.run(
-        [_nersc_wrapper_path()],
-        capture_output=True,
-        check=False,
-        env=env,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture(autouse=True)
