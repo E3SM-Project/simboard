@@ -48,6 +48,16 @@ def test_parse_settings_rejects_duplicate_required_key(tmp_path: Path) -> None:
         parse_settings(settings)
 
 
+def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None:
+    directory = _case(tmp_path, "production/type/case")
+    settings = next(directory.glob("*.settings"))
+    outside = tmp_path.parent / "outside.settings"
+    outside.write_text(settings.read_text(), encoding="utf-8")
+    settings.unlink()
+    settings.symlink_to(outside)
+    assert discover(tmp_path, BASE_URL) == []
+
+
 def test_retry_helper_retries_transient_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
