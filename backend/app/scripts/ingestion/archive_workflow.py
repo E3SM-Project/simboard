@@ -44,7 +44,7 @@ def _validate_run_preconditions(
         )
         return False
 
-    if not config.api_token:
+    if not config.dry_run and not config.api_token:
         log_event_fn(
             "configuration_error",
             {"error": "SIMBOARD_API_TOKEN is required"},

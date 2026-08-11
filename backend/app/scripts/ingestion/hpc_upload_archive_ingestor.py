@@ -5,7 +5,7 @@ that is not mounted in the SimBoard backend environment. Runtime configuration
 is read from environment variables (for example ``SIMBOARD_API_BASE_URL``,
 ``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-Each ingest run executes these phases:
+Non-dry-run ingestion executes these phases:
 
     1. In archive mode, fetch completed snapshot checkpoints.
     2. Fetch persisted per-case state from SimBoard API.
@@ -13,8 +13,9 @@ Each ingest run executes these phases:
     4. Persist discovery results, then package and submit each changed case.
     5. In archive mode, settle and persist completed snapshot checkpoints.
 
-Dry runs stop after discovery and emit a summary. Successful ingestions update
-database state used to keep future runs idempotent.
+Dry runs use empty local state, stop after discovery, and emit a summary without
+API requests. Successful ingestions update database state used to keep future
+runs idempotent.
 
 Structured log metric definitions for this runner live in
 ``docs/architecture/metadata-ingestion.md``. This module emits those field names
@@ -31,6 +32,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import Any
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -58,6 +60,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     MetadataLocator,
     SleepCallback,
     _build_config_from_env,
+    _fresh_state,
     _log_event,
 )
 from app.scripts.ingestion.archive_workflow import (
@@ -112,16 +115,12 @@ def _case_submission_callback(
     )
 
 
-def _run_ingestor(
+def _prepare_run_state(
     config: IngestorConfig,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
-    sleep_fn: SleepCallback = time.sleep,
-    post_request_fn: CaseSubmissionCallback | None = None,
-    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
-    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
-) -> int:
-    """Execute one complete archive scan-and-upload cycle."""
-    post_request_fn = _case_submission_callback(post_request_fn)
+) -> tuple[dict[str, Any], set[str], str] | None:
+    """Build local dry-run state or fetch state needed for ingestion."""
+    if config.dry_run:
+        return _fresh_state(), set(), ""
 
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
@@ -131,10 +130,6 @@ def _run_ingestor(
         state_endpoint_url=state_endpoint_url,
         log_event_fn=_log_event,
     )
-
-    if not _validate_run_preconditions(config, log_event_fn=_log_event):
-        return 1
-
     completed_snapshot_keys: set[str] = set()
     if config.scan_mode == "archive":
         try:
@@ -152,7 +147,7 @@ def _run_ingestor(
                 "archive_checkpoint_fetch_failed",
                 {"status_code": exc.status_code, "error": str(exc)},
             )
-            return 1
+            return None
 
     try:
         state = _fetch_ingestion_state(
@@ -170,7 +165,29 @@ def _run_ingestor(
                 "error": str(exc),
             },
         )
+        return None
+
+    return state, completed_snapshot_keys, endpoint_url
+
+
+def _run_ingestor(
+    config: IngestorConfig,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
+    sleep_fn: SleepCallback = time.sleep,
+    post_request_fn: CaseSubmissionCallback | None = None,
+    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
+    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
+) -> int:
+    """Execute one complete archive scan-and-upload cycle."""
+    post_request_fn = _case_submission_callback(post_request_fn)
+
+    if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1
+
+    run_state = _prepare_run_state(config)
+    if run_state is None:
+        return 1
+    state, completed_snapshot_keys, endpoint_url = run_state
 
     new_discovery_results: list[ExecutionDiscoveryResult] = []
     try:

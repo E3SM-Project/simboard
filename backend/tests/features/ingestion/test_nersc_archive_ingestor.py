@@ -1,7 +1,9 @@
 """Tests for the NERSC archive ingestion runner script."""
 
 import logging
+import os
 import runpy
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,29 @@ from app.scripts.ingestion.archive_ingestor_core import (
 from app.scripts.ingestion.nersc_archive_ingestor import (
     _run_ingestor,
 )
+
+
+def _nersc_wrapper_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "app/scripts/ingestion/sites/nersc.sh"
+
+
+@pytest.mark.parametrize("dry_run", ["true", "True", " true ", "maybe"])
+def test_nersc_wrapper_allows_dry_run_without_api_configuration(dry_run: str) -> None:
+    env = os.environ.copy()
+    env.pop("SIMBOARD_API_BASE_URL", None)
+    env.pop("SIMBOARD_API_TOKEN", None)
+    env["DRY_RUN"] = dry_run
+    env["PYTHON_BIN"] = "/usr/bin/true"
+
+    result = subprocess.run(
+        [_nersc_wrapper_path()],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture(autouse=True)
@@ -456,7 +481,7 @@ def test_run_ingestor_submits_only_new_ids_when_state_uses_mount_path(
     assert captured_processed_execution_ids == [["101.1-1"]]
 
 
-def test_run_ingestor_dry_run_without_token_returns_config_error(
+def test_run_ingestor_dry_run_without_api_configuration_scans_offline(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -469,9 +494,26 @@ def test_run_ingestor_dry_run_without_token_returns_config_error(
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
     monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_build_endpoint_url",
+        lambda *_: pytest.fail("dry run must not build ingestion endpoint"),
+    )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *_args, **_kwargs: pytest.fail("dry run must not fetch API state"),
+    )
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *_args, **_kwargs: pytest.fail(
+            "dry run must not fetch archive checkpoints"
+        ),
+    )
 
     config = IngestorConfig(
-        api_base_url="http://backend:8000",
+        api_base_url="",
         api_token="",
         archive_root=archive_root,
         machine_name="perlmutter",
@@ -479,6 +521,7 @@ def test_run_ingestor_dry_run_without_token_returns_config_error(
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="archive",
     )
 
     exit_code = _run_ingestor(
@@ -487,8 +530,8 @@ def test_run_ingestor_dry_run_without_token_returns_config_error(
         sleep_fn=lambda *_: None,
     )
 
-    assert exit_code == 1
-    assert any(event == "configuration_error" for event, _ in logged_events)
+    assert exit_code == 0
+    assert any(event == "dry_run_completed" for event, _ in logged_events)
 
 
 def test_run_ingestor_without_token_returns_config_error(
@@ -589,7 +632,7 @@ def test_run_ingestor_fetches_state_before_archive_checkpoints(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=True,
+        dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
@@ -624,7 +667,7 @@ def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=True,
+        dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,

@@ -55,10 +55,11 @@ def _fake_python(tmp_path: Path) -> Path:
     return python_path
 
 
-def test_chrysalis_wrapper_requires_api_base_url(tmp_path: Path) -> None:
+def test_chrysalis_wrapper_requires_api_base_url_for_ingestion(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("SIMBOARD_API_BASE_URL", None)
     env["SIMBOARD_API_TOKEN"] = "token"
+    env["DRY_RUN"] = "false"
     env["PYTHON_BIN"] = str(_fake_python(tmp_path))
 
     result = subprocess.run(
@@ -71,6 +72,30 @@ def test_chrysalis_wrapper_requires_api_base_url(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "SIMBOARD_API_BASE_URL must be set" in result.stderr
+
+
+@pytest.mark.parametrize("dry_run", ["true", "True", " true ", "maybe"])
+def test_chrysalis_wrapper_allows_dry_run_without_api_configuration(
+    tmp_path: Path,
+    dry_run: str,
+) -> None:
+    capture_path = tmp_path / "environment.txt"
+    env = os.environ.copy()
+    env.pop("SIMBOARD_API_BASE_URL", None)
+    env.pop("SIMBOARD_API_TOKEN", None)
+    env["CAPTURE_PATH"] = str(capture_path)
+    env["PYTHON_BIN"] = str(_fake_python(tmp_path))
+    env["DRY_RUN"] = dry_run
+
+    result = subprocess.run(
+        [_chrysalis_wrapper_path()],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_chrysalis_wrapper_defaults_to_staging(tmp_path: Path) -> None:
@@ -531,18 +556,31 @@ def test_run_ingestor_dry_run_does_not_upload(
     monkeypatch.setattr(
         upload_ingestor_module,
         "_fetch_ingestion_state",
-        lambda *args, **kwargs: _fresh_state(),
+        lambda *_args, **_kwargs: pytest.fail("dry run must not fetch API state"),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_build_endpoint_url",
+        lambda *_: pytest.fail("dry run must not build upload endpoint"),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *_args, **_kwargs: pytest.fail(
+            "dry run must not fetch archive checkpoints"
+        ),
     )
 
     config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
+        api_base_url="",
+        api_token="",
         archive_root=archive_root,
         machine_name="perlmutter",
         dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="archive",
     )
 
     exit_code = _run_ingestor(
@@ -737,7 +775,7 @@ def test_run_ingestor_fetches_archive_checkpoints_before_state(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=True,
+        dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
@@ -784,7 +822,7 @@ def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=True,
+        dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,

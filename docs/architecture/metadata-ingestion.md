@@ -275,7 +275,8 @@ flowchart TD
 
 ### Runner Configuration
 
-All automated ingestion requests require a bearer API token. Both site-side runners use:
+Non-dry-run automated ingestion requests require a bearer API token. Both site-side
+runners use:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
@@ -284,6 +285,11 @@ All automated ingestion requests require a bearer API token. Both site-side runn
 - `OLD_PERF_ARCHIVE_ROOT`
 - `MACHINE_NAME`
 - `DRY_RUN`
+
+With `DRY_RUN=true`, runners scan local archive data using empty ingestion state and
+make no API requests. `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` are not
+required, but dry-run output cannot exclude executions already ingested remotely or
+archive snapshots already checkpointed.
 
 They also support these tuning options:
 
