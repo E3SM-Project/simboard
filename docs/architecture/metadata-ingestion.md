@@ -316,6 +316,20 @@ Set it when operators need to limit one invocation's submission volume, such as:
 - debugging or validating behavior on a small batch before allowing full drain
 - mitigating temporary backend or network instability without stopping collection
 
+### Operational Validation
+
+The runners use composable configuration rather than numbered dry-run modes:
+
+- Set `DRY_RUN=true` to scan and report candidates without API requests or
+  persisted state changes.
+- Set `DRY_RUN=false` and a small `MAX_CASES_PER_RUN` value to validate live
+  ingestion on a bounded batch. This is real ingestion and persists results.
+- Set `DRY_RUN=false` with no per-run cap for normal scheduled ingestion.
+
+Use one-off diagnostic scripts only for exceptional, data-specific
+investigations. Do not add a permanent runner mode unless that workflow becomes
+a recurring operational need.
+
 ### Stored Results
 
 After ingestion, SimBoard stores normalized cases, executions, machines, artifacts, links, and audit records in PostgreSQL. Execution records preserve parsed `CASE_HASH` values so the frontend can group related executions inside a case without assigning a persistent reference execution. The frontend reads the resulting catalog data through `/api/v1` endpoints.
