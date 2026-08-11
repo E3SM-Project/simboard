@@ -152,6 +152,33 @@ class DiagnosticsLinkRequest(CamelInBaseModel):
     ]
 
 
+class DiagnosticProvenanceMetadata(CamelInBaseModel):
+    """Immutable provenance identity supplied by the diagnostics scanner."""
+
+    archive_relative_case_path: Annotated[
+        str, Field(..., min_length=1, max_length=1000)
+    ]
+    settings_filename: Annotated[str, Field(..., min_length=1, max_length=255)]
+    provenance_timestamp: datetime
+    fingerprint: Annotated[str, Field(..., min_length=1, max_length=128)]
+
+
+class DiagnosticsScannerLinkRequest(DiagnosticsLinkRequest):
+    """Scanner-only diagnostics link request with successful provenance state."""
+
+    provenance: DiagnosticProvenanceMetadata
+
+
+class DiagnosticProvenanceStateOut(CamelOutBaseModel):
+    machine_name: str
+    archive_relative_case_path: str
+    settings_filename: str
+    provenance_timestamp: datetime
+    fingerprint: str
+    linked_url: str
+    submitted_at: datetime
+
+
 class ArtifactCreate(CamelInBaseModel):
     """Schema for creating a new Artifact."""
 
