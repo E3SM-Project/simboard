@@ -151,7 +151,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
 
 
 def test_dry_run_requires_no_api_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _case(tmp_path, "production/type/case")
     monkeypatch.setattr(
@@ -162,6 +162,9 @@ def test_dry_run_requires_no_api_configuration(
     monkeypatch.delenv("SIMBOARD_API_TOKEN", raising=False)
     monkeypatch.setenv("DRY_RUN", "true")
     assert run() == 0
+    assert (
+        "Dry run complete: 1 diagnostics candidate(s) found." in capsys.readouterr().out
+    )
 
 
 def test_run_defers_after_exhausted_state_lookup(
