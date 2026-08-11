@@ -9,7 +9,7 @@ from app.scripts.ingestion.diagnostics_archives import (
 )
 from app.scripts.ingestion.diagnostics_link_scanner import (
     _discover,
-    _parse_settings,
+    _parse_settings_bytes,
     _request_with_retry,
     run,
 )
@@ -59,7 +59,12 @@ def test_parse_settings_rejects_duplicate_required_key(tmp_path: Path) -> None:
     settings = tmp_path / "provenance.settings"
     settings.write_text("case_name = one\ncase_name = two\n", encoding="utf-8")
     with pytest.raises(ValueError):
-        _parse_settings(settings)
+        _parse_settings_bytes(settings.read_bytes())
+
+
+def test_parse_settings_rejects_oversized_file() -> None:
+    with pytest.raises(ValueError):
+        _parse_settings_bytes(b"x" * (64 * 1024 + 1))
 
 
 def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None:
@@ -69,6 +74,16 @@ def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None
     outside.write_text(settings.read_text(), encoding="utf-8")
     settings.unlink()
     settings.symlink_to(outside)
+    assert _discover(tmp_path, BASE_URL) == []
+
+
+def test_discovery_rejects_external_output_directory_symlink(tmp_path: Path) -> None:
+    directory = _case(tmp_path, "production/type/case")
+    (directory / "index.html").unlink()
+    outside = tmp_path.parent / "outside-output"
+    outside.mkdir(exist_ok=True)
+    (outside / "index.html").write_text("ready")
+    (directory / "output").symlink_to(outside, target_is_directory=True)
     assert _discover(tmp_path, BASE_URL) == []
 
 
