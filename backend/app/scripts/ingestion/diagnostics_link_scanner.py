@@ -112,7 +112,12 @@ def discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
 
         for case_dir, (cfg, timestamp) in newest_by_case.items():
             settings = cfg.with_suffix(".settings")
-            if not settings.is_file() or not _published_output(case_dir):
+            if (
+                settings.is_symlink()
+                or root not in settings.resolve().parents
+                or not settings.is_file()
+                or not _published_output(case_dir)
+            ):
                 continue
             try:
                 values = parse_settings(settings)
@@ -169,7 +174,7 @@ def run() -> int:
                 params={"machine": machine, "archive_relative_case_path": relative},
                 headers=headers,
             )
-            if state is None:
+            if state is None or state.status_code != 200:
                 LOGGER.warning("State lookup failed for %s; deferring", relative)
                 continue
             if (
