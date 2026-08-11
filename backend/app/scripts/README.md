@@ -157,6 +157,36 @@ Archive notes:
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 - `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
 
+## Diagnostics Provenance Scanner
+
+`diagnostics_link_scanner` discovers newest paired zppy provenance under the
+reviewed, static diagnostics-archive registry and creates case-scoped diagnostic
+links through the scanner API. It never reads Mache configuration at runtime.
+
+Run through the NERSC wrapper:
+
+```bash
+SIMBOARD_API_TOKEN=<service-account-token> \
+DRY_RUN=true \
+backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
+```
+
+Required configuration: `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN`, and
+`MACHINE_NAME`. The archive root and public URL come only from
+`diagnostics_archives.py`. Start with `DRY_RUN=true`; it performs discovery and
+state-safe planning without link/state writes. After log review, schedule the
+provided cron example with `DRY_RUN=false`.
+
+Scanner account needs read/traverse access to archive `production/` and
+`development/` trees, including provenance `.settings` files and published
+diagnostic output. Transient network responses are retried; malformed,
+output-not-ready, or failed candidates remain unstated and retry next scan.
+
+When a site archive moves, maintainers generate candidate values from Mache
+`[web_portal]` cfg data during development, then update the checked-in registry
+in a reviewed SimBoard change. Do not add runtime environment overrides for
+archive roots or public URLs.
+
 ## HPC Upload Archive Ingestor
 
 The HPC upload archive ingestor uses the same scan, state, dry-run, retry, and

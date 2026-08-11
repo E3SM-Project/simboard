@@ -3,10 +3,12 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.scripts.ingestion.diagnostics_archives import DiagnosticsArchive
 from app.scripts.ingestion.diagnostics_link_scanner import (
     _request_with_retry,
     discover,
     parse_settings,
+    run,
 )
 
 BASE_URL = "https://diagnostics.example.org/archive"
@@ -70,3 +72,68 @@ def test_retry_helper_retries_transient_response(
     )
     assert response is not None
     assert response.status_code == 204
+
+
+class _Client:
+    def __init__(self, get_response: httpx.Response) -> None:
+        self.get_response = get_response
+        self.get_calls: list[dict] = []
+        self.post_calls: list[dict] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def get(self, *_args, **kwargs):
+        self.get_calls.append(kwargs)
+        return self.get_response
+
+    def post(self, *_args, **kwargs):
+        self.post_calls.append(kwargs)
+        return httpx.Response(204)
+
+
+def test_run_submits_exact_payload_and_bearer_auth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _case(tmp_path, "production/type/case")
+    client = _Client(httpx.Response(404))
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.resolve_archive",
+        lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.httpx.Client",
+        lambda **_kwargs: client,
+    )
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("DRY_RUN", "false")
+    assert run() == 0
+    assert client.post_calls[0]["headers"] == {"Authorization": "Bearer token"}
+    assert client.post_calls[0]["json"]["diagnostics"][0]["name"] == "zppy diagnostics"
+
+
+def test_run_defers_after_exhausted_state_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _case(tmp_path, "production/type/case")
+    client = _Client(httpx.Response(503))
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.time.sleep", lambda _: None
+    )
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.resolve_archive",
+        lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.httpx.Client",
+        lambda **_kwargs: client,
+    )
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("DRY_RUN", "false")
+    run()
+    assert client.post_calls == []
