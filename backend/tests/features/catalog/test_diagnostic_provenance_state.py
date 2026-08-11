@@ -102,7 +102,8 @@ def test_scanner_link_rolls_back_link_when_state_write_fails(
     original_execute = db.execute
 
     def fail_only_state_insert(statement, *args, **kwargs):
-        if statement.table.name == "diagnostic_provenance_states":
+        table = getattr(statement, "table", None)
+        if table is not None and table.name == "diagnostic_provenance_states":
             raise RuntimeError("state failure")
         return original_execute(statement, *args, **kwargs)
 
