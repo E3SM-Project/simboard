@@ -209,6 +209,35 @@ the documented Chrysalis archive root, and records uploads under machine
 `ARCHIVE_YEAR_END` variables remain supported. `SCAN_MODE`,
 `ARCHIVE_YEAR_START`, and `MACHINE_NAME` are ignored because source site and
 scan scope are fixed.
+## Diagnostics Provenance Scanner
+
+`diagnostics_link_scanner` discovers newest paired zppy provenance under the
+reviewed, static diagnostics-archive registry and creates case-scoped diagnostic
+links through the scanner API. It never reads Mache configuration at runtime.
+
+Run through the NERSC wrapper:
+
+```bash
+SIMBOARD_API_TOKEN=<service-account-token> \
+DRY_RUN=true \
+backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
+```
+
+Required configuration: `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN`, and
+`MACHINE_NAME`. The archive root and public URL come only from
+`diagnostics_archives.py`. Start with `DRY_RUN=true`; it performs discovery and
+state-safe planning without link/state writes. After log review, schedule the
+provided cron example with `DRY_RUN=false`.
+
+Scanner account needs read/traverse access to archive `production/` and
+`development/` trees, including provenance `.settings` files and published
+diagnostic output. Transient network responses are retried; malformed,
+output-not-ready, or failed candidates remain unstated and retry next scan.
+
+When a site archive moves, maintainers generate candidate values from Mache
+`[web_portal]` cfg data during development, then update the checked-in registry
+in a reviewed SimBoard change. Do not add runtime environment overrides for
+archive roots or public URLs.
 
 ## HPC Upload Archive Ingestor
 

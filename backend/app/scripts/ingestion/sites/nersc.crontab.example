@@ -24,3 +24,6 @@ OLD_PERF_ARCHIVE_ROOT=/global/cfs/projectdirs/e3sm/OLD_PERF
 # Archive scan: run daily at 03:15 UTC. Add ARCHIVE_YEAR_START / ARCHIVE_YEAR_END
 # here only when you want a scoped archive backfill. Values may use YYYY or YYYY-MM.
 15 3 * * * cd ${REPO_DIR} && SCAN_MODE=archive ARCHIVE_YEAR_START=2025-01 ARCHIVE_YEAR_END=2025-03 ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc.sh.log 2>&1
+
+# Diagnostics provenance scan: start dry-run, inspect logs, then set DRY_RUN=false.
+20 * * * * cd ${REPO_DIR} && ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.log 2>&1
