@@ -71,6 +71,26 @@ def _published_output(case_dir: Path) -> bool:
     return False
 
 
+def _validate_layout(case_dir: Path, root: Path, values: dict[str, str]) -> None:
+    parts = case_dir.relative_to(root).parts
+    if len(parts) not in {3, 4} or parts[0] not in {"production", "development"}:
+        raise ValueError("Invalid diagnostics archive case layout")
+    if values["case_name"] != parts[-1]:
+        raise ValueError("Provenance case_name does not match archive layout")
+    expected_group = parts[-2] if len(parts) == 4 else None
+    if values.get("case_group") != expected_group:
+        raise ValueError("Provenance case_group does not match archive layout")
+
+
+def _timestamp(cfg: Path) -> datetime | None:
+    match = TIMESTAMP_RE.match(cfg.name)
+    if match is None:
+        return None
+    return datetime.strptime(match.group(1), "%Y%m%d_%H%M%S_%f").replace(
+        tzinfo=timezone.utc
+    )
+
+
 def discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
     base = urlparse(public_base_url)
     candidates: list[Candidate] = []
@@ -78,25 +98,20 @@ def discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
         tier_root = root / tier
         if not tier_root.is_dir():
             continue
+        newest_by_case: dict[Path, tuple[Path, datetime]] = {}
         for cfg in tier_root.rglob("provenance.*.cfg"):
             if cfg.is_symlink() or root not in cfg.resolve().parents:
                 continue
-            match = TIMESTAMP_RE.match(cfg.name)
-            if match is None:
+            timestamp = _timestamp(cfg)
+            if timestamp is None:
                 continue
             case_dir = cfg.parent
-            timestamp = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S_%f").replace(
-                tzinfo=timezone.utc
-            )
+            prior = newest_by_case.get(case_dir)
+            if prior is None or timestamp > prior[1]:
+                newest_by_case[case_dir] = (cfg, timestamp)
+
+        for case_dir, (cfg, timestamp) in newest_by_case.items():
             settings = cfg.with_suffix(".settings")
-            # newest cfg controls: missing paired settings must defer this case.
-            prior = next(
-                (item for item in candidates if item.path.parent == case_dir), None
-            )
-            if prior and prior.timestamp >= timestamp:
-                continue
-            if prior:
-                candidates.remove(prior)
             if not settings.is_file() or not _published_output(case_dir):
                 continue
             try:
@@ -109,16 +124,29 @@ def discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
                     raise ValueError(
                         "Diagnostics URL outside configured public archive"
                     )
-                relative = case_dir.relative_to(root).as_posix()
-                if values.get("case_group") and values[
-                    "case_group"
-                ] not in relative.split("/"):
-                    raise ValueError("Case group does not match archive layout")
+                _validate_layout(case_dir, root, values)
                 digest = hashlib.sha256(settings.read_bytes()).hexdigest()
                 candidates.append(Candidate(cfg, settings, timestamp, values, digest))
             except (OSError, UnicodeError, ValueError) as exc:
                 LOGGER.warning("Skipping invalid provenance %s: %s", cfg, exc)
     return candidates
+
+
+def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
+    for attempt in range(3):
+        try:
+            response = method(url, **kwargs)
+        except httpx.RequestError:
+            response = None
+        if (
+            response is not None
+            and response.status_code not in {408, 429}
+            and response.status_code < 500
+        ):
+            return response
+        if attempt < 2:
+            time.sleep(2**attempt)
+    return response
 
 
 def run() -> int:
@@ -135,11 +163,15 @@ def run() -> int:
             if dry_run:
                 LOGGER.info("Would link diagnostics for %s", relative)
                 continue
-            state = client.get(
+            state = _request_with_retry(
+                client.get,
                 f"{api_base}/api/v1/diagnostics/scanner-state",
                 params={"machine": machine, "archive_relative_case_path": relative},
                 headers=headers,
             )
+            if state is None:
+                LOGGER.warning("State lookup failed for %s; deferring", relative)
+                continue
             if (
                 state.status_code == 200
                 and state.json()
@@ -167,22 +199,14 @@ def run() -> int:
                     "fingerprint": candidate.fingerprint,
                 },
             }
-            for attempt in range(3):
-                try:
-                    response = client.post(
-                        f"{api_base}/api/v1/diagnostics/scanner/link",
-                        json=payload,
-                        headers=headers,
-                    )
-                    if (
-                        response.status_code == 204
-                        or response.status_code < 500
-                        and response.status_code not in {408, 429}
-                    ):
-                        break
-                except httpx.RequestError:
-                    pass
-                time.sleep(2**attempt)
+            response = _request_with_retry(
+                client.post,
+                f"{api_base}/api/v1/diagnostics/scanner/link",
+                json=payload,
+                headers=headers,
+            )
+            if response is None or response.status_code != 204:
+                LOGGER.warning("Diagnostics link submission failed for %s", relative)
     return 0
 
 
