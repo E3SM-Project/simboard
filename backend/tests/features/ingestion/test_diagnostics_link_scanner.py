@@ -8,9 +8,9 @@ from app.scripts.ingestion.diagnostics_archives import (
     DiagnosticsArchive,
 )
 from app.scripts.ingestion.diagnostics_link_scanner import (
+    _discover,
+    _parse_settings,
     _request_with_retry,
-    discover,
-    parse_settings,
     run,
 )
 
@@ -43,7 +43,7 @@ def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -
 def test_newest_missing_settings_defers_without_stale_fallback(tmp_path: Path) -> None:
     directory = _case(tmp_path, "production/type/case")
     (directory / "provenance.20260812_120000_000000.cfg").write_text("cfg")
-    assert discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL) == []
 
 
 def test_discovery_rejects_case_and_group_mismatches(tmp_path: Path) -> None:
@@ -52,14 +52,14 @@ def test_discovery_rejects_case_and_group_mismatches(tmp_path: Path) -> None:
     settings.write_text(
         settings.read_text().replace("case_name = case", "case_name = wrong")
     )
-    assert discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL) == []
 
 
 def test_parse_settings_rejects_duplicate_required_key(tmp_path: Path) -> None:
     settings = tmp_path / "provenance.settings"
     settings.write_text("case_name = one\ncase_name = two\n", encoding="utf-8")
     with pytest.raises(ValueError):
-        parse_settings(settings)
+        _parse_settings(settings)
 
 
 def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None
     outside.write_text(settings.read_text(), encoding="utf-8")
     settings.unlink()
     settings.symlink_to(outside)
-    assert discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL) == []
 
 
 def test_retry_helper_retries_transient_response(
