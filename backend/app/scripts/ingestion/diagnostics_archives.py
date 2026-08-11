@@ -10,6 +10,7 @@ class DiagnosticsArchive:
 
 
 # Refresh from Mache [web_portal] configuration in a reviewed change when sites move.
+# Source: https://github.com/E3SM-Project/mache/tree/main/mache/machines
 DIAGNOSTICS_ARCHIVES_BY_MACHINE: dict[str, DiagnosticsArchive] = {
     "perlmutter": DiagnosticsArchive(
         root="/global/cfs/cdirs/e3sm/diagnostic_output",

@@ -763,8 +763,10 @@ def get_diagnostics_scanner_state(
     """Return successful scanner state for one machine/archive case path."""
     _require_diagnostics_scanner_role(user)
     resolved_machine = resolve_machine_by_name(db, machine)
+
     if resolved_machine is None:
         raise HTTPException(status_code=404, detail="Unknown machine.")
+
     state = (
         db.query(DiagnosticProvenanceState)
         .filter(DiagnosticProvenanceState.machine_name == resolved_machine.name)
@@ -774,6 +776,7 @@ def get_diagnostics_scanner_state(
         )
         .one_or_none()
     )
+
     return DiagnosticProvenanceStateOut.model_validate(state) if state else None
 
 
@@ -785,10 +788,12 @@ def link_scanner_diagnostics(
 ) -> None:
     """Atomically upsert one scanner-managed case diagnostic link and state."""
     _require_diagnostics_scanner_role(user)
+
     if len(payload.diagnostics) != 1:
         raise HTTPException(
             status_code=422, detail="Scanner payload requires one diagnostic."
         )
+
     if _unsafe_archive_relative_path(payload.provenance.archive_relative_case_path):
         raise HTTPException(
             status_code=422, detail="Invalid archive-relative case path."
@@ -797,6 +802,7 @@ def link_scanner_diagnostics(
     machine = resolve_machine_by_name(db, payload.machine)
     if machine is None:
         raise HTTPException(status_code=404, detail="No matching case found.")
+
     case_id = _resolve_case_id_for_diagnostics_link(
         db=db,
         case_name=payload.case_name,
@@ -805,6 +811,7 @@ def link_scanner_diagnostics(
     )
     diagnostic = payload.diagnostics[0]
     now = datetime.now(timezone.utc)
+
     with transaction(db):
         link_id = db.execute(
             pg_insert(ExternalLink)
