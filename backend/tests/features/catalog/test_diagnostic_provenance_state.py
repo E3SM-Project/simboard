@@ -1,0 +1,136 @@
+from unittest.mock import patch
+from uuid import uuid4
+
+from sqlalchemy.orm import Session
+
+from app.api.version import API_BASE
+from app.features.catalog.models import DiagnosticProvenanceState, ExternalLink
+from app.features.machine.models import Machine
+from tests.features.catalog.test_api import (
+    _create_matching_execution,
+    _create_service_account_token,
+    use_real_auth,
+)
+
+
+def _payload(*, case_name: str, machine: str, path: str) -> dict:
+    return {
+        "caseName": case_name,
+        "machine": machine,
+        "hpcUsername": "scanner-user",
+        "diagnostics": [
+            {
+                "name": "zppy diagnostics",
+                "url": "https://diagnostics.example.org/archive/case",
+                "kind": "diagnostic",
+            }
+        ],
+        "provenance": {
+            "archiveRelativeCasePath": path,
+            "settingsFilename": "provenance.20260811_120000_000000.settings",
+            "provenanceTimestamp": "2026-08-11T12:00:00Z",
+            "fingerprint": "a" * 64,
+        },
+    }
+
+
+def _matching_case(db: Session):
+    machine = db.query(Machine).first()
+    assert machine is not None
+    user, token = _create_service_account_token(db)
+    case, _ = _create_matching_execution(
+        db,
+        case_name=f"scanner-state-{uuid4()}",
+        machine_id=machine.id,
+        machine_name=machine.name,
+        user_id=user.id,
+        execution_id=f"scanner-{uuid4()}",
+        hpc_username="scanner-user",
+        source_reference=f"scanner-state-{uuid4()}",
+    )
+    return machine, user, token, case
+
+
+@use_real_auth
+def test_scanner_link_is_idempotent_and_state_is_readable(client, db: Session) -> None:
+    machine, _, token, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine=machine.name, path="production/e3sm/case"
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert (
+        client.post(
+            f"{API_BASE}/diagnostics/scanner/link", json=payload, headers=headers
+        ).status_code
+        == 204
+    )
+    assert (
+        client.post(
+            f"{API_BASE}/diagnostics/scanner/link", json=payload, headers=headers
+        ).status_code
+        == 204
+    )
+
+    state = db.query(DiagnosticProvenanceState).one()
+    assert state.machine_name == machine.name
+    assert state.settings_filename == payload["provenance"]["settingsFilename"]
+    assert db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 1
+
+    response = client.get(
+        f"{API_BASE}/diagnostics/scanner-state",
+        params={
+            "machine": machine.name,
+            "archiveRelativeCasePath": "production/e3sm/case",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["fingerprint"] == "a" * 64
+
+
+@use_real_auth
+def test_scanner_link_rolls_back_link_when_state_write_fails(
+    client, db: Session
+) -> None:
+    machine, _, token, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine=machine.name, path="production/e3sm/fail"
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch.object(
+        db,
+        "execute",
+        side_effect=[
+            type("Result", (), {"scalar_one": lambda self: uuid4()})(),
+            RuntimeError("state failure"),
+        ],
+    ):
+        response = client.post(
+            f"{API_BASE}/diagnostics/scanner/link", json=payload, headers=headers
+        )
+
+    assert response.status_code == 500
+    assert db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 0
+
+
+@use_real_auth
+def test_deleting_scanner_link_cascades_provenance_state(client, db: Session) -> None:
+    machine, _, token, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine=machine.name, path="development/e3sm/case"
+    )
+    assert (
+        client.post(
+            f"{API_BASE}/diagnostics/scanner/link",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+        ).status_code
+        == 204
+    )
+
+    link = db.query(ExternalLink).filter(ExternalLink.case_id == case.id).one()
+    db.delete(link)
+    db.commit()
+    assert db.query(DiagnosticProvenanceState).count() == 0
