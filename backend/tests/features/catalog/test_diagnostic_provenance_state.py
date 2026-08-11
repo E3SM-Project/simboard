@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.api.version import API_BASE
 from app.features.catalog.models import DiagnosticProvenanceState, ExternalLink
 from app.features.machine.models import Machine
+from app.features.user.manager import current_active_user
+from app.main import app
 from tests.features.catalog.test_api import (
     _create_matching_execution,
     _create_service_account_token,
@@ -93,23 +95,23 @@ def test_scanner_link_is_idempotent_and_state_is_readable(client, db: Session) -
 def test_scanner_link_rolls_back_link_when_state_write_fails(
     client, db: Session
 ) -> None:
-    machine, _, token, case = _matching_case(db)
+    machine, service_user, _, case = _matching_case(db)
     payload = _payload(
         case_name=case.name, machine=machine.name, path="production/e3sm/fail"
     )
-    headers = {"Authorization": f"Bearer {token}"}
+    original_execute = db.execute
 
-    with patch.object(
-        db,
-        "execute",
-        side_effect=[
-            type("Result", (), {"scalar_one": lambda self: uuid4()})(),
-            RuntimeError("state failure"),
-        ],
-    ):
-        response = client.post(
-            f"{API_BASE}/diagnostics/scanner/link", json=payload, headers=headers
-        )
+    def fail_only_state_insert(statement, *args, **kwargs):
+        if statement.table.name == "diagnostic_provenance_states":
+            raise RuntimeError("state failure")
+        return original_execute(statement, *args, **kwargs)
+
+    app.dependency_overrides[current_active_user] = lambda: service_user
+    try:
+        with patch.object(db, "execute", side_effect=fail_only_state_insert):
+            response = client.post(f"{API_BASE}/diagnostics/scanner/link", json=payload)
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
 
     assert response.status_code == 500
     assert db.query(ExternalLink).filter(ExternalLink.case_id == case.id).count() == 0
