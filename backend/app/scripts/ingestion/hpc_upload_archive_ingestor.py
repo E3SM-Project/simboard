@@ -13,9 +13,10 @@ Non-dry-run ingestion executes these phases:
     4. Persist discovery results, then package and submit each changed case.
     5. In archive mode, settle and persist completed snapshot checkpoints.
 
-Dry runs use empty local state, stop after discovery, and emit a summary without
-API requests. Successful ingestions update database state used to keep future
-runs idempotent.
+Dry runs read remote state and checkpoints by default, stop after discovery,
+and emit a summary without writes. Set ``DRY_RUN_USE_REMOTE_STATE=false`` for
+an offline dry run with empty local state. Successful ingestions update database
+state used to keep future runs idempotent.
 
 Structured log metric definitions for this runner live in
 ``docs/architecture/metadata-ingestion.md``. This module emits those field names
@@ -123,8 +124,8 @@ def _prepare_run_state(
     config: IngestorConfig,
     archive_checkpointing: bool = True,
 ) -> tuple[dict[str, Any], set[str], str] | None:
-    """Build local dry-run state or fetch state needed for ingestion."""
-    if config.dry_run:
+    """Build offline dry-run state or fetch state needed for this run."""
+    if config.dry_run and not config.dry_run_use_remote_state:
         return _fresh_state(), set(), ""
 
     endpoint_url = _build_endpoint_url(config)

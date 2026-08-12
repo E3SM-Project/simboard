@@ -149,9 +149,11 @@ app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive
 
 Each site config defines its machine name, archive roots, working and repository
 paths, Python environment file, token export file, API base URL, archive lower
-bound, and ingestor module. The launcher defaults to `DRY_RUN=true`; in this
-mode it does not load API credentials. Set `DRY_RUN=false` only after validating
-archive access, token storage, network egress, and candidate counts. A capped
+bound, and ingestor module. The launcher defaults to `DRY_RUN=true` with
+`DRY_RUN_USE_REMOTE_STATE=true`, so it loads API credentials and performs
+read-only state validation. Set `DRY_RUN_USE_REMOTE_STATE=false` for a
+credential-free offline scan. Set `DRY_RUN=false` only after validating archive
+access, token storage, network egress, and candidate counts. A capped
 `MAX_CASES_PER_RUN` value limits real ingestion but still persists results.
 
 Site configs are operational inputs. Keep credentials in their referenced,
@@ -185,6 +187,7 @@ Configuration surface (via env vars):
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN` (default `true`)
+- `DRY_RUN_USE_REMOTE_STATE` (default `true`; set `false` for offline dry runs)
 - `MAX_CASES_PER_RUN` (optional, default not set)
 - `MAX_ATTEMPTS` (optional, default not set)
 - `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
@@ -320,6 +323,7 @@ Configuration surface (via env vars):
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN` (default `true`)
+- `DRY_RUN_USE_REMOTE_STATE` (default `true`; set `false` for offline dry runs)
 - `MAX_CASES_PER_RUN` (optional, default not set)
 - `MAX_ATTEMPTS` (optional, default not set)
 - `REQUEST_TIMEOUT_SECONDS` (optional, default 60)

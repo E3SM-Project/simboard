@@ -493,6 +493,7 @@ def test_run_ingestor_dry_run_without_api_configuration_scans_offline(
         archive_root=archive_root,
         machine_name="perlmutter",
         dry_run=True,
+        dry_run_use_remote_state=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
@@ -580,7 +581,7 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
-def test_run_ingestor_fetches_state_before_archive_checkpoints(
+def test_run_ingestor_default_dry_run_fetches_state_before_archive_checkpoints(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -607,7 +608,7 @@ def test_run_ingestor_fetches_state_before_archive_checkpoints(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=False,
+        dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
@@ -839,6 +840,7 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
     assert config.archive_root == (tmp_path / "archive").resolve()
     assert config.machine_name == "pm"
     assert config.dry_run is True
+    assert config.dry_run_use_remote_state is True
     assert config.max_cases_per_run == 5
     assert config.max_attempts == 4
     assert config.request_timeout_seconds == 90
@@ -862,6 +864,18 @@ def test_build_config_from_env_parses_archive_mode_and_year_range(
     assert config.archive_root == (tmp_path / "old").resolve()
     assert config.archive_year_start == "2023-01"
     assert config.archive_year_end == "2025-12"
+
+
+def test_build_config_from_env_allows_offline_dry_runs(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path / "archive"))
+    monkeypatch.setenv("DRY_RUN_USE_REMOTE_STATE", "false")
+
+    config = _build_config_from_env()
+
+    assert config.dry_run is True
+    assert config.dry_run_use_remote_state is False
 
 
 def test_build_config_from_env_parses_archive_mode_and_month_range(

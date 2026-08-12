@@ -301,8 +301,8 @@ flowchart TD
 
 ### Runner Configuration
 
-Non-dry-run automated ingestion requests require a bearer API token. Both site-side
-runners use:
+Automated ingestion and remote-state dry runs require a bearer API token. Both
+site-side runners use:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
@@ -311,11 +311,14 @@ runners use:
 - `OLD_PERF_ARCHIVE_ROOT`
 - `MACHINE_NAME`
 - `DRY_RUN`
+- `DRY_RUN_USE_REMOTE_STATE`
 
-With `DRY_RUN=true`, runners scan local archive data using empty ingestion state and
-make no API requests. `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` are not
-required, but dry-run output cannot exclude executions already ingested remotely or
-archive snapshots already checkpointed.
+With `DRY_RUN=true`, runners read remote ingestion state and archive checkpoints by
+default, then scan and report candidates without writes. This requires
+`SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`; the report excludes executions
+already ingested remotely and snapshots already checkpointed. Set
+`DRY_RUN_USE_REMOTE_STATE=false` for an offline scan using empty local state and no
+API requests.
 
 They also support these tuning options:
 
@@ -351,8 +354,9 @@ not supply synthetic benchmark measurements.
 
 The runners use composable configuration rather than numbered dry-run modes:
 
-- Set `DRY_RUN=true` to scan and report candidates without API requests or
-  persisted state changes.
+- Set `DRY_RUN=true` to scan and report candidates without persisted state changes;
+  it reads remote state by default. Set `DRY_RUN_USE_REMOTE_STATE=false` to avoid
+  API requests for an offline scan.
 - Set `DRY_RUN=false` and a small `MAX_CASES_PER_RUN` value to validate live
   ingestion on a bounded batch. This is real ingestion and persists results.
 - Set `DRY_RUN=false` with no per-run cap for normal scheduled ingestion.

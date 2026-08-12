@@ -43,11 +43,12 @@ Site configs should set only local defaults such as:
 - `MACHINE_NAME`
 - `PERF_ARCHIVE_ROOT`
 - `DRY_RUN`
+- `DRY_RUN_USE_REMOTE_STATE`
 - `SIMBOARD_INGESTOR_MODULE`
 - protected environment and token file locations
 
-For non-dry-run execution, the launcher loads the API environment and token from
-the protected files referenced by the site config:
+For normal execution and default dry runs, the launcher loads the API environment
+and token from the protected files referenced by the site config:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
@@ -69,6 +70,9 @@ The Chrysalis config defaults to:
 - `MACHINE_NAME=chrysalis`
 - `PERF_ARCHIVE_ROOT=/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`
 - `DRY_RUN=true`
+
+Set `DRY_RUN_USE_REMOTE_STATE=false` only when a credential-free offline scan is
+needed; default dry runs read remote state and checkpoints without writing data.
 
 Before enabling real ingestion, validate:
 
