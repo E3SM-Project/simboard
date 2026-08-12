@@ -488,6 +488,7 @@ def test_run_ingestor_dry_run_does_not_upload(
         archive_root=archive_root,
         machine_name="perlmutter",
         dry_run=True,
+        dry_run_use_remote_state=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
@@ -655,7 +656,7 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
 
 
-def test_run_ingestor_fetches_archive_checkpoints_before_state(
+def test_run_ingestor_default_dry_run_fetches_archive_checkpoints_before_state(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -686,7 +687,7 @@ def test_run_ingestor_fetches_archive_checkpoints_before_state(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=False,
+        dry_run=True,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,

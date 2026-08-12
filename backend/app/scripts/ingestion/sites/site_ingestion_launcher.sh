@@ -33,20 +33,34 @@ fi
 # Optional max cases per run, default is no limit.
 export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-}"
 
-# Optional dry run mode, default is true. If true, no API calls will be made, and no data will be written to the database.
-# This also means the SIMBOARD_ENV_FILE and SIMBOARD_API_TOKEN_FILE are not required to be set.
+# Dry runs default to read-only remote-state validation. Set
+# DRY_RUN_USE_REMOTE_STATE=false for credential-free offline scanning.
 dry_run_normalized="${DRY_RUN:-true}"
 dry_run_normalized="${dry_run_normalized#"${dry_run_normalized%%[![:space:]]*}"}"
 dry_run_normalized="${dry_run_normalized%"${dry_run_normalized##*[![:space:]]}"}"
+remote_state_normalized="${DRY_RUN_USE_REMOTE_STATE:-true}"
+remote_state_normalized="${remote_state_normalized#"${remote_state_normalized%%[![:space:]]*}"}"
+remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*[![:space:]]}"}"
+
+load_api_configuration() {
+    : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
+    : "${SIMBOARD_API_TOKEN_FILE:?SIMBOARD_API_TOKEN_FILE must be set when remote API access is enabled}"
+    source "${SIMBOARD_ENV_FILE}"
+    source "${SIMBOARD_API_TOKEN_FILE}"
+    : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
+    : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
+}
+
 shopt -s nocasematch
 case "${dry_run_normalized}" in
   0|false|no|off)
-    : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set for non-dry-run ingestion}"
-    : "${SIMBOARD_API_TOKEN_FILE:?SIMBOARD_API_TOKEN_FILE must be set for non-dry-run ingestion}"
-    source "${SIMBOARD_ENV_FILE}"
-    source "${SIMBOARD_API_TOKEN_FILE}"
-    : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set for non-dry-run ingestion}"
-    : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
+    load_api_configuration
+    ;;
+  *)
+    case "${remote_state_normalized}" in
+      0|false|no|off) ;;
+      *) load_api_configuration ;;
+    esac
     ;;
 esac
 shopt -u nocasematch
