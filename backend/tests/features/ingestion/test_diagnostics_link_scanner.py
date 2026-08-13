@@ -20,11 +20,32 @@ BASE_URL = "https://diagnostics.example.org/archive"
 
 def test_chrysalis_diagnostics_archive_settings() -> None:
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE["chrysalis"]
-    assert archive.root == "/lcrc/group/e3sm/diagnostic_output"
+    assert archive.root == "/lcrc/group/e3sm/public_html/diagnostic_output"
     assert (
         archive.public_base_url
         == "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output"
     )
+
+
+@pytest.mark.parametrize("machine_name", [None, "   "])
+def test_run_requires_machine_name_before_archive_resolution(
+    monkeypatch: pytest.MonkeyPatch, machine_name: str | None
+) -> None:
+    def resolve_archive(_machine: str) -> DiagnosticsArchive:
+        pytest.fail("archive resolution must not be called without MACHINE_NAME")
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
+        resolve_archive,
+    )
+    if machine_name is None:
+        monkeypatch.delenv("MACHINE_NAME", raising=False)
+    else:
+        monkeypatch.setenv("MACHINE_NAME", machine_name)
+
+    with pytest.raises(ValueError, match="MACHINE_NAME is required"):
+        run()
 
 
 def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -> Path:
@@ -200,6 +221,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
     )
     monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
     assert run() == 0
     assert client.get_calls[0]["params"] == {
@@ -232,6 +254,7 @@ def test_dry_run_requires_no_api_configuration(
     )
     monkeypatch.delenv("SIMBOARD_API_BASE_URL", raising=False)
     monkeypatch.delenv("SIMBOARD_API_TOKEN", raising=False)
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "true")
     events: list[tuple[str, dict | None]] = []
     monkeypatch.setattr(
@@ -289,6 +312,7 @@ def test_run_defers_after_exhausted_state_lookup(
     )
     monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
     run()
     assert client.post_calls == []

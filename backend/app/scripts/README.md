@@ -170,13 +170,16 @@ Run through the NERSC wrapper:
 
 ```bash
 SIMBOARD_API_TOKEN=<service-account-token> \
+MACHINE_NAME=perlmutter \
 DRY_RUN=true \
 backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
 ```
 
-Use `sites/chrysalis-diagnostics-scanner.sh` at LCRC. Required: API base URL,
-service-account token, and machine name. Roots and public URLs come only from
-`diagnostics_archives.py`.
+Use `sites/chrysalis-diagnostics-scanner.sh` at LCRC with
+`MACHINE_NAME=chrysalis`. `MACHINE_NAME` is required for every diagnostics
+scanner invocation; wrappers do not assign a machine default. A non-dry run
+also requires an API base URL and service-account token. Roots and public URLs
+come only from `diagnostics_archives.py`.
 
 Start with `DRY_RUN=true`; it needs no API URL or token. Inspect logs, then
 schedule with `DRY_RUN=false`, which requires both API URL and service token.

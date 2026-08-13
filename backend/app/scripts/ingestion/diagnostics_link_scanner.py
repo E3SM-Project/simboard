@@ -35,10 +35,14 @@ class Candidate:
 
 
 def run() -> int:
-    machine = os.environ.get("MACHINE_NAME", "perlmutter")
+    machine = os.environ.get("MACHINE_NAME", "").strip()
+    if not machine:
+        raise ValueError("MACHINE_NAME is required")
+
     archive = _resolve_archive(machine)
     root = Path(archive.root)
     dry_run = os.environ.get("DRY_RUN", "true").lower() in {"1", "true", "yes"}
+
     summary = {
         "discovered_candidates": 0,
         "dry_run_candidates": 0,
@@ -58,6 +62,7 @@ def run() -> int:
             "has_api_token": bool(os.environ.get("SIMBOARD_API_TOKEN")),
         },
     )
+
     candidates = _discover(root, archive.public_base_url)
     summary["discovered_candidates"] = len(candidates)
     _log_event("diagnostics_scanner_discovery_completed", summary.copy())
@@ -76,6 +81,7 @@ def run() -> int:
             )
         _log_event("diagnostics_scanner_dry_run_completed", summary.copy())
         _log_event("diagnostics_scanner_completed", summary.copy())
+
         return 0
 
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
@@ -111,7 +117,7 @@ def run() -> int:
                 )
                 continue
 
-            state_payload = state.json()
+            state_payload = state.json() if state.content else None
             if state_payload and (
                 state_payload.get("settingsFilename") == candidate.settings.name
                 and state_payload.get("fingerprint") == candidate.fingerprint
@@ -175,6 +181,7 @@ def run() -> int:
                 )
 
     _log_event("diagnostics_scanner_completed", summary)
+
     return 0
 
 
@@ -199,8 +206,10 @@ def _sanitize_url(url: str) -> str:
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
     netloc = hostname
+
     if parsed.port is not None:
         netloc = f"{netloc}:{parsed.port}"
+
     return urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
 
 
@@ -244,6 +253,7 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                     or not _published_output(case_dir, root)
                 ):
                     continue
+
                 settings_bytes = _read_settings_bytes(settings)
                 values = _parse_settings_bytes(settings_bytes)
                 url = urlparse(values["diagnostics_url"])
@@ -255,6 +265,7 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                     raise ValueError(
                         "Diagnostics URL outside configured public archive"
                     )
+
                 _validate_layout(case_dir, root, values)
 
                 digest = hashlib.sha256(settings_bytes).hexdigest()
@@ -315,8 +326,10 @@ def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
 def _read_settings_bytes(path: Path) -> bytes:
     with path.open("rb") as settings_file:
         content = settings_file.read(MAX_SETTINGS_BYTES + 1)
+
     if len(content) > MAX_SETTINGS_BYTES:
         raise ValueError("Provenance settings file is too large")
+
     return content
 
 
