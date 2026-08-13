@@ -21,7 +21,7 @@ Invalid, unreadable, unsafe, or malformed provenance and settings inputs are ski
 
 ## Scanner State Flow
 
-1. The scanner resolves the configured diagnostics archive for its machine and verifies that its root is readable and its public base URL is absolute HTTP(S).
+1. `MACHINE_NAME` is required and must name the machine whose diagnostics archive the scanner resolves. The scanner rejects unset or blank values before archive resolution, then verifies that the configured root is readable and its public base URL is absolute HTTP(S).
 2. It discovers scanner candidates by selecting the newest timestamped provenance configuration for each diagnostics case directory, then validating its paired settings and computing the settings fingerprint. If the selected configuration or settings are invalid or missing, the case is skipped without falling back to an older configuration.
 3. For every candidate, it calls `GET /api/v1/diagnostics/scanner-state` with the configured machine and archive-relative diagnostics case path. A missing state is an unlinked candidate; matching settings filename and fingerprint make it unchanged; a failed or non-successful lookup defers it.
 4. For each unlinked or changed candidate, it calls `POST /api/v1/diagnostics/scanner/link` with one diagnostic link and provenance metadata. The API resolves the target SimBoard Case from case name, machine, and HPC username, then atomically upserts the case diagnostic link and scanner state. A successful request returns no content.
