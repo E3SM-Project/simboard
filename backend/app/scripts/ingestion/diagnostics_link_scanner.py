@@ -3,23 +3,22 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from app.scripts.ingestion.archive_ingestor_core import _log_event
 from app.scripts.ingestion.diagnostics_archives import (
     DIAGNOSTICS_ARCHIVES_BY_MACHINE,
     DiagnosticsArchive,
 )
 
-LOGGER = logging.getLogger(__name__)
 TIMESTAMP_RE = re.compile(r"^provenance\.(\d{8}_\d{6}_\d{6})\.cfg$")
 REQUIRED_SETTINGS = {"case_name", "machine", "hpc_username", "diagnostics_url"}
 MAX_SETTINGS_BYTES = 64 * 1024
@@ -40,13 +39,43 @@ def run() -> int:
     archive = _resolve_archive(machine)
     root = Path(archive.root)
     dry_run = os.environ.get("DRY_RUN", "true").lower() in {"1", "true", "yes"}
+    summary = {
+        "discovered_candidates": 0,
+        "dry_run_candidates": 0,
+        "unchanged_candidates": 0,
+        "deferred_state_lookups": 0,
+        "submitted_links": 0,
+        "failed_link_submissions": 0,
+    }
+    _log_event(
+        "diagnostics_scanner_startup_configuration",
+        {
+            "machine_name": machine,
+            "archive_root": str(root),
+            "public_base_url": _sanitize_url(archive.public_base_url),
+            "dry_run": dry_run,
+            "has_api_base_url": bool(os.environ.get("SIMBOARD_API_BASE_URL")),
+            "has_api_token": bool(os.environ.get("SIMBOARD_API_TOKEN")),
+        },
+    )
     candidates = _discover(root, archive.public_base_url)
+    summary["discovered_candidates"] = len(candidates)
+    _log_event("diagnostics_scanner_discovery_completed", summary.copy())
 
     if dry_run:
         for candidate in candidates:
             relative = candidate.path.parent.relative_to(root).as_posix()
-            LOGGER.info("Would link diagnostics for %s", relative)
-        print(f"Dry run complete: {len(candidates)} diagnostics candidate(s) found.")
+            summary["dry_run_candidates"] += 1
+            _log_event(
+                "diagnostics_scanner_dry_run_candidate",
+                {
+                    "archive_relative_case_path": relative,
+                    "settings_filename": candidate.settings.name,
+                    "fingerprint": candidate.fingerprint,
+                },
+            )
+        _log_event("diagnostics_scanner_dry_run_completed", summary.copy())
+        _log_event("diagnostics_scanner_completed", summary.copy())
         return 0
 
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
@@ -63,19 +92,39 @@ def run() -> int:
                 params={"machine": machine, "archive_relative_case_path": relative},
                 headers=headers,
             )
+            _log_event(
+                "diagnostics_scanner_state_lookup_result",
+                {
+                    "archive_relative_case_path": relative,
+                    "status_code": None if state is None else state.status_code,
+                },
+            )
 
             if state is None or state.status_code != 200:
-                LOGGER.warning("State lookup failed for %s; deferring", relative)
+                summary["deferred_state_lookups"] += 1
+                _log_event(
+                    "diagnostics_scanner_state_lookup_deferred",
+                    {
+                        "archive_relative_case_path": relative,
+                        "status_code": None if state is None else state.status_code,
+                    },
+                )
                 continue
 
-            if (
-                state.status_code == 200
-                and state.json()
-                and (
-                    state.json().get("settingsFilename") == candidate.settings.name
-                    and state.json().get("fingerprint") == candidate.fingerprint
-                )
+            state_payload = state.json()
+            if state_payload and (
+                state_payload.get("settingsFilename") == candidate.settings.name
+                and state_payload.get("fingerprint") == candidate.fingerprint
             ):
+                summary["unchanged_candidates"] += 1
+                _log_event(
+                    "diagnostics_scanner_skipped_unchanged",
+                    {
+                        "archive_relative_case_path": relative,
+                        "settings_filename": candidate.settings.name,
+                        "fingerprint": candidate.fingerprint,
+                    },
+                )
                 continue
 
             payload = {
@@ -105,8 +154,27 @@ def run() -> int:
             )
 
             if response is None or response.status_code != 204:
-                LOGGER.warning("Diagnostics link submission failed for %s", relative)
+                summary["failed_link_submissions"] += 1
+                _log_event(
+                    "diagnostics_scanner_link_submission_failed",
+                    {
+                        "archive_relative_case_path": relative,
+                        "status_code": None
+                        if response is None
+                        else response.status_code,
+                    },
+                )
+            else:
+                summary["submitted_links"] += 1
+                _log_event(
+                    "diagnostics_scanner_link_submitted",
+                    {
+                        "archive_relative_case_path": relative,
+                        "status_code": response.status_code,
+                    },
+                )
 
+    _log_event("diagnostics_scanner_completed", summary)
     return 0
 
 
@@ -126,6 +194,16 @@ def _resolve_archive(machine_name: str) -> DiagnosticsArchive:
     return archive
 
 
+def _sanitize_url(url: str) -> str:
+    """Return a URL safe to include in structured logs."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    netloc = hostname
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
+
+
 def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
     base = urlparse(public_base_url)
     candidates: list[Candidate] = []
@@ -139,7 +217,11 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
         newest_by_case: dict[Path, tuple[Path, datetime]] = {}
 
         for cfg in tier_root.rglob("provenance.*.cfg"):
-            if cfg.is_symlink() or root not in cfg.resolve().parents:
+            try:
+                if cfg.is_symlink() or root not in cfg.resolve().parents:
+                    continue
+            except OSError as exc:
+                _log_invalid_provenance(root, cfg, exc)
                 continue
 
             timestamp = _timestamp(cfg)
@@ -154,14 +236,14 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
 
         for case_dir, (cfg, timestamp) in newest_by_case.items():
             settings = cfg.with_suffix(".settings")
-            if (
-                settings.is_symlink()
-                or root not in settings.resolve().parents
-                or not settings.is_file()
-                or not _published_output(case_dir, root)
-            ):
-                continue
             try:
+                if (
+                    settings.is_symlink()
+                    or root not in settings.resolve().parents
+                    or not settings.is_file()
+                    or not _published_output(case_dir, root)
+                ):
+                    continue
                 settings_bytes = _read_settings_bytes(settings)
                 values = _parse_settings_bytes(settings_bytes)
                 url = urlparse(values["diagnostics_url"])
@@ -178,9 +260,20 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                 digest = hashlib.sha256(settings_bytes).hexdigest()
                 candidates.append(Candidate(cfg, settings, timestamp, values, digest))
             except (OSError, UnicodeError, ValueError) as exc:
-                LOGGER.warning("Skipping invalid provenance %s: %s", cfg, exc)
+                _log_invalid_provenance(root, cfg, exc)
 
     return candidates
+
+
+def _log_invalid_provenance(root: Path, cfg: Path, exc: Exception) -> None:
+    """Log a malformed or inaccessible provenance file without halting discovery."""
+    _log_event(
+        "diagnostics_scanner_invalid_provenance",
+        {
+            "provenance_path": cfg.relative_to(root).as_posix(),
+            "reason": str(exc),
+        },
+    )
 
 
 def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
@@ -197,8 +290,25 @@ def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
             return response
 
         if attempt < 2:
+            _log_event(
+                "diagnostics_scanner_request_retry_scheduled",
+                {
+                    "attempt": attempt + 1,
+                    "max_attempts": 3,
+                    "status_code": None if response is None else response.status_code,
+                    "request_error": response is None,
+                },
+            )
             time.sleep(2**attempt)
 
+    _log_event(
+        "diagnostics_scanner_request_retry_exhausted",
+        {
+            "attempts": 3,
+            "status_code": None if response is None else response.status_code,
+            "request_error": response is None,
+        },
+    )
     return response
 
 
