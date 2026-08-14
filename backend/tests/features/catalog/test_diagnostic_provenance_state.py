@@ -1,6 +1,7 @@
 from unittest.mock import patch
 from uuid import uuid4
 
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
@@ -83,7 +84,7 @@ def test_scanner_link_is_idempotent_and_state_is_readable(client, db: Session) -
         f"{API_BASE}/diagnostics/scanner-state",
         params={
             "machine": machine.name,
-            "archiveRelativeCasePath": "production/e3sm/case",
+            "archive_relative_case_path": "production/e3sm/case",
         },
         headers=headers,
     )
@@ -110,7 +111,10 @@ def test_scanner_link_rolls_back_link_when_state_write_fails(
     app.dependency_overrides[current_active_user] = lambda: service_user
     try:
         with patch.object(db, "execute", side_effect=fail_only_state_insert):
-            response = client.post(f"{API_BASE}/diagnostics/scanner/link", json=payload)
+            with TestClient(app, raise_server_exceptions=False) as error_client:
+                response = error_client.post(
+                    f"{API_BASE}/diagnostics/scanner/link", json=payload
+                )
     finally:
         app.dependency_overrides.pop(current_active_user, None)
 
