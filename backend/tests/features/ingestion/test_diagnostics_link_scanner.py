@@ -20,10 +20,13 @@ BASE_URL = "https://diagnostics.example.org/archive"
 
 def test_chrysalis_diagnostics_archive_settings() -> None:
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE["chrysalis"]
-    assert archive.root == "/lcrc/group/e3sm/public_html/diagnostic_output"
+    assert (
+        archive.root
+        == "/lcrc/group/e3sm/public_html/diagnostic_output/diagnostics_archive"
+    )
     assert (
         archive.public_base_url
-        == "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output"
+        == "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive"
     )
 
 
@@ -53,8 +56,14 @@ def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -
     directory.mkdir(parents=True)
     cfg = directory / f"provenance.{timestamp}.cfg"
     cfg.write_text("cfg", encoding="utf-8")
+    case_group = (
+        f"case_group = {directory.parent.name}\n"
+        if len(directory.relative_to(root).parts) == 3
+        else ""
+    )
     cfg.with_suffix(".settings").write_text(
-        "case_name = case\nmachine = perlmutter\nhpc_username = user\n"
+        f"case_name = {directory.name}\nmachine = perlmutter\nhpc_username = user\n"
+        f"{case_group}"
         "diagnostics_url = https://diagnostics.example.org/archive/case\n",
         encoding="utf-8",
     )
