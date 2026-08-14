@@ -23,7 +23,7 @@ scripts/
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   └── sites/
-│       ├── chrysalis-diagnostics-scanner.sh
+│       ├── lcrc-diagnostics-scanner.sh
 │       ├── nersc-diagnostics-scanner.sh
 │       └── nersc.sh
 ├── db/
@@ -175,7 +175,7 @@ DRY_RUN=true \
 backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
 ```
 
-Use `sites/chrysalis-diagnostics-scanner.sh` at LCRC with
+Use `sites/lcrc-diagnostics-scanner.sh` at LCRC with
 `MACHINE_NAME=chrysalis`. `MACHINE_NAME` is required for every diagnostics
 scanner invocation; wrappers do not assign a machine default. A non-dry run
 also requires an API base URL and service-account token. Roots and public URLs
