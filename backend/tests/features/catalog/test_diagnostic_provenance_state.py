@@ -8,6 +8,7 @@ from app.api.version import API_BASE
 from app.features.catalog.models import DiagnosticProvenanceState, ExternalLink
 from app.features.machine.models import Machine
 from app.features.user.manager import current_active_user
+from app.features.user.models import User, UserRole
 from app.main import app
 from tests.features.catalog.test_api import (
     _create_matching_execution,
@@ -90,6 +91,98 @@ def test_scanner_link_is_idempotent_and_state_is_readable(client, db: Session) -
     )
     assert response.status_code == 200
     assert response.json()["fingerprint"] == "a" * 64
+
+
+@use_real_auth
+def test_scanner_state_returns_404_for_unknown_machine(client, db: Session) -> None:
+    _, _, token, _ = _matching_case(db)
+
+    response = client.get(
+        f"{API_BASE}/diagnostics/scanner-state",
+        params={
+            "machine": "unknown-machine",
+            "archive_relative_case_path": "production/e3sm/case",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Unknown machine."
+
+
+@use_real_auth
+def test_scanner_link_rejects_multiple_diagnostics(client, db: Session) -> None:
+    machine, _, token, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine=machine.name, path="production/e3sm/case"
+    )
+    payload["diagnostics"].append(payload["diagnostics"][0].copy())
+
+    response = client.post(
+        f"{API_BASE}/diagnostics/scanner/link",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Scanner payload requires one diagnostic."
+
+
+@use_real_auth
+def test_scanner_link_rejects_unsafe_archive_path(client, db: Session) -> None:
+    machine, _, token, case = _matching_case(db)
+    payload = _payload(case_name=case.name, machine=machine.name, path="../outside")
+
+    response = client.post(
+        f"{API_BASE}/diagnostics/scanner/link",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Invalid archive-relative case path."
+
+
+@use_real_auth
+def test_scanner_link_returns_404_for_unknown_machine(client, db: Session) -> None:
+    _, _, token, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine="unknown-machine", path="production/e3sm/case"
+    )
+
+    response = client.post(
+        f"{API_BASE}/diagnostics/scanner/link",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No matching case found."
+
+
+@use_real_auth
+def test_scanner_endpoints_reject_regular_user(client, db: Session) -> None:
+    machine, _, _, case = _matching_case(db)
+    payload = _payload(
+        case_name=case.name, machine=machine.name, path="production/e3sm/case"
+    )
+    regular_user = User(
+        id=uuid4(),
+        email="regular-scanner-user@example.com",
+        is_active=True,
+        is_verified=True,
+        role=UserRole.USER,
+    )
+    app.dependency_overrides[current_active_user] = lambda: regular_user
+    try:
+        response = client.post(f"{API_BASE}/diagnostics/scanner/link", json=payload)
+    finally:
+        app.dependency_overrides.pop(current_active_user, None)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "Scanner access requires an administrator or service account."
+    )
 
 
 @use_real_auth
