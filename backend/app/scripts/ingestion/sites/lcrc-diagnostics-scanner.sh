@@ -12,7 +12,8 @@ export SIMBOARD_API_BASE_URL="${SIMBOARD_API_BASE_URL:-https://simboard-dev-api.
 : "${MACHINE_NAME:?MACHINE_NAME must be set}"
 export DRY_RUN="${DRY_RUN:-true}"
 
-if [[ "${DRY_RUN,,}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN,,}" != "yes" ]]; then
+DRY_RUN_NORMALIZED="$(printf '%s' "${DRY_RUN}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${DRY_RUN_NORMALIZED}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN_NORMALIZED}" != "yes" ]]; then
   : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set when DRY_RUN is false}"
 fi
 
