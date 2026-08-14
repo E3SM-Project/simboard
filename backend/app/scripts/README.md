@@ -183,6 +183,9 @@ come only from `diagnostics_archives.py`.
 
 Start with `DRY_RUN=true`; it needs no API URL or token. Inspect logs, then
 schedule with `DRY_RUN=false`, which requires both API URL and service token.
+The scanner emits structured events for startup configuration, discovery,
+candidate selection, state lookups, retry outcomes, and completion; credentials
+are never logged. Dry runs also emit one candidate event per discovered link.
 Scanner account needs read/traverse access to `production/` and `development/`,
 provenance settings, and published output. Failed or not-ready candidates retry
 next run. Refresh registry entries from Mache `[web_portal]` cfg data only in a
