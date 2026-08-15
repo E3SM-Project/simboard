@@ -3,7 +3,6 @@ default_stages: [pre-commit]
 fail_fast: true
 
 # To update pre-commit hooks, run `pre-commit autoupdate` in the terminal.
-# Then update the versions in `conda-env/dev.yml`.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -25,9 +24,12 @@ repos:
       # Run the formatter.
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+  - repo: local
     hooks:
-      - id: mypy
-        args: ["--config=backend/pyproject.toml"]
-        additional_dependencies: [types-requests, pydantic, types-python-dateutil]
+      - id: ty
+        name: ty (type checking)
+        entry: >
+          bash -c 'cd "$(git rev-parse --show-toplevel)/backend" && uv run ty check'
+        language: system
+        pass_filenames: false
+        files: ^(?:backend/)?app/.*\.py$

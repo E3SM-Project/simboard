@@ -58,7 +58,7 @@ Requests to `https://simboard-dev.e3sm.org/api/...` (the frontend origin) return
 - Backend: FastAPI, Pydantic, SQLAlchemy, Alembic
 - Database: PostgreSQL
 - Auth: GitHub OAuth for browser flows, API tokens for service accounts
-- Tooling: `uv`, `pnpm`, `ruff`, `mypy`, `eslint`, `prettier`, `pre-commit`
+- Tooling: `uv`, `pnpm`, `ruff`, `ty`, `eslint`, `prettier`, `pre-commit`
 - CI/CD: GitHub Actions plus NERSC-focused deployment/build docs under `docs/`
 
 ## Documentation Map

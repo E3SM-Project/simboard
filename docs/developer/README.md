@@ -101,9 +101,12 @@ Useful commands:
 make backend-test          # run backend pytest suite
 make frontend-lint         # lint frontend with ESLint
 make pre-commit-run        # run all pre-commit hooks (formatting, linting, etc.)
+cd backend && uv run ty check  # type-check production backend code
 pnpm --dir frontend run type-check  # TypeScript type checking (no Makefile wrapper yet)
 make help                  # list all available Makefile targets
 ```
+
+`ty` currently checks `backend/app`; tests and migrations remain outside this migration scope because their dynamic fixture and framework patterns do not have equivalent ty support.
 
 ## Optional Local Services
 
@@ -238,7 +241,7 @@ Your browser will show a self-signed certificate warning — this is expected fo
 The backend uses `uv` (not pip) and the frontend uses `pnpm` (not npm/yarn). Both must be on your `PATH`. See the [Prerequisites](#local-environment-setup) section for install links.
 
 **Pre-commit fails or gives inconsistent results**
-Always run pre-commit from the repository root, not from `backend/` or `frontend/`. Some hooks (e.g., `mypy`) depend on root-relative config paths.
+Always run pre-commit from the repository root, not from `backend/` or `frontend/`. Some hooks (e.g., `ty`) depend on root-relative config paths.
 
 ```bash
 # correct

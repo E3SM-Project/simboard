@@ -23,7 +23,7 @@ async def create_admin():
     hashed_password = password_helper.hash(password)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.email == email))
+        result = await session.execute(select(User).where(User.email == email))  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
         existing = result.scalar_one_or_none()
 
         if existing:

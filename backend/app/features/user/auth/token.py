@@ -97,7 +97,7 @@ def validate_token(
         if datetime.now(timezone.utc) > token.expires_at:
             return None
 
-    user = db.query(User).filter(User.id == token.user_id).first()
+    user = db.query(User).filter(User.id == token.user_id).first()  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
 
     if not user or not user.is_active:
         return None

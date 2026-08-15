@@ -119,7 +119,7 @@ def rollback_seed(db: Session):
 
         # Remove only the dummy OAuth account/user created by seed.py
         dev_user_id = db.execute(
-            select(User.id).where(User.__table__.c.email == DEV_EMAIL)
+            select(User.id).where(User.__table__.c.email == DEV_EMAIL)  # ty: ignore[no-matching-overload] -- SQLAlchemy declarative table columns are dynamically generated.
         ).scalar_one_or_none()
 
         if dev_user_id:

@@ -114,24 +114,25 @@ class SummaryLLMGenerator:
         if self.config.provider == "ollama":
             api_key = api_key or _OLLAMA_PLACEHOLDER_API_KEY
 
-        provider_kwargs = {
-            "api_key": api_key,
-            "base_url": self._resolve_base_url(),
-            "http_client": http_client,
-        }
         if self.config.provider == "ollama":
-            provider_kwargs = {
-                "openai_client": AsyncOpenAI(
-                    **provider_kwargs,
+            provider = OpenAIProvider(
+                openai_client=AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=self._resolve_base_url(),
+                    http_client=http_client,
                     max_retries=0,
                     timeout=self.config.timeout_seconds,
                     _enforce_credentials=False,
                 )
-            }
+            )
+        else:
+            provider = OpenAIProvider(
+                api_key=api_key,
+                base_url=self._resolve_base_url(),
+                http_client=http_client,
+            )
 
-        model = OpenAIChatModel(
-            self.config.model_name, provider=OpenAIProvider(**provider_kwargs)
-        )
+        model = OpenAIChatModel(self.config.model_name, provider=provider)
         return model
 
     def _resolve_base_url(self) -> str | None:
