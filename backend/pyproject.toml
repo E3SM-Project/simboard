@@ -53,7 +53,7 @@ dev = [
   # --- Development Tools ---
   "ruff==0.14.1",
   "pre-commit==4.3.0",
-  "mypy==1.19.1",
+  "ty==0.0.72",
 
   # --- Notebook runtime ---
   "ipykernel==7.0.0",
@@ -79,7 +79,6 @@ exclude = [
   ".git-rewrite",
   ".hg",
   ".ipynb_checkpoints",
-  ".mypy_cache",
   ".nox",
   ".pants.d",
   ".pyenv",
@@ -147,13 +146,10 @@ python_files = ["tests.py", "test_*.py"]
 [tool.coverage.run]
 omit = ["app/scripts/*"]
 
-[tool.mypy]
-# Docs: https://mypy.readthedocs.io/en/stable/config_file.html
-python_version = "3.13"
-check_untyped_defs = true
-ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
+[tool.ty.environment]
+python-version = "3.13"
 
-plugins = ["pydantic.mypy"]
+[tool.ty.rules]
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsound-return-statement = "error"

@@ -31,19 +31,14 @@ repos:
         files: ^backend/.*\.py$
 
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+  - repo: local
     hooks:
-      - id: mypy
-        name: mypy (type checking)
-        args:
-          - --config-file=backend/pyproject.toml
+      - id: ty
+        name: ty (type checking)
+        entry: uv run --project backend ty check
+        language: system
+        pass_filenames: false
         files: ^backend/.*\.py$
-        additional_dependencies:
-          - fastapi
-          - pydantic
-          - sqlalchemy
-          - types-python-dateutil
 
   # ------------------------
   # Frontend (Node / TS)
