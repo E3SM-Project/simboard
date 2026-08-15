@@ -149,7 +149,10 @@ omit = ["app/scripts/*"]
 [tool.ty.environment]
 python-version = "3.13"
 
-[tool.ty.rules]
-missing-type-argument = "error"
-possibly-unresolved-reference = "warn"
-unsound-return-statement = "error"
+[tool.ty.src]
+# Check production backend code only.
+# Tests and migrations are intentionally outside this migration scope because their
+# dynamic Pydantic fixtures and framework patterns are not supported equivalently by ty.
+# ty defaults are used because the prior mypy configuration did not opt into stricter
+# missing-generics or unsound-return policies.
+include = ["app"]

@@ -1191,7 +1191,7 @@ def _machine_filter_options(db: Session) -> list[FilterOptionOut]:
 def _creator_filter_options(db: Session) -> list[FilterOptionOut]:
     """Return execution creators with stable IDs and email labels."""
     rows = (
-        db.query(User.id, User.email)
+        db.query(User.id, User.email)  # ty: ignore[no-matching-overload] -- SQLAlchemy mapped descriptors are not recognized as query columns.
         .join(Execution, Execution.created_by == User.id)
         .distinct()
         .order_by(User.email, User.id)

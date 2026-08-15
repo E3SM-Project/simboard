@@ -29,7 +29,7 @@ repos:
       - id: ty
         name: ty (type checking)
         entry: >
-          bash -c 'uv run --project "$(git rev-parse --show-toplevel)/backend" ty check'
+          bash -c 'cd "$(git rev-parse --show-toplevel)/backend" && uv run ty check'
         language: system
         pass_filenames: false
-        files: ^.*\.py$
+        files: ^(?:backend/)?app/.*\.py$

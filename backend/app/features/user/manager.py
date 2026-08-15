@@ -19,10 +19,10 @@ logger = _setup_custom_logger(__name__)
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_session)):  # noqa: B008
-    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
+    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)  # ty: ignore[invalid-argument-type] -- FastAPI Users' protocol does not support nullable OAuth passwords.
 
 
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):  # ty: ignore[invalid-type-arguments] -- OAuth users intentionally have nullable passwords.
     async def on_after_register(self, user: User, request=None):
         logger.info(f"✅ New GitHub user registered: {user.email}")
 
@@ -48,7 +48,7 @@ async def get_user_manager(user_db=Depends(get_user_db)):  # noqa: B008
     yield UserManager(user_db)
 
 
-fastapi_users = FastAPIUsers[User, uuid.UUID](
+fastapi_users = FastAPIUsers[User, uuid.UUID](  # ty: ignore[invalid-type-arguments] -- OAuth users intentionally have nullable passwords.
     get_user_manager, [GITHUB_OAUTH_BACKEND, JWT_BEARER_BACKEND]
 )
 

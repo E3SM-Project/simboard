@@ -74,7 +74,7 @@ def create_api_token(
             detail="Only administrators can create API tokens",
         )
 
-    stmt = select(User).where(User.id == payload.user_id)
+    stmt = select(User).where(User.id == payload.user_id)  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
     result = db.execute(stmt)
     target_user = result.scalar_one_or_none()
 
@@ -259,7 +259,7 @@ def create_service_account(
 
     email = f"{payload.service_name}@{settings.domain}"
 
-    existing = db.query(User).filter(User.email == email).first()
+    existing = db.query(User).filter(User.email == email).first()  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
     if existing is not None:
         return ServiceAccountResponse(
             id=existing.id,

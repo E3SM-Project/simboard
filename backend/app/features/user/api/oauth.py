@@ -185,7 +185,7 @@ async def github_callback(
     if has_verified_e3sm_membership is not None and hasattr(
         user_manager, "refresh_github_org_membership"
     ):
-        user = await user_manager.refresh_github_org_membership(
+        user = await user_manager.refresh_github_org_membership(  # ty: ignore[call-non-callable] -- FastAPI Users' untyped extension method is narrowed by hasattr.
             user,
             is_verified_member=has_verified_e3sm_membership,
             checked_at=datetime.now(timezone.utc),

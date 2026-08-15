@@ -13,6 +13,7 @@ import os
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, cast
 
 from pydantic import AnyUrl, HttpUrl
 from sqlalchemy import select
@@ -56,7 +57,7 @@ def create_dev_oauth_user(db: Session):
     provider = DEV_OAUTH_PROVIDER
 
     # 1. Check if the user already exists
-    stmt = select(User).where(User.email == dev_email)
+    stmt = select(User).where(User.email == dev_email)  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
     user = db.execute(stmt).scalars().one_or_none()
 
     if user is not None:
@@ -66,7 +67,7 @@ def create_dev_oauth_user(db: Session):
         stmt = (
             select(OAuthAccount)
             .where(OAuthAccount.user_id == user.id)
-            .where(OAuthAccount.oauth_name == provider)
+            .where(OAuthAccount.oauth_name == provider)  # ty: ignore[invalid-argument-type] -- SQLAlchemy mapped descriptor comparison produces a SQL expression at runtime.
         )
         oauth_exists = db.execute(stmt).scalars().one_or_none()
 
@@ -144,7 +145,7 @@ def seed_from_json(db: Session, json_path: str):
     rollback_seed(db)
 
     # ✅ Ensure at least one user exists
-    first_user = db.query(User).order_by(User.id.asc()).first()
+    first_user = db.query(User).order_by(User.id.asc()).first()  # ty: ignore[unresolved-attribute] -- SQLAlchemy mapped descriptors provide SQL ordering methods at runtime.
     if not first_user:
         first_user = create_dev_oauth_user(db)
         db.refresh(first_user)
@@ -275,24 +276,30 @@ def _seed_execution(
     }
 
     execution_in = ExecutionCreate(
-        **{
-            **seed_payload,
-            "caseId": case.id,
-            "simulationStartDate": _parse_date(
-                execution_entry.get("simulationStartDate")
-            ),
-            "simulationEndDate": _parse_date(execution_entry.get("simulationEndDate")),
-            "runStartDate": _parse_datetime(execution_entry.get("runStartDate")),
-            "runEndDate": _parse_datetime(execution_entry.get("runEndDate")),
-            "createdBy": user_id,
-            "lastUpdatedBy": user_id,
-            "artifacts": [
-                ArtifactCreate(**a) for a in execution_entry.get("artifacts", [])
-            ],
-            "links": [
-                ExternalLinkCreate(**link) for link in execution_entry.get("links", [])
-            ],
-        }
+        **cast(
+            dict[str, Any],
+            {
+                **seed_payload,
+                "caseId": case.id,
+                "simulationStartDate": _parse_date(
+                    execution_entry.get("simulationStartDate")
+                ),
+                "simulationEndDate": _parse_date(
+                    execution_entry.get("simulationEndDate")
+                ),
+                "runStartDate": _parse_datetime(execution_entry.get("runStartDate")),
+                "runEndDate": _parse_datetime(execution_entry.get("runEndDate")),
+                "createdBy": user_id,
+                "lastUpdatedBy": user_id,
+                "artifacts": [
+                    ArtifactCreate(**a) for a in execution_entry.get("artifacts", [])
+                ],
+                "links": [
+                    ExternalLinkCreate(**link)
+                    for link in execution_entry.get("links", [])
+                ],
+            },
+        )
     )
 
     execution = Execution(

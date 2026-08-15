@@ -35,10 +35,10 @@ repos:
     hooks:
       - id: ty
         name: ty (type checking)
-        entry: uv run --project backend ty check
+        entry: bash -c 'cd backend && uv run ty check'
         language: system
         pass_filenames: false
-        files: ^backend/.*\.py$
+        files: ^backend/app/.*\.py$
 
   # ------------------------
   # Frontend (Node / TS)
