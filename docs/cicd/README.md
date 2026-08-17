@@ -77,6 +77,18 @@ docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 
 ## Troubleshooting
 
+### NERSC registry login diagnostics
+
+Use the registry endpoint response to distinguish connectivity from authentication:
+
+- An unauthenticated `401` response from the registry `/v2/` endpoint means the endpoint is reachable; continue investigating credentials or registry access.
+- DNS failures, connection timeouts, and TLS failures indicate a network-connectivity problem, not a credential problem.
+- Authentication or authorization errors after reaching the registry indicate an access, secret, or credential problem.
+
+When escalating a registry-login failure to NERSC, provide the GitHub Actions job URL, the failure time in UTC, and a sanitized diagnostic response. Do not include usernames, passwords, tokens, or secret values.
+
+CI uses bounded retries only for transient connection failures; it does not retry authentication or authorization failures.
+
 ### Authentication failure
 
 - Verify GitHub Actions secrets are configured.

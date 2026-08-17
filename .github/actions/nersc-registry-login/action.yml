@@ -1,0 +1,98 @@
+name: Log in to NERSC Container Registry
+description: Verify registry reachability and log in with bounded retries for transient network failures.
+
+inputs:
+  registry:
+    description: Registry host to log in to
+    required: true
+  username:
+    description: Registry username
+    required: true
+  password:
+    description: Registry password
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Verify registry reachability
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+      run: |
+        set -euo pipefail
+
+        registry="${REGISTRY%/}"
+        for attempt in 1 2 3; do
+          set +e
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "https://${registry}/v2/")"
+          curl_exit=$?
+          set -e
+
+          if [[ $curl_exit -eq 0 ]]; then
+            if [[ "$status" =~ ^2[0-9]{2}$ || "$status" == "401" ]]; then
+              exit 0
+            fi
+
+            if [[ "$status" =~ ^5[0-9]{2}$ ]]; then
+              if [[ $attempt -lt 3 ]]; then
+                sleep $((attempt * 2))
+                continue
+              fi
+              echo "Registry preflight failed after retries: server returned HTTP ${status}." >&2
+              exit 1
+            fi
+
+            echo "Registry preflight returned HTTP ${status}." >&2
+            exit 1
+          fi
+
+          case "$curl_exit" in
+            5|6|7|28|35|52|55|56)
+              if [[ $attempt -lt 3 ]]; then
+                sleep $((attempt * 2))
+                continue
+              fi
+              echo "Registry preflight failed after transient-network retries (curl exit ${curl_exit})." >&2
+              exit 1
+              ;;
+          esac
+
+          echo "Registry preflight failed (curl exit ${curl_exit})." >&2
+          exit 1
+        done
+
+    - name: Log in to registry
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        USERNAME: ${{ inputs.username }}
+        PASSWORD: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+
+        for attempt in 1 2 3; do
+          set +e
+          login_output="$(printf '%s' "$PASSWORD" | docker login "$REGISTRY" --username "$USERNAME" --password-stdin 2>&1)"
+          login_exit=$?
+          set -e
+
+          if [[ $login_exit -eq 0 ]]; then
+            exit 0
+          fi
+
+          if [[ "$login_output" =~ [Uu]nauthorized|[Aa]uthentication|[Aa]uthorization|[Dd]enied|[Ff]orbidden ]]; then
+            printf '%s\n' "$login_output" >&2
+            echo "Registry login failed due to authentication or authorization." >&2
+            exit 1
+          fi
+
+          if [[ "$login_output" =~ ([Cc]onnection|[Nn]etwork|[Dd]ial|[Ll]ookup|[Nn]o\ such\ host|[Tt]imeout|[Tt]imed\ out|[Tt]LS|[Xx]509|[Tt]emporary\ failure|[Rr]eset) ]] && [[ $attempt -lt 3 ]]; then
+            sleep $((attempt * 2))
+            continue
+          fi
+
+          printf '%s\n' "$login_output" >&2
+          echo "Registry login failed." >&2
+          exit 1
+        done
