@@ -21,7 +21,9 @@ scripts/
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   └── sites/
-│       └── nersc.sh
+│       ├── site_ingestion_launcher.sh
+│       ├── chrysalis.config
+│       └── nersc.config
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
@@ -50,6 +52,7 @@ python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
 python -m app.scripts.ingestion.nersc_archive_ingestor
+python -m app.scripts.ingestion.hpc_upload_archive_ingestor
 ```
 
 Do not execute scripts directly by file path:
@@ -110,6 +113,42 @@ If operational complexity increases, these scripts may later be consolidated int
 
 ---
 
+## HPC Upload Archive Ingestor
+
+The scheduler-agnostic HPC upload archive ingestor is the preferred entrypoint for
+site wrappers. It currently delegates to the existing NERSC archive ingestor,
+preserving Perlmutter behavior while giving non-NERSC schedulers a stable shared
+command.
+
+Example:
+
+```bash
+uv run python -m app.scripts.ingestion.hpc_upload_archive_ingestor
+```
+
+### Site Collection Launcher
+
+`app/scripts/ingestion/sites/site_ingestion_launcher.sh` is the host-side
+launcher for site collection. It loads `sites/<site>.config`, then selects the
+configured Python ingestor. Use it as:
+
+```bash
+app/scripts/ingestion/sites/site_ingestion_launcher.sh nersc staging
+app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive
+```
+
+Each site config defines its machine name, archive roots, working and repository
+paths, Python environment file, token export file, API base URL, archive lower
+bound, and ingestor module. The launcher defaults to `DRY_RUN=true` with
+`DRY_RUN_USE_REMOTE_STATE=true`, so it loads API credentials and performs
+read-only state validation. Set `DRY_RUN_USE_REMOTE_STATE=false` for a
+credential-free offline scan. Set `DRY_RUN=false` only after validating archive
+access, token storage, network egress, and candidate counts. A capped
+`MAX_CASES_PER_RUN` value limits real ingestion but still persists results.
+
+Site configs are operational inputs. Keep credentials in their referenced,
+protected files rather than committing them to a config file.
+
 ## NERSC Archive Ingestor
 
 The NERSC archive ingestor scans a bind-mounted performance archive directory,
@@ -138,23 +177,19 @@ Configuration surface (via env vars):
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN` (default `true`)
+- `DRY_RUN_USE_REMOTE_STATE` (default `true`; set `false` for offline dry runs)
 - `MAX_CASES_PER_RUN` (optional, default not set)
 - `MAX_ATTEMPTS` (optional, default not set)
 - `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
 - `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 - `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
 
-Helper wrapper:
-
-- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=archive`, defaults to `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
-- Override `SCAN_MODE`, `DRY_RUN`, or any other supported env var in the caller or cron entry when you need a different schedule or behavior.
-
 Archive notes:
 
 - Archive mode traverses only top-level `YYYY-MM` directories under `OLD_PERF_ARCHIVE_ROOT`. Other top-level directories are ignored.
 - Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
-- `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
+- Direct Python entrypoints leave `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` unset. The site collection launcher applies each site's configured archive lower bound; callers may override either bound for a differently scoped archive scan.
 - `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
 
 ## HPC Upload Archive Ingestor
@@ -202,6 +237,7 @@ Configuration surface (via env vars):
 - `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
 - `MACHINE_NAME` (default `perlmutter`)
 - `DRY_RUN` (default `true`)
+- `DRY_RUN_USE_REMOTE_STATE` (default `true`; set `false` for offline dry runs)
 - `MAX_CASES_PER_RUN` (optional, default not set)
 - `MAX_ATTEMPTS` (optional, default not set)
 - `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
