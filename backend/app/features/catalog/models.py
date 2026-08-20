@@ -322,3 +322,48 @@ class ExternalLink(Base, IDMixin, TimestampMixin):
         foreign_keys=[case_id],
         passive_deletes=True,
     )
+    diagnostic_provenance_state: Mapped[DiagnosticProvenanceState | None] = (
+        relationship(
+            back_populates="link",
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+            uselist=False,
+        )
+    )
+
+
+class DiagnosticProvenanceState(Base, IDMixin):
+    """Successful scanner submission state for one published diagnostics link."""
+
+    __tablename__ = "diagnostic_provenance_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "machine_name",
+            "archive_relative_case_path",
+            name="uq_diagnostic_provenance_states_machine_path",
+        ),
+        UniqueConstraint("link_id", name="uq_diagnostic_provenance_states_link_id"),
+    )
+
+    link_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("external_links.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    machine_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    archive_relative_case_path: Mapped[str] = mapped_column(Text, nullable=False)
+    settings_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    provenance_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    linked_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    link: Mapped[ExternalLink] = relationship(
+        back_populates="diagnostic_provenance_state",
+        foreign_keys=[link_id],
+        passive_deletes=True,
+    )

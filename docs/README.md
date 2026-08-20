@@ -2,6 +2,10 @@
 
 Use this directory as the documentation router by audience.
 
+## For Users
+
+- Publish diagnostics links: [user/diagnostics.md](user/diagnostics.md)
+
 ## For Contributors
 
 - Developer guide: [developer/README.md](developer/README.md)

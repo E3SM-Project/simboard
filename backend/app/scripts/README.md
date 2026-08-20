@@ -18,9 +18,13 @@ scripts/
 │   ├── archive_ingestor_core.py
 │   ├── archive_layout.py
 │   ├── archive_workflow.py
+│   ├── diagnostics_archives.py
+│   ├── diagnostics_link_scanner.py
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   └── sites/
+│       ├── lcrc-diagnostics-scanner.sh
+│       ├── nersc-diagnostics-scanner.sh
 │       └── nersc.sh
 ├── db/
 │   ├── seed.py
@@ -156,6 +160,36 @@ Archive notes:
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 - `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
+
+## Diagnostics Provenance Scanner
+
+Scans newest paired zppy provenance from the reviewed static registry and creates
+case-scoped diagnostic links. It never reads Mache configuration at runtime.
+
+Run through the NERSC wrapper:
+
+```bash
+SIMBOARD_API_TOKEN=<service-account-token> \
+MACHINE_NAME=perlmutter \
+DRY_RUN=true \
+backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
+```
+
+Use `sites/lcrc-diagnostics-scanner.sh` at LCRC with
+`MACHINE_NAME=chrysalis`. `MACHINE_NAME` is required for every diagnostics
+scanner invocation; wrappers do not assign a machine default. A non-dry run
+also requires an API base URL and service-account token. Roots and public URLs
+come only from `diagnostics_archives.py`.
+
+Start with `DRY_RUN=true`; it needs no API URL or token. Inspect logs, then
+schedule with `DRY_RUN=false`, which requires both API URL and service token.
+The scanner emits structured events for startup configuration, discovery,
+candidate selection, state lookups, retry outcomes, and completion; credentials
+are never logged. Dry runs also emit one candidate event per discovered link.
+Scanner account needs read/traverse access to `production/` and `development/`,
+provenance settings, and published output. Failed or not-ready candidates retry
+next run. Refresh registry entries from Mache `[web_portal]` cfg data only in a
+reviewed change; never add archive-path environment overrides.
 
 ## HPC Upload Archive Ingestor
 
