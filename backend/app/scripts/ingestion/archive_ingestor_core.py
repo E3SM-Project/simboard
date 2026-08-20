@@ -187,6 +187,28 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "error_count",
     ),
     "case_ingestion_failed": ("case_path", "attempts", "status_code", "error"),
+    "archive_created": (
+        "case_path",
+        "selected_execution_count",
+        "archive_bytes",
+        "duration_seconds",
+    ),
+    "case_upload_attempt": (
+        "case_path",
+        "attempt",
+        "archive_bytes",
+        "duration_seconds",
+    ),
+    "case_ingestion_attempt_completed": (
+        "case_path",
+        "attempt",
+        "duration_seconds",
+    ),
+    "case_ingestion_retry_completed": (
+        "case_path",
+        "attempts",
+        "duration_seconds",
+    ),
 }
 
 

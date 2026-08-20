@@ -396,6 +396,56 @@ def test_archive_checkpoint_persistence_retries_and_sorts_keys(monkeypatch) -> N
     ]
 
 
+def test_ingest_case_retry_timing_events_have_stable_fields(monkeypatch) -> None:
+    candidate = IngestionCandidate(
+        case_path="/performance_archive/case_a",
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fp-1",
+    )
+    events: list[tuple[str, dict[str, object]]] = []
+    monotonic_values = iter([10.0, 11.0, 12.25, 13.0, 14.5, 15.75])
+    monkeypatch.setattr(client_module.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        client_module,
+        "_log_event",
+        lambda event, fields: events.append((event, fields)),
+    )
+    attempts = 0
+
+    def submit(*args, **kwargs) -> IngestionRequestResponse:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise IngestionRequestError("temporary", status_code=503, transient=True)
+        return {"status_code": 201, "body": {}}
+
+    result = _ingest_case_with_retries(
+        candidate,
+        "http://backend/ingestions",
+        "token",
+        "pm",
+        max_attempts=2,
+        timeout_seconds=10,
+        sleep_fn=lambda _: None,
+        post_request_fn=submit,
+    )
+
+    assert result["ok"] is True
+    assert events[1] == (
+        "case_ingestion_attempt_completed",
+        {"case_path": candidate.case_path, "attempt": 1, "duration_seconds": 1.25},
+    )
+    assert events[2] == (
+        "case_ingestion_attempt_completed",
+        {"case_path": candidate.case_path, "attempt": 2, "duration_seconds": 1.5},
+    )
+    assert events[3] == (
+        "case_ingestion_retry_completed",
+        {"case_path": candidate.case_path, "attempts": 2, "duration_seconds": 5.75},
+    )
+
+
 def test_archive_checkpoint_persistence_skips_empty_set() -> None:
     def unexpected_request(*args, **kwargs) -> IngestionRequestResponse:
         raise AssertionError("empty checkpoint set must not be persisted")
@@ -556,18 +606,26 @@ def test_ingest_case_with_retries_retries_transient_errors(monkeypatch) -> None:
     assert result["ok"] is True
     assert result["attempts"] == 2
     assert sleep_calls == [1]
-    assert logged_events == [
-        (
-            "case_ingestion_request_failed",
-            {
-                "case_path": "/performance_archive/case_a",
-                "attempt": 1,
-                "status_code": 503,
-                "transient": True,
-                "retrying": True,
-                "error": "temporary error",
-            },
-        )
+    assert logged_events[0] == (
+        "case_ingestion_request_failed",
+        {
+            "case_path": "/performance_archive/case_a",
+            "attempt": 1,
+            "status_code": 503,
+            "transient": True,
+            "retrying": True,
+            "error": "temporary error",
+        },
+    )
+    assert [event for event, _ in logged_events[1:]] == [
+        "case_ingestion_attempt_completed",
+        "case_ingestion_attempt_completed",
+        "case_ingestion_retry_completed",
+    ]
+    assert [list(fields) for _, fields in logged_events[1:]] == [
+        ["case_path", "attempt", "duration_seconds"],
+        ["case_path", "attempt", "duration_seconds"],
+        ["case_path", "attempts", "duration_seconds"],
     ]
 
 

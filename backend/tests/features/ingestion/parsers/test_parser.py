@@ -15,6 +15,7 @@ import pytest
 
 from app.features.ingestion.parsers import parser
 from app.features.ingestion.parsers.types import ParsedExecution
+from app.scripts.ingestion.hpc_upload_archive_ingestor import _create_case_archive
 
 
 class TestMainParser:
@@ -237,6 +238,27 @@ class TestMainParser:
         assert len(result) > 0
         assert skipped == 0
         assert any("2.5-10" in parsed.execution_dir for parsed in result)
+
+    def test_accepts_selected_execution_case_archive(self, tmp_path: Path) -> None:
+        case_dir = tmp_path / "case_a"
+        selected_execution = case_dir / "2.5-10"
+        excluded_execution = case_dir / "3.5-10"
+        selected_execution.mkdir(parents=True)
+        excluded_execution.mkdir()
+        self._create_execution_metadata_files(selected_execution, "002.002")
+        self._create_execution_metadata_files(excluded_execution, "003.003")
+
+        archive_path = _create_case_archive(
+            str(case_dir), tmp_path, selected_execution_ids=["2.5-10"]
+        )
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+
+        with self._mock_all_parsers():
+            result, skipped = parser.main_parser(archive_path, extract_dir)
+
+        assert skipped == 0
+        assert [parsed.execution_id for parsed in result] == ["2.5-10"]
 
     def test_with_multiple_executions(self, tmp_path: Path) -> None:
         archive_base = tmp_path / "archive_extract"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -408,7 +409,9 @@ def _ingest_case_with_retries(
     if post_request_fn is None:
         post_request_fn = _post_ingestion_request
 
+    retry_started_at = time.monotonic()
     for attempt in range(1, max_attempts + 1):
+        attempt_started_at = time.monotonic()
         try:
             response = post_request_fn(
                 endpoint_url,
@@ -423,13 +426,18 @@ def _ingest_case_with_retries(
             if not isinstance(body, dict):
                 body = {}
 
-            return {
+            result: IngestionAttemptResult = {
                 "ok": True,
                 "attempts": attempt,
                 "status_code": response.get("status_code"),
                 "body": body,
                 "error": None,
             }
+            _log_case_ingestion_timing(candidate.case_path, attempt, attempt_started_at)
+            _log_case_ingestion_retry_timing(
+                candidate.case_path, attempt, retry_started_at
+            )
+            return result
         except IngestionRequestError as exc:
             should_retry, failure_fields = _retry_failure_event_fields(
                 exc,
@@ -445,18 +453,23 @@ def _ingest_case_with_retries(
                     **failure_fields,
                 },
             )
+            _log_case_ingestion_timing(candidate.case_path, attempt, attempt_started_at)
 
             if should_retry:
                 sleep_fn(_retry_backoff_seconds(attempt))
                 continue
 
-            return {
+            result = {
                 "ok": False,
                 "attempts": attempt,
                 "status_code": exc.status_code,
                 "body": None,
                 "error": str(exc),
             }
+            _log_case_ingestion_retry_timing(
+                candidate.case_path, attempt, retry_started_at
+            )
+            return result
 
     return {
         "ok": False,
@@ -465,6 +478,34 @@ def _ingest_case_with_retries(
         "body": None,
         "error": "Exhausted retries",
     }
+
+
+def _log_case_ingestion_timing(
+    case_path: str, attempt: int, attempt_started_at: float
+) -> None:
+    """Log the elapsed time for one ingestion request attempt."""
+    _log_event(
+        "case_ingestion_attempt_completed",
+        {
+            "case_path": case_path,
+            "attempt": attempt,
+            "duration_seconds": round(time.monotonic() - attempt_started_at, 3),
+        },
+    )
+
+
+def _log_case_ingestion_retry_timing(
+    case_path: str, attempts: int, retry_started_at: float
+) -> None:
+    """Log the elapsed time for a complete ingestion retry sequence."""
+    _log_event(
+        "case_ingestion_retry_completed",
+        {
+            "case_path": case_path,
+            "attempts": attempts,
+            "duration_seconds": round(time.monotonic() - retry_started_at, 3),
+        },
+    )
 
 
 def _post_ingestion_request(

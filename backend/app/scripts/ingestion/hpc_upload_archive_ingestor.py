@@ -30,6 +30,8 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
@@ -52,6 +54,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     CaseSubmissionCallback,
     DiscoveryResultsPersistenceCallback,
     ExecutionDiscoveryResult,
+    IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
@@ -121,6 +124,7 @@ def _run_ingestor(
     checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
+    use_prepared_archives = post_request_fn is None
     post_request_fn = _case_submission_callback(post_request_fn)
 
     endpoint_url = _build_endpoint_url(config)
@@ -233,6 +237,15 @@ def _run_ingestor(
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
         log_event_fn=_log_event,
+        candidate_preparer=(
+            (
+                lambda candidate: _prepared_hpc_case_submission(
+                    candidate, config.machine_name
+                )
+            )
+            if use_prepared_archives
+            else None
+        ),
     )
     if not _finalize_archive_checkpoints(
         snapshot_scan,
@@ -252,9 +265,17 @@ def _build_endpoint_url(config: IngestorConfig) -> str:
     return f"{_normalized_api_base_url(config.api_base_url)}/ingestions/from-hpc-upload"
 
 
-def _create_case_archive(case_path: str, staging_dir: Path) -> Path:
-    """Package one case directory into a tar.gz archive."""
-    case_dir = Path(case_path)
+def _create_case_archive(
+    case_path: str,
+    staging_dir: Path,
+    selected_execution_ids: list[str] | None = None,
+) -> Path:
+    """Package selected execution directories under one case directory root.
+
+    ``None`` preserves the legacy full-case helper behavior for direct callers;
+    the candidate upload path always supplies selected execution IDs.
+    """
+    case_dir = Path(case_path).resolve()
     if not case_dir.is_dir():
         raise IngestionRequestError(
             f"Case path is not a directory: {case_path}",
@@ -262,12 +283,107 @@ def _create_case_archive(case_path: str, staging_dir: Path) -> Path:
             transient=False,
         )
 
+    if selected_execution_ids is None:
+        case_hash = hashlib.sha256(case_path.encode("utf-8")).hexdigest()[:12]
+        archive_path = staging_dir / f"{case_dir.name or 'case'}-{case_hash}.tar.gz"
+
+        with tarfile.open(archive_path, "w:gz") as tar_file:
+            tar_file.add(case_dir, arcname=case_dir.name)
+
+        return archive_path
+
+    if not selected_execution_ids:
+        raise IngestionRequestError(
+            f"No selected execution directories for case: {case_path}",
+            status_code=None,
+            transient=False,
+        )
+
+    selected_execution_dirs: list[Path] = []
+    for execution_id in selected_execution_ids:
+        execution_dir = (case_dir / execution_id).resolve()
+        if execution_dir.parent != case_dir or not execution_dir.is_dir():
+            raise IngestionRequestError(
+                f"Selected execution path is not a directory in case: {execution_id}",
+                status_code=None,
+                transient=False,
+            )
+        selected_execution_dirs.append(execution_dir)
+
     case_hash = hashlib.sha256(case_path.encode("utf-8")).hexdigest()[:12]
     archive_path = staging_dir / f"{case_dir.name or 'case'}-{case_hash}.tar.gz"
     with tarfile.open(archive_path, "w:gz") as tar_file:
-        tar_file.add(case_dir, arcname=case_dir.name)
+        # The parser expects one case basename at archive root.  Add only its
+        # directory entry and the executions selected for this candidate.
+        tar_file.add(case_dir, arcname=case_dir.name, recursive=False)
+        for execution_dir in selected_execution_dirs:
+            tar_file.add(execution_dir, arcname=f"{case_dir.name}/{execution_dir.name}")
 
     return archive_path
+
+
+@contextmanager
+def _prepared_hpc_case_submission(
+    candidate: IngestionCandidate,
+    machine_name: str,
+) -> Iterator[CaseSubmissionCallback]:
+    """Stage a candidate once and retain its immutable upload body for retries."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_started_at = time.monotonic()
+        staged_archive = _create_case_archive(
+            candidate.case_path,
+            Path(tmpdir),
+            candidate.new_execution_ids,
+        )
+        body, boundary = _encode_multipart_form_data(
+            archive_path=staged_archive,
+            machine_name=machine_name,
+            case_path=candidate.case_path,
+            processed_execution_ids=candidate.new_execution_ids,
+        )
+        _log_event(
+            "archive_created",
+            {
+                "case_path": candidate.case_path,
+                "selected_execution_count": len(candidate.new_execution_ids),
+                "archive_bytes": staged_archive.stat().st_size,
+                "duration_seconds": round(time.monotonic() - archive_started_at, 3),
+            },
+        )
+        attempt = 0
+
+        def submit(
+            endpoint_url: str,
+            api_token: str,
+            _archive_path: str,
+            machine_name: str,
+            *,
+            processed_execution_ids: list[str],
+            timeout_seconds: int,
+        ) -> IngestionRequestResponse:
+            """Submit the prebuilt body without rebuilding its archive or boundary."""
+            del _archive_path, machine_name, processed_execution_ids
+            nonlocal attempt
+            attempt += 1
+            upload_started_at = time.monotonic()
+            try:
+                return _send_hpc_upload_request(
+                    endpoint_url, api_token, body, boundary, timeout_seconds
+                )
+            finally:
+                _log_event(
+                    "case_upload_attempt",
+                    {
+                        "case_path": candidate.case_path,
+                        "attempt": attempt,
+                        "archive_bytes": staged_archive.stat().st_size,
+                        "duration_seconds": round(
+                            time.monotonic() - upload_started_at, 3
+                        ),
+                    },
+                )
+
+        yield submit
 
 
 def _encode_multipart_form_data(
@@ -332,7 +448,9 @@ def _post_hpc_upload_ingestion_request(
 ) -> IngestionRequestResponse:
     """Upload one case directory as a multipart archive request."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        staged_archive = _create_case_archive(archive_path, Path(tmpdir))
+        staged_archive = _create_case_archive(
+            archive_path, Path(tmpdir), processed_execution_ids
+        )
         body, boundary = _encode_multipart_form_data(
             archive_path=staged_archive,
             machine_name=machine_name,
@@ -340,29 +458,39 @@ def _post_hpc_upload_ingestion_request(
             processed_execution_ids=processed_execution_ids,
         )
 
-        request = urllib.request.Request(
-            endpoint_url,
-            data=body,
-            headers={
-                **_authorization_headers(api_token),
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            },
-            method="POST",
+        return _send_hpc_upload_request(
+            endpoint_url, api_token, body, boundary, timeout_seconds
         )
 
-        try:
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                parsed_body = _read_json_object_response(response)
-                return {
-                    "status_code": response.status,
-                    "body": parsed_body,
-                }
-        except urllib.error.HTTPError as exc:
-            raise _http_request_error(exc) from exc
-        except urllib.error.URLError as exc:
-            raise _url_request_error(exc) from exc
-        except TimeoutError as exc:
-            raise _timeout_request_error() from exc
+
+def _send_hpc_upload_request(
+    endpoint_url: str,
+    api_token: str,
+    body: bytes,
+    boundary: str,
+    timeout_seconds: int,
+) -> IngestionRequestResponse:
+    """Send one already-encoded HPC archive upload request."""
+    request = urllib.request.Request(
+        endpoint_url,
+        data=body,
+        headers={
+            **_authorization_headers(api_token),
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            parsed_body = _read_json_object_response(response)
+            return {"status_code": response.status, "body": parsed_body}
+    except urllib.error.HTTPError as exc:
+        raise _http_request_error(exc) from exc
+    except urllib.error.URLError as exc:
+        raise _url_request_error(exc) from exc
+    except TimeoutError as exc:
+        raise _timeout_request_error() from exc
 
 
 if __name__ == "__main__":
