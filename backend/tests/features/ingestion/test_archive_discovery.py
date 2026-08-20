@@ -377,6 +377,43 @@ def test_discover_case_executions_skips_incomplete_runs(tmp_path: Path) -> None:
     assert list(grouped.values()) == [["100.1-1"]]
 
 
+def test_discover_case_executions_prunes_terminal_execution_directories(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    execution_dir = archive_root / "case_a" / "100.1-1"
+    nested_execution_dir = execution_dir / "nested" / "200.1-1"
+    nested_execution_dir.mkdir(parents=True)
+    visited: list[str] = []
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda path: visited.append(path),
+    )
+
+    assert grouped == {str(execution_dir.parent.resolve()): ["100.1-1"]}
+    assert visited == [str(execution_dir)]
+
+
+def test_discover_case_executions_prunes_terminal_dirs_before_case_filter(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    rejected_execution_dir = archive_root / "case_a" / "100.1-1"
+    nested_execution_dir = rejected_execution_dir / "nested" / "200.1-1"
+    nested_execution_dir.mkdir(parents=True)
+    visited: list[str] = []
+
+    grouped = _discover_case_executions(
+        archive_root,
+        metadata_locator=lambda path: visited.append(path),
+        case_path_filter=lambda case_path: case_path.name != "case_a",
+    )
+
+    assert grouped == {}
+    assert visited == []
+
+
 def test_discover_case_executions_skips_unreadable_execution_dirs(
     tmp_path: Path,
 ) -> None:
@@ -482,7 +519,7 @@ def test_discover_case_executions_logs_scan_progress(
     ]
 
     assert start_events == [{"scan_mode": "staging", "archive_root": archive_root_path}]
-    assert len(progress_events) == 3
+    assert len(progress_events) == 2
     assert progress_events[0]["scan_mode"] == "staging"
     assert progress_events[0]["archive_root"] == archive_root_path
     assert progress_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
@@ -495,24 +532,16 @@ def test_discover_case_executions_logs_scan_progress(
     assert progress_events[1]["archive_root"] == archive_root_path
     assert progress_events[1]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[1]["directories_visited"] == 4
-    assert progress_events[1]["discovered_cases"] == 2
-    assert progress_events[1]["execution_dirs_scanned"] == 2
-    assert progress_events[1]["execution_dirs_accepted"] == 2
+    assert progress_events[1]["discovered_cases"] == 3
+    assert progress_events[1]["execution_dirs_scanned"] == 3
+    assert progress_events[1]["execution_dirs_accepted"] == 3
     assert progress_events[1]["rejected_existing_execution_ids"] == 0
-    assert progress_events[2]["scan_mode"] == "staging"
-    assert progress_events[2]["archive_root"] == archive_root_path
-    assert progress_events[2]["current_dir"].startswith(f"{archive_root_path}/case_")
-    assert progress_events[2]["directories_visited"] == 6
-    assert progress_events[2]["discovered_cases"] == 3
-    assert progress_events[2]["execution_dirs_scanned"] == 3
-    assert progress_events[2]["execution_dirs_accepted"] == 3
-    assert progress_events[2]["rejected_existing_execution_ids"] == 0
 
     assert len(completed_events) == 1
     assert completed_events[0]["scan_mode"] == "staging"
     assert completed_events[0]["archive_root"] == archive_root_path
     assert completed_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
-    assert completed_events[0]["directories_visited"] == 7
+    assert completed_events[0]["directories_visited"] == 4
     assert completed_events[0]["discovered_cases"] == 3
     assert completed_events[0]["execution_dirs_scanned"] == 3
     assert completed_events[0]["execution_dirs_accepted"] == 3

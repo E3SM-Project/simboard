@@ -12,9 +12,11 @@ from typing import Any
 
 import pytest
 
+from app.features.ingestion.parsers import parser as parser_module
 from app.features.ingestion.parsers.parser import (
     ArchiveValidationError,
     IncompleteArchiveError,
+    main_parser,
 )
 from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
@@ -22,6 +24,7 @@ from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_workflow as workflow_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
 from app.scripts.ingestion.archive_ingestor_core import (
+    IngestionCandidate,
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
@@ -31,6 +34,7 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _build_endpoint_url,
     _create_case_archive,
     _post_hpc_upload_ingestion_request,
+    _prepared_hpc_case_submission,
     _run_ingestor,
 )
 
@@ -115,6 +119,145 @@ def test_create_case_archive_packages_single_case_dir(tmp_path: Path) -> None:
     assert archive_path.name.endswith(".tar.gz")
     assert members
     assert all(member == "case_a" or member.startswith("case_a/") for member in members)
+
+
+def test_create_case_archive_includes_only_selected_execution_directories(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    selected_execution = case_dir / "100.1-1"
+    unselected_execution = case_dir / "101.1-1"
+    (selected_execution / "CaseDocs").mkdir(parents=True)
+    unselected_execution.mkdir()
+    (selected_execution / "CaseDocs" / "env_run.xml.001").write_text("selected")
+    (unselected_execution / "env_run.xml.001").write_text("unselected")
+    (case_dir / "case-level.txt").write_text("case root remains")
+
+    archive_path = _create_case_archive(
+        str(case_dir), tmp_path, selected_execution_ids=["100.1-1"]
+    )
+
+    with tarfile.open(archive_path, "r:gz") as tar_file:
+        members = tar_file.getnames()
+
+    assert "case_a" in members
+    assert "case_a/100.1-1" in members
+    assert "case_a/100.1-1/CaseDocs/env_run.xml.001" in members
+    assert not any("101.1-1" in member for member in members)
+    assert "case_a/case-level.txt" not in members
+
+
+def test_parser_accepts_delta_archive_with_required_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    execution_dir = case_dir / "100.1-1"
+    casedocs_dir = execution_dir / "CaseDocs"
+    casedocs_dir.mkdir(parents=True)
+    for filename in (
+        "env_case.xml.001.gz",
+        "env_build.xml.001.gz",
+        "env_run.xml.001.gz",
+        "README.case.001.gz",
+    ):
+        (casedocs_dir / filename).write_text("fixture")
+    for filename in ("CaseStatus.001.gz", "e3sm_timing.001", "GIT_DESCRIBE.001.gz"):
+        (execution_dir / filename).write_text("fixture")
+    (case_dir / "101.1-1").mkdir()
+
+    parsed_values = {
+        "case_docs_env_case": {"case_name": "case_a", "machine": "pm"},
+        "case_docs_env_build": {"compiler": "gnu"},
+        "case_docs_env_run": {"simulation_start_date": "2025-01-01"},
+        "readme_case": {},
+        "case_status": {"status": "completed"},
+        "e3sm_timing": {"execution_id": "100.1-1"},
+        "git_describe": {"git_commit_hash": "abc123"},
+    }
+    for key, value in parsed_values.items():
+        monkeypatch.setitem(
+            parser_module.FILE_SPECS[key], "parser", lambda _, v=value: v
+        )
+
+    archive_path = _create_case_archive(
+        str(case_dir), tmp_path, selected_execution_ids=["100.1-1"]
+    )
+    parsed, skipped = main_parser(archive_path, tmp_path / "extracted")
+
+    assert skipped == 0
+    assert [
+        (item.case_name, item.execution_id, item.machine, item.compiler)
+        for item in parsed
+    ] == [("case_a", "100.1-1", "pm", "gnu")]
+
+
+@pytest.mark.parametrize("succeeds", [True, False])
+def test_prepared_hpc_submission_reuses_payload_and_cleans_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    succeeds: bool,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    candidate = IngestionCandidate(
+        case_path=str(case_dir),
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="ignored",
+    )
+    staged_paths: list[Path] = []
+    request_bodies: list[bytes] = []
+    events: list[tuple[str, dict[str, object]]] = []
+    original_create = upload_ingestor_module._create_case_archive
+
+    def capture_create(*args, **kwargs) -> Path:
+        archive_path = original_create(*args, **kwargs)
+        staged_paths.append(archive_path)
+        return archive_path
+
+    def send_request(*args, **kwargs) -> IngestionRequestResponse:
+        request_bodies.append(args[2])
+        if not succeeds or len(request_bodies) == 1:
+            raise IngestionRequestError("temporary", status_code=503, transient=True)
+        return {"status_code": 201, "body": {}}
+
+    monkeypatch.setattr(upload_ingestor_module, "_create_case_archive", capture_create)
+    monkeypatch.setattr(
+        upload_ingestor_module, "_send_hpc_upload_request", send_request
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_log_event",
+        lambda event, fields: events.append((event, fields)),
+    )
+
+    with _prepared_hpc_case_submission(candidate, "pm") as submit:
+        result = client_module._ingest_case_with_retries(
+            candidate,
+            "http://backend/upload",
+            "token",
+            "pm",
+            max_attempts=2,
+            timeout_seconds=10,
+            sleep_fn=lambda _: None,
+            post_request_fn=submit,
+        )
+        assert staged_paths[0].exists()
+
+    assert result["ok"] is succeeds
+    assert len(request_bodies) == 2
+    assert request_bodies[0] == request_bodies[1]
+    assert not staged_paths[0].exists()
+    assert [list(fields) for event, fields in events if event == "archive_created"] == [
+        ["case_path", "selected_execution_count", "archive_bytes", "duration_seconds"]
+    ]
+    assert [
+        list(fields) for event, fields in events if event == "case_upload_attempt"
+    ] == [
+        ["case_path", "attempt", "archive_bytes", "duration_seconds"],
+        ["case_path", "attempt", "archive_bytes", "duration_seconds"],
+    ]
 
 
 def test_create_case_archive_rejects_non_directory(tmp_path: Path) -> None:
@@ -787,6 +930,81 @@ def test_run_ingestor_retries_transient_upload_errors(
     assert exit_code == 0
     assert len(attempts) == 2
     assert sleep_calls == [1]
+
+
+def test_run_ingestor_continues_after_archive_staging_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    snapshot = archive_root / "2025-01" / "performance_archive_2025_01_01_00_00_00"
+    first_case = snapshot / "COMPLETED" / "case_a"
+    second_case = snapshot / "COMPLETED" / "case_b"
+    (first_case / "100.1-1").mkdir(parents=True)
+    (second_case / "200.1-1").mkdir(parents=True)
+    network_attempts: list[str] = []
+    finalization_calls = 0
+    logged_events: list[tuple[str, dict[str, object]]] = []
+    original_create_archive = upload_ingestor_module._create_case_archive
+
+    def fail_first_archive(case_path: str, *args: Any, **kwargs: Any) -> Path:
+        if case_path == str(first_case.resolve()):
+            raise OSError("staging filesystem unavailable")
+        return original_create_archive(case_path, *args, **kwargs)
+
+    def send_request(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        network_attempts.append("attempt")
+        return {"status_code": 201, "body": {}}
+
+    def finalize(*args: Any, **kwargs: Any) -> bool:
+        nonlocal finalization_calls
+        finalization_calls += 1
+        return True
+
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module, "_create_case_archive", fail_first_archive
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module, "_send_hpc_upload_request", send_request
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module, "_finalize_archive_checkpoints", finalize
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_log_event",
+        lambda event, fields=None: logged_events.append((event, fields or {})),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+    )
+
+    assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
+    assert network_attempts == ["attempt"]
+    assert finalization_calls == 1
+    assert (
+        "case_ingestion_failed",
+        {
+            "case_path": str(first_case.resolve()),
+            "attempts": 0,
+            "status_code": None,
+            "error": "staging filesystem unavailable",
+        },
+    ) in logged_events
 
 
 def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -> None:

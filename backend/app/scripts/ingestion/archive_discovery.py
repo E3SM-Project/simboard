@@ -289,11 +289,18 @@ def _discover_case_executions(
             walk_dir_filter(dirpath, dirnames)
         case_dir = Path(dirpath)
 
-        for dirname in dirnames:
+        for dirname in list(dirnames):
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
                 continue
+
+            # Execution directories are terminal parser inputs. Prune them
+            # before case filtering so rejected parents cannot expose nested
+            # execution-like directories to a later walk iteration.
+            dirnames.remove(dirname)
+
             if case_path_filter is not None and not case_path_filter(case_dir):
                 continue
+
             if execution_observer is not None:
                 execution_observer(case_dir, dirname)
 

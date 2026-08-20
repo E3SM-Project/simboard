@@ -70,6 +70,10 @@ that canonical term instead of repeating the full concept definition.
 | `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata content was invalid.                                                      |
 | `transient_execution_ids`           | Count of execution IDs skipped for transient filesystem access failures; these outcomes are never persisted.                                |
 | `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection. |
+| `archive_created`                   | Remote-upload event emitted once after a selected-execution archive is staged. Its stable fields are `case_path`, `selected_execution_count`, `archive_bytes`, and `duration_seconds`. |
+| `case_upload_attempt`               | Remote-upload event emitted for every request attempt using the staged multipart payload. Its stable fields are `case_path`, `attempt`, `archive_bytes`, and `duration_seconds`. |
+| `case_ingestion_attempt_completed`  | Request timing event with stable fields `case_path`, `attempt`, and `duration_seconds`. |
+| `case_ingestion_retry_completed`    | Full retry-sequence timing event with stable fields `case_path`, `attempts`, and `duration_seconds`. |
 
 ## Performance Directories
 
@@ -214,7 +218,7 @@ uncheckpointed. See the NERSC Spin runbook for the operational SQL procedure.
 3. Skip processed executions. For unprocessed executions, reuse stored discovery results before metadata validation: accepted results remain candidates, while rejected results remain excluded.
 4. Validate executions without stored results. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
 5. Persist all new immutable results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent; a different outcome for an existing identity returns a conflict and rolls back that batch.
-6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`.
+6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`. Remote uploads stage a delta archive with the case root and only those selected execution directories; retries reuse that one immutable multipart payload, then remove the staging directory after either success or failure.
 7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
 8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
 9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has an immutable rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed.
@@ -307,6 +311,11 @@ Set it when operators need to limit one invocation's submission volume, such as:
 - rolling out ingestion changes cautiously while watching logs and results
 - debugging or validating behavior on a small batch before allowing full drain
 - mitigating temporary backend or network instability without stopping collection
+
+Before enabling or expanding remote archive uploads, benchmark a representative
+production-like archive at the target site. Record the observed archive creation,
+upload, and retry timings from the events above before rollout; this document does
+not supply synthetic benchmark measurements.
 
 ### Stored Results
 

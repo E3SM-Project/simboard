@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import tarfile
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.scripts.ingestion.archive_client import (
     _ingest_case_with_retries,
@@ -21,6 +23,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     DiscoveryStats,
     ExecutionDiscoveryResult,
     IngestionCandidate,
+    IngestionRequestError,
     IngestorConfig,
     SleepCallback,
     StructuredLogCallback,
@@ -243,6 +246,10 @@ def _handle_ingest_run(
     post_request_fn: CaseSubmissionCallback,
     *,
     log_event_fn: StructuredLogCallback | None = None,
+    candidate_preparer: (
+        Callable[[IngestionCandidate], AbstractContextManager[CaseSubmissionCallback]]
+        | None
+    ) = None,
 ) -> int:
     """Execute candidate ingestion loop and emit completion summaries."""
     log_event_fn = log_event_fn or _log_event
@@ -250,20 +257,46 @@ def _handle_ingest_run(
     failure_count = 0
 
     for candidate in candidates:
-        result = _ingest_case_with_retries(
-            candidate,
-            endpoint_url,
-            config.api_token,
-            config.machine_name,
-            max_attempts=config.max_attempts,
-            timeout_seconds=config.request_timeout_seconds,
-            sleep_fn=sleep_fn,
-            post_request_fn=post_request_fn,
-        )
+        try:
+            if candidate_preparer is None:
+                result = _ingest_case_with_retries(
+                    candidate,
+                    endpoint_url,
+                    config.api_token,
+                    config.machine_name,
+                    max_attempts=config.max_attempts,
+                    timeout_seconds=config.request_timeout_seconds,
+                    sleep_fn=sleep_fn,
+                    post_request_fn=post_request_fn,
+                )
+            else:
+                with candidate_preparer(candidate) as candidate_post_request_fn:
+                    result = _ingest_case_with_retries(
+                        candidate,
+                        endpoint_url,
+                        config.api_token,
+                        config.machine_name,
+                        max_attempts=config.max_attempts,
+                        timeout_seconds=config.request_timeout_seconds,
+                        sleep_fn=sleep_fn,
+                        post_request_fn=candidate_post_request_fn,
+                    )
+        except (IngestionRequestError, OSError, tarfile.TarError) as exc:
+            result = {
+                "ok": False,
+                "attempts": 0,
+                "status_code": (
+                    exc.status_code if isinstance(exc, IngestionRequestError) else None
+                ),
+                "body": None,
+                "error": str(exc),
+            }
 
         if result["ok"]:
             success_count += 1
-            body = result["body"] or {}
+            body = result["body"]
+            if not isinstance(body, dict):
+                body = {}
             log_event_fn(
                 "case_ingested",
                 {
