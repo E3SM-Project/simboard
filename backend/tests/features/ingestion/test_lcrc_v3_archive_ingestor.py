@@ -102,7 +102,7 @@ def test_documented_simulations_normalize_to_unique_case_names() -> None:
     assert len(v3_ingestor.V3_CASE_NAMES) == len(v3_ingestor.V3_SIMULATIONS)
     assert (
         v3_ingestor.V3_CASE_NAMES_BY_SIMULATION[
-            "v3.LR.piClim-histall/v3.LR.piClim-histall_0101"
+            "v3.LR.piClim-histall_0101"
         ]
         == "v3.LR.piClim-histall_0101"
     )
