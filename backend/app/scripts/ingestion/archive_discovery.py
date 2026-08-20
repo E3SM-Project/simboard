@@ -27,6 +27,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     ExecutionDiscoveryResult,
     IngestionCandidate,
     IngestorConfig,
+    IngestorRunReport,
     MetadataLocator,
     _build_discovery_results_by_key,
     _case_log_label,
@@ -61,12 +62,42 @@ class _CaseCollectionOutcome:
     decisions_by_execution_id: dict[str, ExecutionCollectionDecision]
 
 
+def _combine_case_path_filters(
+    configured_filter: Callable[[Path], bool] | None,
+    supplied_filter: Callable[[Path], bool] | None,
+) -> Callable[[Path], bool] | None:
+    """Return the intersection of configured and caller-supplied path filters."""
+    if supplied_filter is None:
+        return configured_filter
+    if configured_filter is None:
+        return supplied_filter
+
+    return partial(
+        _matches_combined_case_path_filters,
+        configured_filter=configured_filter,
+        supplied_filter=supplied_filter,
+    )
+
+
+def _matches_combined_case_path_filters(
+    path: Path,
+    *,
+    configured_filter: Callable[[Path], bool],
+    supplied_filter: Callable[[Path], bool],
+) -> bool:
+    """Return whether a path passes both case path filters."""
+    return configured_filter(path) and supplied_filter(path)
+
+
 def _scan_archive(
     config: IngestorConfig,
     state: dict[str, Any],
     metadata_locator: MetadataLocator,
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     completed_snapshot_keys: set[str] | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
+    run_report: IngestorRunReport | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
@@ -99,7 +130,11 @@ def _scan_archive(
     staging_root_basename = (
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
-    case_path_filter = _build_case_path_filter(config)
+    case_path_filter = _combine_case_path_filters(
+        _build_case_path_filter(config),
+        case_path_filter,
+    )
+
     snapshot_scan = _initialize_snapshot_scan(config, completed_snapshot_keys)
     selected_snapshot_keys = _selected_snapshot_keys(snapshot_scan)
     walk_dir_filter = _build_walk_dir_filter(
@@ -123,6 +158,7 @@ def _scan_archive(
         case_collection_data,
         case_path_filter=case_path_filter,
         walk_dir_filter=walk_dir_filter,
+        additional_dir_pruner=additional_dir_pruner,
         scan_mode=config.scan_mode,
         processed_ids_by_key=processed_ids_by_key,
         discovery_results=discovery_results,
@@ -153,6 +189,15 @@ def _scan_archive(
         scan_mode=config.scan_mode,
         staging_root_basename=staging_root_basename,
     )
+
+    if run_report is not None:
+        run_report.scan_completed = True
+        run_report.traversal_complete = snapshot_scan.traversal_complete
+        run_report.scan_results = scan_results
+        run_report.candidates = candidates
+        run_report.submission_qualified_case_count = len(all_candidates)
+        run_report.discovery_stats = discovery_stats
+        run_report.case_collection_data = case_collection_data
 
     return (
         scan_results,
@@ -238,6 +283,7 @@ def _discover_case_executions(
     *,
     case_path_filter: Callable[[Path], bool] | None = None,
     walk_dir_filter: Callable[[str, list[str]], None] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     scan_mode: str = "staging",
     processed_ids_by_key: defaultdict[str, set[str]] | None = None,
     staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
@@ -287,6 +333,10 @@ def _discover_case_executions(
 
         if walk_dir_filter is not None:
             walk_dir_filter(dirpath, dirnames)
+        # Apply specialized pruning only after generic archive layout pruning.
+        if additional_dir_pruner is not None:
+            additional_dir_pruner(dirpath, dirnames)
+
         case_dir = Path(dirpath)
 
         for dirname in list(dirnames):
