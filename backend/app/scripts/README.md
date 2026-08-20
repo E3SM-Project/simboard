@@ -20,7 +20,7 @@ scripts/
 │   ├── archive_workflow.py
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
-│   ├── chrysalis_v3_archive_ingestor.py
+│   ├── lcrc_v3_archive_ingestor.py
 │   └── sites/
 │       └── nersc.sh
 ├── db/
@@ -51,7 +51,7 @@ python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
 python -m app.scripts.ingestion.nersc_archive_ingestor
-python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
 ```
 
 Do not execute scripts directly by file path:
@@ -161,7 +161,7 @@ Archive notes:
 
 ## Chrysalis E3SM v3 Archive Backfill
 
-`chrysalis_v3_archive_ingestor.py` is a targeted remote-upload backfill for
+`lcrc_v3_archive_ingestor.py` is a targeted remote-upload backfill for
 simulations stored on LCRC Chrysalis and listed in
 the [E3SM v3 simulation table](https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/CoupledSystem/simulation_data/simulation_table.html).
 It uses a static copy of the table's `Simulation` values, matches archive case
@@ -173,7 +173,7 @@ Run a dry run first:
 
 ```bash
 DRY_RUN=true \
-uv run python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+uv run python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
 ```
 
 Review `v3_case_match`, `v3_case_missing`, and `v3_ingestion_summary` events.

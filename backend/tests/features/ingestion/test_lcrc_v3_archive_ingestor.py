@@ -5,7 +5,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from app.scripts.ingestion import chrysalis_v3_archive_ingestor as v3_ingestor
+from app.scripts.ingestion import lcrc_v3_archive_ingestor as v3_ingestor
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor
 from app.scripts.ingestion.archive_discovery import _new_discovery_stats
 from app.scripts.ingestion.archive_ingestor_core import (

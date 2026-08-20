@@ -101,7 +101,7 @@ and service-account token, then start with dry run:
 SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
 SIMBOARD_API_TOKEN=<service-account-token> \
 DRY_RUN=true \
-uv run python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+uv run python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
 ```
 
 `OLD_PERF_ARCHIVE_ROOT` defaults to the documented Chrysalis archive location
@@ -116,7 +116,7 @@ missing targets and transient scan errors before enabling uploads. Then run:
 SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
 SIMBOARD_API_TOKEN=<service-account-token> \
 DRY_RUN=false \
-uv run python -m app.scripts.ingestion.chrysalis_v3_archive_ingestor
+uv run python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
 ```
 
 Repeat dry run after upload to confirm processed execution state prevents
