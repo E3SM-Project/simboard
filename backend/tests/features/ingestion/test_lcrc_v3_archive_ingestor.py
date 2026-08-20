@@ -2,10 +2,10 @@
 
 import json
 import urllib.request
+from functools import partial
 from pathlib import Path
 from typing import Any
 
-from app.scripts.ingestion.v3_data import lcrc_v3_archive_ingestor as v3_ingestor
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor
 from app.scripts.ingestion.archive_discovery import _new_discovery_stats
 from app.scripts.ingestion.archive_ingestor_core import (
@@ -15,6 +15,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     IngestorRunReport,
     _fresh_state,
 )
+from app.scripts.ingestion.v3_data import lcrc_v3_archive_ingestor as v3_ingestor
 
 
 def _config(archive_root: Path, *, dry_run: bool) -> IngestorConfig:
@@ -101,9 +102,7 @@ class _CompleteReportRunner:
 def test_documented_simulations_normalize_to_unique_case_names() -> None:
     assert len(v3_ingestor.V3_CASE_NAMES) == len(v3_ingestor.V3_SIMULATIONS)
     assert (
-        v3_ingestor.V3_CASE_NAMES_BY_SIMULATION[
-            "v3.LR.piClim-histall_0101"
-        ]
+        v3_ingestor.V3_CASE_NAMES_BY_SIMULATION["v3.LR.piClim-histall_0101"]
         == "v3.LR.piClim-histall_0101"
     )
 
@@ -112,6 +111,56 @@ def test_v3_case_filter_requires_exact_leaf_name() -> None:
     assert v3_ingestor._is_v3_case_path(Path("/archive/v3.LR.piControl"))
     assert not v3_ingestor._is_v3_case_path(Path("/archive/prefix-v3.LR.piControl"))
     assert not v3_ingestor._is_v3_case_path(Path("/archive/v3.LR.piControl-extra"))
+
+
+def test_v3_case_directory_pruner_only_prunes_proven_user_directory(
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    user_dir = (
+        archive_root
+        / "2024-01"
+        / "performance_archive_2024_01_01_00_00_00"
+        / "COMPLETED"
+        / "user"
+    )
+    unchanged_paths = (
+        archive_root,
+        archive_root / "2024-01",
+        archive_root / "2024-01" / "performance_archive_2024_01_01_00_00_00",
+        user_dir.parent,
+        archive_root
+        / "2024-13"
+        / "performance_archive_2024_01_01_00_00_00"
+        / "COMPLETED"
+        / "user",
+        archive_root
+        / "2024-01"
+        / "not_performance_archive_2024_01_01_00_00_00"
+        / "COMPLETED"
+        / "user",
+        user_dir / "v3.LR.piControl",
+        user_dir / "v3.LR.piControl" / "100.1-1",
+        archive_root / "2024-01" / "performance_archive_2024_01_01_00_00_00" / "user",
+        archive_root
+        / "2024-01"
+        / "performance_archive_2024_01_01_00_00_00"
+        / "FAILED"
+        / "user",
+    )
+    child_names = ["v3.LR.piControl", "unrelated-case"]
+
+    v3_ingestor._prune_v3_case_directories(
+        str(user_dir), child_names, archive_root=archive_root
+    )
+
+    assert child_names == ["v3.LR.piControl"]
+    for path in unchanged_paths:
+        child_names = ["v3.LR.piControl", "unrelated-case"]
+        v3_ingestor._prune_v3_case_directories(
+            str(path), child_names, archive_root=archive_root
+        )
+        assert child_names == ["v3.LR.piControl", "unrelated-case"]
 
 
 def test_v3_config_forces_archive_mode_and_2024_lower_bound(
@@ -307,6 +356,12 @@ def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(
     assert v3_ingestor.main() == 0
     assert captured_kwargs["archive_checkpointing"] is False
     assert captured_kwargs["case_path_filter"] is v3_ingestor._is_v3_case_path
+    additional_dir_pruner = captured_kwargs["additional_dir_pruner"]
+    assert isinstance(additional_dir_pruner, partial)
+    assert additional_dir_pruner.func is v3_ingestor._prune_v3_case_directories
+    assert additional_dir_pruner.keywords == {
+        "archive_root": config.archive_root.resolve()
+    }
     assert any(event == "v3_ingestion_summary" for event, _ in logged_events)
 
 

@@ -96,6 +96,7 @@ def _scan_archive(
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     completed_snapshot_keys: set[str] | None = None,
     case_path_filter: Callable[[Path], bool] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     run_report: IngestorRunReport | None = None,
 ) -> tuple[
     list[CaseScanResult],
@@ -157,6 +158,7 @@ def _scan_archive(
         case_collection_data,
         case_path_filter=case_path_filter,
         walk_dir_filter=walk_dir_filter,
+        additional_dir_pruner=additional_dir_pruner,
         scan_mode=config.scan_mode,
         processed_ids_by_key=processed_ids_by_key,
         discovery_results=discovery_results,
@@ -281,6 +283,7 @@ def _discover_case_executions(
     *,
     case_path_filter: Callable[[Path], bool] | None = None,
     walk_dir_filter: Callable[[str, list[str]], None] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     scan_mode: str = "staging",
     processed_ids_by_key: defaultdict[str, set[str]] | None = None,
     staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
@@ -330,6 +333,10 @@ def _discover_case_executions(
 
         if walk_dir_filter is not None:
             walk_dir_filter(dirpath, dirnames)
+        # Apply specialized pruning only after generic archive layout pruning.
+        if additional_dir_pruner is not None:
+            additional_dir_pruner(dirpath, dirnames)
+
         case_dir = Path(dirpath)
 
         for dirname in list(dirnames):

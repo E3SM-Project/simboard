@@ -125,6 +125,7 @@ def _run_ingestor(
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
     checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
     case_path_filter: Callable[[Path], bool] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     archive_checkpointing: bool = True,
     run_report: IngestorRunReport | None = None,
 ) -> int:
@@ -196,6 +197,7 @@ def _run_ingestor(
             discovery_results=new_discovery_results,
             completed_snapshot_keys=completed_snapshot_keys,
             case_path_filter=case_path_filter,
+            additional_dir_pruner=additional_dir_pruner,
             run_report=run_report,
         )
     except Exception as exc:

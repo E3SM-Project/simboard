@@ -13,13 +13,19 @@ import os
 import time
 from collections import defaultdict
 from dataclasses import replace
-from pathlib import Path, PurePosixPath
+from functools import partial
+from pathlib import Path
 
 from app.scripts.ingestion.archive_ingestor_core import (
     IngestorConfig,
     IngestorRunReport,
     _build_config_from_env,
     _log_event,
+)
+from app.scripts.ingestion.archive_layout import (
+    ARCHIVE_COMPLETED_STATUS_DIR_NAME,
+    _archive_dir_bucket,
+    _is_archive_snapshot_dir,
 )
 from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _run_ingestor as _run_upload_ingestor,
@@ -33,8 +39,7 @@ V3_ARCHIVE_YEAR_START = "2024-01"
 CHRYSALIS_ARCHIVE_ROOT = "/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF"
 CHRYSALIS_MACHINE_NAME = "chrysalis"
 
-# Values are copied from the source table's Simulation column. Some RFMIP
-# entries include a grouping path; archive case directories use the leaf name.
+# Normalized archive case names from the source table's Simulation column.
 V3_SIMULATIONS = (
     "v3.LR.piControl",
     "v3.LR.abrupt-4xCO2_0101_bcdt15m",
@@ -69,14 +74,7 @@ V3_SIMULATIONS = (
 )
 
 
-def _case_name(simulation: str) -> str:
-    """Return archive case-directory name for one documented simulation."""
-    return PurePosixPath(simulation).name
-
-
-V3_CASE_NAMES_BY_SIMULATION = {
-    simulation: _case_name(simulation) for simulation in V3_SIMULATIONS
-}
+V3_CASE_NAMES_BY_SIMULATION = {simulation: simulation for simulation in V3_SIMULATIONS}
 V3_CASE_NAMES = frozenset(V3_CASE_NAMES_BY_SIMULATION.values())
 
 if len(V3_CASE_NAMES) != len(V3_SIMULATIONS):
@@ -106,6 +104,29 @@ def _build_v3_config_from_env() -> IngestorConfig:
 def _is_v3_case_path(case_path: Path) -> bool:
     """Return whether path exactly matches a documented v3 case name."""
     return case_path.name in V3_CASE_NAMES
+
+
+def _prune_v3_case_directories(
+    dirpath: str,
+    dirnames: list[str],
+    *,
+    archive_root: Path,
+) -> None:
+    """Prune non-v3 case names only beneath proven archive user directories."""
+    try:
+        relative_parts = Path(dirpath).relative_to(archive_root).parts
+    except ValueError:
+        return
+
+    if (
+        len(relative_parts) != 4
+        or _archive_dir_bucket(relative_parts[0]) is None
+        or not _is_archive_snapshot_dir(relative_parts[1])
+        or relative_parts[2] != ARCHIVE_COMPLETED_STATUS_DIR_NAME
+    ):
+        return
+
+    dirnames[:] = [dirname for dirname in dirnames if dirname in V3_CASE_NAMES]
 
 
 def _matched_paths_by_case_name(
@@ -203,6 +224,10 @@ def main() -> int:
     exit_code = _run_upload_ingestor(
         config,
         case_path_filter=_is_v3_case_path,
+        additional_dir_pruner=partial(
+            _prune_v3_case_directories,
+            archive_root=config.archive_root.resolve(),
+        ),
         archive_checkpointing=False,
         run_report=report,
     )
