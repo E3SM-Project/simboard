@@ -87,22 +87,29 @@ curl -X POST https://api.simboard.org/api/v1/ingestions/from-hpc-upload \
   -F "hpc_username=johndoe"
 ```
 
-#### Chrysalis E3SM v3 archive backfill
+#### One-time Chrysalis E3SM v3 archive backfill
 
 Run the targeted v3 backfill on Chrysalis because source case directories are
 not mounted in SimBoard's NERSC backend. The runner scans archive snapshots from
 `2024-01`, packages each selected case as a single-case archive, and uploads it
 through `/api/v1/ingestions/from-hpc-upload`.
 
-From `backend/` on Chrysalis, provide an externally reachable SimBoard API URL
-and service-account token, then start with dry run:
+From `backend/` on Chrysalis, copy the committed template outside the repository,
+secure it, replace its placeholders, then start this one-time backfill with a
+dry run:
 
 ```bash
-SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
-SIMBOARD_API_TOKEN=<service-account-token> \
-DRY_RUN=true \
-uv run python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
+mkdir -p ~/.config/simboard
+cp app/scripts/ingestion/v3_data/lcrc-v3.env.example ~/.config/simboard/lcrc-v3.env
+chmod 600 ~/.config/simboard/lcrc-v3.env
+# Edit ~/.config/simboard/lcrc-v3.env to replace placeholders.
+LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env \
+  ./app/scripts/ingestion/v3_data/lcrc_v3.sh
 ```
+
+Use `backend/app/scripts/ingestion/v3_data/lcrc_v3.sh` from `backend/`; it
+requires `LCRC_V3_ENV_FILE` and validates both API variables after sourcing it.
+The template defaults to dry-run mode and the LCRC archive root.
 
 `OLD_PERF_ARCHIVE_ROOT` defaults to the documented Chrysalis archive location
 and may be overridden when site storage is mounted elsewhere. Machine identity
@@ -110,13 +117,12 @@ is fixed to `chrysalis`; archive mode and the `2024-01` lower bound are also
 fixed by the targeted runner.
 
 Review `v3_case_match`, `v3_case_missing`, and `v3_ingestion_summary`. Resolve
-missing targets and transient scan errors before enabling uploads. Then run:
+missing targets and transient scan errors, then set `DRY_RUN=false` in the
+external environment file before enabling uploads:
 
 ```bash
-SIMBOARD_API_BASE_URL=https://<simboard-api-host> \
-SIMBOARD_API_TOKEN=<service-account-token> \
-DRY_RUN=false \
-uv run python -m app.scripts.ingestion.lcrc_v3_archive_ingestor
+LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env \
+  ./app/scripts/ingestion/v3_data/lcrc_v3.sh
 ```
 
 Repeat dry run after upload to confirm processed execution state prevents

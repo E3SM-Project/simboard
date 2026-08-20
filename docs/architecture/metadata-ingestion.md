@@ -192,7 +192,7 @@ Example NERSC path for `COMPLETED` status cases:
 Automated HPC collection reaches SimBoard ingestion through two site-side submission modes. Both use database-backed stored known execution IDs, but they submit submission-qualified cases through different routes:
 
 - `nersc_archive_ingestor.py` for local path submission on NERSC / Perlmutter
-- `lcrc_v3_archive_ingestor.py` for the targeted Chrysalis E3SM v3 remote-upload backfill
+- `v3_data/lcrc_v3_archive_ingestor.py` for the targeted Chrysalis E3SM v3 remote-upload backfill
 - `hpc_upload_archive_ingestor.py` for remote automated archive upload from LCRC and other DOE sites
 
 | Mode                            | Script / entry point             | Access pattern                                                                                                         | Route                                | Use when                                        | Examples                          |
