@@ -7,8 +7,8 @@ from typing import Any
 
 from app.scripts.ingestion import chrysalis_v3_archive_ingestor as v3_ingestor
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor
-from app.scripts.ingestion import nersc_archive_ingestor as base_ingestor
-from app.scripts.ingestion.nersc_archive_ingestor import (
+from app.scripts.ingestion.archive_discovery import _new_discovery_stats
+from app.scripts.ingestion.archive_ingestor_core import (
     CaseCollectionLogData,
     IngestionRequestResponse,
     IngestorConfig,
@@ -34,7 +34,7 @@ def _config(archive_root: Path, *, dry_run: bool) -> IngestorConfig:
 
 def _populate_complete_report(report: IngestorRunReport) -> None:
     report.scan_completed = True
-    report.discovery_stats = base_ingestor._new_discovery_stats()
+    report.discovery_stats = _new_discovery_stats()
     report.case_collection_data = {
         f"/lcrc/OLD_PERF/2024-01/snapshot/COMPLETED/user/{case_name}": (
             CaseCollectionLogData(case_path=case_name, execution_count_total=1)
@@ -56,6 +56,46 @@ class _FakeHttpResponse:
 
     def __exit__(self, *args: Any) -> None:
         return None
+
+
+def _fail_checkpoint(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("targeted runner must not use archive checkpoints")
+
+
+def _fail_write(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("dry run must not write")
+
+
+def _post_discovery(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+    return {"status_code": 201, "body": {}}
+
+
+class _FakeUrlopen:
+    def __init__(self, captured_requests: list[urllib.request.Request]) -> None:
+        self.captured_requests = captured_requests
+
+    def __call__(
+        self, request: urllib.request.Request, timeout: int
+    ) -> _FakeHttpResponse:
+        self.captured_requests.append(request)
+        assert timeout == 30
+        return _FakeHttpResponse()
+
+
+class _CompleteReportRunner:
+    def __init__(
+        self, captured_kwargs: dict[str, Any], *, remove_one_case: bool = False
+    ) -> None:
+        self.captured_kwargs = captured_kwargs
+        self.remove_one_case = remove_one_case
+
+    def __call__(self, config: IngestorConfig, **kwargs: Any) -> int:
+        self.captured_kwargs.update(kwargs)
+        report = kwargs["run_report"]
+        _populate_complete_report(report)
+        if self.remove_one_case:
+            report.case_collection_data.pop(next(iter(report.case_collection_data)))
+        return 0
 
 
 def test_documented_simulations_normalize_to_unique_case_names() -> None:
@@ -107,7 +147,7 @@ def test_v3_summary_reports_paths_missing_and_execution_outcomes(
     monkeypatch,
 ) -> None:
     report = IngestorRunReport(scan_completed=True)
-    stats = base_ingestor._new_discovery_stats()
+    stats = _new_discovery_stats()
     stats["execution_dirs_accepted"] = 4
     stats["rejected_existing_execution_ids"] = 3
     stats["rejected_incomplete_execution_ids"] = 2
@@ -183,27 +223,17 @@ def test_targeted_archive_run_filters_cases_and_skips_all_checkpoints(
         lambda *args, **kwargs: _fresh_state(),
     )
 
-    def fail_checkpoint(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("targeted runner must not use archive checkpoints")
-
-    monkeypatch.setattr(upload_ingestor, "_fetch_archive_checkpoints", fail_checkpoint)
-
-    def post_discovery(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
-        return {"status_code": 201, "body": {}}
-
-    def fake_urlopen(request: urllib.request.Request, timeout: int):
-        captured_requests.append(request)
-        assert timeout == 30
-        return _FakeHttpResponse()
-
-    monkeypatch.setattr(upload_ingestor.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(upload_ingestor, "_fetch_archive_checkpoints", _fail_checkpoint)
+    monkeypatch.setattr(
+        upload_ingestor.urllib.request, "urlopen", _FakeUrlopen(captured_requests)
+    )
 
     report = IngestorRunReport()
     exit_code = upload_ingestor._run_ingestor(
         _config(archive_root, dry_run=False),
         metadata_locator=lambda path: validated.append(path),
-        discovery_post_request_fn=post_discovery,
-        checkpoint_post_request_fn=fail_checkpoint,
+        discovery_post_request_fn=_post_discovery,
+        checkpoint_post_request_fn=_fail_checkpoint,
         case_path_filter=v3_ingestor._is_v3_case_path,
         archive_checkpointing=False,
         run_report=report,
@@ -244,15 +274,12 @@ def test_targeted_dry_run_never_calls_write_functions(
         lambda *args, **kwargs: _fresh_state(),
     )
 
-    def fail_write(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("dry run must not write")
-
     exit_code = upload_ingestor._run_ingestor(
         _config(archive_root, dry_run=True),
         metadata_locator=lambda *_: {},
-        post_request_fn=fail_write,
-        discovery_post_request_fn=fail_write,
-        checkpoint_post_request_fn=fail_write,
+        post_request_fn=_fail_write,
+        discovery_post_request_fn=_fail_write,
+        checkpoint_post_request_fn=_fail_write,
         case_path_filter=v3_ingestor._is_v3_case_path,
         archive_checkpointing=False,
     )
@@ -273,12 +300,9 @@ def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(
         lambda event, fields=None: logged_events.append((event, fields or {})),
     )
 
-    def fake_run(config: IngestorConfig, **kwargs: Any) -> int:
-        captured_kwargs.update(kwargs)
-        _populate_complete_report(kwargs["run_report"])
-        return 0
-
-    monkeypatch.setattr(v3_ingestor, "_run_upload_ingestor", fake_run)
+    monkeypatch.setattr(
+        v3_ingestor, "_run_upload_ingestor", _CompleteReportRunner(captured_kwargs)
+    )
 
     assert v3_ingestor.main() == 0
     assert captured_kwargs["archive_checkpointing"] is False
@@ -293,12 +317,10 @@ def test_v3_main_fails_reconciliation_when_case_is_missing(
     monkeypatch.setattr(v3_ingestor, "_build_v3_config_from_env", lambda: config)
     monkeypatch.setattr(v3_ingestor, "_log_event", lambda *args, **kwargs: None)
 
-    def fake_run(config: IngestorConfig, **kwargs: Any) -> int:
-        report = kwargs["run_report"]
-        _populate_complete_report(report)
-        report.case_collection_data.pop(next(iter(report.case_collection_data)))
-        return 0
-
-    monkeypatch.setattr(v3_ingestor, "_run_upload_ingestor", fake_run)
+    monkeypatch.setattr(
+        v3_ingestor,
+        "_run_upload_ingestor",
+        _CompleteReportRunner({}, remove_one_case=True),
+    )
 
     assert v3_ingestor.main() == 1

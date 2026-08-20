@@ -38,7 +38,6 @@ def _validate_run_preconditions(
     config: IngestorConfig,
     *,
     log_event_fn: StructuredLogCallback | None = None,
-    run_report: IngestorRunReport | None = None,
 ) -> bool:
     """Validate filesystem and authentication requirements for one run."""
     log_event_fn = log_event_fn or _log_event

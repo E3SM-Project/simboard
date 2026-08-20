@@ -255,8 +255,10 @@ def _run_ingestor(
         ),
         run_report=run_report,
     )
+
     if not archive_checkpointing:
         return ingest_exit_code
+
     if not _finalize_archive_checkpoints(
         snapshot_scan,
         state,

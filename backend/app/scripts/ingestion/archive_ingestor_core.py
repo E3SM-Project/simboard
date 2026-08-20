@@ -465,7 +465,11 @@ class StructuredLogCallback(Protocol):
 # -------------
 
 
-def _build_config_from_env() -> IngestorConfig:
+def _build_config_from_env(
+    *,
+    scan_mode_override: Literal["staging", "archive"] | None = None,
+    archive_year_start_override: str | None = None,
+) -> IngestorConfig:
     """Build and validate runtime config from environment variables.
 
     Returns
@@ -481,7 +485,11 @@ def _build_config_from_env() -> IngestorConfig:
     api_base_url = os.getenv("SIMBOARD_API_BASE_URL", DEFAULT_API_BASE_URL)
     api_token = os.getenv("SIMBOARD_API_TOKEN", "")
 
-    scan_mode = os.getenv("SCAN_MODE", DEFAULT_SCAN_MODE).strip().lower()
+    scan_mode = (
+        scan_mode_override
+        if scan_mode_override is not None
+        else os.getenv("SCAN_MODE", DEFAULT_SCAN_MODE).strip().lower()
+    )
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
@@ -514,7 +522,9 @@ def _build_config_from_env() -> IngestorConfig:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
     archive_year_start = _parse_optional_archive_bound(
-        os.getenv("ARCHIVE_YEAR_START"),
+        archive_year_start_override
+        if archive_year_start_override is not None
+        else os.getenv("ARCHIVE_YEAR_START"),
         env_name="ARCHIVE_YEAR_START",
         is_end_bound=False,
     )

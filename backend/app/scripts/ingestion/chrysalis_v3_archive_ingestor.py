@@ -15,14 +15,14 @@ from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
-from app.scripts.ingestion.hpc_upload_archive_ingestor import (
-    _run_ingestor as _run_upload_ingestor,
-)
-from app.scripts.ingestion.nersc_archive_ingestor import (
+from app.scripts.ingestion.archive_ingestor_core import (
     IngestorConfig,
     IngestorRunReport,
     _build_config_from_env,
     _log_event,
+)
+from app.scripts.ingestion.hpc_upload_archive_ingestor import (
+    _run_ingestor as _run_upload_ingestor,
 )
 
 V3_SIMULATION_TABLE_URL = (
@@ -148,7 +148,7 @@ def _log_v3_summary(report: IngestorRunReport, *, dry_run: bool) -> list[str]:
                 {"simulation": simulation, "case_name": case_name},
             )
 
-    stats = report.discovery_stats
+    stats = report.discovery_stats or {}
     _log_event(
         "v3_ingestion_summary",
         {
@@ -160,24 +160,18 @@ def _log_v3_summary(report: IngestorRunReport, *, dry_run: bool) -> list[str]:
             "matching_case_directories": sum(
                 len(case_paths) for case_paths in matched_paths.values()
             ),
-            "execution_dirs_accepted": (
-                0 if stats is None else stats["execution_dirs_accepted"]
+            "execution_dirs_accepted": stats.get("execution_dirs_accepted", 0),
+            "rejected_existing_execution_ids": stats.get(
+                "rejected_existing_execution_ids", 0
             ),
-            "rejected_existing_execution_ids": (
-                0 if stats is None else stats["rejected_existing_execution_ids"]
+            "rejected_incomplete_execution_ids": stats.get(
+                "rejected_incomplete_execution_ids", 0
             ),
-            "rejected_incomplete_execution_ids": (
-                0 if stats is None else stats["rejected_incomplete_execution_ids"]
+            "rejected_invalid_execution_ids": stats.get(
+                "rejected_invalid_execution_ids", 0
             ),
-            "rejected_invalid_execution_ids": (
-                0 if stats is None else stats["rejected_invalid_execution_ids"]
-            ),
-            "transient_execution_ids": (
-                0 if stats is None else stats["transient_execution_ids"]
-            ),
-            "deferred_execution_ids": (
-                0 if stats is None else stats["deferred_execution_ids"]
-            ),
+            "transient_execution_ids": stats.get("transient_execution_ids", 0),
+            "deferred_execution_ids": stats.get("deferred_execution_ids", 0),
             "submission_qualified_cases": report.submission_qualified_case_count,
             "selected_submission_cases": len(report.candidates),
             "ingestion_success_count": report.ingestion_success_count,
@@ -215,10 +209,8 @@ def main() -> int:
 
     if report.scan_completed:
         missing_simulations = _log_v3_summary(report, dry_run=config.dry_run)
-        transient_count = (
-            0
-            if report.discovery_stats is None
-            else report.discovery_stats["transient_execution_ids"]
+        transient_count = (report.discovery_stats or {}).get(
+            "transient_execution_ids", 0
         )
         if missing_simulations or transient_count or not report.traversal_complete:
             exit_code = 1

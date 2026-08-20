@@ -62,6 +62,33 @@ class _CaseCollectionOutcome:
     decisions_by_execution_id: dict[str, ExecutionCollectionDecision]
 
 
+def _combine_case_path_filters(
+    configured_filter: Callable[[Path], bool] | None,
+    supplied_filter: Callable[[Path], bool] | None,
+) -> Callable[[Path], bool] | None:
+    """Return the intersection of configured and caller-supplied path filters."""
+    if supplied_filter is None:
+        return configured_filter
+    if configured_filter is None:
+        return supplied_filter
+
+    return partial(
+        _matches_combined_case_path_filters,
+        configured_filter=configured_filter,
+        supplied_filter=supplied_filter,
+    )
+
+
+def _matches_combined_case_path_filters(
+    path: Path,
+    *,
+    configured_filter: Callable[[Path], bool],
+    supplied_filter: Callable[[Path], bool],
+) -> bool:
+    """Return whether a path passes both case path filters."""
+    return configured_filter(path) and supplied_filter(path)
+
+
 def _scan_archive(
     config: IngestorConfig,
     state: dict[str, Any],
@@ -102,17 +129,10 @@ def _scan_archive(
     staging_root_basename = (
         config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
     )
-    configured_case_path_filter = _build_case_path_filter(config)
-
-    if case_path_filter is None:
-        case_path_filter = configured_case_path_filter
-    elif configured_case_path_filter is not None:
-        supplied_case_path_filter = case_path_filter
-
-        def combined_case_path_filter(path: Path) -> bool:
-            return configured_case_path_filter(path) and supplied_case_path_filter(path)
-
-        case_path_filter = combined_case_path_filter
+    case_path_filter = _combine_case_path_filters(
+        _build_case_path_filter(config),
+        case_path_filter,
+    )
 
     snapshot_scan = _initialize_snapshot_scan(config, completed_snapshot_keys)
     selected_snapshot_keys = _selected_snapshot_keys(snapshot_scan)
