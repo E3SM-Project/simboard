@@ -20,8 +20,13 @@ scripts/
 │   ├── archive_workflow.py
 │   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
-│   └── sites/
+│   ├── sites/
 │       └── nersc.sh
+│   └── v3_data/
+│       ├── __init__.py
+│       ├── lcrc-v3.env.example
+│       ├── lcrc_v3.sh
+│       └── lcrc_v3_archive_ingestor.py
 ├── db/
 │   ├── seed.py
 │   ├── rollback_seed.py
@@ -50,6 +55,7 @@ python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
 python -m app.scripts.ingestion.nersc_archive_ingestor
+python -m app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor
 ```
 
 Do not execute scripts directly by file path:
@@ -156,6 +162,53 @@ Archive notes:
 - Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
 - `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
 - `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
+
+## One-Time Chrysalis E3SM v3 Archive Backfill
+
+`v3_data/lcrc_v3_archive_ingestor.py` is a targeted remote-upload backfill for
+simulations stored on LCRC Chrysalis and listed in
+the [E3SM v3 simulation table](https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/CoupledSystem/simulation_data/simulation_table.html).
+It uses a static copy of the table's `Simulation` values, matches archive case
+directory leaf names exactly, forces archive scanning from `2024-01`, and
+reuses the HPC upload runner's discovery, validation, deduplication, packaging,
+and `/api/v1/ingestions/from-hpc-upload` request logic.
+
+For this one-time backfill, copy the committed template outside the repository,
+secure it, replace its placeholders, then run a dry run:
+
+```bash
+mkdir -p ~/.config/simboard
+cp app/scripts/ingestion/v3_data/lcrc-v3.env.example ~/.config/simboard/lcrc-v3.env
+chmod 600 ~/.config/simboard/lcrc-v3.env
+# Edit ~/.config/simboard/lcrc-v3.env to replace placeholders.
+LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env \
+  ./app/scripts/ingestion/v3_data/lcrc_v3.sh
+```
+
+`backend/app/scripts/ingestion/v3_data/lcrc_v3.sh` sources the selected
+environment file, requires `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`,
+and defaults the LCRC archive root and dry-run mode. Set the optional
+`OLD_PERF_ARCHIVE_ROOT` in that file only when storage is mounted elsewhere.
+
+Review `v3_case_match`, `v3_case_missing`, and `v3_ingestion_summary` events.
+The command exits nonzero when an expected simulation is missing, filesystem
+traversal is incomplete, an execution has a transient validation error, or a
+live ingestion request fails. Set `DRY_RUN=false` only after every expected
+simulation maps to the intended archive case directories.
+
+This targeted runner deliberately ignores database-backed archive snapshot
+checkpoints and never writes new ones. A filtered backfill cannot safely mark a
+mixed snapshot complete for the general archive runner. Processed execution
+state and immutable discovery results still make repeated runs idempotent.
+
+Run this module on Chrysalis, where source case directories are readable. It
+requires explicit `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` values for an
+externally reachable SimBoard deployment, defaults `OLD_PERF_ARCHIVE_ROOT` to
+the documented Chrysalis archive root, and records uploads under machine
+`chrysalis`. Retry, timeout, case-limit, dry-run, and optional
+`ARCHIVE_YEAR_END` variables remain supported. `SCAN_MODE`,
+`ARCHIVE_YEAR_START`, and `MACHINE_NAME` are ignored because source site and
+scan scope are fixed.
 
 ## HPC Upload Archive Ingestor
 

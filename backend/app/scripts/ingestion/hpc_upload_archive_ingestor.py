@@ -33,6 +33,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -58,6 +59,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     IngestionRequestError,
     IngestionRequestResponse,
     IngestorConfig,
+    IngestorRunReport,
     MetadataLocator,
     SleepCallback,
     _build_config_from_env,
@@ -122,6 +124,10 @@ def _run_ingestor(
     post_request_fn: CaseSubmissionCallback | None = None,
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
     checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
+    archive_checkpointing: bool = True,
+    run_report: IngestorRunReport | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     use_prepared_archives = post_request_fn is None
@@ -140,7 +146,7 @@ def _run_ingestor(
         return 1
 
     completed_snapshot_keys: set[str] = set()
-    if config.scan_mode == "archive":
+    if config.scan_mode == "archive" and archive_checkpointing:
         try:
             completed_snapshot_keys = _fetch_archive_checkpoints(
                 _build_archive_checkpoints_endpoint_url(config),
@@ -190,6 +196,9 @@ def _run_ingestor(
             metadata_locator=metadata_locator,
             discovery_results=new_discovery_results,
             completed_snapshot_keys=completed_snapshot_keys,
+            case_path_filter=case_path_filter,
+            additional_dir_pruner=additional_dir_pruner,
+            run_report=run_report,
         )
     except Exception as exc:
         _log_event(
@@ -246,7 +255,12 @@ def _run_ingestor(
             if use_prepared_archives
             else None
         ),
+        run_report=run_report,
     )
+
+    if not archive_checkpointing:
+        return ingest_exit_code
+
     if not _finalize_archive_checkpoints(
         snapshot_scan,
         state,

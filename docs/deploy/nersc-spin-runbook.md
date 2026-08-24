@@ -637,6 +637,20 @@ Service Discovery -> Ingresses -> Create
 | Name          | `lb`      |
 | Ingress class | `nginx`   |
 
+#### Labels & Annotations
+
+Add the following annotation to allow remote archive-ingestion uploads to reach
+the backend. Without it, the NGINX Ingress default request-body limit can reject
+uploads before the API processes them.
+
+| Annotation key | Value |
+| -------------- | ----- |
+| `nginx.ingress.kubernetes.io/proxy-body-size` | `52m` |
+
+Keep this value slightly above the backend upload limit in
+`backend/app/features/ingestion/api.py` to allow multipart overhead. Update the
+Ingress annotation if that backend limit changes.
+
 #### TLS tab
 
 | Rancher field | Value                                                                                              |
