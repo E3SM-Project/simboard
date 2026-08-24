@@ -23,6 +23,21 @@ export interface PageParams {
   [key: string]: string | number | string[] | undefined;
 }
 
+export interface CaseFilterOptionsParams extends PageParams {
+  search?: string;
+  name?: string;
+  caseGroup?: string;
+  machineId?: string;
+  hpcUsername?: string;
+  executionId?: string;
+  simulationType?: string;
+  campaign?: string;
+  initializationType?: string;
+  compiler?: string;
+  gitTag?: string;
+  createdBy?: string;
+}
+
 const toQueryParams = (params: PageParams) => {
   const query = new URLSearchParams();
 
@@ -122,8 +137,12 @@ export const getCatalogOverview = async (): Promise<CatalogOverviewOut> => {
   return res.data;
 };
 
-export const getCaseFilterOptions = async (): Promise<CaseFilterOptionsOut> => {
-  const res = await api.get<CaseFilterOptionsOut>(`${CASES_URL}/filter-options`);
+export const getCaseFilterOptions = async (
+  params: CaseFilterOptionsParams = {},
+): Promise<CaseFilterOptionsOut> => {
+  const res = await api.get<CaseFilterOptionsOut>(`${CASES_URL}/filter-options`, {
+    params: toQueryParams(params),
+  });
   return res.data;
 };
 

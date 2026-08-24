@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { getCaseFilterOptions } from '@/api/catalog';
+import { type CaseFilterOptionsParams, getCaseFilterOptions } from '@/api/catalog';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
-export const useCaseFilterOptions = () =>
+export const useCaseFilterOptions = (params: CaseFilterOptionsParams = {}) =>
   useQuery({
-    queryKey: catalogQueryKeys.cases.options,
-    queryFn: getCaseFilterOptions,
+    queryKey: catalogQueryKeys.cases.optionsFor(params),
+    queryFn: () => getCaseFilterOptions(params),
+    placeholderData: keepPreviousData,
   });

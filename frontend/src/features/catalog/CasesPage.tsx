@@ -39,7 +39,6 @@ type ActiveFilterKey =
   | 'initializationType'
   | 'compiler'
   | 'gitTag'
-  | 'createdBy'
   | 'caseGroup';
 
 interface CaseExecutionFilters {
@@ -50,7 +49,6 @@ interface CaseExecutionFilters {
   initializationType: string;
   compiler: string;
   gitTag: string;
-  createdBy: string;
 }
 
 interface SelectOption {
@@ -72,7 +70,6 @@ const createEmptyExecutionFilters = (): CaseExecutionFilters => ({
   initializationType: '',
   compiler: '',
   gitTag: '',
-  createdBy: '',
 });
 
 const sortCaseExecutions = (caseExecutions: ExecutionListItemOut[]) =>
@@ -81,14 +78,40 @@ const sortCaseExecutions = (caseExecutions: ExecutionListItemOut[]) =>
   );
 
 const CASE_SORT_FIELDS: Record<string, string> = {
+  latestRun: 'latest_run_activity',
   name: 'name',
   hpcUsers: 'hpc_username',
   machines: 'machine_name',
   executionCount: 'execution_count',
   caseGroup: 'case_group',
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
 };
+
+const getLatestExecution = (caseRecord: CaseListItemOut) => caseRecord.latestExecution;
+
+const formatLatestCompletedRun = (runEndDate: string | null) =>
+  runEndDate ? formatCaseDate(runEndDate) : null;
+
+const formatCompletedRun = (runStartDate: string | null, runEndDate: string | null) => {
+  if (runEndDate) return `Ended ${formatCaseDate(runEndDate)}`;
+  if (runStartDate) return `Started ${formatCaseDate(runStartDate)}`;
+  return null;
+};
+
+const formatRunTimeline = (runStartDate: string | null, runEndDate: string | null) => {
+  if (runStartDate && runEndDate) {
+    return `Started ${formatCaseDate(runStartDate)} → ended ${formatCaseDate(runEndDate)}`;
+  }
+  return formatCompletedRun(runStartDate, runEndDate);
+};
+
+const UnavailableTimestamp = () => (
+  <span
+    title="Run timestamps are not available for this execution."
+    aria-label="Run timestamps unavailable"
+  >
+    —
+  </span>
+);
 
 export const CasesPage = () => {
   const location = useLocation();
@@ -102,12 +125,31 @@ export const CasesPage = () => {
   );
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
-  const [expandedExecutionPage, setExpandedExecutionPage] = useState(1);
-  const { data: executions, page: expandedExecutionPageData } = useExecutions(
+  const caseFilterOptionParams = useMemo(
+    () => ({
+      search: debouncedCaseName || undefined,
+      caseGroup: caseGroupFilter || undefined,
+      machineId: executionFilters.machineId || undefined,
+      hpcUsername: executionFilters.hpcUsername || undefined,
+      simulationType: executionFilters.simulationType || undefined,
+      campaign: executionFilters.campaign || undefined,
+      initializationType: executionFilters.initializationType || undefined,
+      compiler: executionFilters.compiler || undefined,
+      gitTag: executionFilters.gitTag || undefined,
+    }),
+    [caseGroupFilter, debouncedCaseName, executionFilters],
+  );
+  const {
+    data: executions,
+    page: expandedExecutionPage,
+    isFetching: expandedExecutionsFetching,
+  } = useExecutions(
     {
       caseId: expandedCaseId ?? undefined,
-      page: expandedExecutionPage,
-      pageSize: 25,
+      page: 1,
+      pageSize: 5,
+      sortBy: 'simulation_start_date',
+      sortOrder: 'desc',
       hpcUsername: executionFilters.hpcUsername || undefined,
       machineId: executionFilters.machineId || undefined,
       campaign: executionFilters.campaign || undefined,
@@ -115,15 +157,11 @@ export const CasesPage = () => {
       initializationType: executionFilters.initializationType || undefined,
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
-      createdBy: executionFilters.createdBy || undefined,
     },
     expandedCaseId != null,
   );
-  const { data: filterOptions } = useCaseFilterOptions();
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: 'updatedAt', desc: true },
-    { id: 'name', desc: false },
-  ]);
+  const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'latestRun', desc: true }]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedCaseName(caseNameFilter.trim()), 300);
@@ -135,9 +173,6 @@ export const CasesPage = () => {
   useEffect(() => {
     setPagination((current) => ({ ...current, pageIndex: 0 }));
   }, [sorting]);
-  useEffect(() => {
-    setExpandedExecutionPage(1);
-  }, [expandedCaseId, executionFilters]);
   const primarySort = sorting[0];
   const {
     data: cases,
@@ -156,8 +191,7 @@ export const CasesPage = () => {
     initializationType: executionFilters.initializationType || undefined,
     compiler: executionFilters.compiler || undefined,
     gitTag: executionFilters.gitTag || undefined,
-    createdBy: executionFilters.createdBy || undefined,
-    sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'updated_at',
+    sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'latest_run_activity',
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
 
@@ -176,7 +210,6 @@ export const CasesPage = () => {
     caseGroupOptions,
     hpcUsernameOptions,
     machineOptions,
-    creatorOptions,
     campaignOptions,
     simulationTypeOptions,
     initializationTypeOptions,
@@ -193,7 +226,6 @@ export const CasesPage = () => {
         label: username,
       })),
       machineOptions: filterOptions?.machines ?? [],
-      creatorOptions: filterOptions?.creators ?? [],
       campaignOptions: (filterOptions?.campaigns ?? []).map((campaign) => ({
         value: campaign,
         label: campaign,
@@ -226,13 +258,11 @@ export const CasesPage = () => {
   const advancedFilterCount = useMemo(
     () =>
       [
-        executionFilters.machineId,
         executionFilters.campaign,
         executionFilters.simulationType,
         executionFilters.initializationType,
         executionFilters.compiler,
         executionFilters.gitTag,
-        executionFilters.createdBy,
         caseGroupFilter,
       ].filter(Boolean).length,
     [caseGroupFilter, executionFilters],
@@ -285,20 +315,10 @@ export const CasesPage = () => {
       filters.push({ key: 'gitTag', label: 'Tag', value: executionFilters.gitTag });
     }
 
-    if (executionFilters.createdBy) {
-      filters.push({
-        key: 'createdBy',
-        label: 'Creator',
-        value:
-          creatorOptions.find((option) => option.value === executionFilters.createdBy)?.label ??
-          executionFilters.createdBy,
-      });
-    }
-
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
     return filters;
-  }, [caseGroupFilter, caseNameFilter, creatorOptions, machineOptions, executionFilters]);
+  }, [caseGroupFilter, caseNameFilter, machineOptions, executionFilters]);
 
   const setExecutionFilter = (key: keyof CaseExecutionFilters, value: string) => {
     setExecutionFilters((current) => ({
@@ -388,22 +408,47 @@ export const CasesPage = () => {
         accessorKey: 'name',
         header: 'Case Name',
         cell: ({ row }) => (
-          <Link
-            to={`/cases/${row.original.id}`}
-            state={{ from: currentPath }}
-            className="block max-w-[28rem] truncate font-medium text-blue-600 hover:underline"
-            title={row.original.name}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {row.original.name}
-          </Link>
+          <div className="min-w-[14rem] max-w-[28rem]">
+            <Link
+              to={`/cases/${row.original.id}`}
+              state={{ from: currentPath }}
+              className="block truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              title={row.original.name}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {row.original.name}
+            </Link>
+            {row.original.caseGroup && (
+              <button
+                type="button"
+                className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:text-blue-600 hover:underline"
+                title={`Filter by case group: ${row.original.caseGroup}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCaseGroupFilter(row.original.caseGroup ?? '');
+                }}
+              >
+                Group: {row.original.caseGroup}
+              </button>
+            )}
+          </div>
         ),
       },
       {
-        id: 'hpcUsers',
-        header: 'HPC Users',
-        accessorFn: (caseRecord) => caseRecord.hpcUsername,
-        cell: ({ row }) => <TableCellText value={row.original.hpcUsername} lines={1} />,
+        id: 'latestRun',
+        header: 'Latest completed run',
+        cell: ({ row }) => {
+          const latestExecution = getLatestExecution(row.original);
+          const completedRun = latestExecution
+            ? formatLatestCompletedRun(latestExecution.runEndDate)
+            : null;
+
+          return (
+            <div className="min-w-[10rem] text-sm text-slate-600">
+              {completedRun ?? <UnavailableTimestamp />}
+            </div>
+          );
+        },
       },
       {
         id: 'machines',
@@ -412,34 +457,18 @@ export const CasesPage = () => {
         cell: ({ row }) => <TableCellText value={row.original.machineName} lines={1} />,
       },
       {
+        id: 'hpcUsers',
+        header: 'HPC Users',
+        accessorFn: (caseRecord) => caseRecord.hpcUsername,
+        cell: ({ row }) => <TableCellText value={row.original.hpcUsername} lines={1} />,
+      },
+      {
         id: 'executionCount',
         header: 'Total Executions',
         accessorFn: (caseRecord) => caseRecord.executionCount,
         cell: ({ row }) => {
           return <Badge variant="secondary">{row.original.executionCount}</Badge>;
         },
-      },
-      {
-        accessorKey: 'caseGroup',
-        header: 'Case Group',
-        cell: ({ row }) => <TableCellText value={row.original.caseGroup ?? '—'} />,
-      },
-      {
-        accessorKey: 'updatedAt',
-        header: 'Last Updated',
-        cell: ({ row }) => formatCaseDate(row.original.updatedAt),
-      },
-      {
-        id: 'details',
-        header: 'Details',
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Button variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
-            <Link to={`/cases/${row.original.id}`} state={{ from: currentPath }}>
-              View case
-            </Link>
-          </Button>
-        ),
       },
     ],
     [currentPath, expandedCaseId],
@@ -469,54 +498,78 @@ export const CasesPage = () => {
     placeholder: string;
     options: SelectOption[];
     onValueChange: (value: string) => void;
-  }) => (
-    <div className="space-y-2">
-      <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-        {label}
-      </label>
-      <SearchableFilterSelect
-        label={label}
-        value={value}
-        placeholder={placeholder}
-        options={options}
-        onValueChange={onValueChange}
-      />
-    </div>
-  );
+  }) => {
+    const optionsWithSelection =
+      value && !options.some((option) => option.value === value)
+        ? [{ value, label: value }, ...options]
+        : options;
+
+    return (
+      <div className="space-y-2">
+        <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+          {label}
+        </label>
+        <SearchableFilterSelect
+          label={label}
+          value={value}
+          placeholder={placeholder}
+          options={optionsWithSelection}
+          onValueChange={onValueChange}
+        />
+      </div>
+    );
+  };
 
   const renderExpandedContent = (caseRecord: CaseListItemOut) => {
-    const visibleCaseExecutions = sortCaseExecutions(
-      executionsByCaseId.get(caseRecord.id) ?? [],
-    );
-    const expandedExecutionTotal = expandedExecutionPageData?.total ?? 0;
-    const expandedExecutionPageCount = Math.max(1, Math.ceil(expandedExecutionTotal / 25));
+    const visibleCaseExecutions = sortCaseExecutions(executionsByCaseId.get(caseRecord.id) ?? []);
+    const expandedExecutionLabel = hasActiveExecutionFilters
+      ? expandedExecutionsFetching || !expandedExecutionPage
+        ? 'View matching executions'
+        : `View all ${expandedExecutionPage.total} executions`
+      : `View all ${caseRecord.executionCount} executions`;
+    const latestExecution = getLatestExecution(caseRecord);
 
     return (
       <div className="space-y-3 bg-muted/20 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">Execution Summaries</p>
+            <p className="text-sm font-medium">Recent execution preview</p>
             <p className="text-xs text-muted-foreground">
               {hasActiveExecutionFilters
-                ? `${expandedExecutionTotal} executions match the current filters.`
-                : 'Open the case page to organize executions by Case Hash and launch compare.'}
+                ? 'Showing executions in this case that match the current execution filters.'
+                : 'Showing the five most recent execution records by simulation start date.'}
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
             <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
-              Open case page
+              {expandedExecutionLabel}
             </Link>
           </Button>
         </div>
 
-        <div className="max-w-4xl overflow-hidden rounded-md border bg-background">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background px-3 py-2 text-xs text-slate-600">
+          {caseRecord.caseGroup && <span>Case group: {caseRecord.caseGroup}</span>}
+          <span>
+            Latest completed run:{' '}
+            {latestExecution ? (
+              (formatLatestCompletedRun(latestExecution.runEndDate) ?? <UnavailableTimestamp />)
+            ) : (
+              <UnavailableTimestamp />
+            )}
+          </span>
+        </div>
+
+        <div className="overflow-hidden rounded-md border bg-background">
           <div className="max-h-[26rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Case Hash</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead>Run timeline</TableHead>
                   <TableHead>Simulation Dates</TableHead>
+                  <TableHead>Case Hash</TableHead>
+                  <TableHead>Machine</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -531,6 +584,21 @@ export const CasesPage = () => {
                         {execution.executionId}
                       </Link>
                     </TableCell>
+                    <TableCell className="align-top text-xs text-slate-600">
+                      {formatCompletedRun(execution.runStartDate, execution.runEndDate) ?? (
+                        <UnavailableTimestamp />
+                      )}
+                    </TableCell>
+                    <TableCell className="align-top text-xs text-slate-600">
+                      {formatRunTimeline(execution.runStartDate, execution.runEndDate) ?? (
+                        <UnavailableTimestamp />
+                      )}
+                    </TableCell>
+                    <TableCell className="align-top text-xs text-slate-600">
+                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
+                        execution.simulationEndDate ?? null,
+                      )}`}
+                    </TableCell>
                     <TableCell className="align-top">
                       <span
                         className="font-mono text-xs text-slate-700"
@@ -539,10 +607,8 @@ export const CasesPage = () => {
                         {formatCaseHashLabel(execution.caseHash ?? null)}
                       </span>
                     </TableCell>
-                    <TableCell className="align-top">
-                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
-                        execution.simulationEndDate ?? null,
-                      )}`}
+                    <TableCell className="align-top text-xs text-slate-600">
+                      {execution.machineName}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -550,31 +616,6 @@ export const CasesPage = () => {
             </Table>
           </div>
         </div>
-        {expandedExecutionTotal > 25 && (
-          <div className="flex max-w-4xl items-center justify-end gap-2 text-sm">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={expandedExecutionPage <= 1}
-              onClick={() => setExpandedExecutionPage((page) => Math.max(1, page - 1))}
-            >
-              Previous executions
-            </Button>
-            <span>
-              Page {expandedExecutionPage} of {expandedExecutionPageCount}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={expandedExecutionPage >= expandedExecutionPageCount}
-              onClick={() =>
-                setExpandedExecutionPage((page) => Math.min(expandedExecutionPageCount, page + 1))
-              }
-            >
-              Next executions
-            </Button>
-          </div>
-        )}
       </div>
     );
   };
@@ -604,46 +645,22 @@ export const CasesPage = () => {
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                  Find the cases behind your executions. Start with HPC username or machine, then
-                  refine by campaign, version context, and case metadata.
+                  Find cases and their execution context. Search case names, then refine by run or
+                  case metadata.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[440px]">
-              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Cases on page
-                </p>
-                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                  {filteredCases.length}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  of {casePage?.total ?? 0} matching cases
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Executions on page
-                </p>
-                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                  {visibleRunCount}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">total executions across visible cases</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/30">
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                  Active filters
-                </p>
-                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                  {activeFilterPills.length}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {advancedFilterCount > 0
-                    ? `${advancedFilterCount} advanced refinements applied`
-                    : 'Quick case discovery'}
-                </p>
-              </div>
+            <div className="rounded-xl border border-slate-200 bg-white/75 px-4 py-3 text-sm text-slate-600 shadow-sm shadow-slate-200/20">
+              <span className="font-medium text-slate-900">{casePage?.total ?? 0} cases</span>
+              <span className="px-2 text-slate-300">·</span>
+              <span>{visibleRunCount} runs on this page</span>
+              {activeFilterPills.length > 0 && (
+                <>
+                  <span className="px-2 text-slate-300">·</span>
+                  <span>{activeFilterPills.length} active filters</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -670,19 +687,19 @@ export const CasesPage = () => {
                   </div>
 
                   {renderSelectField({
-                    label: 'HPC Username',
-                    value: executionFilters.hpcUsername,
-                    placeholder: 'All HPC usernames',
-                    options: hpcUsernameOptions,
-                    onValueChange: (value) => setExecutionFilter('hpcUsername', value),
-                  })}
-
-                  {renderSelectField({
                     label: 'Machine',
                     value: executionFilters.machineId,
                     placeholder: 'All machines',
                     options: machineOptions,
                     onValueChange: (value) => setExecutionFilter('machineId', value),
+                  })}
+
+                  {renderSelectField({
+                    label: 'HPC Username',
+                    value: executionFilters.hpcUsername,
+                    placeholder: 'All HPC usernames',
+                    options: hpcUsernameOptions,
+                    onValueChange: (value) => setExecutionFilter('hpcUsername', value),
                   })}
                 </div>
 
@@ -724,7 +741,7 @@ export const CasesPage = () => {
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-slate-900">Execution context</p>
                         <p className="text-xs text-slate-500">
-                          Filter cases by the metadata attached to the executions inside them.
+                          Shows cases with at least one execution matching these filters.
                         </p>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -747,8 +764,7 @@ export const CasesPage = () => {
                           value: executionFilters.initializationType,
                           placeholder: 'All init types',
                           options: initializationTypeOptions,
-                          onValueChange: (value) =>
-                            setExecutionFilter('initializationType', value),
+                          onValueChange: (value) => setExecutionFilter('initializationType', value),
                         })}
                         {renderSelectField({
                           label: 'Compiler',
@@ -764,19 +780,12 @@ export const CasesPage = () => {
                           options: gitTagOptions,
                           onValueChange: (value) => setExecutionFilter('gitTag', value),
                         })}
-                        {renderSelectField({
-                          label: 'Creator',
-                          value: executionFilters.createdBy,
-                          placeholder: 'All creators',
-                          options: creatorOptions,
-                          onValueChange: (value) => setExecutionFilter('createdBy', value),
-                        })}
                       </div>
                     </div>
 
                     <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Case settings</p>
+                        <p className="text-sm font-medium text-slate-900">Case metadata</p>
                         <p className="text-xs text-slate-500">
                           Narrow the result set using case-level metadata.
                         </p>

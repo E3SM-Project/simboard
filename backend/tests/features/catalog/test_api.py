@@ -434,6 +434,7 @@ class TestListCases:
         assert case_data["hpcUsername"] == "test-user"
         assert case_data["executionCount"] == 2
         assert case_data["executionCount"] == 2
+        assert case_data["latestExecution"] is None
         assert "description" not in case_data
         assert "keyFeatures" not in case_data
         assert "knownIssues" not in case_data
@@ -614,6 +615,103 @@ class TestListCases:
             == 422
         )
 
+    def test_latest_execution_summary_and_activity_sort_use_run_timestamps(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        archive_case = _create_case(db, "archive-run-case")
+        browser_case = _create_case(db, "browser-run-case")
+        no_run_case = _create_case(db, "no-run-case")
+        # Case audit data must not be treated as run activity.
+        no_run_case.updated_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        archive_ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive/case",
+            machine_id=machine.id,
+            triggered_by=normal_user_sync["id"],
+            status=IngestionStatus.SUCCESS,
+            created_count=1,
+            duplicate_count=0,
+            error_count=0,
+        )
+        browser_ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        db.add(archive_ingestion)
+        db.flush()
+        archive_execution = _create_execution_record(
+            db,
+            case=archive_case,
+            ingestion_id=archive_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="archive-completed",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        archive_execution.run_start_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        archive_execution.run_end_date = datetime(2026, 1, 3, tzinfo=timezone.utc)
+        older_archive_execution = _create_execution_record(
+            db,
+            case=archive_case,
+            ingestion_id=archive_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="archive-failed-earlier",
+            execution_status=ExecutionStatus.FAILED,
+        )
+        older_archive_execution.run_start_date = datetime(
+            2025, 12, 30, tzinfo=timezone.utc
+        )
+        older_archive_execution.run_end_date = datetime(
+            2025, 12, 31, tzinfo=timezone.utc
+        )
+        newer_running_execution = _create_execution_record(
+            db,
+            case=archive_case,
+            ingestion_id=archive_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="archive-running-newer",
+            execution_status=ExecutionStatus.RUNNING,
+        )
+        newer_running_execution.run_start_date = datetime(
+            2026, 1, 4, tzinfo=timezone.utc
+        )
+        browser_execution = _create_execution_record(
+            db,
+            case=browser_case,
+            ingestion_id=browser_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="browser-running",
+            execution_status=ExecutionStatus.RUNNING,
+        )
+        browser_execution.run_start_date = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        _create_execution_record(
+            db,
+            case=no_run_case,
+            ingestion_id=browser_ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="no-run",
+        )
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/cases",
+            params={"sort_by": "latest_run_activity", "sort_order": "desc"},
+        ).json()
+
+        assert data["items"][0]["name"] == "archive-run-case"
+        assert data["items"][0]["latestExecution"] == {
+            "executionId": "archive-completed",
+            "status": ExecutionStatus.COMPLETED.value,
+            "runStartDate": "2026-01-01T00:00:00Z",
+            "runEndDate": "2026-01-03T00:00:00Z",
+        }
+        summaries = {item["name"]: item["latestExecution"] for item in data["items"]}
+        assert summaries["browser-run-case"] is None
+        assert summaries["no-run-case"] is None
+
     def test_filter_options_include_complete_values_and_display_labels(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
@@ -643,6 +741,75 @@ class TestListCases:
                 "label": normal_user_sync["email"],
             }
         ]
+
+    def test_filter_options_cascade_case_and_execution_facets(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        first_machine = db.query(Machine).first()
+        assert first_machine is not None
+        second_machine = Machine(
+            name="cascade-second-machine",
+            site_record=get_or_create_site(db),
+            architecture="x86_64",
+            scheduler="slurm",
+            gpu=False,
+        )
+        db.add(second_machine)
+        db.flush()
+        first_case = _create_case(
+            db, "cascade-first", machine_id=first_machine.id, hpc_username="alpha"
+        )
+        second_case = _create_case(
+            db, "cascade-second", machine_id=first_machine.id, hpc_username="beta"
+        )
+        third_case = _create_case(
+            db, "cascade-third", machine_id=second_machine.id, hpc_username="gamma"
+        )
+        first_ingestion = _create_ingestion(
+            db, first_machine.id, normal_user_sync["id"]
+        )
+        second_ingestion = _create_ingestion(
+            db, second_machine.id, normal_user_sync["id"]
+        )
+        for case, ingestion, campaign, execution_status in (
+            (first_case, first_ingestion, "campaign-a", ExecutionStatus.CREATED),
+            (second_case, first_ingestion, "campaign-b", ExecutionStatus.RUNNING),
+            (third_case, second_ingestion, "campaign-c", ExecutionStatus.COMPLETED),
+        ):
+            _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=f"{case.name}-execution",
+                campaign=campaign,
+                execution_status=execution_status,
+            )
+        db.commit()
+
+        machine_facets = client.get(
+            f"{API_BASE}/cases/filter-options",
+            params={"machine_id": str(first_machine.id)},
+        ).json()
+        assert machine_facets["hpcUsernames"] == ["alpha", "beta"]
+        # The selected dimension omits its own filter, so users can change it.
+        assert {option["value"] for option in machine_facets["machines"]} == {
+            str(first_machine.id),
+            str(second_machine.id),
+        }
+
+        execution_facets = client.get(
+            f"{API_BASE}/cases/filter-options",
+            params={
+                "machine_id": str(first_machine.id),
+                "campaign": "campaign-a",
+            },
+        ).json()
+        assert execution_facets["hpcUsernames"] == ["alpha"]
+        assert execution_facets["statuses"] == [ExecutionStatus.CREATED.value]
+        # Campaign remains selectable because its own active value is excluded.
+        assert execution_facets["campaigns"] == ["campaign-a", "campaign-b"]
 
     def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
         cases = [_create_case(db, f"overview-{index}") for index in range(7)]
