@@ -65,7 +65,7 @@ diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
         500: {"description": "Internal server error."},
     },
 )
-def list_cases(  # noqa: C901
+def list_cases(
     db: Session = Depends(get_database_session),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
@@ -92,31 +92,80 @@ def list_cases(  # noqa: C901
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ) -> CasePageOut:
     """Return one lightweight, server-filtered case page."""
-    query = db.query(Case)
+    query = _filtered_case_list_query(
+        db,
+        search=search,
+        name=name,
+        case_group=case_group,
+        machine_id=machine_id,
+        hpc_username=hpc_username,
+        execution_id=execution_id,
+        status_filter=status_filter,
+        simulation_type=simulation_type,
+        campaign=campaign,
+        initialization_type=initialization_type,
+        compiler=compiler,
+        git_tag=git_tag,
+        created_by=created_by,
+    )
+    total = query.order_by(None).count()
+    latest_execution = _completed_execution_summary_subquery(db)
+    execution_count = _case_execution_count_subquery(db)
+    rows_query = _case_list_projection(query, execution_count, latest_execution)
+    ordering = _case_list_ordering(
+        sort_by, sort_order, execution_count, latest_execution
+    )
+    rows = (
+        rows_query.order_by(*ordering)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return CasePageOut(
+        items=[_case_list_item_from_row(row) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
+
+def _filtered_case_list_query(
+    db: Session,
+    *,
+    search: str | None,
+    name: str | None,
+    case_group: str | None,
+    machine_id: UUID | None,
+    hpc_username: str | None,
+    execution_id: str | None,
+    status_filter: ExecutionStatus | None,
+    simulation_type: SimulationType | None,
+    campaign: str | None,
+    initialization_type: str | None,
+    compiler: str | None,
+    git_tag: str | None,
+    created_by: UUID | None,
+):
+    """Apply the Case list's scalar and same-execution filters."""
+    query = db.query(Case)
     if search:
         query = query.filter(Case.name.ilike(f"%{search.strip()}%"))
-    if name:
-        query = query.filter(Case.name == name)
-    if case_group:
-        query = query.filter(Case.case_group == case_group)
-    if machine_id:
-        query = query.filter(Case.machine_id == machine_id)
-    if hpc_username:
-        query = query.filter(Case.hpc_username == hpc_username)
+    for column, value in (
+        (Case.name, name),
+        (Case.case_group, case_group),
+        (Case.machine_id, machine_id),
+        (Case.hpc_username, hpc_username),
+    ):
+        if value:
+            query = query.filter(column == value)
 
-    simulation_predicates: list[ColumnElement[bool]] = []
+    predicates: list[ColumnElement[bool]] = []
     if execution_id:
-        simulation_predicates.append(
-            Execution.execution_id.ilike(f"%{execution_id.strip()}%")
-        )
+        predicates.append(Execution.execution_id.ilike(f"%{execution_id.strip()}%"))
     if status_filter:
-        simulation_predicates.append(
-            Execution.status == ExecutionStatus(status_filter.value)
-        )
+        predicates.append(Execution.status == ExecutionStatus(status_filter.value))
     if simulation_type:
-        simulation_predicates.append(Execution.simulation_type == simulation_type)
-
+        predicates.append(Execution.simulation_type == simulation_type)
     for column, value in (
         (Execution.campaign, campaign),
         (Execution.initialization_type, initialization_type),
@@ -125,27 +174,28 @@ def list_cases(  # noqa: C901
         (Execution.created_by, created_by),
     ):
         if value is not None:
-            simulation_predicates.append(column == value)
-    if simulation_predicates:
-        query = query.filter(Case.executions.any(and_(*simulation_predicates)))
+            predicates.append(column == value)
+    if predicates:
+        query = query.filter(Case.executions.any(and_(*predicates)))
+    return query
 
-    total = query.order_by(None).count()
-    execution_count = (
+
+def _case_execution_count_subquery(db: Session):
+    """Return the per-case execution count correlated to a Case row."""
+    return (
         db.query(func.count(Execution.id))
         .filter(Execution.case_id == Case.id)
         .correlate(Case)
         .scalar_subquery()
     )
 
-    # Only completed executions represent completed-run activity. A run's
-    # activity is its actual end when available, otherwise its start. The
-    # remaining keys make the selected execution deterministic when activity
-    # timestamps are equal (or both absent); execution ID is the final
-    # deterministic tiebreaker. Audit timestamps are deliberately not used.
+
+def _completed_execution_summary_subquery(db: Session):
+    """Rank completed runs by actual activity, never audit timestamps."""
     latest_run_activity = func.coalesce(
         Execution.run_end_date, Execution.run_start_date
     )
-    latest_execution = (
+    return (
         db.query(
             Execution.case_id.label("case_id"),
             Execution.execution_id.label("latest_execution_id"),
@@ -168,7 +218,11 @@ def list_cases(  # noqa: C901
         .filter(Execution.status == ExecutionStatus.COMPLETED)
         .subquery()
     )
-    rows_query = (
+
+
+def _case_list_projection(query, execution_count, latest_execution):
+    """Attach the list projection and optional completed-run summary."""
+    return (
         query.join(Case.machine)
         .outerjoin(
             latest_execution,
@@ -194,6 +248,12 @@ def list_cases(  # noqa: C901
             latest_execution.c.latest_run_activity,
         )
     )
+
+
+def _case_list_ordering(
+    sort_by: str, sort_order: str, execution_count, latest_execution
+):
+    """Build nullable case-list ordering with a stable Case ID tiebreaker."""
     sort_column = {
         "updated_at": Case.updated_at,
         "created_at": Case.created_at,
@@ -209,18 +269,7 @@ def list_cases(  # noqa: C901
         if sort_order == "asc"
         else desc(sort_column).nullslast()
     )
-    rows = (
-        rows_query.order_by(ordering, Case.id.asc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return CasePageOut(
-        items=[_case_list_item_from_row(row) for row in rows],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    return ordering, Case.id.asc()
 
 
 def _case_list_item_from_row(row) -> CaseListItemOut:
