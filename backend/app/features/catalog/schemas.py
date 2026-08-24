@@ -553,6 +553,15 @@ class ExecutionSummaryCapabilitiesOut(CamelOutBaseModel):
     ]
 
 
+class LatestExecutionSummaryOut(CamelOutBaseModel):
+    """Run-derived summary of the deterministically latest completed execution."""
+
+    execution_id: str
+    status: ExecutionStatus
+    run_start_date: datetime | None = None
+    run_end_date: datetime | None = None
+
+
 class CaseListItemOut(CamelOutBaseModel):
     """Lightweight case row for paginated catalog views."""
 
@@ -565,6 +574,7 @@ class CaseListItemOut(CamelOutBaseModel):
     execution_count: int
     created_at: datetime
     updated_at: datetime
+    latest_execution: LatestExecutionSummaryOut | None = None
 
 
 class CasePageOut(CamelOutBaseModel):

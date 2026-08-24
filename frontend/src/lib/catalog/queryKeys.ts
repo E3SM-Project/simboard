@@ -17,6 +17,7 @@ export const catalogQueryKeys = {
     pages: () => ['cases', 'page'] as const,
     page: (params: object) => ['cases', 'page', params] as const,
     options: ['cases', 'filter-options'] as const,
+    optionsFor: (params: object) => ['cases', 'filter-options', params] as const,
     detail: (id: string) => ['cases', 'detail', id] as const,
     history: (id: string) => ['cases', 'detail', id, 'history'] as const,
   },

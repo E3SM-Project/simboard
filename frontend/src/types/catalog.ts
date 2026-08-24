@@ -96,6 +96,17 @@ export interface CaseListItemOut {
   executionCount: number;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Optional lightweight execution aggregate. Older API responses do not include it;
+   * the Cases view deliberately handles its absence rather than substituting record
+   * audit timestamps for run activity.
+   */
+  latestExecution?: {
+    executionId: string;
+    status: ExecutionStatusValue;
+    runStartDate: string | null;
+    runEndDate: string | null;
+  } | null;
 }
 
 export interface PageOut<T> {

@@ -86,13 +86,14 @@ def list_cases(  # noqa: C901
         "updated_at",
         pattern=(
             "^(updated_at|created_at|name|case_group|machine_name|hpc_username|"
-            "execution_count)$"
+            "execution_count|latest_run_activity)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ) -> CasePageOut:
     """Return one lightweight, server-filtered case page."""
     query = db.query(Case)
+
     if search:
         query = query.filter(Case.name.ilike(f"%{search.strip()}%"))
     if name:
@@ -103,6 +104,7 @@ def list_cases(  # noqa: C901
         query = query.filter(Case.machine_id == machine_id)
     if hpc_username:
         query = query.filter(Case.hpc_username == hpc_username)
+
     simulation_predicates: list[ColumnElement[bool]] = []
     if execution_id:
         simulation_predicates.append(
@@ -114,6 +116,7 @@ def list_cases(  # noqa: C901
         )
     if simulation_type:
         simulation_predicates.append(Execution.simulation_type == simulation_type)
+
     for column, value in (
         (Execution.campaign, campaign),
         (Execution.initialization_type, initialization_type),
@@ -133,16 +136,63 @@ def list_cases(  # noqa: C901
         .correlate(Case)
         .scalar_subquery()
     )
-    rows_query = query.join(Case.machine).with_entities(
-        Case.id,
-        Case.name,
-        Case.case_group,
-        Case.machine_id,
-        Machine.name.label("machine_name"),
-        Case.hpc_username,
-        execution_count.label("execution_count"),
-        Case.created_at,
-        Case.updated_at,
+
+    # Only completed executions represent completed-run activity. A run's
+    # activity is its actual end when available, otherwise its start. The
+    # remaining keys make the selected execution deterministic when activity
+    # timestamps are equal (or both absent); execution ID is the final
+    # deterministic tiebreaker. Audit timestamps are deliberately not used.
+    latest_run_activity = func.coalesce(
+        Execution.run_end_date, Execution.run_start_date
+    )
+    latest_execution = (
+        db.query(
+            Execution.case_id.label("case_id"),
+            Execution.execution_id.label("latest_execution_id"),
+            Execution.status.label("latest_execution_status"),
+            Execution.run_start_date.label("latest_run_start_date"),
+            Execution.run_end_date.label("latest_run_end_date"),
+            latest_run_activity.label("latest_run_activity"),
+            func.row_number()
+            .over(
+                partition_by=Execution.case_id,
+                order_by=(
+                    latest_run_activity.desc().nullslast(),
+                    Execution.run_end_date.desc().nullslast(),
+                    Execution.run_start_date.desc().nullslast(),
+                    Execution.execution_id.desc(),
+                ),
+            )
+            .label("latest_execution_rank"),
+        )
+        .filter(Execution.status == ExecutionStatus.COMPLETED)
+        .subquery()
+    )
+    rows_query = (
+        query.join(Case.machine)
+        .outerjoin(
+            latest_execution,
+            and_(
+                latest_execution.c.case_id == Case.id,
+                latest_execution.c.latest_execution_rank == 1,
+            ),
+        )
+        .with_entities(
+            Case.id,
+            Case.name,
+            Case.case_group,
+            Case.machine_id,
+            Machine.name.label("machine_name"),
+            Case.hpc_username,
+            execution_count.label("execution_count"),
+            Case.created_at,
+            Case.updated_at,
+            latest_execution.c.latest_execution_id,
+            latest_execution.c.latest_execution_status,
+            latest_execution.c.latest_run_start_date,
+            latest_execution.c.latest_run_end_date,
+            latest_execution.c.latest_run_activity,
+        )
     )
     sort_column = {
         "updated_at": Case.updated_at,
@@ -152,8 +202,13 @@ def list_cases(  # noqa: C901
         "machine_name": Machine.name,
         "hpc_username": Case.hpc_username,
         "execution_count": execution_count,
+        "latest_run_activity": latest_execution.c.latest_run_activity,
     }[sort_by]
-    ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    ordering = (
+        asc(sort_column).nullslast()
+        if sort_order == "asc"
+        else desc(sort_column).nullslast()
+    )
     rows = (
         rows_query.order_by(ordering, Case.id.asc())
         .offset((page - 1) * page_size)
@@ -161,11 +216,31 @@ def list_cases(  # noqa: C901
         .all()
     )
     return CasePageOut(
-        items=[CaseListItemOut(**row._asdict()) for row in rows],
+        items=[_case_list_item_from_row(row) for row in rows],
         total=total,
         page=page,
         page_size=page_size,
     )
+
+
+def _case_list_item_from_row(row) -> CaseListItemOut:
+    """Build a case row, nesting the optional run-derived execution summary."""
+    values = row._asdict()
+    execution_id = values.pop("latest_execution_id", None)
+    status = values.pop("latest_execution_status", None)
+    run_start_date = values.pop("latest_run_start_date", None)
+    run_end_date = values.pop("latest_run_end_date", None)
+    values.pop("latest_run_activity", None)
+
+    if status is not None:
+        values["latest_execution"] = {
+            "execution_id": execution_id,
+            "status": status,
+            "run_start_date": run_start_date,
+            "run_end_date": run_end_date,
+        }
+
+    return CaseListItemOut(**values)
 
 
 @case_router.get("/overview", response_model=CatalogOverviewOut)
@@ -227,22 +302,69 @@ def get_catalog_overview(
 @case_router.get("/filter-options", response_model=CaseFilterOptionsOut)
 def get_case_filter_options(
     db: Session = Depends(get_database_session),
+    search: str | None = Query(None),
+    name: str | None = Query(None),
+    case_group: str | None = Query(None),
+    machine_id: UUID | None = Query(None),
+    hpc_username: str | None = Query(None),
+    execution_id: str | None = Query(None),
+    status_filter: ExecutionStatus | None = Query(None, alias="status"),
+    simulation_type: SimulationType | None = Query(None),
+    campaign: str | None = Query(None),
+    initialization_type: str | None = Query(None),
+    compiler: str | None = Query(None),
+    git_tag: str | None = Query(None),
+    created_by: UUID | None = Query(None),
 ) -> CaseFilterOptionsOut:
-    """Return distinct scalar case filter values."""
+    """Return scalar case facets constrained by all other active filters."""
+    filters = {
+        "search": search,
+        "name": name,
+        "case_group": case_group,
+        "machine_id": machine_id,
+        "hpc_username": hpc_username,
+        "execution_id": execution_id,
+        "status": status_filter,
+        "simulation_type": simulation_type,
+        "campaign": campaign,
+        "initialization_type": initialization_type,
+        "compiler": compiler,
+        "git_tag": git_tag,
+        "created_by": created_by,
+    }
+
+    def case_query(exclude: str):
+        return _filtered_cases_for_facets(db, filters, exclude=exclude)
+
+    def execution_query(exclude: str):
+        return _filtered_executions_for_facets(db, filters, exclude=exclude)
+
     return CaseFilterOptionsOut(
-        names=_distinct_values(db, Case.name),
-        case_groups=_distinct_values(db, Case.case_group),
-        hpc_usernames=_distinct_values(db, Case.hpc_username),
-        machine_ids=_distinct_values(db, Case.machine_id),
-        machines=_machine_filter_options(db),
-        statuses=_distinct_values(db, Execution.status),
-        simulation_types=_distinct_values(db, Execution.simulation_type),
-        campaigns=_distinct_values(db, Execution.campaign),
-        initialization_types=_distinct_values(db, Execution.initialization_type),
-        compilers=_distinct_values(db, Execution.compiler),
-        git_tags=_distinct_values(db, Execution.git_tag),
-        created_by_ids=_distinct_values(db, Execution.created_by),
-        creators=_creator_filter_options(db),
+        names=_distinct_query_values(case_query("name"), Case.name),
+        case_groups=_distinct_query_values(case_query("case_group"), Case.case_group),
+        hpc_usernames=_distinct_query_values(
+            case_query("hpc_username"), Case.hpc_username
+        ),
+        machine_ids=_distinct_query_values(case_query("machine_id"), Case.machine_id),
+        machines=_machine_filter_options_for_query(case_query("machine_id")),
+        statuses=_distinct_query_values(execution_query("status"), Execution.status),
+        simulation_types=_distinct_query_values(
+            execution_query("simulation_type"), Execution.simulation_type
+        ),
+        campaigns=_distinct_query_values(
+            execution_query("campaign"), Execution.campaign
+        ),
+        initialization_types=_distinct_query_values(
+            execution_query("initialization_type"), Execution.initialization_type
+        ),
+        compilers=_distinct_query_values(
+            execution_query("compiler"), Execution.compiler
+        ),
+        git_tags=_distinct_query_values(execution_query("git_tag"), Execution.git_tag),
+        created_by_ids=_distinct_query_values(
+            execution_query("created_by"), Execution.created_by
+        ),
+        creators=_creator_filter_options_for_query(execution_query("created_by")),
     )
 
 
@@ -1174,6 +1296,77 @@ def _distinct_values(db: Session, column) -> list:
     ]
 
 
+def _distinct_query_values(query, column) -> list:
+    """Return sorted non-null values from an already constrained query."""
+    return [
+        value
+        for (value,) in query.with_entities(distinct(column))
+        .filter(column.is_not(None))
+        .order_by(column)
+        .all()
+    ]
+
+
+def _filtered_cases_for_facets(db: Session, filters: dict, *, exclude: str):
+    """Apply list-case semantics while omitting one facet's own filter."""
+    query = db.query(Case)
+    if filters["search"] and exclude != "search":
+        query = query.filter(Case.name.ilike(f"%{filters['search'].strip()}%"))
+    for key, column in (
+        ("name", Case.name),
+        ("case_group", Case.case_group),
+        ("machine_id", Case.machine_id),
+        ("hpc_username", Case.hpc_username),
+    ):
+        if filters[key] is not None and exclude != key:
+            query = query.filter(column == filters[key])
+
+    predicates = _case_execution_facet_predicates(filters, exclude=exclude)
+    if predicates:
+        query = query.filter(Case.executions.any(and_(*predicates)))
+    return query
+
+
+def _filtered_executions_for_facets(db: Session, filters: dict, *, exclude: str):
+    """Return executions matching the same-case execution filter semantics."""
+    query = db.query(Execution).join(Case)
+    if filters["search"] and exclude != "search":
+        query = query.filter(Case.name.ilike(f"%{filters['search'].strip()}%"))
+    for key, column in (
+        ("name", Case.name),
+        ("case_group", Case.case_group),
+        ("machine_id", Case.machine_id),
+        ("hpc_username", Case.hpc_username),
+    ):
+        if filters[key] is not None and exclude != key:
+            query = query.filter(column == filters[key])
+    predicates = _case_execution_facet_predicates(filters, exclude=exclude)
+    if predicates:
+        query = query.filter(*predicates)
+    return query
+
+
+def _case_execution_facet_predicates(filters: dict, *, exclude: str):
+    """Build execution predicates shared by case and execution facet queries."""
+    predicates: list[ColumnElement[bool]] = []
+    if filters["execution_id"] and exclude != "execution_id":
+        predicates.append(
+            Execution.execution_id.ilike(f"%{filters['execution_id'].strip()}%")
+        )
+    for key, column in (
+        ("status", Execution.status),
+        ("simulation_type", Execution.simulation_type),
+        ("campaign", Execution.campaign),
+        ("initialization_type", Execution.initialization_type),
+        ("compiler", Execution.compiler),
+        ("git_tag", Execution.git_tag),
+        ("created_by", Execution.created_by),
+    ):
+        if filters[key] is not None and exclude != key:
+            predicates.append(column == filters[key])
+    return predicates
+
+
 def _machine_filter_options(db: Session) -> list[FilterOptionOut]:
     """Return machines referenced by catalog cases with display names."""
     rows = (
@@ -1188,11 +1381,37 @@ def _machine_filter_options(db: Session) -> list[FilterOptionOut]:
     ]
 
 
+def _machine_filter_options_for_query(query) -> list[FilterOptionOut]:
+    """Return machine options represented by a constrained case query."""
+    rows = (
+        query.join(Machine, Machine.id == Case.machine_id)
+        .with_entities(Machine.id, Machine.name)
+        .distinct()
+        .order_by(Machine.name, Machine.id)
+        .all()
+    )
+    return [
+        FilterOptionOut(value=str(machine_id), label=name) for machine_id, name in rows
+    ]
+
+
 def _creator_filter_options(db: Session) -> list[FilterOptionOut]:
     """Return execution creators with stable IDs and email labels."""
     rows = (
         db.query(User.id, User.email)  # ty: ignore[no-matching-overload] -- SQLAlchemy mapped descriptors are not recognized as query columns.
         .join(Execution, Execution.created_by == User.id)
+        .distinct()
+        .order_by(User.email, User.id)
+        .all()
+    )
+    return [FilterOptionOut(value=str(user_id), label=email) for user_id, email in rows]
+
+
+def _creator_filter_options_for_query(query) -> list[FilterOptionOut]:
+    """Return creator options represented by a constrained execution query."""
+    rows = (
+        query.join(User, Execution.created_by == User.id)
+        .with_entities(User.id, User.email)
         .distinct()
         .order_by(User.email, User.id)
         .all()
