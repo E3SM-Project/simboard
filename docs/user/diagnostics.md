@@ -20,10 +20,10 @@ If the case is not available in SimBoard, contact the SimBoard administrator: [T
 
 ## Publish and find the link
 
-1. Run and publish the zppy diagnostics using the configured `simulation_type`. This generates the `provenance.settings` file used for SimBoard publication.
+1. Run and publish the zppy diagnostics using the configured `simulation_type`. This generates timestamped paired provenance files: `provenance.*.cfg` and its corresponding `provenance.*.settings`, which SimBoard uses for publication.
 2. Confirm that the diagnostics web output is complete and opens successfully in a browser.
 3. Confirm the completed public output uses the matching SimBoard archive layout.
-4. Wait for the scheduled SimBoard scanner to attempt linkage. Linking is not immediate; the scanner runs periodically every 15 minutes.
+4. Wait for the scheduled SimBoard scanner to attempt linkage. Linking is not immediate; the scanner runs periodically.
 5. After the link appears, open the case in SimBoard and follow its diagnostics link.
 
 Discovery uses the latest valid provenance for each published diagnostics case. If current provenance is incomplete or invalid, re-run and re-publish zppy diagnostics to regenerate it, then run discovery again. Do not manually edit provenance files or expect discovery to use an older provenance file.

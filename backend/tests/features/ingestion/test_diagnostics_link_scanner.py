@@ -74,16 +74,109 @@ def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -
 def test_newest_missing_settings_defers_without_stale_fallback(tmp_path: Path) -> None:
     directory = _case(tmp_path, "production/type/case")
     (directory / "provenance.20260812_120000_000000.cfg").write_text("cfg")
-    assert _discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
 
 
-def test_discovery_rejects_case_and_group_mismatches(tmp_path: Path) -> None:
-    directory = _case(tmp_path, "development/type/group/case")
+@pytest.mark.parametrize(
+    ("path", "expected_group"),
+    [("development/case", None), ("development/group/case", "group")],
+)
+def test_discovery_accepts_supported_archive_layouts(
+    tmp_path: Path, path: str, expected_group: str | None
+) -> None:
+    directory = _case(tmp_path, path)
+    candidates = _discover(tmp_path, BASE_URL, "perlmutter")
+
+    assert [candidate.path.parent for candidate in candidates] == [directory]
+    assert candidates[0].values.get("case_group") == expected_group
+
+
+def test_discovery_requires_machine_matching_configured_archive(tmp_path: Path) -> None:
+    directory = _case(tmp_path, "development/case")
+
+    matching = _discover(tmp_path, BASE_URL, "perlmutter")
+    mismatching = _discover(tmp_path, BASE_URL, "chrysalis")
+
+    assert [candidate.path.parent for candidate in matching] == [directory]
+    assert mismatching == []
+
+
+@pytest.mark.parametrize("path", ["development", "development/group/extra/case"])
+def test_discovery_rejects_unsupported_archive_layouts(
+    tmp_path: Path, path: str
+) -> None:
+    _case(tmp_path, path)
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
+
+
+def test_discovery_rejects_case_name_mismatch(tmp_path: Path) -> None:
+    directory = _case(tmp_path, "development/group/case")
     settings = next(directory.glob("*.settings"))
     settings.write_text(
         settings.read_text().replace("case_name = case", "case_name = wrong")
     )
-    assert _discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
+
+
+@pytest.mark.parametrize("replacement", ["case_group = wrong", ""])
+def test_discovery_rejects_case_group_mismatch(
+    tmp_path: Path, replacement: str
+) -> None:
+    directory = _case(tmp_path, "development/group/case")
+    settings = next(directory.glob("*.settings"))
+    settings.write_text(settings.read_text().replace("case_group = group", replacement))
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
+
+
+def test_discovery_skips_malformed_timestamp_without_aborting(tmp_path: Path) -> None:
+    directory = _case(tmp_path, "production/group/valid")
+    (directory / "provenance.20261311_120000_000000.cfg").write_text("cfg")
+
+    candidates = _discover(tmp_path, BASE_URL, "perlmutter")
+
+    assert [candidate.path.parent for candidate in candidates] == [directory]
+
+
+@pytest.mark.parametrize(
+    "diagnostics_path",
+    [
+        "/archive/../outside",
+        "/archive/%2e%2e/outside",
+        "/archive%2f..%2foutside",
+        "/archive/%252e%252e%252foutside",
+    ],
+)
+def test_discovery_rejects_diagnostics_url_path_traversal(
+    tmp_path: Path, diagnostics_path: str
+) -> None:
+    directory = _case(tmp_path, "production/group/case")
+    settings = next(directory.glob("*.settings"))
+    settings.write_text(
+        settings.read_text().replace(
+            "https://diagnostics.example.org/archive/case",
+            f"https://diagnostics.example.org{diagnostics_path}",
+        )
+    )
+
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
+
+
+def test_discovery_accepts_normalized_diagnostics_url_within_archive(
+    tmp_path: Path,
+) -> None:
+    directory = _case(tmp_path, "production/group/case")
+    settings = next(directory.glob("*.settings"))
+    settings.write_text(
+        settings.read_text().replace(
+            "https://diagnostics.example.org/archive/case",
+            "https://diagnostics.example.org/archive/group/../case",
+        )
+    )
+
+    assert [
+        candidate.path.parent
+        for candidate in _discover(tmp_path, BASE_URL, "perlmutter")
+    ] == [directory]
 
 
 def test_parse_settings_rejects_duplicate_required_key(tmp_path: Path) -> None:
@@ -107,7 +200,7 @@ def test_discovery_rejects_settings_symlink_outside_root(tmp_path: Path) -> None
     outside.write_text(settings.read_text(), encoding="utf-8")
     settings.unlink()
     settings.symlink_to(outside)
-    assert _discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
 
 
 def test_discovery_rejects_external_output_directory_symlink(tmp_path: Path) -> None:
@@ -117,7 +210,7 @@ def test_discovery_rejects_external_output_directory_symlink(tmp_path: Path) -> 
     outside.mkdir(exist_ok=True)
     (outside / "index.html").write_text("ready")
     (directory / "output").symlink_to(outside, target_is_directory=True)
-    assert _discover(tmp_path, BASE_URL) == []
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
 
 
 def test_discovery_continues_after_published_output_oserror(
@@ -146,7 +239,7 @@ def test_discovery_continues_after_published_output_oserror(
         lambda event, fields=None: events.append((event, fields)),
     )
 
-    candidates = _discover(tmp_path, BASE_URL)
+    candidates = _discover(tmp_path, BASE_URL, "perlmutter")
 
     assert [candidate.path.parent for candidate in candidates] == [valid_case]
     assert (
@@ -230,7 +323,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
     )
     monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
-    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("MACHINE_NAME", "pm-gpu")
     monkeypatch.setenv("DRY_RUN", "false")
     assert run() == 0
     assert client.get_calls[0]["params"] == {
@@ -238,6 +331,7 @@ def test_run_submits_exact_payload_and_bearer_auth(
         "archive_relative_case_path": "production/type/case",
     }
     assert client.post_calls[0]["headers"] == {"Authorization": "Bearer token"}
+    assert client.post_calls[0]["json"]["machine"] == "perlmutter"
     assert client.post_calls[0]["json"]["diagnostics"][0]["name"] == "zppy diagnostics"
     startup_fields = next(
         fields

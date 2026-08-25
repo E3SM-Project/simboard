@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import posixpath
 import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 import httpx
 
+from app.features.machine.utils import canonicalize_machine_name
 from app.scripts.ingestion.archive_ingestor_core import _log_event
 from app.scripts.ingestion.diagnostics_archives import (
     DIAGNOSTICS_ARCHIVES_BY_MACHINE,
@@ -35,10 +37,11 @@ class Candidate:
 
 
 def run() -> int:
-    machine = os.environ.get("MACHINE_NAME", "").strip()
-    if not machine:
+    configured_machine = os.environ.get("MACHINE_NAME", "").strip()
+    if not configured_machine:
         raise ValueError("MACHINE_NAME is required")
 
+    machine = canonicalize_machine_name(configured_machine)
     archive = _resolve_archive(machine)
     root = Path(archive.root)
     dry_run = os.environ.get("DRY_RUN", "true").lower() in {"1", "true", "yes"}
@@ -63,7 +66,7 @@ def run() -> int:
         },
     )
 
-    candidates = _discover(root, archive.public_base_url)
+    candidates = _discover(root, archive.public_base_url, machine)
     summary["discovered_candidates"] = len(candidates)
     _log_event("diagnostics_scanner_discovery_completed", summary.copy())
 
@@ -186,7 +189,8 @@ def run() -> int:
 
 
 def _resolve_archive(machine_name: str) -> DiagnosticsArchive:
-    archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE.get(machine_name.lower())
+    canonical_machine_name = canonicalize_machine_name(machine_name)
+    archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE.get(canonical_machine_name)
     if archive is None:
         raise ValueError(f"Unsupported diagnostics scanner machine: {machine_name}")
 
@@ -213,7 +217,9 @@ def _sanitize_url(url: str) -> str:
     return urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
 
 
-def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C901
+def _discover(  # noqa: C901
+    root: Path, public_base_url: str, machine_name: str
+) -> list[Candidate]:
     base = urlparse(public_base_url)
     candidates: list[Candidate] = []
 
@@ -258,10 +264,13 @@ def _discover(root: Path, public_base_url: str) -> list[Candidate]:  # noqa: C90
                 values = _parse_settings_bytes(settings_bytes)
                 url = urlparse(values["diagnostics_url"])
 
-                if (url.scheme, url.netloc) != (
-                    base.scheme,
-                    base.netloc,
-                ) or not url.path.startswith(base.path.rstrip("/") + "/"):
+                if canonicalize_machine_name(values["machine"]) != machine_name:
+                    raise ValueError(
+                        "Provenance machine does not match configured diagnostics archive"
+                    )
+                values["machine"] = machine_name
+
+                if not _is_archive_url(url, base):
                     raise ValueError(
                         "Diagnostics URL outside configured public archive"
                     )
@@ -375,13 +384,13 @@ def _published_output(case_dir: Path, root: Path) -> bool:
 def _validate_layout(case_dir: Path, root: Path, values: dict[str, str]) -> None:
     parts = case_dir.relative_to(root).parts
 
-    if len(parts) not in {3, 4} or parts[0] not in {"production", "development"}:
+    if len(parts) not in {2, 3} or parts[0] not in {"production", "development"}:
         raise ValueError("Invalid diagnostics archive case layout")
 
     if values["case_name"] != parts[-1]:
         raise ValueError("Provenance case_name does not match archive layout")
 
-    expected_group = parts[-2] if len(parts) == 3 else None
+    expected_group = parts[1] if len(parts) == 3 else None
 
     if values.get("case_group") != expected_group:
         raise ValueError("Provenance case_group does not match archive layout")
@@ -393,9 +402,35 @@ def _timestamp(cfg: Path) -> datetime | None:
     if match is None:
         return None
 
-    return datetime.strptime(match.group(1), "%Y%m%d_%H%M%S_%f").replace(
-        tzinfo=timezone.utc
-    )
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d_%H%M%S_%f").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+def _is_archive_url(url, archive_base) -> bool:
+    """Check that a decoded, normalized URL path remains within the archive."""
+    if (url.scheme, url.netloc) != (archive_base.scheme, archive_base.netloc):
+        return False
+
+    base_path = _normalized_url_path(archive_base.path)
+    url_path = _normalized_url_path(url.path)
+    prefix = "/" if base_path == "/" else f"{base_path}/"
+    return url_path.startswith(prefix)
+
+
+def _normalized_url_path(path: str) -> str:
+    """Fully decode and normalize a URL path before validating its boundary."""
+    decoded = path
+    while True:
+        unquoted = unquote(decoded)
+        if unquoted == decoded:
+            break
+        decoded = unquoted
+
+    return posixpath.normpath(f"/{decoded.lstrip('/')}")
 
 
 if __name__ == "__main__":
