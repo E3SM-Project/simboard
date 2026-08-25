@@ -46,6 +46,14 @@ collection in "staging" or "archive" modes, respectively:
         && ${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive 
 ```
 
+These command should be preceded by crontab scedule specifications, recommended to be:
+
+```text
+    5 20 35 50 * * * *          (for the "staging" operation, every 15 minutes of every hour)
+    10 15 * * *                 (for the "archive" operaiton, 15:10 every day)
+```
+
+
 ## About the Site Config
 
 The following sample (from Chrysalis) demonstrates certain flexibilities involved:
