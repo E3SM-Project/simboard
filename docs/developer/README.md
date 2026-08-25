@@ -65,6 +65,8 @@ SimBoard supports local path ingestion from NERSC / Perlmutter and remote automa
 
 See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for terminology, ingestion modes, submission-state flow, runner configuration, site mapping, and PACE reference scripts.
 
+See [Diagnostics Linkage Architecture](../architecture/diagnostics-linkage.md) for published diagnostics scanner terminology and state flow.
+
 ## Local Environment Setup
 
 Prerequisites:

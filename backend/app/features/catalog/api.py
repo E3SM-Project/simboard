@@ -20,6 +20,7 @@ from app.features.catalog.link_utils import merge_execution_and_case_links
 from app.features.catalog.models import (
     Artifact,
     Case,
+    DiagnosticProvenanceState,
     Execution,
     ExternalLink,
     MetadataChange,
@@ -32,7 +33,9 @@ from app.features.catalog.schemas import (
     CaseSummaryOut,
     CaseUpdate,
     CatalogOverviewOut,
+    DiagnosticProvenanceStateOut,
     DiagnosticsLinkRequest,
+    DiagnosticsScannerLinkRequest,
     ExecutionCreate,
     ExecutionExternalLinkOut,
     ExecutionFilterOptionsOut,
@@ -748,6 +751,115 @@ def link_case_diagnostics(
     )
 
 
+@diagnostics_router.get(
+    "/scanner-state", response_model=DiagnosticProvenanceStateOut | None
+)
+def get_diagnostics_scanner_state(
+    machine: str,
+    archive_relative_case_path: str,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> DiagnosticProvenanceStateOut | None:
+    """Return successful scanner state for one machine/archive case path."""
+    _require_diagnostics_scanner_role(user)
+    resolved_machine = resolve_machine_by_name(db, machine)
+
+    if resolved_machine is None:
+        raise HTTPException(status_code=404, detail="Unknown machine.")
+
+    state = (
+        db.query(DiagnosticProvenanceState)
+        .filter(DiagnosticProvenanceState.machine_name == resolved_machine.name)
+        .filter(
+            DiagnosticProvenanceState.archive_relative_case_path
+            == archive_relative_case_path
+        )
+        .one_or_none()
+    )
+
+    return DiagnosticProvenanceStateOut.model_validate(state) if state else None
+
+
+@diagnostics_router.post("/scanner/link", status_code=status.HTTP_204_NO_CONTENT)
+def link_scanner_diagnostics(
+    payload: DiagnosticsScannerLinkRequest,
+    db: Session = Depends(get_database_session),
+    user: User = Depends(current_active_user),
+) -> None:
+    """Atomically upsert one scanner-managed case diagnostic link and state."""
+    _require_diagnostics_scanner_role(user)
+
+    if len(payload.diagnostics) != 1:
+        raise HTTPException(
+            status_code=422, detail="Scanner payload requires one diagnostic."
+        )
+
+    if _unsafe_archive_relative_path(payload.provenance.archive_relative_case_path):
+        raise HTTPException(
+            status_code=422, detail="Invalid archive-relative case path."
+        )
+
+    machine = resolve_machine_by_name(db, payload.machine)
+    if machine is None:
+        raise HTTPException(status_code=404, detail="No matching case found.")
+
+    case_id = _resolve_case_id_for_diagnostics_link(
+        db=db,
+        case_name=payload.case_name,
+        machine_name=payload.machine,
+        hpc_username=payload.hpc_username,
+    )
+    diagnostic = payload.diagnostics[0]
+    now = datetime.now(timezone.utc)
+
+    with transaction(db):
+        link_id = db.execute(
+            pg_insert(ExternalLink)
+            .values(
+                case_id=case_id,
+                kind=ExternalLinkKind.DIAGNOSTIC,
+                url=str(diagnostic.url),
+                label=diagnostic.name,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    ExternalLink.case_id,
+                    ExternalLink.kind,
+                    ExternalLink.url,
+                ],
+                index_where=ExternalLink.case_id.is_not(None),
+                set_={"label": diagnostic.name, "updated_at": now},
+            )
+            .returning(ExternalLink.id)
+        ).scalar_one()
+        db.execute(
+            pg_insert(DiagnosticProvenanceState)
+            .values(
+                link_id=link_id,
+                machine_name=machine.name,
+                archive_relative_case_path=payload.provenance.archive_relative_case_path,
+                settings_filename=payload.provenance.settings_filename,
+                provenance_timestamp=payload.provenance.provenance_timestamp,
+                fingerprint=payload.provenance.fingerprint,
+                linked_url=str(diagnostic.url),
+                submitted_at=now,
+            )
+            .on_conflict_do_update(
+                constraint="uq_diagnostic_provenance_states_machine_path",
+                set_={
+                    "link_id": link_id,
+                    "settings_filename": payload.provenance.settings_filename,
+                    "provenance_timestamp": payload.provenance.provenance_timestamp,
+                    "fingerprint": payload.provenance.fingerprint,
+                    "linked_url": str(diagnostic.url),
+                    "submitted_at": now,
+                },
+            )
+        )
+
+
 @execution_router.get(
     "",
     response_model=ExecutionPageOut,
@@ -1217,6 +1329,20 @@ def _resolve_case_id_for_diagnostics_link(
         )
 
     return match[0]
+
+
+def _require_diagnostics_scanner_role(user: User) -> None:
+    if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
+        raise HTTPException(
+            status_code=403,
+            detail="Scanner access requires an administrator or service account.",
+        )
+
+
+def _unsafe_archive_relative_path(value: str) -> bool:
+    return value.startswith("/") or any(
+        part in {"", ".", ".."} for part in value.split("/")
+    )
 
 
 def _upsert_case_diagnostic_links(

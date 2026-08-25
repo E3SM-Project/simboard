@@ -4,7 +4,7 @@
 
 Replace manual diagnostics URL entry with automated linking from zppy diagnostics outputs to existing SimBoard simulation records.
 
-MVP is NERSC-only.
+MVP uses SimBoard's static diagnostics-archive registry for supported machines.
 
 ## Scope
 
@@ -12,12 +12,12 @@ MVP is NERSC-only.
 
 - Add required zppy provenance fields: `case_name`, `machine`, `hpc_username`
 - Add required diagnostics URLs in zppy provenance
-- Require standardized zppy diagnostics output locations for NERSC production runs
-- Discover zppy diagnostics provenance files from configured NERSC production filesystem roots
-- Confirm diagnostics completion from index page plus status files
+- Require standardized zppy diagnostics archive locations for supported machines
+- Discover newest paired zppy provenance from the static archive registry
+- Require published diagnostic output before linking
 - Match diagnostics to SimBoard records using `(case_name, machine, hpc_username)`
 - Create idempotent case-scoped diagnostic links
-- Maintain scanner state to avoid repeated processing
+- Maintain database-backed scanner provenance state
 
 ### Out
 
@@ -27,7 +27,7 @@ MVP is NERSC-only.
 - Diagnostics content ingestion or indexing
 - Public HTML directory scraping
 - Historical backfill beyond configured provenance roots
-- Non-NERSC deployments
+- Mache runtime/config retrieval
 
 ## Core Decisions
 
@@ -45,9 +45,12 @@ All three fields are required. `case_name` alone is not globally safe, and `CASE
 
 Avoid public directory scraping. It is fragile, web-server-coupled, slow, and expands the SSRF/content-injection attack surface.
 
-### Use zppy provenance cfg as the primary input
+### Use paired zppy provenance files
 
-SimBoard discovers zppy provenance files from configured NERSC filesystem roots. Newer zppy runs already emit provenance cfg files under diagnostics output paths, for example:
+SimBoard discovers timestamped paired provenance files from the filesystem roots
+selected by its static site registry. The cfg establishes that a matching
+provenance pair exists; the paired settings file is the authoritative source of
+case identity and diagnostics URL. For example:
 
 ```text
 post/scripts/provenance.20260303_230804_991619.cfg
@@ -58,7 +61,7 @@ Reference example:
 - https://github.com/E3SM-Project/zppy/blob/main/examples/post.v3.LR.historical.zppy_v3.cfg
 - https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/zppy_example/v3.2.0/v3.LR.historical_0051/provenance.20260303_230804_991619.cfg
 
-Current cfg examples expose useful fields:
+Current cfg examples expose useful contextual fields:
 
 - `case`: case name
 - `input`: case run directory
@@ -66,7 +69,7 @@ Current cfg examples expose useful fields:
 - `www`: public diagnostics root
 - `campaign`: optional campaign metadata
 
-But current cfg is not yet an authoritative join source because it may lack:
+The cfg is not an authoritative join source because it may lack:
 
 - `machine`
 - canonical simulation owner
@@ -79,7 +82,8 @@ input  path owner: ac.wlin
 output path owner: ac.zhang40
 ```
 
-Therefore, zppy must enrich provenance cfg with required case identity copied from `<input>/case_scripts/env_case.xml`:
+Therefore, zppy must write required case identity to provenance settings, copied
+from `<input>/case_scripts/env_case.xml`:
 
 | XML field  | Provenance field |
 | ---------- | ---------------- |
@@ -87,39 +91,57 @@ Therefore, zppy must enrich provenance cfg with required case identity copied fr
 | `MACH`     | `machine`        |
 | `REALUSER` | `hpc_username`   |
 
-If any required field is missing, SimBoard skips the provenance file and logs it as invalid for linking.
+If any required field is missing, SimBoard skips the provenance pair and logs it
+as invalid for linking. Settings also provide the explicit `diagnostics_url`.
 
-For MVP, zppy should reuse existing top-level cfg fields rather than emit a new versioned normalized block.
+SimBoard selects the newest complete cfg/settings pair by parsed filename
+timestamp and does not fall back to older provenance when the newest pair is
+incomplete.
 
-### Require standardized output locations for production runs
+### Require standardized archive locations
 
-For MVP, NERSC production runs must use standardized zppy diagnostics output locations. SimBoard relies on those known production roots for provenance discovery.
+SimBoard keeps a checked-in `DIAGNOSTICS_ARCHIVES_BY_MACHINE` registry under
+`backend/app/scripts/ingestion/`. Each entry supplies the complete filesystem
+archive root and matching public archive URL for a supported SimBoard machine.
+The registry is seeded or refreshed during development from Mache machine cfg
+files, but the scanner never fetches or parses Mache at runtime.
 
-Custom or ad hoc layouts do not block the overall design, but they are not the required path for MVP.
+Custom or ad hoc layouts are not part of this MVP.
 
 ### Require explicit diagnostics URLs in provenance
 
-For MVP, SimBoard should not derive diagnostics URLs from path conventions. zppy should emit explicit diagnostics URLs in provenance cfg.
+For MVP, SimBoard should not derive diagnostics URLs from path conventions. zppy
+should emit an explicit `diagnostics_url` in provenance settings. SimBoard
+validates that URL against the configured public archive prefix.
 
-### Use index page plus status files as completion signal
+### Use published output as readiness signal
 
-Treat diagnostics as complete only when the expected index page and zppy status files are present.
+Treat a candidate as ready when its published case directory contains a
+non-provenance diagnostic artifact or non-empty diagnostic subdirectory. Do not
+inspect zppy status files: they are not published archive artifacts and do not
+reliably identify one provenance run. This is a published-output readiness
+check, not proof every zppy task has completed.
 
 ### Persist links, do not resolve at query time
 
 Create database rows when diagnostics are discovered. Frontend queries should not crawl filesystems or remote URLs.
 
-Diagnostic links are case-scoped. For MVP, store them on `Case` by adding `case_id` to `ExternalLink`. Keep the existing manual-link rendering path where possible by surfacing case-scoped diagnostic links alongside current links.
+Diagnostic links are case-scoped. Store scanner state centrally with each
+scanner-managed link, keyed by canonical machine and archive-relative case path.
+State is removed when its linked `ExternalLink` is deleted, allowing a later
+scan to recreate a still-published link.
 
 ## Implementation
 
-Implement in order: provenance contract -> scanner -> storage target -> resolver/API -> frontend verification.
+Implement in order: provenance contract -> storage/API state -> scanner ->
+frontend verification.
 
 ### zppy
 
 #### 1. Emit required provenance fields
 
-For MVP, production runs must write diagnostics outputs and provenance cfg files to the standardized NERSC zppy output locations.
+For MVP, runs must write diagnostics outputs and paired provenance
+cfg/settings files to the standardized site diagnostics archive.
 
 | Field          | Source                    |
 | -------------- | ------------------------- |
@@ -135,9 +157,9 @@ Implementation note:
 
 Tests:
 
-- uses standardized NERSC production output locations
+- uses standardized diagnostics archive locations
 - emits `case_name`, `machine`, `hpc_username`
-- emits explicit diagnostics URLs (`diagnostic_url`)
+- emits explicit diagnostics URLs (`diagnostics_url`)
 - can construct explicit diagnostics URLs from cfg `www` plus `mache` machine metadata
 - parses values from `env_case.xml`
 - parses values from `env_build.xml`
@@ -146,68 +168,94 @@ Tests:
 
 ### SimBoard
 
-#### 1. Add diagnostics scanner
+#### 1. Add diagnostics scanner and static site registry
 
 Add `diagnostics_link_scanner.py`.
 
 Responsibilities:
 
-- scan configured NERSC production diagnostics roots for `provenance*.cfg`
-- dedup with state file
-- verify diagnostics completion from index page plus status files
-- parse `case_name`, `machine`, `hpc_username`
-- parse explicit diagnostics URLs (`diagnostic_url`)
-- call internal API with service-account auth
-- skip and log if full join key is unavailable
+- add a checked-in machine-to-archive registry under `scripts/ingestion`, seeded
+  or refreshed from Mache cfg files during development only
+- select a registry entry by accepted SimBoard machine name or alias; reject an
+  unsupported machine before scanning
+- scan bounded production and development archive trees, including optional
+  case-group directories, without following symlinks outside the archive root
+- select newest paired cfg/settings provenance by parsed filename timestamp
+- parse identity and `diagnostics_url` only from settings; validate settings
+  syntax, archive layout, and URL scheme/authority/path boundary
+- require published diagnostic output beyond provenance files; do not inspect
+  zppy status files
+- read database-backed provenance state and skip an unchanged successful
+  settings filename/fingerprint
+- call the scanner-specific internal diagnostics endpoint with service-account
+  auth, leaving `POST /api/v1/diagnostics/link` unchanged
+- skip and log malformed, output-not-ready, or non-matching candidates
 
 Tests:
 
-- discovers cfgs
-- parses required cfg identity
-- handles malformed cfgs
+- selects static archive registry entries by canonical machine name and alias
+- rejects unsupported machines and invalid registry roots or public URLs
+- generates registry candidates from representative Mache cfg files while
+  skipping files without usable `[web_portal]` values
+- discovers grouped and ungrouped cases in both archive classifications
+- selects the newest paired provenance without stale fallback
+- parses required settings identity and URL without parsing cfg identity
+- handles malformed or unsafe provenance
 - skips missing identity
-- checks index-plus-status completion marker
-- dedups state
+- checks published output and provenance-only directories without status files
+- retries transient submissions and dedups central successful state
 - handles duplicate links idempotently
 
-#### 2. Resolve link storage
+#### 2. Resolve link storage and scanner state
 
-Add `DiagnosticsLinkRequest` in `backend/app/features/simulation/schemas.py`.
+Use the existing diagnostics-link request schema in
+`backend/app/features/catalog/schemas.py`.
 
-For MVP, add `case_id` to `ExternalLink` and store diagnostic links at case scope.
-Add a partial unique index on `(case_id, kind, url)` where `case_id IS NOT NULL` so case-owned diagnostic links remain idempotent under repeated or concurrent writes.
+Use the existing case-owned `ExternalLink` storage and partial uniqueness on
+`(case_id, kind, url)` so repeated or concurrent submissions remain idempotent.
+
+Add `DiagnosticProvenanceState` for each scanner-managed diagnostic link. Store
+the canonical machine, normalized archive-relative case path, settings filename,
+timestamp, fingerprint, URL, and successful submission time. Give the state row
+a unique foreign key to `ExternalLink` with cascade deletion, and add a unique
+machine/path constraint.
 
 #### 3. Add matching resolver
 
 | Input          | Match                   |
 | -------------- | ----------------------- |
 | `case_name`    | `Case.name`             |
-| `machine`      | joined case simulations |
-| `hpc_username` | joined case simulations |
+| `machine`      | resolved `Case.machine_id` |
+| `hpc_username` | `Case.hpc_username`     |
 
 Outcomes:
 
 - 1 case match: create/update case-scoped links
 - 0 matches: `404`
-- multiple matches: `409`
+- case uniqueness makes multiple matches invalid
 
 Tests:
 
 - matching triple creates links
 - same case/machine under different user does not cross-link
 - no match returns `404`
-- ambiguous match returns `409`
+- case uniqueness prevents ambiguous matches
 
-#### 4. Add internal API endpoint
+#### 4. Add internal diagnostics APIs
 
 Endpoint: `POST /api/v1/diagnostics/link`
 
 Implementation note:
 
-- Define the endpoint in `backend/app/features/simulation/api.py` using a dedicated `diagnostics_router` with prefix `/diagnostics`.
+- Define the endpoint in `backend/app/features/catalog/api.py` using a dedicated `diagnostics_router` with prefix `/diagnostics`.
 - Register that router in `backend/app/main.py` with `API_BASE` so the public path remains exactly `/api/v1/diagnostics/link` instead of inheriting the `/simulations` prefix.
 
 Roles: `ADMIN`, `SERVICE_ACCOUNT`
+
+Keep this endpoint's contract unchanged. Add scanner-specific state read and
+link endpoints for service accounts. The scanner link endpoint accepts existing
+diagnostics-link identity plus provenance metadata and atomically upserts the
+case link and `DiagnosticProvenanceState` in one transaction.
 
 Request:
 
@@ -232,6 +280,10 @@ Tests:
 - concurrent duplicate request is idempotent
 - invalid payload returns `422`
 - auth required
+- scanner state lookup skips unchanged successful provenance
+- scanner link submission atomically persists link and state
+- concurrent scanner submissions remain safe
+- deleting a scanner-managed link cascades state deletion
 
 #### 5. Keep frontend unchanged
 
@@ -255,13 +307,12 @@ make backend-test && make pre-commit-run
   Mitigation: add `case_id` for MVP and keep migration/API behavior narrow.
 - **Missing identity**: SimBoard cannot link a provenance file without `case_name`, `machine`, and `hpc_username`.
   Mitigation: require zppy provenance enrichment; skip and log invalid files.
-- **NERSC deployment variability**: zppy roots and public URL prefixes may still vary by campaign or user layout within NERSC.
-  Mitigation: use env-configured NERSC scanner roots and NERSC public-prefix mappings.
+- **Static registry drift**: a site may move its published archive.
+  Mitigation: refresh the checked-in registry through a reviewed SimBoard change.
 - **Provenance drift**: cfg layout and required-field coverage may vary across zppy versions.
   Mitigation: add parser tests, schema/version detection, and a documented support window.
 
 ## Remaining Open Questions
 
-1. **NERSC deployment scope:** Which NERSC scanner roots and public URL prefixes are supported in MVP?
-2. **Retroactive linking:** Does MVP include historical backfill, or only provenance files with the required join key?
-3. **Case identity hardening:** Is `(case_name, machine, hpc_username)` sufficient until issue #136 is resolved?
+1. **Retroactive linking:** Does MVP include historical backfill, or only provenance files with the required join key?
+2. **Case identity hardening:** Is `(case_name, machine, hpc_username)` sufficient until issue #136 is resolved?

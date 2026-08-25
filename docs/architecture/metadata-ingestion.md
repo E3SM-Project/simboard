@@ -34,6 +34,8 @@ that case by an execution ID derived from a CIME LID.
 | Staging directory | The active `PERF_ARCHIVE_DIR` tree where new performance output from E3SM runs appears before PACE moves it elsewhere. |
 | Archive directory | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.                               |
 
+Published diagnostics linking is documented in [Diagnostics Linkage](diagnostics-linkage.md).
+
 ### Case and execution state terms
 
 Case-level state is derived from execution-level state.

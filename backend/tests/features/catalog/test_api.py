@@ -803,13 +803,15 @@ class TestListCases:
             f"{API_BASE}/cases/filter-options",
             params={
                 "machine_id": str(first_machine.id),
+                "search": "cascade-first",
+                "execution_id": "cascade-first-execution",
                 "campaign": "campaign-a",
             },
         ).json()
         assert execution_facets["hpcUsernames"] == ["alpha"]
         assert execution_facets["statuses"] == [ExecutionStatus.CREATED.value]
-        # Campaign remains selectable because its own active value is excluded.
-        assert execution_facets["campaigns"] == ["campaign-a", "campaign-b"]
+        # Search and execution filters keep only the matching campaign.
+        assert execution_facets["campaigns"] == ["campaign-a"]
 
     def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
         cases = [_create_case(db, f"overview-{index}") for index in range(7)]

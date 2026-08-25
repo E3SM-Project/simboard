@@ -15,6 +15,8 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
   - Home: README.md
+  - User Guide:
+      - Publish Diagnostics Links: user/diagnostics.md
   - Developer:
       - Developer Guide: developer/README.md
       - Assistant LLM Setup: developer/assistant-llm-setup.md
@@ -22,6 +24,7 @@ nav:
       - Frontend Guide: frontend/README.md
   - Architecture:
       - Metadata Ingestion: architecture/metadata-ingestion.md
+      - Diagnostics Linkage: architecture/diagnostics-linkage.md
   - Operations:
       - CI/CD: cicd/README.md
       - Deployment Docs Index: deploy/README.md
