@@ -48,7 +48,7 @@ echo "SIMBOARD_API_BASE_URL=${SIMBOARD_API_BASE_URL}" >> TMPLOG 2>&1
 echo "SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=${SIMBOARD_DEFAULT_ARCHIVE_YEAR_START}" >> TMPLOG 2>&1
 
 # Optional max cases per run, default is no limit.
-export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-}"
+export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-1}"
 
 # Dry runs default to read-only remote-state validation. Set
 # DRY_RUN_USE_REMOTE_STATE=false for credential-free offline scanning.
@@ -83,13 +83,12 @@ esac
 shopt -u nocasematch
 
 export PYTHON_BIN="${PYTHON_BIN:-${SIMBOARD_MODULES}/.venv/bin/python}"
-if [[ ! -x "${PYTHON_BIN}" ]]; then
+
+if [[ ! -d "${SIMBOARD_MODULES}/.venv" || ! -x "${PYTHON_BIN}" ]]; then
   echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
   echo "Run 'make install' from the repository root to create it." >&2
   exit 1
 fi
-
-tokenproof="${SIMBOARD_API_TOKEN:0:4}-XXXX-REDACTED-XXXX-${SIMBOARD_API_TOKEN: -4}"
 
 echo "DEBUG_pre-activate: SIMBOARD_INGESTOR_MODULE = ${SIMBOARD_INGESTOR_MODULE}" >> TMPLOG 2>&1
 echo "DEBUG_pre-activate: MAX_CASES_PER_RUN = ${MAX_CASES_PER_RUN}" >> TMPLOG 2>&1
@@ -97,17 +96,11 @@ echo "DEBUG_pre-activate: PYTHON_BIN = ${PYTHON_BIN}" >> TMPLOG 2>&1
 echo "DEBUG_pre-activate: SIMBOARD_ENV_FILE = ${SIMBOARD_ENV_FILE}" >> TMPLOG 2>&1
 echo "DEBUG_pre-activate: SIMBOARD_API_TOKEN_FILE = ${SIMBOARD_API_TOKEN_FILE}" >> TMPLOG 2>&1
 echo "DEBUG_pre-activate: SIMBOARD_API_BASE_URL = ${SIMBOARD_API_BASE_URL}" >> TMPLOG 2>&1
-printf 'DEBUG: SIMBOARD_API_TOKEN=%q\n' "${tokenproof-<unset>}" >> TMPLOG 2>&1
 printf 'DEBUG: ARCHIVE_YEAR_START=%q\n' "${ARCHIVE_YEAR_START-<unset>}" >> TMPLOG 2>&1
 
 ts=`date -u +%Y%m%d_%H%M%S`
 LOG_FILE="$SIMBOARD_WORKDIR/SBCS-$ts.log"
 echo "DEBUG: LOG_FILE = ${LOG_FILE}" >> TMPLOG 2>&1
-
-# DO IT ANYWAY
-source "${SIMBOARD_ENV_FILE}"
-source "${SIMBOARD_API_TOKEN_FILE}"
-tokenproof="${SIMBOARD_API_TOKEN:0:4}-XXXX-REDACTED-XXXX-${SIMBOARD_API_TOKEN: -4}"
 
 echo "DEBUG_post-activate: SIMBOARD_INGESTOR_MODULE = ${SIMBOARD_INGESTOR_MODULE}" >> ${LOG_FILE} 2>&1
 echo "DEBUG_post-activate: MAX_CASES_PER_RUN = ${MAX_CASES_PER_RUN}" >> ${LOG_FILE} 2>&1
@@ -115,7 +108,6 @@ echo "DEBUG_post-activate: PYTHON_BIN = ${PYTHON_BIN}" >> ${LOG_FILE} 2>&1
 echo "DEBUG_post-activate: SIMBOARD_ENV_FILE = ${SIMBOARD_ENV_FILE}" >> ${LOG_FILE} 2>&1
 echo "DEBUG_post-activate: SIMBOARD_API_TOKEN_FILE = ${SIMBOARD_API_TOKEN_FILE}" >> ${LOG_FILE} 2>&1
 echo "DEBUG_post-activate: SIMBOARD_API_BASE_URL = ${SIMBOARD_API_BASE_URL}" >> ${LOG_FILE} 2>&1
-printf 'DEBUG: SIMBOARD_API_TOKEN=%q\n' "${tokenproof-<unset>}" >> ${LOG_FILE} 2>&1
 printf 'DEBUG: ARCHIVE_YEAR_START=%q\n' "${ARCHIVE_YEAR_START-<unset>}" >> ${LOG_FILE} 2>&1
 
 
@@ -130,6 +122,10 @@ cleanup() {
   echo "[$(date -Is)] simboard collection launcher exiting, pid $$" >> "$LOG_FILE"
 }
 trap cleanup EXIT
+
+
+exit 0
+
 
 # Run the app
 cd "${SIMBOARD_MODULES}"
