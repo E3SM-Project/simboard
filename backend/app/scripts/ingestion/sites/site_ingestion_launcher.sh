@@ -123,10 +123,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-
-exit 0
-
-
 # Run the app
 cd "${SIMBOARD_MODULES}"
 curdir=`pwd`
