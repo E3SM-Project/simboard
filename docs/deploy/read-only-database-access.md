@@ -91,6 +91,127 @@ queries, should succeed for granted tables. Commands that change data or
 schema, such as `INSERT`, `UPDATE`, `DELETE`, `CREATE`, or `ALTER`, should be
 denied.
 
+## Getting started: ingestion and operations queries
+
+The `ingestions` table is the audit record for each upload or HPC-path
+ingestion. Join it to `machines` to see where the data came from, and to
+`executions` and `cases` to inspect the records it created. The queries below
+are read-only and use date filters or `LIMIT` to keep exploratory queries
+small.
+
+### Recent ingestion activity
+
+Use this first to see the most recent ingestion attempts and their outcomes.
+
+```sql
+SELECT
+  i.created_at,
+  m.name AS machine,
+  i.source_type,
+  i.status,
+  i.created_count,
+  i.duplicate_count,
+  i.error_count,
+  i.source_reference
+FROM ingestions AS i
+JOIN machines AS m ON m.id = i.machine_id
+ORDER BY i.created_at DESC
+LIMIT 25;
+```
+
+`success`, `partial`, and `failed` are the ingestion status values. A
+non-zero `error_count` or a `partial`/`failed` status is worth investigating.
+
+### Recent incomplete or failed ingestions
+
+This narrows the audit trail to outcomes that may need attention.
+
+```sql
+SELECT
+  i.created_at,
+  m.name AS machine,
+  i.status,
+  i.error_count,
+  i.created_count,
+  i.duplicate_count,
+  i.source_type,
+  i.source_reference
+FROM ingestions AS i
+JOIN machines AS m ON m.id = i.machine_id
+WHERE i.status IN ('partial', 'failed')
+   OR i.error_count > 0
+ORDER BY i.created_at DESC
+LIMIT 50;
+```
+
+### Daily ingestion volume by machine
+
+Use this operational summary to look for gaps, spikes, or a rise in errors.
+
+```sql
+SELECT
+  date_trunc('day', i.created_at) AS day,
+  m.name AS machine,
+  COUNT(*) AS ingestion_count,
+  SUM(i.created_count) AS executions_created,
+  SUM(i.duplicate_count) AS duplicates,
+  SUM(i.error_count) AS errors
+FROM ingestions AS i
+JOIN machines AS m ON m.id = i.machine_id
+WHERE i.created_at >= CURRENT_TIMESTAMP - INTERVAL '14 days'
+GROUP BY day, m.name
+ORDER BY day DESC, m.name;
+```
+
+Change the interval to suit the investigation. For example, use `7 days` for
+a shorter operational view.
+
+### Executions created by recent ingestions
+
+This joins ingestion audit records to their resulting execution and case
+records. It is useful when an ingestion count looks unexpected.
+
+```sql
+SELECT
+  i.created_at AS ingested_at,
+  m.name AS machine,
+  i.status AS ingestion_status,
+  c.name AS case_name,
+  e.execution_id,
+  e.status AS execution_status,
+  e.compset,
+  e.grid_name
+FROM ingestions AS i
+JOIN machines AS m ON m.id = i.machine_id
+JOIN executions AS e ON e.ingestion_id = i.id
+JOIN cases AS c ON c.id = e.case_id
+ORDER BY i.created_at DESC, c.name, e.execution_id
+LIMIT 100;
+```
+
+To investigate one ingestion, add `WHERE i.id = 'INGESTION_UUID'` before the
+`ORDER BY` clause, replacing `INGESTION_UUID` with the identifier shown by
+your client.
+
+### Current execution status overview
+
+This gives a compact view of the catalog's execution states by machine.
+
+```sql
+SELECT
+  m.name AS machine,
+  e.status AS execution_status,
+  COUNT(*) AS execution_count
+FROM executions AS e
+JOIN cases AS c ON c.id = e.case_id
+JOIN machines AS m ON m.id = c.machine_id
+GROUP BY m.name, e.status
+ORDER BY m.name, e.status;
+```
+
+Execution statuses include `created`, `queued`, `running`, `failed`, and
+`completed`; `unknown` is used when no more specific state is available.
+
 ## Troubleshooting
 
 - **SSH authentication fails:** confirm that you can SSH to Perlmutter with
