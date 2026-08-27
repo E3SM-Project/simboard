@@ -56,7 +56,8 @@ from app.features.user.models import User, UserRole
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
-MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
+# Keep this below the NGINX Ingress body-size limit to allow multipart overhead.
+MAX_UPLOAD_SIZE_BYTES = 320 * 1024 * 1024
 STATEFUL_INGESTION_SOURCE_TYPES = (
     IngestionSourceType.HPC_PATH,
     IngestionSourceType.HPC_UPLOAD,

@@ -1989,10 +1989,16 @@ class TestIngestFromUploadEndpoint:
         )
 
     def test_save_uploaded_file_rejects_large_files(self, tmp_path: Path):
-        file_content = b"x" * (51 * 1024 * 1024)  # 51MB
+        file_content = b"x" * 11
         upload_file = UploadFile(file=BytesIO(file_content), filename="large_file.zip")
 
-        with pytest.raises(HTTPException) as exc_info:
+        with (
+            patch(
+                "app.features.ingestion.api.MAX_UPLOAD_SIZE_BYTES",
+                10,
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             _save_uploaded_file_and_hash(upload_file, tmp_path / "large_file.zip")
 
         assert exc_info.value.status_code == 413
