@@ -906,7 +906,7 @@ def list_executions(  # noqa: C901
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
-            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
     ),
@@ -1028,7 +1028,7 @@ def _list_executions(  # noqa: C901
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
-            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
     ),
@@ -1136,12 +1136,15 @@ def _list_executions(  # noqa: C901
         "simulation_start_date": Execution.simulation_start_date,
         "simulation_end_date": Execution.simulation_end_date,
         "run_start_date": Execution.run_start_date,
+        "run_activity": func.coalesce(Execution.run_end_date, Execution.run_start_date),
         "grid_resolution": Execution.grid_resolution,
         "compset": Execution.compset,
         "grid_name": Execution.grid_name,
         "machine_name": Machine.name,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    if sort_by == "run_activity":
+        ordering = ordering.nullslast()
     rows = (
         rows_query.order_by(ordering, Execution.id.asc())
         .offset((page - 1) * page_size)

@@ -28,7 +28,7 @@ import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
 import { cn } from '@/lib/utils';
 import type { CaseListItemOut, ExecutionListItemOut } from '@/types';
-import { compareModelDates, formatModelDate } from '@/utils/utils';
+import { formatModelDate } from '@/utils/utils';
 
 type ActiveFilterKey =
   | 'caseName'
@@ -71,11 +71,6 @@ const createEmptyExecutionFilters = (): CaseExecutionFilters => ({
   compiler: '',
   gitTag: '',
 });
-
-const sortCaseExecutions = (caseExecutions: ExecutionListItemOut[]) =>
-  [...caseExecutions].sort((left, right) =>
-    compareModelDates(right.simulationStartDate, left.simulationStartDate),
-  );
 
 const CASE_SORT_FIELDS: Record<string, string> = {
   latestRun: 'latest_run_activity',
@@ -148,7 +143,7 @@ export const CasesPage = () => {
       caseId: expandedCaseId ?? undefined,
       page: 1,
       pageSize: 5,
-      sortBy: 'simulation_start_date',
+      sortBy: 'run_activity',
       sortOrder: 'desc',
       hpcUsername: executionFilters.hpcUsername || undefined,
       machineId: executionFilters.machineId || undefined,
@@ -521,30 +516,25 @@ export const CasesPage = () => {
   };
 
   const renderExpandedContent = (caseRecord: CaseListItemOut) => {
-    const visibleCaseExecutions = sortCaseExecutions(executionsByCaseId.get(caseRecord.id) ?? []);
+    const visibleCaseExecutions = executionsByCaseId.get(caseRecord.id) ?? [];
     const expandedExecutionLabel = hasActiveExecutionFilters
       ? expandedExecutionsFetching || !expandedExecutionPage
-        ? 'View matching executions'
-        : `View all ${expandedExecutionPage.total} executions`
-      : `View all ${caseRecord.executionCount} executions`;
+        ? 'View matching executions on the case details page'
+        : `View all ${expandedExecutionPage.total} executions on the case details page`
+      : `View all ${caseRecord.executionCount} executions on the case details page`;
     const latestExecution = getLatestExecution(caseRecord);
 
     return (
       <div className="space-y-3 bg-muted/20 p-4">
-        <div className="flex items-center justify-between gap-3">
+        <div>
           <div>
-            <p className="text-sm font-medium">Recent execution preview</p>
+            <p className="text-sm font-medium">Latest execution preview</p>
             <p className="text-xs text-muted-foreground">
               {hasActiveExecutionFilters
                 ? 'Showing executions in this case that match the current execution filters.'
-                : 'Showing the five most recent execution records by simulation start date.'}
+                : 'Showing the five most recent execution records by run date.'}
             </p>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
-              {expandedExecutionLabel}
-            </Link>
-          </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background px-3 py-2 text-xs text-slate-600">
@@ -615,6 +605,14 @@ export const CasesPage = () => {
               </TableBody>
             </Table>
           </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
+              {expandedExecutionLabel}
+            </Link>
+          </Button>
         </div>
       </div>
     );
