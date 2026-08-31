@@ -86,17 +86,10 @@ const getLatestExecution = (caseRecord: CaseListItemOut) => caseRecord.latestExe
 const formatLatestCompletedRun = (runEndDate: string | null) =>
   runEndDate ? formatCaseDate(runEndDate) : null;
 
-const formatCompletedRun = (runStartDate: string | null, runEndDate: string | null) => {
-  if (runEndDate) return `Ended ${formatCaseDate(runEndDate)}`;
-  if (runStartDate) return `Started ${formatCaseDate(runStartDate)}`;
-  return null;
-};
+const formatRunDateRange = (runStartDate: string | null, runEndDate: string | null) => {
+  if (!runStartDate && !runEndDate) return null;
 
-const formatRunTimeline = (runStartDate: string | null, runEndDate: string | null) => {
-  if (runStartDate && runEndDate) {
-    return `Started ${formatCaseDate(runStartDate)} → ended ${formatCaseDate(runEndDate)}`;
-  }
-  return formatCompletedRun(runStartDate, runEndDate);
+  return `${formatCaseDate(runStartDate)} → ${formatCaseDate(runEndDate)}`;
 };
 
 const UnavailableTimestamp = () => (
@@ -522,50 +515,37 @@ export const CasesPage = () => {
         ? 'View matching executions on the case details page'
         : `View all ${expandedExecutionPage.total} executions on the case details page`
       : `View all ${caseRecord.executionCount} executions on the case details page`;
-    const latestExecution = getLatestExecution(caseRecord);
-
     return (
-      <div className="space-y-3 bg-muted/20 p-4">
+      <div className="mx-3 my-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:ml-12">
         <div>
-          <div>
-            <p className="text-sm font-medium">Latest execution preview</p>
-            <p className="text-xs text-muted-foreground">
-              {hasActiveExecutionFilters
-                ? 'Showing executions in this case that match the current execution filters.'
-                : 'Showing the five most recent execution records by run date.'}
-            </p>
-          </div>
+          <p className="text-sm font-medium">Latest executions</p>
+          <p className="text-xs text-muted-foreground">
+            {hasActiveExecutionFilters
+              ? 'Matching current execution filters.'
+              : 'Five most recent runs by run date.'}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background px-3 py-2 text-xs text-slate-600">
-          {caseRecord.caseGroup && <span>Case group: {caseRecord.caseGroup}</span>}
-          <span>
-            Latest completed run:{' '}
-            {latestExecution ? (
-              (formatLatestCompletedRun(latestExecution.runEndDate) ?? <UnavailableTimestamp />)
-            ) : (
-              <UnavailableTimestamp />
-            )}
-          </span>
-        </div>
-
-        <div className="overflow-hidden rounded-md border bg-background">
-          <div className="max-h-[26rem] overflow-auto">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-background">
+          <div className="max-h-[20rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Run dates (latest first)</TableHead>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Completed</TableHead>
-                  <TableHead>Run timeline</TableHead>
-                  <TableHead>Simulation Dates</TableHead>
                   <TableHead>Case Hash</TableHead>
-                  <TableHead>Machine</TableHead>
+                  <TableHead>Simulation dates</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visibleCaseExecutions.map((execution) => (
                   <TableRow key={execution.id}>
-                    <TableCell className="align-top">
+                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                      {formatRunDateRange(execution.runStartDate, execution.runEndDate) ?? (
+                        <UnavailableTimestamp />
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2 align-top">
                       <Link
                         to={`/executions/${execution.id}`}
                         state={{ from: currentPath }}
@@ -574,22 +554,7 @@ export const CasesPage = () => {
                         {execution.executionId}
                       </Link>
                     </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {formatCompletedRun(execution.runStartDate, execution.runEndDate) ?? (
-                        <UnavailableTimestamp />
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {formatRunTimeline(execution.runStartDate, execution.runEndDate) ?? (
-                        <UnavailableTimestamp />
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
-                        execution.simulationEndDate ?? null,
-                      )}`}
-                    </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="py-2 align-top">
                       <span
                         className="font-mono text-xs text-slate-700"
                         title={execution.caseHash ?? MISSING_CASE_HASH_LABEL}
@@ -597,8 +562,10 @@ export const CasesPage = () => {
                         {formatCaseHashLabel(execution.caseHash ?? null)}
                       </span>
                     </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {execution.machineName}
+                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
+                        execution.simulationEndDate ?? null,
+                      )}`}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -607,7 +574,7 @@ export const CasesPage = () => {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           <Button variant="outline" size="sm" asChild>
             <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
               {expandedExecutionLabel}
@@ -881,7 +848,7 @@ export const CasesPage = () => {
                         ))}
                       </TableRow>
                       {isExpanded && (
-                        <TableRow className="hover:bg-transparent">
+                        <TableRow className="bg-slate-50/40 hover:bg-slate-50/40">
                           <TableCell colSpan={columns.length} className="p-0">
                             {renderExpandedContent(row.original)}
                           </TableCell>

@@ -1430,11 +1430,11 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
+                            <TableHead>Run dates (latest first)</TableHead>
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
                             <TableHead>Initialization</TableHead>
                             <TableHead>Simulation dates</TableHead>
-                            <TableHead>Run dates (latest first)</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1450,6 +1450,17 @@ export const CaseDetailsPage = ({
                                   onCheckedChange={() => toggleExecutionSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
                                 />
+                              </TableCell>
+                              <TableCell className="align-top">
+                                {details?.runStartDate || details?.runEndDate ? (
+                                  <span
+                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
+                                  >
+                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
                               </TableCell>
                               <TableCell className="align-top">
                                 <Link
@@ -1478,17 +1489,6 @@ export const CaseDetailsPage = ({
                               </TableCell>
                               <TableCell className="align-top">
                                 {formatExecutionDateRange(summary)}
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {details?.runStartDate || details?.runEndDate ? (
-                                  <span
-                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
-                                  >
-                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
                               </TableCell>
                             </TableRow>
                           ))}
