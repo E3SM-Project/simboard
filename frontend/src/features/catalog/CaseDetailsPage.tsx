@@ -169,8 +169,11 @@ const getRunActivityTime = ({ details }: GroupExecution) => {
 
 const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
   [...executions].sort((left, right) => {
-    const runActivityDifference = getRunActivityTime(right) - getRunActivityTime(left);
-    if (runActivityDifference !== 0) return runActivityDifference;
+    const leftRunActivityTime = getRunActivityTime(left);
+    const rightRunActivityTime = getRunActivityTime(right);
+    if (leftRunActivityTime !== rightRunActivityTime) {
+      return rightRunActivityTime - leftRunActivityTime;
+    }
 
     return right.summary.executionId.localeCompare(left.summary.executionId);
   });
