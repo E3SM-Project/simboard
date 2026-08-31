@@ -160,6 +160,24 @@ interface GroupExecution {
   details?: ExecutionListItemOut;
 }
 
+const getRunActivityTime = ({ details }: GroupExecution) => {
+  const activityDate = details?.runEndDate ?? details?.runStartDate;
+  const timestamp = activityDate ? new Date(activityDate).getTime() : Number.NEGATIVE_INFINITY;
+
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+};
+
+const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
+  [...executions].sort((left, right) => {
+    const leftRunActivityTime = getRunActivityTime(left);
+    const rightRunActivityTime = getRunActivityTime(right);
+    if (leftRunActivityTime !== rightRunActivityTime) {
+      return rightRunActivityTime - leftRunActivityTime;
+    }
+
+    return right.summary.executionId.localeCompare(left.summary.executionId);
+  });
+
 type ExecutionViewMode = 'grouped' | 'flat';
 type EditableFormState = Record<CaseEditableField, string>;
 type CaseSaveError = {
@@ -355,7 +373,7 @@ export const CaseDetailsPage = ({
     isFetchingNextPage,
     refetch: refetchExecutions,
     total: executionTotal,
-  } = useCaseExecutions(id);
+  } = useCaseExecutions(id, { sortBy: 'run_activity', sortOrder: 'desc' });
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
@@ -393,25 +411,20 @@ export const CaseDetailsPage = ({
     () =>
       rawExecutionGroups.map((group) => ({
         ...group,
-        executions: group.executions.map((execution) => ({
-          summary: execution,
-          details: executionDetailsById.get(execution.id),
-        })),
+        executions: sortExecutionsByRunDate(
+          group.executions.map((execution) => ({
+            summary: execution,
+            details: executionDetailsById.get(execution.id),
+          })),
+        ),
       })),
     [rawExecutionGroups, executionDetailsById],
   );
   const sortedExecutionGroups = useMemo(() => {
     const getLatestRunTime = (executions: GroupExecution[]) => {
       const timestamps = executions
-        .map(
-          ({ details, summary }) =>
-            details?.runEndDate ??
-            details?.runStartDate ??
-            summary.simulationEndDate ??
-            summary.simulationStartDate,
-        )
-        .map((value) => new Date(value).getTime())
-        .filter((value) => !Number.isNaN(value));
+        .map(getRunActivityTime)
+        .filter((value) => value !== Number.NEGATIVE_INFINITY);
 
       return timestamps.length > 0 ? Math.max(...timestamps) : 0;
     };
@@ -480,7 +493,7 @@ export const CaseDetailsPage = ({
     [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery],
   );
   const filteredFlatExecutions = useMemo(
-    () => filteredExecutionGroups.flatMap((group) => group.executions),
+    () => sortExecutionsByRunDate(filteredExecutionGroups.flatMap((group) => group.executions)),
     [filteredExecutionGroups],
   );
   const visibleExecutionIds = useMemo(
@@ -1420,11 +1433,11 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
+                            <TableHead>Run dates (latest first)</TableHead>
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
                             <TableHead>Initialization</TableHead>
                             <TableHead>Simulation dates</TableHead>
-                            <TableHead>Run dates</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1440,6 +1453,17 @@ export const CaseDetailsPage = ({
                                   onCheckedChange={() => toggleExecutionSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
                                 />
+                              </TableCell>
+                              <TableCell className="align-top">
+                                {details?.runStartDate || details?.runEndDate ? (
+                                  <span
+                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
+                                  >
+                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
                               </TableCell>
                               <TableCell className="align-top">
                                 <Link
@@ -1468,17 +1492,6 @@ export const CaseDetailsPage = ({
                               </TableCell>
                               <TableCell className="align-top">
                                 {formatExecutionDateRange(summary)}
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {details?.runStartDate || details?.runEndDate ? (
-                                  <span
-                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
-                                  >
-                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
                               </TableCell>
                             </TableRow>
                           ))}

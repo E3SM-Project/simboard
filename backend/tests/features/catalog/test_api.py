@@ -2290,6 +2290,7 @@ class TestListExecutions:
             "simulation_start_date",
             "simulation_end_date",
             "run_start_date",
+            "run_activity",
             "grid_resolution",
             "compset",
             "grid_name",
@@ -2310,6 +2311,74 @@ class TestListExecutions:
             ).status_code
             == 422
         )
+
+    def test_run_activity_sort_uses_run_end_and_places_missing_dates_last(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "run-activity-sort-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        completed = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="completed-last",
+        )
+        running = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="running-middle",
+        )
+        missing_dates = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="missing-dates",
+        )
+        completed.run_start_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        completed.run_end_date = datetime(2026, 1, 5, tzinfo=timezone.utc)
+        running.run_start_date = datetime(2026, 1, 4, tzinfo=timezone.utc)
+        assert missing_dates.run_start_date is None
+        assert missing_dates.run_end_date is None
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/executions",
+            params={
+                "case_id": str(case.id),
+                "sort_by": "run_activity",
+                "sort_order": "desc",
+            },
+        ).json()
+
+        assert [item["executionId"] for item in data["items"]] == [
+            "completed-last",
+            "running-middle",
+            "missing-dates",
+        ]
+
+        ascending_data = client.get(
+            f"{API_BASE}/executions",
+            params={
+                "case_id": str(case.id),
+                "sort_by": "run_activity",
+                "sort_order": "asc",
+            },
+        ).json()
+
+        assert [item["executionId"] for item in ascending_data["items"]] == [
+            "running-middle",
+            "completed-last",
+            "missing-dates",
+        ]
 
     def test_case_scoped_results_continue_after_one_hundred(
         self, client, db: Session, normal_user_sync, admin_user_sync
