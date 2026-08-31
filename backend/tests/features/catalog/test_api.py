@@ -21,6 +21,7 @@ from app.features.catalog.api import (
     update_execution,
 )
 from app.features.catalog.enums import (
+    ArtifactKind,
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
@@ -989,6 +990,83 @@ class TestGetCase:
         assert data["executions"][0]["caseHash"] == "detail-hash-1"
         assert data["executions"][0]["simulationStartDate"] == "2023-01-01"
         assert data["links"] == []
+        assert data["artifacts"] == []
+
+    def test_endpoint_includes_artifacts_from_multiple_executions(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "test_case_detail_artifacts")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_case_detail_artifacts",
+        )
+        first_execution = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="case-detail-artifacts-exec-1",
+        )
+        second_execution = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="case-detail-artifacts-exec-2",
+        )
+        db.add_all(
+            [
+                Artifact(
+                    execution_id=first_execution.id,
+                    kind=ArtifactKind.OUTPUT,
+                    uri="https://example.com/first-output",
+                    label="First output",
+                ),
+                Artifact(
+                    execution_id=first_execution.id,
+                    kind=ArtifactKind.ARCHIVE,
+                    uri="/archive/first",
+                ),
+                Artifact(
+                    execution_id=second_execution.id,
+                    kind=ArtifactKind.OUTPUT,
+                    uri="https://example.com/second-output",
+                    label="Second output",
+                ),
+                Artifact(
+                    execution_id=second_execution.id,
+                    kind=ArtifactKind.RUN_SCRIPT,
+                    uri="/scripts/second-run",
+                ),
+            ]
+        )
+        db.commit()
+
+        response = client.get(f"{API_BASE}/cases/{case.id}")
+
+        assert response.status_code == 200
+        artifacts_by_uri = {
+            artifact["uri"]: artifact for artifact in response.json()["artifacts"]
+        }
+        assert len(artifacts_by_uri) == 4
+        first_output = artifacts_by_uri["https://example.com/first-output"]
+        assert first_output["kind"] == "output"
+        assert first_output["label"] == "First output"
+        assert first_output["executionUuid"] == str(first_execution.id)
+        assert first_output["executionId"] == "case-detail-artifacts-exec-1"
+        second_output = artifacts_by_uri["https://example.com/second-output"]
+        assert second_output["kind"] == "output"
+        assert second_output["label"] == "Second output"
+        assert second_output["executionUuid"] == str(second_execution.id)
+        assert second_output["executionId"] == "case-detail-artifacts-exec-2"
+        assert artifacts_by_uri["/archive/first"]["kind"] == "archive"
+        assert artifacts_by_uri["/scripts/second-run"]["kind"] == "run_script"
 
     def test_endpoint_includes_case_level_diagnostic_links(
         self, client, db: Session, normal_user_sync, admin_user_sync

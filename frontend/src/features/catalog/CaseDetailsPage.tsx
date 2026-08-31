@@ -44,6 +44,10 @@ import {
   matchesExecutionGroupFilter,
   MISSING_CASE_HASH_LABEL,
 } from '@/features/catalog/caseUtils';
+import {
+  CaseArtifactsTable,
+  type CaseArtifactValue,
+} from '@/features/catalog/components/CaseArtifactsTable';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
@@ -354,10 +358,12 @@ export const CaseDetailsPage = ({
   } = useCaseExecutions(id);
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
+  const executionsSectionRef = useRef<HTMLElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('flat');
   const [groupFilterMode, setGroupFilterMode] = useState<ExecutionSummaryGroupFilter>('all');
   const [caseHashQuery, setCaseHashQuery] = useState('');
+  const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -439,9 +445,24 @@ export const CaseDetailsPage = ({
     caseHashGroupCount === 0 &&
     missingCaseHashCount > 0;
   const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
+  const artifactFilteredExecutionGroups = useMemo(() => {
+    if (artifactExecutionIds == null) {
+      return sortedExecutionGroups;
+    }
+
+    const matchingExecutionIds = new Set(artifactExecutionIds);
+    return sortedExecutionGroups
+      .map((group) => ({
+        ...group,
+        executions: group.executions.filter(({ summary }) =>
+          matchingExecutionIds.has(summary.executionId),
+        ),
+      }))
+      .filter((group) => group.executions.length > 0);
+  }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      sortedExecutionGroups.filter((group) => {
+      artifactFilteredExecutionGroups.filter((group) => {
         if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
           return false;
         }
@@ -456,7 +477,7 @@ export const CaseDetailsPage = ({
 
         return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
       }),
-    [groupFilterMode, normalizedCaseHashQuery, sortedExecutionGroups],
+    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery],
   );
   const filteredFlatExecutions = useMemo(
     () => filteredExecutionGroups.flatMap((group) => group.executions),
@@ -763,6 +784,29 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
+  const artifactValuesByKey = caseRecord.artifacts.reduce((groups, artifact) => {
+    const key = JSON.stringify([artifact.kind, artifact.uri]);
+    const value = groups.get(key);
+    if (value) {
+      if (!value.executionIds.includes(artifact.executionId)) {
+        value.executionIds.push(artifact.executionId);
+      }
+      if (value.label == null && artifact.label != null) {
+        value.label = artifact.label;
+      }
+      return groups;
+    }
+
+    groups.set(key, {
+      id: artifact.id,
+      kind: artifact.kind,
+      uri: artifact.uri,
+      label: artifact.label ?? null,
+      executionIds: [artifact.executionId],
+    });
+    return groups;
+  }, new Map<string, CaseArtifactValue>());
+  const artifactValues = Array.from(artifactValuesByKey.values());
   const isCompareButtonDisabled = caseSelectedExecutionCount < 2;
   const filteredExecutionCount = filteredFlatExecutions.length;
   const activeExecutionCount =
@@ -837,6 +881,20 @@ export const CaseDetailsPage = ({
   const resetGroupFilters = () => {
     setGroupFilterMode('all');
     setCaseHashQuery('');
+  };
+
+  const clearArtifactExecutionFilter = () => {
+    setArtifactExecutionIds(null);
+  };
+
+  const filterExecutionsForArtifact = (executionIds: string[]) => {
+    setArtifactExecutionIds([...new Set(executionIds)]);
+    setGroupFilterMode('all');
+    setCaseHashQuery('');
+    setViewMode('flat');
+    requestAnimationFrame(() => {
+      executionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -1117,7 +1175,7 @@ export const CaseDetailsPage = ({
         />
       </section>
 
-      <section className="space-y-4">
+      <section ref={executionsSectionRef} className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
@@ -1297,6 +1355,24 @@ export const CaseDetailsPage = ({
                   {hiddenSelectedCount} selected{' '}
                   {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
                   groups.
+                </div>
+              ) : null}
+
+              {artifactExecutionIds != null ? (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+                  <p>
+                    Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
+                    artifact.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
+                    onClick={clearArtifactExecutionFilter}
+                  >
+                    Clear artifact filter
+                  </Button>
                 </div>
               ) : null}
             </div>
@@ -1684,6 +1760,14 @@ export const CaseDetailsPage = ({
               </Button>
             </div>
           ) : null}
+
+          <div className="border-t border-slate-200 px-5 py-5">
+            <CaseArtifactsTable
+              artifacts={artifactValues}
+              totalArtifactCount={caseRecord.artifacts.length}
+              onFilterExecutionIds={filterExecutionsForArtifact}
+            />
+          </div>
 
           {shouldRenderCompare && renderCompareSection ? (
             <div
