@@ -45,6 +45,7 @@ import {
   MISSING_CASE_HASH_LABEL,
 } from '@/features/catalog/caseUtils';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
+import { ExecutionPathCard } from '@/features/catalog/components/ExecutionPathCard';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
 import {
@@ -72,6 +73,7 @@ import type {
   ExecutionSummaryOut,
   ExternalLinkOut,
 } from '@/types';
+import type { ArtifactKind } from '@/types/artifact';
 import { formatModelDate } from '@/utils/utils';
 
 const DetailField = ({
@@ -144,6 +146,21 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
   docs: 'linked documentation',
   other: 'linked resource',
 };
+
+const ARTIFACT_GROUPS: ReadonlyArray<{
+  kind: ArtifactKind;
+  title: string;
+  description: string;
+}> = [
+  { kind: 'output', title: 'Output', description: 'Model output artifacts' },
+  { kind: 'archive', title: 'Archive', description: 'Archived model output artifacts' },
+  { kind: 'run_script', title: 'Run script', description: 'Execution run scripts' },
+  {
+    kind: 'postprocessing_script',
+    title: 'Post-processing script',
+    description: 'Post-processing scripts',
+  },
+];
 
 interface CaseDetailsPageProps {
   renderCompareSection?: (options: { onClose: () => void }) => React.ReactNode;
@@ -763,6 +780,10 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
+  const artifactGroups = ARTIFACT_GROUPS.map((group) => ({
+    ...group,
+    artifacts: caseRecord.artifacts.filter((artifact) => artifact.kind === group.kind),
+  })).filter((group) => group.artifacts.length > 0);
   const isCompareButtonDisabled = caseSelectedExecutionCount < 2;
   const filteredExecutionCount = filteredFlatExecutions.length;
   const activeExecutionCount =
@@ -970,6 +991,38 @@ export const CaseDetailsPage = ({
                   <div className="space-y-2">{resourceLinks.map(renderResourceLink)}</div>
                 ) : (
                   <p className="text-sm text-slate-500">No linked resources yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-3">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <h2 className="text-sm font-semibold text-slate-950">Artifacts</h2>
+                  {caseRecord.artifacts.length > 0 ? (
+                    <p className="text-sm text-slate-500">({caseRecord.artifacts.length})</p>
+                  ) : null}
+                </div>
+
+                {artifactGroups.length > 0 ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {artifactGroups.map(({ kind, title, description, artifacts }) => (
+                      <ExecutionPathCard
+                        key={kind}
+                        kind={kind}
+                        title={title}
+                        description={description}
+                        paths={artifacts.map((artifact) => ({
+                          id: artifact.id,
+                          url: artifact.uri,
+                          label: `${artifact.executionId}: ${artifact.label ?? artifact.uri}`,
+                        }))}
+                        emptyText={`No ${title.toLowerCase()} artifacts available.`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No execution artifacts available.</p>
                 )}
               </div>
             </div>

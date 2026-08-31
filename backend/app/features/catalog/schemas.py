@@ -229,6 +229,22 @@ class ArtifactOut(CamelOutBaseModel):
     ]
 
 
+class CaseExecutionArtifactOut(ArtifactOut):
+    """An execution-owned artifact shown in a case-detail response."""
+
+    execution_uuid: Annotated[
+        UUID,
+        Field(..., description="The unique identifier of the artifact's execution."),
+    ]
+    execution_id: Annotated[
+        str,
+        Field(
+            ...,
+            description="The human-readable identifier of the artifact's execution.",
+        ),
+    ]
+
+
 class ExecutionCreate(CamelInBaseModel):
     """Schema for creating a new execution."""
 
@@ -769,6 +785,13 @@ class CaseSummaryOut(CamelOutBaseModel):
 class CaseDetailOut(CaseSummaryOut):
     """Schema for representing full case details used by Case Details."""
 
+    artifacts: Annotated[
+        list[CaseExecutionArtifactOut],
+        Field(
+            default_factory=list,
+            description="Execution-owned artifacts associated with this case.",
+        ),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional shared description of the case")
     ]

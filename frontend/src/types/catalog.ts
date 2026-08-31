@@ -80,10 +80,17 @@ export interface CaseSummaryOut {
 }
 
 export interface CaseDetailOut extends CaseSummaryOut {
+  artifacts: CaseExecutionArtifactOut[];
   description: string | null;
   keyFeatures: string | null;
   knownIssues: string | null;
   notesMarkdown: string | null;
+}
+
+/** An execution-owned artifact returned with a case-detail response. */
+export interface CaseExecutionArtifactOut extends ArtifactOut {
+  executionUuid: string;
+  executionId: string;
 }
 
 export interface CaseListItemOut {
