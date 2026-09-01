@@ -915,6 +915,83 @@ class TestListCaseNames:
 
 
 class TestGetCase:
+    def test_resolve_endpoint_returns_case_by_human_readable_identity(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(
+            db,
+            "test_case_resolve",
+            hpc_username="case-resolve-user",
+        )
+        db.commit()
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(case.id)
+
+    def test_resolve_endpoint_accepts_machine_alias(self, client, db: Session):
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").one_or_none()
+        if machine is None:
+            pytest.skip("Test database does not include the perlmutter machine.")
+        case = _create_case(
+            db,
+            "test_case_resolve_alias",
+            machine_id=machine.id,
+            hpc_username="case-resolve-user",
+        )
+        db.commit()
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": "pm",
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(case.id)
+
+    def test_resolve_endpoint_raises_404_for_missing_case(self, client, db: Session):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": "missing-user",
+                "case_name": "missing-case",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Case not found"}
+
+    def test_resolve_endpoint_raises_404_for_unknown_machine(self, client):
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": "unknown-machine",
+                "hpc_username": "missing-user",
+                "case_name": "missing-case",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Case not found"}
+
     def test_case_summary_conversion(self, db: Session):
         case = _create_case(db, "summary-conversion-case")
         db.commit()
@@ -2889,6 +2966,64 @@ class TestListExecutions:
 
 
 class TestGetExecution:
+    def test_resolve_endpoint_returns_execution_by_human_readable_identity(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case, execution = _create_matching_execution(
+            db,
+            case_name="test_execution_resolve",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=normal_user_sync["id"],
+            execution_id="execution-resolve-id",
+            hpc_username="execution-resolve-user",
+            source_reference="test_execution_resolve",
+        )
+
+        response = client.get(
+            f"{API_BASE}/executions/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+                "execution_id": execution.execution_id,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(execution.id)
+
+    def test_resolve_endpoint_raises_404_for_missing_execution(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case, _ = _create_matching_execution(
+            db,
+            case_name="test_execution_resolve_missing",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=normal_user_sync["id"],
+            execution_id="existing-execution-id",
+            hpc_username="execution-resolve-user",
+            source_reference="test_execution_resolve_missing",
+        )
+
+        response = client.get(
+            f"{API_BASE}/executions/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+                "execution_id": "missing-execution-id",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Execution not found"}
+
     def test_endpoint_succeeds_with_valid_id(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
     ):

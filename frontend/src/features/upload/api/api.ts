@@ -24,6 +24,8 @@ export interface IngestionUploadExecutionSummary {
   id: string;
   case_id: string;
   case_name: string;
+  machine_name: string;
+  hpc_username: string;
   execution_id: string;
 }
 

@@ -289,7 +289,7 @@ export interface ExecutionOut extends ExecutionCreate {
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
   machineId: string;
-  hpcUsername?: string | null;
+  hpcUsername: string;
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
   createdByUser?: ExecutionUserPreview | null;

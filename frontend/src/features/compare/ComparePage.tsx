@@ -18,6 +18,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { ExecutionOut } from '@/types/index';
 import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
@@ -240,11 +241,26 @@ export const CompareWorkspace = ({
     const execution = getExecutionById(executionId);
 
     return {
-      caseHref: execution?.caseId ? `/cases/${execution.caseId}` : undefined,
+      caseHref:
+        execution?.machine?.name && execution.hpcUsername
+          ? caseDetailsPath({
+              machineName: execution.machine.name,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+            })
+          : undefined,
       caseName: execution?.caseName || '—',
       colIdx,
       executionHeader: headers[colIdx],
-      executionHref: `/executions/${executionId}`,
+      executionHref:
+        execution?.machine?.name && execution.hpcUsername
+          ? executionDetailsPath({
+              machineName: execution.machine.name,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+              executionId: execution.executionId,
+            })
+          : undefined,
       executionId,
     };
   });
@@ -545,8 +561,15 @@ export const CompareWorkspace = ({
     colIdx: number,
   ) => {
     if (sectionKey === 'configuration' && row.label === 'Case Name') {
-      const caseId = getExecutionProp(selectedExecutionIds[colIdx], 'caseId', '');
-      const caseHref = caseId ? `/cases/${caseId}` : undefined;
+      const execution = getExecutionById(selectedExecutionIds[colIdx]);
+      const caseHref =
+        execution?.machine?.name && execution.hpcUsername
+          ? caseDetailsPath({
+              machineName: execution.machine.name,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+            })
+          : undefined;
       const textValue = value === null || value === undefined || value === '' ? '—' : String(value);
 
       if (caseHref) {

@@ -7,6 +7,13 @@ const executionQueryKeys = {
     ['executions', 'case', caseId, 'infinite', params] as const,
   options: ['executions', 'filter-options'] as const,
   detail: (id: string) => ['executions', 'detail', id] as const,
+  readableDetail: (
+    machineName: string,
+    hpcUsername: string,
+    caseName: string,
+    executionId: string,
+  ) =>
+    ['executions', 'readable-detail', machineName, hpcUsername, caseName, executionId] as const,
   history: (id: string) => ['executions', 'detail', id, 'history'] as const,
 };
 
@@ -19,6 +26,8 @@ export const catalogQueryKeys = {
     options: ['cases', 'filter-options'] as const,
     optionsFor: (params: object) => ['cases', 'filter-options', params] as const,
     detail: (id: string) => ['cases', 'detail', id] as const,
+    readableDetail: (machineName: string, hpcUsername: string, caseName: string) =>
+      ['cases', 'readable-detail', machineName, hpcUsername, caseName] as const,
     history: (id: string) => ['cases', 'detail', id, 'history'] as const,
   },
   executions: executionQueryKeys,

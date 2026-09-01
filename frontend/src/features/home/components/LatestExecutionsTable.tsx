@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { executionDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionOut } from '@/types/index';
 
 const simulationTypeIcon = (execution: ExecutionOut) => {
@@ -74,7 +75,16 @@ const LatestExecutionsTable = ({ latestExecutions }: LatestExecutionsTableProps)
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate(`/executions/${info.row.original.id}`)}
+          onClick={() =>
+            navigate(
+              executionDetailsPath({
+                machineName: info.row.original.machine.name,
+                hpcUsername: info.row.original.hpcUsername,
+                caseName: info.row.original.caseName,
+                executionId: info.row.original.executionId,
+              }),
+            )
+          }
           aria-label="Details"
           className="h-8 w-8 p-0 text-muted-foreground"
         >

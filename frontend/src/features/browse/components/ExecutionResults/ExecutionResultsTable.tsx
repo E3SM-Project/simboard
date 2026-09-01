@@ -30,6 +30,7 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import { ExecutionBrowseDetailsDialog } from '@/features/browse/components/ExecutionResults/ExecutionBrowseDetailsDialog';
+import { executionDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionListItemOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
@@ -100,7 +101,15 @@ const ExecutionTableActions = ({ execution }: { execution: ExecutionListItemOut 
         className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
         onClick={(event) => {
           event.stopPropagation();
-          navigate(`/executions/${execution.id}`, { state: { from: currentPath } });
+          navigate(
+            executionDetailsPath({
+              machineName: execution.machineName,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+              executionId: execution.executionId,
+            }),
+            { state: { from: currentPath } },
+          );
         }}
       >
         All Details
