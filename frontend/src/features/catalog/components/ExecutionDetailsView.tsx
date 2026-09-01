@@ -185,7 +185,7 @@ type ResourceRowErrorsState = {
 
 const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
   { value: 'output', label: 'Output' },
-  { value: 'archive', label: 'Archive' },
+  { value: 'archive', label: 'Short-Term Archive' },
   { value: 'run_script', label: 'Run Script' },
   { value: 'postprocessing_script', label: 'Post-processing Script' },
 ];
@@ -1451,7 +1451,7 @@ export const ExecutionDetailsView = ({
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
                           <div className="font-medium">Inherited case links</div>
                           <div className="mt-1 text-muted-foreground">
-                            These links come from case-level diagnostics. They stay visible here but
+                            These links come from the case. They stay visible here but
                             are not changed by execution save.
                           </div>
                           <ul className="mt-3 space-y-2">
@@ -1786,10 +1786,10 @@ export const ExecutionDetailsView = ({
               />
               <ExecutionPathCard
                 kind="archive"
-                title="Archive Paths"
-                description="These paths contain archived data files from the execution."
+                title="Short-Term Archive Paths"
+                description="These paths contain short-term archived data files from the execution."
                 paths={archiveArtifacts}
-                emptyText="No archive artifacts available."
+                emptyText="No short-term archive artifacts available."
               />
               <ExecutionPathCard
                 kind="run_script"
