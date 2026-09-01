@@ -35,7 +35,7 @@ import { formatModelDate } from '@/utils/utils';
 type ActiveFilterKey =
   | 'caseName'
   | 'hpcUsername'
-  | 'machineId'
+  | 'machineName'
   | 'campaign'
   | 'simulationType'
   | 'initializationType'
@@ -45,7 +45,7 @@ type ActiveFilterKey =
 
 interface CaseExecutionFilters {
   hpcUsername: string;
-  machineId: string;
+  machineName: string;
   campaign: string;
   simulationType: string;
   initializationType: string;
@@ -66,7 +66,7 @@ interface ActiveFilterPill {
 
 const createEmptyExecutionFilters = (): CaseExecutionFilters => ({
   hpcUsername: '',
-  machineId: '',
+  machineName: '',
   campaign: '',
   simulationType: '',
   initializationType: '',
@@ -89,6 +89,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const CASE_SEARCH_PARAM_KEYS = [
   'search',
   'caseGroup',
+  'machine',
   'machineId',
   'hpcUsername',
   'campaign',
@@ -106,11 +107,13 @@ interface CaseSearchState {
   caseNameFilter: string;
   caseGroupFilter: string;
   executionFilters: CaseExecutionFilters;
+  legacyMachineId: string;
   sorting: SortingState;
   pagination: { pageIndex: number; pageSize: number };
 }
 
-const getTextParam = (params: URLSearchParams, key: string): string => params.get(key)?.trim() ?? '';
+const getTextParam = (params: URLSearchParams, key: string): string =>
+  params.get(key)?.trim() ?? '';
 
 const parsePositiveInteger = (value: string | null, fallback: number): number => {
   const parsed = Number(value);
@@ -127,13 +130,14 @@ const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
     caseGroupFilter: getTextParam(params, 'caseGroup'),
     executionFilters: {
       hpcUsername: getTextParam(params, 'hpcUsername'),
-      machineId: getTextParam(params, 'machineId'),
+      machineName: getTextParam(params, 'machine'),
       campaign: getTextParam(params, 'campaign'),
       simulationType: getTextParam(params, 'simulationType'),
       initializationType: getTextParam(params, 'initializationType'),
       compiler: getTextParam(params, 'compiler'),
       gitTag: getTextParam(params, 'gitTag'),
     },
+    legacyMachineId: getTextParam(params, 'machineId'),
     sorting:
       sortBy &&
       Object.prototype.hasOwnProperty.call(CASE_SORT_FIELDS, sortBy) &&
@@ -151,6 +155,7 @@ const serializeCaseSearchState = ({
   caseNameFilter,
   caseGroupFilter,
   executionFilters,
+  legacyMachineId,
   sorting,
   pagination,
 }: CaseSearchState): URLSearchParams => {
@@ -160,9 +165,12 @@ const serializeCaseSearchState = ({
   if (search) params.set('search', search);
   if (caseGroupFilter) params.set('caseGroup', caseGroupFilter);
 
+  if (executionFilters.machineName) params.set('machine', executionFilters.machineName);
+  else if (legacyMachineId) params.set('machineId', legacyMachineId);
+
   (Object.entries(executionFilters) as [keyof CaseExecutionFilters, string][]).forEach(
     ([key, value]) => {
-      if (value) params.set(key, value);
+      if (key !== 'machineName' && value) params.set(key, value);
     },
   );
 
@@ -172,7 +180,8 @@ const serializeCaseSearchState = ({
     params.set('sortOrder', primarySort.desc ? 'desc' : 'asc');
   }
   if (pagination.pageIndex > 0) params.set('page', String(pagination.pageIndex + 1));
-  if (pagination.pageSize !== DEFAULT_PAGE_SIZE) params.set('pageSize', String(pagination.pageSize));
+  if (pagination.pageSize !== DEFAULT_PAGE_SIZE)
+    params.set('pageSize', String(pagination.pageSize));
 
   return params;
 };
@@ -210,6 +219,7 @@ export const CasesPage = () => {
   const [executionFilters, setExecutionFilters] = useState<CaseExecutionFilters>(
     initialSearchState.executionFilters,
   );
+  const [legacyMachineId, setLegacyMachineId] = useState(initialSearchState.legacyMachineId);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(() =>
     [
       initialSearchState.caseGroupFilter,
@@ -221,11 +231,18 @@ export const CasesPage = () => {
     ].some(Boolean),
   );
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const requiresMachineLookup = Boolean(executionFilters.machineName || legacyMachineId);
+  const { data: allFilterOptions } = useCaseFilterOptions({}, requiresMachineLookup);
+  const allMachineOptions = useMemo(() => allFilterOptions?.machines ?? [], [allFilterOptions]);
+  const selectedMachineId =
+    allMachineOptions.find((option) => option.label === executionFilters.machineName)?.value ||
+    legacyMachineId ||
+    undefined;
   const caseFilterOptionParams = useMemo(
     () => ({
       search: debouncedCaseName || undefined,
       caseGroup: caseGroupFilter || undefined,
-      machineId: executionFilters.machineId || undefined,
+      machineId: selectedMachineId,
       hpcUsername: executionFilters.hpcUsername || undefined,
       simulationType: executionFilters.simulationType || undefined,
       campaign: executionFilters.campaign || undefined,
@@ -233,8 +250,9 @@ export const CasesPage = () => {
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters],
+    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId],
   );
+  const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
     data: executions,
     page: expandedExecutionPage,
@@ -247,7 +265,7 @@ export const CasesPage = () => {
       sortBy: 'run_activity',
       sortOrder: 'desc',
       hpcUsername: executionFilters.hpcUsername || undefined,
-      machineId: executionFilters.machineId || undefined,
+      machineId: selectedMachineId,
       campaign: executionFilters.campaign || undefined,
       simulationType: executionFilters.simulationType || undefined,
       initializationType: executionFilters.initializationType || undefined,
@@ -256,7 +274,6 @@ export const CasesPage = () => {
     },
     expandedCaseId != null,
   );
-  const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const [sorting, setSorting] = useState<SortingState>(initialSearchState.sorting);
   const [pagination, setPagination] = useState(initialSearchState.pagination);
   const canonicalSearchParams = useMemo(
@@ -265,10 +282,11 @@ export const CasesPage = () => {
         caseNameFilter: debouncedCaseName,
         caseGroupFilter,
         executionFilters,
+        legacyMachineId,
         sorting,
         pagination,
       }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, pagination, sorting],
+    [caseGroupFilter, debouncedCaseName, executionFilters, legacyMachineId, pagination, sorting],
   );
 
   useEffect(() => {
@@ -283,6 +301,7 @@ export const CasesPage = () => {
     setDebouncedCaseName(next.caseNameFilter);
     setCaseGroupFilter(next.caseGroupFilter);
     setExecutionFilters(next.executionFilters);
+    setLegacyMachineId(next.legacyMachineId);
     setSorting(next.sorting);
     setPagination(next.pagination);
     setShowAdvancedFilters(
@@ -300,6 +319,16 @@ export const CasesPage = () => {
       setSearchParams(normalizedParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!legacyMachineId || executionFilters.machineName) return;
+
+    const legacyMachine = allMachineOptions.find((option) => option.value === legacyMachineId);
+    if (!legacyMachine) return;
+
+    setExecutionFilters((current) => ({ ...current, machineName: legacyMachine.label }));
+    setLegacyMachineId('');
+  }, [allMachineOptions, executionFilters.machineName, legacyMachineId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedCaseName(caseNameFilter.trim()), 300);
@@ -334,7 +363,7 @@ export const CasesPage = () => {
     search: debouncedCaseName || undefined,
     caseGroup: caseGroupFilter || undefined,
     hpcUsername: executionFilters.hpcUsername || undefined,
-    machineId: executionFilters.machineId || undefined,
+    machineId: selectedMachineId,
     campaign: executionFilters.campaign || undefined,
     simulationType: executionFilters.simulationType || undefined,
     initializationType: executionFilters.initializationType || undefined,
@@ -383,7 +412,10 @@ export const CasesPage = () => {
         value: username,
         label: username,
       })),
-      machineOptions: filterOptions?.machines ?? [],
+      machineOptions: (filterOptions?.machines ?? []).map((machine) => ({
+        value: machine.label,
+        label: machine.label,
+      })),
       campaignOptions: (filterOptions?.campaigns ?? []).map((campaign) => ({
         value: campaign,
         label: campaign,
@@ -436,13 +468,11 @@ export const CasesPage = () => {
       filters.push({ key: 'hpcUsername', label: 'HPC', value: executionFilters.hpcUsername });
     }
 
-    if (executionFilters.machineId) {
+    if (executionFilters.machineName) {
       filters.push({
-        key: 'machineId',
+        key: 'machineName',
         label: 'Machine',
-        value:
-          machineOptions.find((option) => option.value === executionFilters.machineId)?.label ??
-          executionFilters.machineId,
+        value: executionFilters.machineName,
       });
     }
 
@@ -476,13 +506,14 @@ export const CasesPage = () => {
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
     return filters;
-  }, [caseGroupFilter, caseNameFilter, machineOptions, executionFilters]);
+  }, [caseGroupFilter, caseNameFilter, executionFilters]);
 
   const setExecutionFilter = (key: keyof CaseExecutionFilters, value: string) => {
     setExecutionFilters((current) => ({
       ...current,
       [key]: value,
     }));
+    if (key === 'machineName') setLegacyMachineId('');
     table.setPageIndex(0);
   };
 
@@ -490,6 +521,7 @@ export const CasesPage = () => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
     setExecutionFilters(createEmptyExecutionFilters());
+    setLegacyMachineId('');
     setShowAdvancedFilters(false);
     table.setPageIndex(0);
   };
@@ -507,6 +539,7 @@ export const CasesPage = () => {
           ...current,
           [filterKey]: '',
         }));
+        if (filterKey === 'machineName') setLegacyMachineId('');
         break;
     }
 
@@ -865,10 +898,10 @@ export const CasesPage = () => {
 
                   {renderSelectField({
                     label: 'Machine',
-                    value: executionFilters.machineId,
+                    value: executionFilters.machineName,
                     placeholder: 'All machines',
                     options: machineOptions,
-                    onValueChange: (value) => setExecutionFilter('machineId', value),
+                    onValueChange: (value) => setExecutionFilter('machineName', value),
                   })}
 
                   {renderSelectField({
