@@ -139,6 +139,9 @@ def test_reconcile_cases_dry_run_does_not_mutate() -> None:
         "links_to_create": 1,
         "documented_cases_without_match": 0,
         "documented_cases_without_match_names": [],
+        "ignored_documented_cases_without_match": 0,
+        "ignored_documented_cases_without_match_names": [],
+        "ignored_documented_cases_without_match_issue_urls": [],
         "documented_cases_with_multiple_matches": 0,
         "documented_cases_with_multiple_matches_names": [],
         "matched_cases_chrysalis": 1,
@@ -165,16 +168,23 @@ def test_reconcile_cases_reports_names_for_missing_and_duplicate_matches() -> No
     ]
     mappings = [
         _mapping("v3.LR.amip_0101"),
+        _mapping("LR_ensemble"),
         _mapping("v3.NARRM.amip_0101"),
     ]
 
     summary = linker.reconcile_cases(cases, mappings, apply=False)
 
     assert summary["documented_case_names"] == [
+        "LR_ensemble",
         "v3.LR.amip_0101",
         "v3.NARRM.amip_0101",
     ]
     assert summary["documented_cases_without_match_names"] == ["v3.NARRM.amip_0101"]
+    assert summary["ignored_documented_cases_without_match"] == 1
+    assert summary["ignored_documented_cases_without_match_names"] == ["LR_ensemble"]
+    assert summary["ignored_documented_cases_without_match_issue_urls"] == [
+        "https://github.com/E3SM-Project/simboard/issues/323"
+    ]
     assert summary["documented_cases_with_multiple_matches_names"] == [
         "v3.LR.amip_0101"
     ]

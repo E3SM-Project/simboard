@@ -44,7 +44,9 @@ filesystem archive discovery.
 4. Default to dry run. With `--apply`, create missing managed links, leave
    matching links unchanged, and update one existing managed link when its URL
    changes. Report ambiguous managed links and conflicting documentation mappings
-   without guessing.
+   without guessing. Treat the documentation-only `LR_ensemble` and
+   `RRM_ensemble` rows as explicit exceptions while their resolution is tracked
+   in [issue #323](https://github.com/E3SM-Project/simboard/issues/323).
 5. Add tests for document parsing, normalization, reconciliation, idempotency,
    and dry-run behavior.
 6. Update frontend labels to `Short-Term Archive` and adjust inherited-link copy

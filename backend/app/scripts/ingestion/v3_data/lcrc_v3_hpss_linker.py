@@ -32,6 +32,12 @@ PERLMUTTER_MACHINE_NAME = "perlmutter"
 LINKABLE_MACHINE_NAMES = frozenset({CHRYSALIS_MACHINE_NAME, PERLMUTTER_MACHINE_NAME})
 LONG_TERM_ARCHIVE_LABEL = "Long-Term Archive"
 ReconciliationSummary = dict[str, int | list[str]]
+# These documentation entries describe ensembles rather than ingestible case
+# directories. Track their eventual resolution in issue #323.
+IGNORED_DOCUMENTED_CASES = {
+    "LR_ensemble": "https://github.com/E3SM-Project/simboard/issues/323",
+    "RRM_ensemble": "https://github.com/E3SM-Project/simboard/issues/323",
+}
 
 
 @dataclass(frozen=True)
@@ -124,9 +130,12 @@ def _run(*, apply: bool, source_file: Path | None = None) -> ReconciliationSumma
             )
         )
         missing_case_names = _documented_case_names_without_match(cases, mappings)
+        actionable_missing_case_names = missing_case_names - set(
+            IGNORED_DOCUMENTED_CASES
+        )
 
-        if apply and missing_case_names:
-            sample = ", ".join(sorted(missing_case_names)[:5])
+        if apply and actionable_missing_case_names:
+            sample = ", ".join(sorted(actionable_missing_case_names)[:5])
             raise ValueError(
                 "Refusing to apply HPSS links because documented cases are missing "
                 f"from linkable machines: {sample}"
@@ -284,8 +293,15 @@ def reconcile_cases(
             if apply:
                 link.url = mapping.url
 
-    summary["documented_cases_without_match"] = len(
-        set(mappings_by_case) - matched_case_names
+    unmatched_case_names = _unmatched_documented_case_names(
+        mappings_by_case, matched_case_names
+    )
+    ignored_case_names = set(IGNORED_DOCUMENTED_CASES)
+    ignored_unmatched_case_names = unmatched_case_names & ignored_case_names
+    actionable_unmatched_case_names = unmatched_case_names - ignored_case_names
+    summary["documented_cases_without_match"] = len(actionable_unmatched_case_names)
+    summary["ignored_documented_cases_without_match"] = len(
+        ignored_unmatched_case_names
     )
     summary["documented_cases_with_multiple_matches"] = sum(
         count > 1 for count in matched_case_counts.values()
@@ -294,8 +310,15 @@ def reconcile_cases(
     return {
         **summary,
         "documented_case_names": sorted(mappings_by_case),
-        "documented_cases_without_match_names": sorted(
-            set(mappings_by_case) - matched_case_names
+        "documented_cases_without_match_names": sorted(actionable_unmatched_case_names),
+        "ignored_documented_cases_without_match_names": sorted(
+            ignored_unmatched_case_names
+        ),
+        "ignored_documented_cases_without_match_issue_urls": sorted(
+            {
+                IGNORED_DOCUMENTED_CASES[case_name]
+                for case_name in ignored_unmatched_case_names
+            }
         ),
         "documented_cases_with_multiple_matches_names": sorted(
             case_name for case_name, count in matched_case_counts.items() if count > 1
@@ -341,6 +364,13 @@ def _documented_case_names_without_match(
 ) -> set[str]:
     """Return documented cases not present in the loaded linkable case set."""
     return set(_mapping_by_case_name(mappings)) - {case.name for case in cases}
+
+
+def _unmatched_documented_case_names(
+    mappings_by_case: dict[str, HpssMapping], matched_case_names: set[str]
+) -> set[str]:
+    """Return documented case names without a matched linkable case."""
+    return set(mappings_by_case) - matched_case_names
 
 
 if __name__ == "__main__":
