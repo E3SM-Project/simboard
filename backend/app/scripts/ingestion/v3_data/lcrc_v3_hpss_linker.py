@@ -29,16 +29,6 @@ V3_SIMULATION_TABLE_URL = (
 )
 CHRYSALIS_MACHINE_NAME = "chrysalis"
 LONG_TERM_ARCHIVE_LABEL = "Long-Term Archive"
-# These documentation rows are aggregate archives or a symlinked simulation
-# without a corresponding SimBoard Chrysalis case. They intentionally do not
-# participate in case-link reconciliation.
-EXCLUDED_DOCUMENTED_SIMULATIONS = frozenset(
-    {
-        "LR_ensemble",
-        "RRM_ensemble",
-        "v3.NARRM_r0125.amip_0101",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -190,9 +180,7 @@ def _parse_hpss_mappings(document: str) -> list[HpssMapping]:
         simulation = row[simulation_index][0]
         hpss_urls = [url.strip() for url in row[hpss_url_index][1]]
 
-        if not simulation or simulation in EXCLUDED_DOCUMENTED_SIMULATIONS:
-            continue
-        if not hpss_urls:
+        if not simulation or not hpss_urls:
             continue
 
         url = hpss_urls[0]

@@ -8,8 +8,8 @@ in the UI.
 
 ## Scope
 
-- Keep the targeted v3 archive backfill unchanged. RRM cases are already
-  ingested by the normal Chrysalis archive scanner from newer snapshots.
+- Expand the targeted v3 archive backfill to include all documented v3 case
+  entries before HPSS reconciliation.
 - Fetch the E3SM v3 simulation table and map its `Simulation` values to HPSS
   URLs.
 - Match existing Chrysalis cases by normalized case name and retain their stored
@@ -34,18 +34,18 @@ filesystem archive discovery.
 1. Add `lcrc_v3_hpss_linker.py`, which fetches (or reads a saved copy of) the
    v3 simulation table, extracts Simulation-to-HPSS URL mappings, and normalizes
    grouped Simulation values to their leaf case names.
-   Exclude the docs-only `LR_ensemble`, `RRM_ensemble`, and symlinked
-   `v3.NARRM_r0125.amip_0101` entries because they have no matching SimBoard
-   Chrysalis cases.
-2. Query existing `chrysalis` cases and reconcile only matching case names. The
+2. Expand the targeted Chrysalis v3 archive catalog with the documented RRM,
+   ensemble, and symlinked NARRM entries, then run its dry-run reconciliation
+   before linking.
+3. Query existing `chrysalis` cases and reconcile only matching case names. The
    script never derives or changes `hpc_username`.
-3. Default to dry run. With `--apply`, create missing managed links, leave
+4. Default to dry run. With `--apply`, create missing managed links, leave
    matching links unchanged, and update one existing managed link when its URL
    changes. Report ambiguous managed links and conflicting documentation mappings
    without guessing.
-4. Add tests for document parsing, normalization, reconciliation, idempotency,
+5. Add tests for document parsing, normalization, reconciliation, idempotency,
    and dry-run behavior.
-5. Update frontend labels to `Short-Term Archive` and adjust inherited-link copy
+6. Update frontend labels to `Short-Term Archive` and adjust inherited-link copy
    to describe general case-level links.
 
 ## Verification
