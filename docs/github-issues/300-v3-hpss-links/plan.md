@@ -24,9 +24,10 @@ The HPSS URL describes a case-level, long-term data location, so it is stored as
 an `other` external link on `Case`, rather than as an execution artifact. Case
 links are already visible from every execution belonging to that case.
 
-The linker is a standalone, dry-run-first script beside the targeted v3 tooling.
-It is intentionally separate from archive ingestion: the documentation table is
-curated metadata and is not part of filesystem archive discovery.
+The linker is a standalone, dry-run-first script run in the deployed backend
+container or an administrative job. It is intentionally separate from archive
+ingestion: the documentation table is curated metadata and is not part of
+filesystem archive discovery.
 
 ## Implementation
 

@@ -58,8 +58,6 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make v3-hpss-link-dry-run                    # Reconcile v3 HPSS case links without writing"
-	@echo "  make v3-hpss-link-apply                      # Create or update reconciled v3 HPSS case links"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -224,7 +222,7 @@ docs-build:
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply v3-hpss-link-dry-run v3-hpss-link-apply
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -284,12 +282,6 @@ v3-ingest-apply:
 	fi
 	LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
-
-v3-hpss-link-dry-run:
-	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
-
-v3-hpss-link-apply:
-	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker --apply
 
 # ============================================================
 # 🧑‍💻 FRONTEND COMMANDS

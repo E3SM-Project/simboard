@@ -336,7 +336,7 @@ discovery results still make repeated runs idempotent.
 documented in the E3SM v3 simulation table. It does not ingest archive data or
 read the Chrysalis filesystem.
 
-Run it from a SimBoard backend environment with:
+Run it inside the deployed SimBoard backend container or administrative job with:
 
 - `DATABASE_URL` and the normal backend settings
 - Network access to the documentation page, unless `--source-file` is used
@@ -357,17 +357,25 @@ is missing from the loaded Chrysalis case set.
 
 #### Dry Run and Apply
 
-Review the dry-run reconciliation counts before applying changes:
+The deployment image does not include the repository Makefile, so run the
+module directly from `/app`. Review the dry-run reconciliation counts before
+applying changes:
 
 ```bash
-make v3-hpss-link-dry-run
-make v3-hpss-link-apply
+python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
 ```
 
-Use the direct module form only when providing a saved copy of the table:
+After review, apply the links and rerun the dry run to confirm idempotency:
 
 ```bash
-uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker \
+python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker --apply
+python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
+```
+
+Use a saved table source when outbound documentation access is unavailable:
+
+```bash
+python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker \
   --source-file /path/to/simulation_table.html
 ```
 
