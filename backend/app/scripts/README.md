@@ -355,6 +355,11 @@ The linker never guesses unresolved records. Matching cases may still be linked
 during `--apply`, but `--apply` refuses to make any changes if a documented case
 is missing from the loaded Chrysalis case set.
 
+The v3 documentation table also includes `LR_ensemble`, `RRM_ensemble`, and
+the symlinked `v3.NARRM_r0125.amip_0101` row. These do not have corresponding
+SimBoard Chrysalis cases, so the linker explicitly excludes them from required
+case reconciliation and does not create links for them.
+
 #### Dry Run and Apply
 
 The deployment image does not include the repository Makefile, so run the

@@ -57,6 +57,26 @@ def test_parse_hpss_mappings_uses_header_names_instead_of_fixed_columns() -> Non
     ]
 
 
+def test_parse_hpss_mappings_excludes_docs_only_entries() -> None:
+    document = """
+    <table>
+      <tr><th>Simulation</th><th>HPSS URL</th></tr>
+      <tr><td>LR_ensemble</td><td><a href="https://portal.nersc.gov/archive/lr">HPSS URL</a></td></tr>
+      <tr><td>RRM_ensemble</td><td><a href="https://portal.nersc.gov/archive/rrm">HPSS URL</a></td></tr>
+      <tr><td>v3.NARRM_r0125.amip_0101</td><td><a href="https://portal.nersc.gov/archive/narrm-symlink">HPSS URL</a></td></tr>
+      <tr><td>v3.NARRM.amip_0101</td><td><a href="https://portal.nersc.gov/archive/narrm">HPSS URL</a></td></tr>
+    </table>
+    """
+
+    assert linker._parse_hpss_mappings(document) == [
+        linker.HpssMapping(
+            simulation="v3.NARRM.amip_0101",
+            case_name="v3.NARRM.amip_0101",
+            url="https://portal.nersc.gov/archive/narrm",
+        )
+    ]
+
+
 def test_parse_hpss_mappings_rejects_missing_required_headers() -> None:
     with pytest.raises(ValueError, match="missing Simulation and HPSS URL headers"):
         linker._parse_hpss_mappings("<table><tr><th>Case</th></tr></table>")

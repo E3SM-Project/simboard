@@ -34,6 +34,9 @@ filesystem archive discovery.
 1. Add `lcrc_v3_hpss_linker.py`, which fetches (or reads a saved copy of) the
    v3 simulation table, extracts Simulation-to-HPSS URL mappings, and normalizes
    grouped Simulation values to their leaf case names.
+   Exclude the docs-only `LR_ensemble`, `RRM_ensemble`, and symlinked
+   `v3.NARRM_r0125.amip_0101` entries because they have no matching SimBoard
+   Chrysalis cases.
 2. Query existing `chrysalis` cases and reconcile only matching case names. The
    script never derives or changes `hpc_username`.
 3. Default to dry run. With `--apply`, create missing managed links, leave
