@@ -28,7 +28,7 @@ def test_parse_hpss_mappings_extracts_and_normalizes_docs_rows() -> None:
     </table>
     """
 
-    assert linker.parse_hpss_mappings(document) == [
+    assert linker._parse_hpss_mappings(document) == [
         linker.HpssMapping(
             simulation="v3.LR.piClim-histall/v3.LR.piClim-histall_0101",
             case_name="v3.LR.piClim-histall_0101",
@@ -48,7 +48,7 @@ def test_parse_hpss_mappings_uses_header_names_instead_of_fixed_columns() -> Non
     </table>
     """
 
-    assert linker.parse_hpss_mappings(document) == [
+    assert linker._parse_hpss_mappings(document) == [
         linker.HpssMapping(
             simulation="v3.NARRM.amip_0101",
             case_name="v3.NARRM.amip_0101",
@@ -59,7 +59,7 @@ def test_parse_hpss_mappings_uses_header_names_instead_of_fixed_columns() -> Non
 
 def test_parse_hpss_mappings_rejects_missing_required_headers() -> None:
     with pytest.raises(ValueError, match="missing Simulation and HPSS URL headers"):
-        linker.parse_hpss_mappings("<table><tr><th>Case</th></tr></table>")
+        linker._parse_hpss_mappings("<table><tr><th>Case</th></tr></table>")
 
 
 def test_mapping_by_case_name_rejects_conflicting_urls() -> None:
@@ -79,6 +79,12 @@ def test_documented_case_names_without_match_reports_unlinked_docs_cases() -> No
     assert linker._documented_case_names_without_match(cases, mappings) == {
         "v3.NARRM.amip_0101"
     }
+
+
+def test_linker_imports_models_required_by_catalog_relationships() -> None:
+    assert linker.User.__name__ == "User"
+    assert linker.Ingestion.__name__ == "Ingestion"
+    assert linker.Site.__name__ == "Site"
 
 
 def test_reconcile_cases_dry_run_does_not_mutate() -> None:

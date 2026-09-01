@@ -18,7 +18,10 @@ from sqlalchemy.orm import selectinload
 from app.core.database import SessionLocal
 from app.features.catalog.enums import ExternalLinkKind
 from app.features.catalog.models import Case, ExternalLink
+from app.features.ingestion.models import Ingestion  # noqa: F401
 from app.features.machine.models import Machine
+from app.features.site.models import Site  # noqa: F401
+from app.features.user.models import User  # noqa: F401
 
 V3_SIMULATION_TABLE_URL = (
     "https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/"
@@ -79,12 +82,70 @@ class _SimulationTableParser(HTMLParser):
             self._row = None
 
 
-def _normalize_case_name(simulation: str) -> str:
-    """Convert a docs Simulation value to its archive case-directory leaf name."""
-    return simulation.strip().rstrip("/").rsplit("/", maxsplit=1)[-1]
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply", action="store_true", help="Write link changes.")
+    parser.add_argument(
+        "--source-file",
+        type=Path,
+        help="Read saved simulation-table HTML instead of downloading it.",
+    )
+    args = parser.parse_args(argv)
+    try:
+        summary = _run(apply=args.apply, source_file=args.source_file)
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        print(f"HPSS link reconciliation failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"mode={'apply' if args.apply else 'dry-run'}")
+    for name, value in sorted(summary.items()):
+        print(f"{name}={value}")
+    return 0
 
 
-def parse_hpss_mappings(document: str) -> list[HpssMapping]:
+def _run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
+    """Run a dry-run or write-mode reconciliation against Chrysalis cases."""
+    mappings = _parse_hpss_mappings(_read_document(source_file))
+    if not mappings:
+        raise ValueError(
+            "No Simulation-to-HPSS mappings were found in the source table."
+        )
+
+    with SessionLocal() as db:
+        cases = list(
+            db.scalars(
+                select(Case)
+                .join(Machine)
+                .where(Machine.name == CHRYSALIS_MACHINE_NAME)
+                .options(selectinload(Case.links))
+            )
+        )
+        missing_case_names = _documented_case_names_without_match(cases, mappings)
+
+        if apply and missing_case_names:
+            sample = ", ".join(sorted(missing_case_names)[:5])
+            raise ValueError(
+                "Refusing to apply HPSS links because documented cases are missing "
+                f"from Chrysalis: {sample}"
+            )
+
+        summary = reconcile_cases(cases, mappings, apply=apply)
+
+        if apply:
+            db.commit()
+
+        return summary
+
+
+def _read_document(source_file: Path | None) -> str:
+    if source_file is not None:
+        return source_file.read_text(encoding="utf-8")
+
+    with urllib.request.urlopen(V3_SIMULATION_TABLE_URL, timeout=30) as response:
+        return response.read().decode("utf-8")
+
+
+def _parse_hpss_mappings(document: str) -> list[HpssMapping]:
     """Parse the documentation table's Simulation and HPSS URL columns."""
     parser = _SimulationTableParser()
     parser.feed(document)
@@ -93,32 +154,40 @@ def parse_hpss_mappings(document: str) -> list[HpssMapping]:
 
     for row in parser.rows:
         column_names = [cell[0].strip().casefold() for cell in row]
+
         if "simulation" in column_names and "hpss url" in column_names:
             header = row
             continue
+
         if header is None:
             continue
+
         simulation_index = next(
             index
             for index, cell in enumerate(header)
             if cell[0].strip().casefold() == "simulation"
         )
+
         hpss_url_index = next(
             index
             for index, cell in enumerate(header)
             if cell[0].strip().casefold() == "hpss url"
         )
+
         if len(row) <= max(simulation_index, hpss_url_index):
             raise ValueError("Simulation table row is missing a required column.")
 
         simulation = row[simulation_index][0]
         hpss_urls = [url.strip() for url in row[hpss_url_index][1]]
+
         if not simulation or not hpss_urls:
             continue
+
         url = hpss_urls[0]
         parsed_url = urlparse(url)
         if parsed_url.scheme != "https" or not parsed_url.netloc:
             raise ValueError(f"Invalid HPSS URL for simulation {simulation!r}.")
+
         mappings.append(
             HpssMapping(
                 simulation=simulation,
@@ -129,20 +198,13 @@ def parse_hpss_mappings(document: str) -> list[HpssMapping]:
 
     if header is None:
         raise ValueError("Simulation table is missing Simulation and HPSS URL headers.")
+
     return mappings
 
 
-def _mapping_by_case_name(mappings: list[HpssMapping]) -> dict[str, HpssMapping]:
-    """Validate that every normalized case name maps to one HPSS URL."""
-    by_case_name: dict[str, HpssMapping] = {}
-    for mapping in mappings:
-        existing = by_case_name.get(mapping.case_name)
-        if existing is not None and existing.url != mapping.url:
-            raise ValueError(
-                f"Conflicting HPSS URLs for normalized case {mapping.case_name!r}."
-            )
-        by_case_name[mapping.case_name] = mapping
-    return by_case_name
+def _normalize_case_name(simulation: str) -> str:
+    """Convert a docs Simulation value to its archive case-directory leaf name."""
+    return simulation.strip().rstrip("/").rsplit("/", maxsplit=1)[-1]
 
 
 def reconcile_cases(
@@ -169,9 +231,11 @@ def reconcile_cases(
             if link.kind == ExternalLinkKind.OTHER
             and link.label == LONG_TERM_ARCHIVE_LABEL
         ]
+
         if len(managed_links) > 1:
             summary["ambiguous_cases"] += 1
             continue
+
         if not managed_links:
             if any(
                 link.kind == ExternalLinkKind.OTHER and link.url == mapping.url
@@ -179,7 +243,9 @@ def reconcile_cases(
             ):
                 summary["conflicting_existing_urls"] += 1
                 continue
+
             summary["links_to_create"] += 1
+
             if apply:
                 case.links.append(
                     ExternalLink(
@@ -188,9 +254,11 @@ def reconcile_cases(
                         url=mapping.url,
                     )
                 )
+
             continue
 
         link = managed_links[0]
+
         if link.url == mapping.url:
             summary["unchanged_links"] += 1
         else:
@@ -201,8 +269,10 @@ def reconcile_cases(
                 for other_link in case.links
             ):
                 summary["conflicting_existing_urls"] += 1
+
                 continue
             summary["links_to_update"] += 1
+
             if apply:
                 link.url = mapping.url
 
@@ -212,7 +282,24 @@ def reconcile_cases(
     summary["documented_cases_with_multiple_matches"] = sum(
         count > 1 for count in matched_case_counts.values()
     )
+
     return summary
+
+
+def _mapping_by_case_name(mappings: list[HpssMapping]) -> dict[str, HpssMapping]:
+    """Validate that every normalized case name maps to one HPSS URL."""
+    by_case_name: dict[str, HpssMapping] = {}
+    for mapping in mappings:
+        existing = by_case_name.get(mapping.case_name)
+
+        if existing is not None and existing.url != mapping.url:
+            raise ValueError(
+                f"Conflicting HPSS URLs for normalized case {mapping.case_name!r}."
+            )
+
+        by_case_name[mapping.case_name] = mapping
+
+    return by_case_name
 
 
 def _documented_case_names_without_match(
@@ -220,64 +307,6 @@ def _documented_case_names_without_match(
 ) -> set[str]:
     """Return documented cases not present in the loaded Chrysalis case set."""
     return set(_mapping_by_case_name(mappings)) - {case.name for case in cases}
-
-
-def _read_document(source_file: Path | None) -> str:
-    if source_file is not None:
-        return source_file.read_text(encoding="utf-8")
-    with urllib.request.urlopen(V3_SIMULATION_TABLE_URL, timeout=30) as response:
-        return response.read().decode("utf-8")
-
-
-def run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
-    """Run a dry-run or write-mode reconciliation against Chrysalis cases."""
-    mappings = parse_hpss_mappings(_read_document(source_file))
-    if not mappings:
-        raise ValueError(
-            "No Simulation-to-HPSS mappings were found in the source table."
-        )
-
-    with SessionLocal() as db:
-        cases = list(
-            db.scalars(
-                select(Case)
-                .join(Machine)
-                .where(Machine.name == CHRYSALIS_MACHINE_NAME)
-                .options(selectinload(Case.links))
-            )
-        )
-        missing_case_names = _documented_case_names_without_match(cases, mappings)
-        if apply and missing_case_names:
-            sample = ", ".join(sorted(missing_case_names)[:5])
-            raise ValueError(
-                "Refusing to apply HPSS links because documented cases are missing "
-                f"from Chrysalis: {sample}"
-            )
-        summary = reconcile_cases(cases, mappings, apply=apply)
-        if apply:
-            db.commit()
-        return summary
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--apply", action="store_true", help="Write link changes.")
-    parser.add_argument(
-        "--source-file",
-        type=Path,
-        help="Read saved simulation-table HTML instead of downloading it.",
-    )
-    args = parser.parse_args(argv)
-    try:
-        summary = run(apply=args.apply, source_file=args.source_file)
-    except (OSError, ValueError, urllib.error.URLError) as exc:
-        print(f"HPSS link reconciliation failed: {exc}", file=sys.stderr)
-        return 1
-
-    print(f"mode={'apply' if args.apply else 'dry-run'}")
-    for name, value in sorted(summary.items()):
-        print(f"{name}={value}")
-    return 0
 
 
 if __name__ == "__main__":
