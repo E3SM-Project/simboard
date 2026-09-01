@@ -327,7 +327,7 @@ export const CompareWorkspace = ({
     ],
     locations: [
       makeArtifactMetricRow('Output Paths', 'output'),
-      makeArtifactMetricRow('Archive Paths', 'archive'),
+      makeArtifactMetricRow('Short-Term Archive Paths', 'archive'),
       makeArtifactMetricRow('Run Script Paths', 'run_script'),
       makeArtifactMetricRow('Post-processing Scripts', 'postprocessing_script'),
     ],

@@ -56,6 +56,8 @@ help:
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
+	@echo "  make v3-hpss-link-dry-run                    # Reconcile v3 HPSS case links without writing"
+	@echo "  make v3-hpss-link-apply                      # Create or update reconciled v3 HPSS case links"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -220,7 +222,7 @@ docs-build:
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-hpss-link-dry-run v3-hpss-link-apply
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -264,6 +266,12 @@ backend-provision-service:
 	cd $(BACKEND_DIR) && \
 	uv run python -m app.scripts.users.provision_service_account \
 		--service-name "$(service_name)"
+
+v3-hpss-link-dry-run:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
+
+v3-hpss-link-apply:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker --apply
 
 # ============================================================
 # 🧑‍💻 FRONTEND COMMANDS
