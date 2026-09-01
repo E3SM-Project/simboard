@@ -272,7 +272,7 @@ v3-ingest-dry-run:
 		echo "Usage: make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path>"; \
 		exit 1; \
 	fi
-	LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true \
+	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 v3-ingest-apply:
@@ -280,7 +280,7 @@ v3-ingest-apply:
 		echo "Usage: make v3-ingest-apply LCRC_V3_ENV_FILE=<path>"; \
 		exit 1; \
 	fi
-	LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
+	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 # ============================================================

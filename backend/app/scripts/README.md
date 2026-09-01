@@ -304,7 +304,8 @@ make v3-ingest-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
 ```
 
 The Make targets override `DRY_RUN`; keep the external environment file focused
-on the API credentials and optional archive-root override.
+on the API credentials and optional archive-root override. They run Python with
+unbuffered output so emitted structured events appear in the console immediately.
 
 #### Fixed and Supported Settings
 
