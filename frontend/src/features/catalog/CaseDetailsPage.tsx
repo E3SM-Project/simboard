@@ -65,9 +65,10 @@ import {
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
 import { toast } from '@/hooks/use-toast';
-import { useCase } from '@/lib/catalog/hooks/useCase';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
+import { useReadableCase } from '@/lib/catalog/hooks/useReadableCase';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import type {
   CaseDetailOut,
   CaseEditableField,
@@ -150,7 +151,7 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 };
 
 interface CaseDetailsPageProps {
-  renderCompareSection?: (options: { onClose: () => void }) => React.ReactNode;
+  renderCompareSection?: (options: { caseId: string; onClose: () => void }) => React.ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -363,7 +364,17 @@ export const CaseDetailsPage = ({
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
   const queryClient = useQueryClient();
-  const { id } = useParams<{ id: string }>();
+  const { caseName, hpcUsername, machine: machineName } = useParams<{
+    caseName: string;
+    hpcUsername: string;
+    machine: string;
+  }>();
+  const readableIdentity =
+    machineName && hpcUsername && caseName
+      ? { machineName, hpcUsername, caseName }
+      : null;
+  const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
+  const caseId = fetchedCaseRecord?.id;
   const {
     data: allExecutions,
     error: executionsError,
@@ -373,7 +384,7 @@ export const CaseDetailsPage = ({
     isFetchingNextPage,
     refetch: refetchExecutions,
     total: executionTotal,
-  } = useCaseExecutions(id, { sortBy: 'run_activity', sortOrder: 'desc' });
+  } = useCaseExecutions(caseId, { sortBy: 'run_activity', sortOrder: 'desc' });
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
@@ -383,9 +394,8 @@ export const CaseDetailsPage = ({
   const [caseHashQuery, setCaseHashQuery] = useState('');
   const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
-  const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const history = useMetadataHistory('case', id ?? '', isHistoryOpen);
+  const history = useMetadataHistory('case', caseId ?? '', isHistoryOpen);
   const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
   const [formState, setFormState] = useState<EditableFormState | null>(null);
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>([]);
@@ -504,8 +514,8 @@ export const CaseDetailsPage = ({
     () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
     [caseRecord?.executions],
   );
-  const rawCaseSelectedExecutionIds = id
-    ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[id] ?? [])
+  const rawCaseSelectedExecutionIds = caseId
+    ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[caseId] ?? [])
     : [];
   const caseSelectedExecutionIds = rawCaseSelectedExecutionIds.filter((executionId) =>
     caseExecutionIdSet.has(executionId),
@@ -525,7 +535,7 @@ export const CaseDetailsPage = ({
       : filteredFlatExecutions.length > SCROLLABLE_FLAT_ROWS_THRESHOLD;
 
   useEffect(() => {
-    if (loading || (fetchedCaseRecord && fetchedCaseRecord.id !== id)) {
+    if (loading) {
       setCaseRecord(null);
       setFormState(null);
       setLinkRows([]);
@@ -534,7 +544,7 @@ export const CaseDetailsPage = ({
       return;
     }
 
-    if (fetchedCaseRecord && fetchedCaseRecord.id === id) {
+    if (fetchedCaseRecord) {
       setCaseRecord(fetchedCaseRecord);
       setFormState(toEditableFormState(fetchedCaseRecord));
       setLinkRows(toEditableLinkRows(fetchedCaseRecord.links, 'case'));
@@ -552,7 +562,7 @@ export const CaseDetailsPage = ({
       setIsEditing(false);
       setSaveError(null);
     }
-  }, [error, fetchedCaseRecord, id, loading]);
+  }, [error, fetchedCaseRecord, loading]);
 
   useEffect(() => {
     if (!caseRecord) {
@@ -630,9 +640,9 @@ export const CaseDetailsPage = ({
   }, [canShowCompare, isCompareVisible]);
 
   const handleShareCase = async () => {
-    if (!id) return;
+    if (!readableIdentity) return;
 
-    const shareUrl = new URL(`/cases/${id}`, window.location.origin).toString();
+    const shareUrl = new URL(caseDetailsPath(readableIdentity), window.location.origin).toString();
     const canUseWebShare = typeof navigator.share === 'function';
 
     try {
@@ -700,7 +710,7 @@ export const CaseDetailsPage = ({
   };
 
   const handleSave = async () => {
-    if (!id || !caseRecord || !formState) return;
+    if (!caseId || !caseRecord || !formState) return;
 
     if (hasAnyResourceRowErrors(getClientLinkRowErrors(linkRows))) {
       return;
@@ -721,7 +731,7 @@ export const CaseDetailsPage = ({
     setSaveError(null);
 
     try {
-      const updatedCaseRecord = await updateCase(id, payload);
+      const updatedCaseRecord = await updateCase(caseId, payload);
       setCaseRecord(updatedCaseRecord);
       setFormState(toEditableFormState(updatedCaseRecord));
       setLinkRows(toEditableLinkRows(updatedCaseRecord.links, 'case'));
@@ -736,15 +746,15 @@ export const CaseDetailsPage = ({
     }
   };
 
-  if (!id) {
+  if (!readableIdentity) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Invalid case ID</div>
+        <div className="text-center text-gray-500">Invalid case identity</div>
       </div>
     );
   }
 
-  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== id)) {
+  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== caseId)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-gray-500">Loading case details…</div>
@@ -855,9 +865,9 @@ export const CaseDetailsPage = ({
 
   const toggleExecutionSelection = (executionId: string) => {
     if (caseSelectedExecutionIds.includes(executionId)) {
-      if (id) {
+      if (caseId) {
         setSelectedCaseExecutionIdsForCase(
-          id,
+          caseId,
           caseSelectedExecutionIds.filter((selectedId) => selectedId !== executionId),
         );
       }
@@ -868,8 +878,8 @@ export const CaseDetailsPage = ({
       return;
     }
 
-    if (id) {
-      setSelectedCaseExecutionIdsForCase(id, [...caseSelectedExecutionIds, executionId]);
+    if (caseId) {
+      setSelectedCaseExecutionIdsForCase(caseId, [...caseSelectedExecutionIds, executionId]);
     }
   };
 
@@ -1317,8 +1327,8 @@ export const CaseDetailsPage = ({
                             size="sm"
                             className="text-slate-600 hover:text-slate-900"
                             onClick={() => {
-                              if (id) {
-                                setSelectedCaseExecutionIdsForCase(id, []);
+                              if (caseId) {
+                                setSelectedCaseExecutionIdsForCase(caseId, []);
                               }
                             }}
                           >
@@ -1467,7 +1477,10 @@ export const CaseDetailsPage = ({
                               </TableCell>
                               <TableCell className="align-top">
                                 <Link
-                                  to={`/executions/${summary.id}`}
+                                  to={executionDetailsPath({
+                                    ...readableIdentity,
+                                    executionId: summary.executionId,
+                                  })}
                                   state={{ from: currentPath }}
                                   className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                 >
@@ -1681,7 +1694,10 @@ export const CaseDetailsPage = ({
                                                     </TableCell>
                                                     <TableCell className="align-top">
                                                       <Link
-                                                        to={`/executions/${summary.id}`}
+                                                        to={executionDetailsPath({
+                                                          ...readableIdentity,
+                                                          executionId: summary.executionId,
+                                                        })}
                                                         state={{ from: currentPath }}
                                                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                                       >
@@ -1808,6 +1824,7 @@ export const CaseDetailsPage = ({
               </div>
 
               {renderCompareSection({
+                caseId: caseRecord.id,
                 onClose: () => setIsCompareVisible(false),
               })}
             </div>

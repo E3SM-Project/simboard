@@ -23,6 +23,12 @@ class IngestionExecutionSummary(BaseModel):
     id: Annotated[UUID, Field(..., description="ID of the created execution")]
     case_id: Annotated[UUID, Field(..., description="ID of the associated case")]
     case_name: Annotated[str, Field(..., description="Name of the associated case")]
+    machine_name: Annotated[
+        str, Field(..., description="Name of the associated machine")
+    ]
+    hpc_username: Annotated[
+        str, Field(..., description="HPC username associated with the case")
+    ]
     execution_id: Annotated[
         str, Field(..., description="Execution identifier for the created execution")
     ]

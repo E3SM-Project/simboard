@@ -39,6 +39,7 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { useExecutionFilterOptions } from '@/lib/catalog/hooks/useExecutionFilterOptions';
 import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
+import { executionDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type { ExecutionListItemOut } from '@/types/index';
 import { formatModelDate } from '@/utils/utils';
@@ -121,8 +122,16 @@ export const ExecutionsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = `${location.pathname}${location.search}`;
-  const navigateToExecutionDetails = (executionId: string) => {
-    navigate(`/executions/${executionId}`, { state: { from: currentPath } });
+  const navigateToExecutionDetails = (execution: ExecutionListItemOut) => {
+    navigate(
+      executionDetailsPath({
+        machineName: execution.machineName,
+        hpcUsername: execution.hpcUsername,
+        caseName: execution.caseName,
+        executionId: execution.executionId,
+      }),
+      { state: { from: currentPath } },
+    );
   };
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -171,7 +180,12 @@ export const ExecutionsPage = () => {
         header: 'Execution ID',
         cell: ({ row }) => (
           <Link
-            to={`/executions/${row.original.id}`}
+            to={executionDetailsPath({
+              machineName: row.original.machineName,
+              hpcUsername: row.original.hpcUsername,
+              caseName: row.original.caseName,
+              executionId: row.original.executionId,
+            })}
             state={{ from: currentPath }}
             className="block max-w-full truncate font-mono text-xs text-blue-600 hover:underline"
             title={row.original.executionId}
@@ -555,7 +569,7 @@ export const ExecutionsPage = () => {
                 <TableRow
                   key={row.id}
                   className="hover:bg-muted/40 cursor-pointer"
-                  onClick={() => navigateToExecutionDetails(row.original.id)}
+                  onClick={() => navigateToExecutionDetails(row.original)}
                 >
                   {/* Sticky checkbox cell */}
                   <TableCell

@@ -53,6 +53,7 @@ import {
   type ResourceRowFieldErrors,
   toEditableLinkRows,
 } from '@/features/catalog/externalLinkEditing';
+import { caseDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type {
   ArtifactIn,
@@ -907,7 +908,11 @@ export const ExecutionDetailsView = ({
           </Button>
           <h1 className="text-2xl font-bold">{execution.executionId}</h1>
           <Link
-            to={`/cases/${execution.caseId}`}
+            to={caseDetailsPath({
+              machineName: execution.machine.name,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+            })}
             className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
           >
             <span>Case: {execution.caseName}</span>
@@ -1167,7 +1172,15 @@ export const ExecutionDetailsView = ({
                     compare for side-by-side review.
                   </p>
                   <Button variant="outline" asChild>
-                    <Link to={`/cases/${execution.caseId}`}>Open Case Details</Link>
+                    <Link
+                      to={caseDetailsPath({
+                        machineName: execution.machine.name,
+                        hpcUsername: execution.hpcUsername,
+                        caseName: execution.caseName,
+                      })}
+                    >
+                      Open Case Details
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>

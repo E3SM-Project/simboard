@@ -19,7 +19,7 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlalchemy import func, or_, tuple_
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
@@ -977,7 +977,11 @@ def _build_ingestion_execution_summaries(
 
     case_ids = list({execution.case_id for execution in created_executions})
     cases = {
-        case.id: case for case in db.query(Case).filter(Case.id.in_(case_ids)).all()
+        case.id: case
+        for case in db.query(Case)
+        .options(joinedload(Case.machine))
+        .filter(Case.id.in_(case_ids))
+        .all()
     }
 
     return [
@@ -985,6 +989,8 @@ def _build_ingestion_execution_summaries(
             id=execution.id,
             case_id=execution.case_id,
             case_name=cases[execution.case_id].name,
+            machine_name=cases[execution.case_id].machine.name,
+            hpc_username=cases[execution.case_id].hpc_username,
             execution_id=execution.execution_id,
         )
         for execution in created_executions

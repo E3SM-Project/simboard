@@ -12,6 +12,7 @@ import {
 } from '@/features/upload/api/api';
 import { toast } from '@/hooks/use-toast';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import type { Machine } from '@/types';
 
 interface UploadPageProps {
@@ -183,6 +184,8 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     return {
       id: firstExecution.case_id,
       name: firstExecution.case_name,
+      machineName: firstExecution.machine_name,
+      hpcUsername: firstExecution.hpc_username,
     };
   }, [createdExecutions]);
   const validationErrorGroups = useMemo(() => {
@@ -568,7 +571,11 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                   {createdCaseSummary ? (
                     <Link
                       className="shrink-0 text-sm font-medium text-blue-700 hover:underline"
-                      to={`/cases/${createdCaseSummary.id}`}
+                      to={caseDetailsPath({
+                        machineName: createdCaseSummary.machineName,
+                        hpcUsername: createdCaseSummary.hpcUsername,
+                        caseName: createdCaseSummary.name,
+                      })}
                     >
                       View case
                     </Link>
@@ -590,7 +597,12 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                             <Link
                               className="block truncate font-medium text-blue-700 hover:underline"
                               title={execution.execution_id}
-                              to={`/executions/${execution.id}`}
+                              to={executionDetailsPath({
+                                machineName: execution.machine_name,
+                                hpcUsername: execution.hpc_username,
+                                caseName: execution.case_name,
+                                executionId: execution.execution_id,
+                              })}
                             >
                               {execution.execution_id}
                             </Link>
@@ -599,14 +611,23 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                             <div className="flex justify-end gap-3">
                               <Link
                                 className="text-blue-700 hover:underline"
-                                to={`/executions/${execution.id}`}
+                                to={executionDetailsPath({
+                                  machineName: execution.machine_name,
+                                  hpcUsername: execution.hpc_username,
+                                  caseName: execution.case_name,
+                                  executionId: execution.execution_id,
+                                })}
                               >
                                 Open
                               </Link>
                               {!createdCaseSummary ? (
                                 <Link
                                   className="text-blue-700 hover:underline"
-                                  to={`/cases/${execution.case_id}`}
+                                  to={caseDetailsPath({
+                                    machineName: execution.machine_name,
+                                    hpcUsername: execution.hpc_username,
+                                    caseName: execution.case_name,
+                                  })}
                                 >
                                   View case
                                 </Link>

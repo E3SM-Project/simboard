@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { ExecutionBrowseDetailsDialog } from '@/features/browse/components/ExecutionResults/ExecutionBrowseDetailsDialog';
+import { executionDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionListItemOut } from '@/types/index';
 import { formatModelDate } from '@/utils/utils';
 
@@ -232,7 +233,15 @@ export const ExecutionResultCard = ({
                 className="w-full sm:w-40"
                 onClick={(event) => {
                   event.stopPropagation();
-                  navigate(`/executions/${execution.id}`, { state: { from: currentPath } });
+                  navigate(
+                    executionDetailsPath({
+                      machineName: execution.machineName,
+                      hpcUsername: execution.hpcUsername,
+                      caseName: execution.caseName,
+                      executionId: execution.executionId,
+                    }),
+                    { state: { from: currentPath } },
+                  );
                 }}
               >
                 All Details

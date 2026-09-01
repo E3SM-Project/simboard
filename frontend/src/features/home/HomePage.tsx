@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
+import { caseDetailsPath } from '@/lib/catalog/urls';
 import type { Machine, Site } from '@/types/index';
 
 interface HomePageProps {
@@ -358,7 +359,13 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                   <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
-                      <Link to={`/cases/${caseRecord.id}`}>
+                      <Link
+                        to={caseDetailsPath({
+                          machineName: caseRecord.machineName,
+                          hpcUsername: caseRecord.hpcUsername,
+                          caseName: caseRecord.name,
+                        })}
+                      >
                         Open
                         <ArrowRight className="h-4 w-4" />
                       </Link>

@@ -59,8 +59,9 @@ const App = () => {
       <AppRoutes
         machines={machines}
         sites={sites}
-        renderCaseCompareSection={({ onClose }) => (
+        renderCaseCompareSection={({ caseId, onClose }) => (
           <CaseCompareRoute
+            caseId={caseId}
             onClose={onClose}
             selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
             setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}

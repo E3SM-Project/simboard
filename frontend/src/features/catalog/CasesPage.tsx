@@ -26,6 +26,7 @@ import { SearchableFilterSelect } from '@/features/catalog/components/Searchable
 import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
 import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type { CaseListItemOut, ExecutionListItemOut } from '@/types';
 import { formatModelDate } from '@/utils/utils';
@@ -398,7 +399,11 @@ export const CasesPage = () => {
         cell: ({ row }) => (
           <div className="min-w-[14rem] max-w-[28rem]">
             <Link
-              to={`/cases/${row.original.id}`}
+              to={caseDetailsPath({
+                machineName: row.original.machineName,
+                hpcUsername: row.original.hpcUsername,
+                caseName: row.original.name,
+              })}
               state={{ from: currentPath }}
               className="block truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               title={row.original.name}
@@ -547,7 +552,12 @@ export const CasesPage = () => {
                     </TableCell>
                     <TableCell className="py-2 align-top">
                       <Link
-                        to={`/executions/${execution.id}`}
+                        to={executionDetailsPath({
+                          machineName: execution.machineName,
+                          hpcUsername: execution.hpcUsername,
+                          caseName: execution.caseName,
+                          executionId: execution.executionId,
+                        })}
                         state={{ from: currentPath }}
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
@@ -576,7 +586,14 @@ export const CasesPage = () => {
 
         <div className="flex justify-end pt-1">
           <Button variant="outline" size="sm" asChild>
-            <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
+            <Link
+              to={caseDetailsPath({
+                machineName: caseRecord.machineName,
+                hpcUsername: caseRecord.hpcUsername,
+                caseName: caseRecord.name,
+              })}
+              state={{ from: currentPath }}
+            >
               {expandedExecutionLabel}
             </Link>
           </Button>

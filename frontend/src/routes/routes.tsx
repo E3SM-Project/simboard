@@ -15,7 +15,7 @@ import type { Site } from '@/types/site';
 interface RoutesProps {
   machines: Machine[];
   sites: Site[];
-  renderCaseCompareSection?: (options: { onClose: () => void }) => ReactNode;
+  renderCaseCompareSection?: (options: { caseId: string; onClose: () => void }) => ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
   selectedExecutionIds: string[];
