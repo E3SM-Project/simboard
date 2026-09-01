@@ -453,6 +453,32 @@ def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
 
 
 @case_router.get(
+    "/resolve",
+    response_model=CaseDetailOut,
+    responses={
+        200: {"description": "Case found."},
+        404: {"description": "Case not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def resolve_case(
+    machine: str,
+    hpc_username: str,
+    case_name: str,
+    db: Session = Depends(get_database_session),
+) -> CaseDetailOut:
+    """Retrieve a case by its immutable human-readable identity."""
+    case = _get_case_by_identity(
+        db=db,
+        machine_name=machine,
+        hpc_username=hpc_username,
+        case_name=case_name,
+    )
+
+    return _case_to_detail_out(case)
+
+
+@case_router.get(
     "/{case_id}",
     response_model=CaseDetailOut,
     responses={
@@ -479,23 +505,7 @@ def get_case(
     CaseDetailOut
         The case object with nested execution summaries if found.
     """
-    case = (
-        db.query(Case)
-        .options(
-            selectinload(Case.machine),
-            selectinload(Case.executions).selectinload(Execution.artifacts),
-        )
-        .options(selectinload(Case.links))
-        .filter(Case.id == case_id)
-        .first()
-    )
-
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    resp = _case_to_detail_out(case)
-
-    return resp
+    return _case_to_detail_out(_get_case(case_id, db))
 
 
 @case_router.get(
@@ -948,6 +958,42 @@ def get_execution_filter_options(
 ) -> ExecutionFilterOptionsOut:
     """Return distinct scalar execution filter values."""
     return _get_execution_filter_options(db)
+
+
+@execution_router.get(
+    "/resolve",
+    response_model=ExecutionOut,
+    responses={
+        200: {"description": "Execution found."},
+        404: {"description": "Execution not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def resolve_execution(
+    machine: str,
+    hpc_username: str,
+    case_name: str,
+    execution_id: str,
+    db: Session = Depends(get_database_session),
+) -> ExecutionOut:
+    """Retrieve an execution by its immutable human-readable identity."""
+    case = _get_case_by_identity(
+        db=db,
+        machine_name=machine,
+        hpc_username=hpc_username,
+        case_name=case_name,
+    )
+    execution = (
+        _execution_detail_query(db)
+        .filter(Execution.case_id == case.id)
+        .filter(Execution.execution_id == execution_id)
+        .one_or_none()
+    )
+
+    if execution is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    return _execution_to_out(execution)
 
 
 @execution_router.get(
@@ -1407,6 +1453,55 @@ def _get_execution(
         )
 
     return execution
+
+
+def _case_detail_query(db: Session):
+    """Return a case detail query with all data required by its response."""
+    return (
+        db.query(Case)
+        .options(
+            selectinload(Case.machine),
+            selectinload(Case.executions).selectinload(Execution.artifacts),
+        )
+        .options(selectinload(Case.links))
+    )
+
+
+def _get_case(case_id: UUID, db: Session) -> Case:
+    """Retrieve a case by its immutable internal identifier."""
+    case = _case_detail_query(db).filter(Case.id == case_id).one_or_none()
+
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return case
+
+
+def _get_case_by_identity(
+    *,
+    db: Session,
+    machine_name: str,
+    hpc_username: str,
+    case_name: str,
+) -> Case:
+    """Retrieve a case by its immutable machine, user, and name identity."""
+    machine = resolve_machine_by_name(db, machine_name)
+
+    if machine is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case = (
+        _case_detail_query(db)
+        .filter(Case.machine_id == machine.id)
+        .filter(Case.hpc_username == hpc_username)
+        .filter(Case.name == case_name)
+        .one_or_none()
+    )
+
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return case
 
 
 def _build_case_summary(case: Case) -> dict:
