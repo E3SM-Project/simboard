@@ -979,6 +979,19 @@ class TestGetCase:
         assert response.status_code == 404
         assert response.json() == {"detail": "Case not found"}
 
+    def test_resolve_endpoint_raises_404_for_unknown_machine(self, client):
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": "unknown-machine",
+                "hpc_username": "missing-user",
+                "case_name": "missing-case",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Case not found"}
+
     def test_case_summary_conversion(self, db: Session):
         case = _create_case(db, "summary-conversion-case")
         db.commit()
