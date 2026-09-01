@@ -106,7 +106,6 @@ def test_documented_simulations_normalize_to_unique_case_names() -> None:
         == "v3.LR.piClim-histall_0101"
     )
     assert {
-        "v3.LR.amip_bonus_0101",
         "LR_ensemble",
         "v3.NARRM.amip_0101",
         "v3.NARRM_r0125.amip_0101",
@@ -114,6 +113,7 @@ def test_documented_simulations_normalize_to_unique_case_names() -> None:
         "v3.AMZRRM.amip_0101",
         "v3.EARRM.amip_0101",
     } <= v3_ingestor.V3_CASE_NAMES
+    assert "v3.LR.amip_bonus_0101" not in v3_ingestor.V3_CASE_NAMES
 
 
 def test_v3_case_filter_requires_exact_leaf_name() -> None:

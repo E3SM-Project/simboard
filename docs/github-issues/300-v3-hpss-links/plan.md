@@ -12,8 +12,8 @@ in the UI.
   entries before HPSS reconciliation.
 - Fetch the E3SM v3 simulation table and map its `Simulation` values to HPSS
   URLs.
-- Match existing Chrysalis cases by normalized case name and retain their stored
-  HPC usernames.
+- Match existing Chrysalis and Perlmutter cases by normalized case name and
+  retain their stored HPC usernames.
 - Idempotently create or update a case-owned `Long-Term Archive` external link.
 - Relabel existing execution `Archive` artifacts as `Short-Term Archive` in the
   frontend without changing the persisted artifact kind.
@@ -36,8 +36,10 @@ filesystem archive discovery.
    grouped Simulation values to their leaf case names.
 2. Expand the targeted Chrysalis v3 archive catalog with the documented RRM,
    ensemble, and symlinked NARRM entries, then run its dry-run reconciliation
-   before linking.
-3. Query existing `chrysalis` cases and reconcile only matching case names. The
+   before linking. Keep the Perlmutter-owned `v3.LR.amip_bonus_0101` in its
+   normal Perlmutter ingestion workflow.
+3. Query existing `chrysalis` and `perlmutter` cases and reconcile matching case
+   names. The
    script never derives or changes `hpc_username`.
 4. Default to dry run. With `--apply`, create missing managed links, leave
    matching links unchanged, and update one existing managed link when its URL

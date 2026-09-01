@@ -12,8 +12,12 @@ def _mapping(case_name: str, url: str = "https://portal.nersc.gov/archive/case")
     return linker.HpssMapping(simulation=case_name, case_name=case_name, url=url)
 
 
-def _case(name: str, links: list | None = None):
-    return SimpleNamespace(name=name, links=[] if links is None else links)
+def _case(name: str, links: list | None = None, machine_name: str = "chrysalis"):
+    return SimpleNamespace(
+        name=name,
+        links=[] if links is None else links,
+        machine_name=machine_name,
+    )
 
 
 def test_parse_hpss_mappings_extracts_and_normalizes_docs_rows() -> None:
@@ -133,8 +137,18 @@ def test_reconcile_cases_dry_run_does_not_mutate() -> None:
         "links_to_create": 1,
         "documented_cases_without_match": 0,
         "documented_cases_with_multiple_matches": 0,
+        "matched_cases_chrysalis": 1,
     }
     assert case.links == []
+
+
+def test_reconcile_cases_reports_perlmutter_matches() -> None:
+    case = _case("v3.LR.amip_bonus_0101", machine_name="perlmutter")
+
+    summary = linker.reconcile_cases([case], [_mapping(case.name)], apply=False)
+
+    assert summary["matched_cases"] == 1
+    assert summary["matched_cases_perlmutter"] == 1
 
 
 def test_reconcile_cases_creates_and_preserves_managed_link() -> None:

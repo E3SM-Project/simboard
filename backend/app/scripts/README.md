@@ -333,9 +333,9 @@ discovery results still make repeated runs idempotent.
 
 #### Purpose
 
-`v3_data/lcrc_v3_hpss_linker.py` links existing Chrysalis cases to the HPSS URLs
-documented in the E3SM v3 simulation table. It does not ingest archive data or
-read the Chrysalis filesystem.
+`v3_data/lcrc_v3_hpss_linker.py` links existing Chrysalis and Perlmutter cases
+to the HPSS URLs documented in the E3SM v3 simulation table. It does not ingest
+archive data or read the Chrysalis filesystem.
 
 Run it inside the deployed SimBoard backend container or administrative job with:
 
@@ -347,10 +347,14 @@ It does not require `SIMBOARD_API_BASE_URL` or `SIMBOARD_API_TOKEN`.
 #### Matching and Safety Rules
 
 Before changing links, the linker loads the complete set of existing
-`chrysalis` cases and reports:
+`chrysalis` and `perlmutter` cases and reports:
 
 - Documented mappings without a matching case
 - Cases with duplicate user-scoped matches
+
+Its summary also separates matching and unmapped case counts by machine. This
+allows the Perlmutter-owned `v3.LR.amip_bonus_0101` case to receive its HPSS
+link without adding it to the Chrysalis-targeted archive backfill.
 
 The linker never guesses unresolved records. `--apply` refuses to make any
 changes if a documented case is missing from the loaded Chrysalis case set. The

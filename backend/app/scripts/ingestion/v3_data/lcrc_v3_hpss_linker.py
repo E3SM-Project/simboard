@@ -28,6 +28,8 @@ V3_SIMULATION_TABLE_URL = (
     "CoupledSystem/simulation_data/simulation_table.html"
 )
 CHRYSALIS_MACHINE_NAME = "chrysalis"
+PERLMUTTER_MACHINE_NAME = "perlmutter"
+LINKABLE_MACHINE_NAMES = frozenset({CHRYSALIS_MACHINE_NAME, PERLMUTTER_MACHINE_NAME})
 LONG_TERM_ARCHIVE_LABEL = "Long-Term Archive"
 
 
@@ -104,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
-    """Run a dry-run or write-mode reconciliation against Chrysalis cases."""
+    """Run a dry-run or write-mode reconciliation against linkable v3 cases."""
     mappings = _parse_hpss_mappings(_read_document(source_file))
     if not mappings:
         raise ValueError(
@@ -116,8 +118,8 @@ def _run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
             db.scalars(
                 select(Case)
                 .join(Machine)
-                .where(Machine.name == CHRYSALIS_MACHINE_NAME)
-                .options(selectinload(Case.links))
+                .where(Machine.name.in_(LINKABLE_MACHINE_NAMES))
+                .options(selectinload(Case.links), selectinload(Case.machine))
             )
         )
         missing_case_names = _documented_case_names_without_match(cases, mappings)
@@ -126,7 +128,7 @@ def _run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
             sample = ", ".join(sorted(missing_case_names)[:5])
             raise ValueError(
                 "Refusing to apply HPSS links because documented cases are missing "
-                f"from Chrysalis: {sample}"
+                f"from linkable machines: {sample}"
             )
 
         summary = reconcile_cases(cases, mappings, apply=apply)
@@ -217,12 +219,15 @@ def reconcile_cases(
     matched_case_counts: Counter[str] = Counter()
 
     for case in cases:
+        machine_name = _case_machine_name(case)
         mapping = mappings_by_case.get(case.name)
         if mapping is None:
             summary["cases_without_mapping"] += 1
+            summary[f"cases_without_mapping_{machine_name}"] += 1
             continue
 
         summary["matched_cases"] += 1
+        summary[f"matched_cases_{machine_name}"] += 1
         matched_case_names.add(case.name)
         matched_case_counts[case.name] += 1
         managed_links = [
@@ -286,6 +291,14 @@ def reconcile_cases(
     return summary
 
 
+def _case_machine_name(case: Case) -> str:
+    """Return the loaded machine name, including lightweight test doubles."""
+    machine_name = getattr(case, "machine_name", None)
+    if isinstance(machine_name, str):
+        return machine_name
+    return case.machine.name
+
+
 def _mapping_by_case_name(mappings: list[HpssMapping]) -> dict[str, HpssMapping]:
     """Validate that every normalized case name maps to one HPSS URL."""
     by_case_name: dict[str, HpssMapping] = {}
@@ -305,7 +318,7 @@ def _mapping_by_case_name(mappings: list[HpssMapping]) -> dict[str, HpssMapping]
 def _documented_case_names_without_match(
     cases: list[Case], mappings: list[HpssMapping]
 ) -> set[str]:
-    """Return documented cases not present in the loaded Chrysalis case set."""
+    """Return documented cases not present in the loaded linkable case set."""
     return set(_mapping_by_case_name(mappings)) - {case.name for case in cases}
 
 
