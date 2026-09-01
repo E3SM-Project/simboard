@@ -133,11 +133,16 @@ def test_reconcile_cases_dry_run_does_not_mutate() -> None:
 
     assert summary == {
         "documented_cases": 1,
+        "documented_case_names": ["v3.NARRM.amip_0101"],
         "matched_cases": 1,
+        "matched_case_names": ["v3.NARRM.amip_0101"],
         "links_to_create": 1,
         "documented_cases_without_match": 0,
+        "documented_cases_without_match_names": [],
         "documented_cases_with_multiple_matches": 0,
+        "documented_cases_with_multiple_matches_names": [],
         "matched_cases_chrysalis": 1,
+        "matched_cases_chrysalis_names": ["v3.NARRM.amip_0101"],
     }
     assert case.links == []
 
@@ -149,6 +154,36 @@ def test_reconcile_cases_reports_perlmutter_matches() -> None:
 
     assert summary["matched_cases"] == 1
     assert summary["matched_cases_perlmutter"] == 1
+    assert summary["matched_case_names"] == ["v3.LR.amip_bonus_0101"]
+    assert summary["matched_cases_perlmutter_names"] == ["v3.LR.amip_bonus_0101"]
+
+
+def test_reconcile_cases_reports_names_for_missing_and_duplicate_matches() -> None:
+    cases = [
+        _case("v3.LR.amip_0101"),
+        _case("v3.LR.amip_0101", machine_name="perlmutter"),
+    ]
+    mappings = [
+        _mapping("v3.LR.amip_0101"),
+        _mapping("v3.NARRM.amip_0101"),
+    ]
+
+    summary = linker.reconcile_cases(cases, mappings, apply=False)
+
+    assert summary["documented_case_names"] == [
+        "v3.LR.amip_0101",
+        "v3.NARRM.amip_0101",
+    ]
+    assert summary["documented_cases_without_match_names"] == ["v3.NARRM.amip_0101"]
+    assert summary["documented_cases_with_multiple_matches_names"] == [
+        "v3.LR.amip_0101"
+    ]
+    assert summary["matched_case_names"] == [
+        "v3.LR.amip_0101",
+        "v3.LR.amip_0101",
+    ]
+    assert summary["matched_cases_chrysalis_names"] == ["v3.LR.amip_0101"]
+    assert summary["matched_cases_perlmutter_names"] == ["v3.LR.amip_0101"]
 
 
 def test_reconcile_cases_creates_and_preserves_managed_link() -> None:

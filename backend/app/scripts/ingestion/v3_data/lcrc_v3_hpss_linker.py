@@ -6,7 +6,7 @@ import argparse
 import sys
 import urllib.error
 import urllib.request
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
@@ -31,6 +31,7 @@ CHRYSALIS_MACHINE_NAME = "chrysalis"
 PERLMUTTER_MACHINE_NAME = "perlmutter"
 LINKABLE_MACHINE_NAMES = frozenset({CHRYSALIS_MACHINE_NAME, PERLMUTTER_MACHINE_NAME})
 LONG_TERM_ARCHIVE_LABEL = "Long-Term Archive"
+ReconciliationSummary = dict[str, int | list[str]]
 
 
 @dataclass(frozen=True)
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _run(*, apply: bool, source_file: Path | None = None) -> Counter[str]:
+def _run(*, apply: bool, source_file: Path | None = None) -> ReconciliationSummary:
     """Run a dry-run or write-mode reconciliation against linkable v3 cases."""
     mappings = _parse_hpss_mappings(_read_document(source_file))
     if not mappings:
@@ -211,12 +212,13 @@ def _normalize_case_name(simulation: str) -> str:
 
 def reconcile_cases(
     cases: list[Case], mappings: list[HpssMapping], *, apply: bool
-) -> Counter[str]:
+) -> ReconciliationSummary:
     """Reconcile managed long-term archive links for the supplied cases."""
     mappings_by_case = _mapping_by_case_name(mappings)
     summary: Counter[str] = Counter(documented_cases=len(mappings_by_case))
     matched_case_names: set[str] = set()
     matched_case_counts: Counter[str] = Counter()
+    matched_case_names_by_machine: defaultdict[str, list[str]] = defaultdict(list)
 
     for case in cases:
         machine_name = _case_machine_name(case)
@@ -230,6 +232,7 @@ def reconcile_cases(
         summary[f"matched_cases_{machine_name}"] += 1
         matched_case_names.add(case.name)
         matched_case_counts[case.name] += 1
+        matched_case_names_by_machine[machine_name].append(case.name)
         managed_links = [
             link
             for link in case.links
@@ -288,7 +291,25 @@ def reconcile_cases(
         count > 1 for count in matched_case_counts.values()
     )
 
-    return summary
+    return {
+        **summary,
+        "documented_case_names": sorted(mappings_by_case),
+        "documented_cases_without_match_names": sorted(
+            set(mappings_by_case) - matched_case_names
+        ),
+        "documented_cases_with_multiple_matches_names": sorted(
+            case_name for case_name, count in matched_case_counts.items() if count > 1
+        ),
+        "matched_case_names": sorted(
+            case_name
+            for case_names in matched_case_names_by_machine.values()
+            for case_name in case_names
+        ),
+        **{
+            f"matched_cases_{machine_name}_names": sorted(case_names)
+            for machine_name, case_names in matched_case_names_by_machine.items()
+        },
+    }
 
 
 def _case_machine_name(case: Case) -> str:
