@@ -1,8 +1,8 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Copy, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import {
   MISSING_CASE_HASH_LABEL,
 } from '@/features/catalog/caseUtils';
 import { SearchableFilterSelect } from '@/features/catalog/components/SearchableFilterSelect';
+import { toast } from '@/hooks/use-toast';
 import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
 import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
@@ -82,6 +83,100 @@ const CASE_SORT_FIELDS: Record<string, string> = {
   caseGroup: 'case_group',
 };
 
+const DEFAULT_SORTING: SortingState = [{ id: 'latestRun', desc: true }];
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const CASE_SEARCH_PARAM_KEYS = [
+  'search',
+  'caseGroup',
+  'machineId',
+  'hpcUsername',
+  'campaign',
+  'simulationType',
+  'initializationType',
+  'compiler',
+  'gitTag',
+  'sortBy',
+  'sortOrder',
+  'page',
+  'pageSize',
+] as const;
+
+interface CaseSearchState {
+  caseNameFilter: string;
+  caseGroupFilter: string;
+  executionFilters: CaseExecutionFilters;
+  sorting: SortingState;
+  pagination: { pageIndex: number; pageSize: number };
+}
+
+const getTextParam = (params: URLSearchParams, key: string): string => params.get(key)?.trim() ?? '';
+
+const parsePositiveInteger = (value: string | null, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
+  const sortBy = params.get('sortBy');
+  const sortOrder = params.get('sortOrder');
+  const pageSize = parsePositiveInteger(params.get('pageSize'), DEFAULT_PAGE_SIZE);
+
+  return {
+    caseNameFilter: getTextParam(params, 'search'),
+    caseGroupFilter: getTextParam(params, 'caseGroup'),
+    executionFilters: {
+      hpcUsername: getTextParam(params, 'hpcUsername'),
+      machineId: getTextParam(params, 'machineId'),
+      campaign: getTextParam(params, 'campaign'),
+      simulationType: getTextParam(params, 'simulationType'),
+      initializationType: getTextParam(params, 'initializationType'),
+      compiler: getTextParam(params, 'compiler'),
+      gitTag: getTextParam(params, 'gitTag'),
+    },
+    sorting:
+      sortBy &&
+      Object.prototype.hasOwnProperty.call(CASE_SORT_FIELDS, sortBy) &&
+      (sortOrder === 'asc' || sortOrder === 'desc')
+        ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+        : DEFAULT_SORTING,
+    pagination: {
+      pageIndex: parsePositiveInteger(params.get('page'), 1) - 1,
+      pageSize: PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE,
+    },
+  };
+};
+
+const serializeCaseSearchState = ({
+  caseNameFilter,
+  caseGroupFilter,
+  executionFilters,
+  sorting,
+  pagination,
+}: CaseSearchState): URLSearchParams => {
+  const params = new URLSearchParams();
+  const search = caseNameFilter.trim();
+
+  if (search) params.set('search', search);
+  if (caseGroupFilter) params.set('caseGroup', caseGroupFilter);
+
+  (Object.entries(executionFilters) as [keyof CaseExecutionFilters, string][]).forEach(
+    ([key, value]) => {
+      if (value) params.set(key, value);
+    },
+  );
+
+  const primarySort = sorting[0];
+  if (primarySort && !(primarySort.id === 'latestRun' && primarySort.desc)) {
+    params.set('sortBy', primarySort.id);
+    params.set('sortOrder', primarySort.desc ? 'desc' : 'asc');
+  }
+  if (pagination.pageIndex > 0) params.set('page', String(pagination.pageIndex + 1));
+  if (pagination.pageSize !== DEFAULT_PAGE_SIZE) params.set('pageSize', String(pagination.pageSize));
+
+  return params;
+};
+
 const getLatestExecution = (caseRecord: CaseListItemOut) => caseRecord.latestExecution;
 
 const formatLatestCompletedRun = (runEndDate: string | null) =>
@@ -104,15 +199,27 @@ const UnavailableTimestamp = () => (
 
 export const CasesPage = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialSearchState] = useState(() => parseCaseSearchState(searchParams));
+  const isApplyingUrlState = useRef(false);
   const currentPath = `${location.pathname}${location.search}`;
 
-  const [caseNameFilter, setCaseNameFilter] = useState('');
-  const [debouncedCaseName, setDebouncedCaseName] = useState('');
-  const [caseGroupFilter, setCaseGroupFilter] = useState('');
+  const [caseNameFilter, setCaseNameFilter] = useState(initialSearchState.caseNameFilter);
+  const [debouncedCaseName, setDebouncedCaseName] = useState(initialSearchState.caseNameFilter);
+  const [caseGroupFilter, setCaseGroupFilter] = useState(initialSearchState.caseGroupFilter);
   const [executionFilters, setExecutionFilters] = useState<CaseExecutionFilters>(
-    createEmptyExecutionFilters,
+    initialSearchState.executionFilters,
   );
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(() =>
+    [
+      initialSearchState.caseGroupFilter,
+      initialSearchState.executionFilters.campaign,
+      initialSearchState.executionFilters.simulationType,
+      initialSearchState.executionFilters.initializationType,
+      initialSearchState.executionFilters.compiler,
+      initialSearchState.executionFilters.gitTag,
+    ].some(Boolean),
+  );
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const caseFilterOptionParams = useMemo(
     () => ({
@@ -150,18 +257,71 @@ export const CasesPage = () => {
     expandedCaseId != null,
   );
   const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'latestRun', desc: true }]);
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [sorting, setSorting] = useState<SortingState>(initialSearchState.sorting);
+  const [pagination, setPagination] = useState(initialSearchState.pagination);
+  const canonicalSearchParams = useMemo(
+    () =>
+      serializeCaseSearchState({
+        caseNameFilter: debouncedCaseName,
+        caseGroupFilter,
+        executionFilters,
+        sorting,
+        pagination,
+      }),
+    [caseGroupFilter, debouncedCaseName, executionFilters, pagination, sorting],
+  );
+
+  useEffect(() => {
+    const next = parseCaseSearchState(searchParams);
+    const canonicalParams = serializeCaseSearchState(next);
+    const normalizedParams = new URLSearchParams(searchParams);
+    CASE_SEARCH_PARAM_KEYS.forEach((key) => normalizedParams.delete(key));
+    canonicalParams.forEach((value, key) => normalizedParams.set(key, value));
+
+    isApplyingUrlState.current = true;
+    setCaseNameFilter(next.caseNameFilter);
+    setDebouncedCaseName(next.caseNameFilter);
+    setCaseGroupFilter(next.caseGroupFilter);
+    setExecutionFilters(next.executionFilters);
+    setSorting(next.sorting);
+    setPagination(next.pagination);
+    setShowAdvancedFilters(
+      [
+        next.caseGroupFilter,
+        next.executionFilters.campaign,
+        next.executionFilters.simulationType,
+        next.executionFilters.initializationType,
+        next.executionFilters.compiler,
+        next.executionFilters.gitTag,
+      ].some(Boolean),
+    );
+
+    if (normalizedParams.toString() !== searchParams.toString()) {
+      setSearchParams(normalizedParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedCaseName(caseNameFilter.trim()), 300);
     return () => window.clearTimeout(timeout);
   }, [caseNameFilter]);
+
   useEffect(() => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [debouncedCaseName, caseGroupFilter, executionFilters]);
-  useEffect(() => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [sorting]);
+    if (isApplyingUrlState.current) {
+      isApplyingUrlState.current = false;
+      return;
+    }
+
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        CASE_SEARCH_PARAM_KEYS.forEach((key) => next.delete(key));
+        canonicalSearchParams.forEach((value, key) => next.set(key, value));
+        return next.toString() === previous.toString() ? previous : next;
+      },
+      { replace: true },
+    );
+  }, [canonicalSearchParams, setSearchParams]);
   const primarySort = sorting[0];
   const {
     data: cases,
@@ -183,6 +343,15 @@ export const CasesPage = () => {
     sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'latest_run_activity',
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
+
+  useEffect(() => {
+    if (!casePage) return;
+
+    const lastPageIndex = Math.max(0, Math.ceil(casePage.total / pagination.pageSize) - 1);
+    setPagination((current) =>
+      current.pageIndex > lastPageIndex ? { ...current, pageIndex: lastPageIndex } : current,
+    );
+  }, [casePage, pagination.pageSize]);
 
   const executionsByCaseId = useMemo(() => {
     const caseMap = new Map<string, ExecutionListItemOut[]>();
@@ -344,6 +513,28 @@ export const CasesPage = () => {
     table.setPageIndex(0);
   };
 
+  const handleCopySearch = async () => {
+    const query = canonicalSearchParams.toString();
+    const searchUrl = new URL(
+      `${location.pathname}${query ? `?${query}` : ''}`,
+      window.location.origin,
+    ).toString();
+
+    try {
+      await navigator.clipboard.writeText(searchUrl);
+      toast({
+        title: 'Search link copied',
+        description: 'This link restores the current case search.',
+      });
+    } catch {
+      toast({
+        title: 'Unable to copy search link',
+        description: 'Copy the URL from your browser instead.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const filteredCases = useMemo(() => {
     const normalizedNameFilter = caseNameFilter.trim().toLowerCase();
 
@@ -419,6 +610,7 @@ export const CasesPage = () => {
                 onClick={(event) => {
                   event.stopPropagation();
                   setCaseGroupFilter(row.original.caseGroup ?? '');
+                  setPagination((current) => ({ ...current, pageIndex: 0 }));
                 }}
               >
                 Group: {row.original.caseGroup}
@@ -471,7 +663,10 @@ export const CasesPage = () => {
     data: filteredCases,
     columns,
     state: { sorting, pagination },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting(updater);
+      setPagination((current) => ({ ...current, pageIndex: 0 }));
+    },
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
@@ -704,6 +899,17 @@ export const CasesPage = () => {
                       />
                     </Button>
                   </CollapsibleTrigger>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => void handleCopySearch()}
+                    disabled={canonicalSearchParams.size === 0}
+                    className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                    aria-label="Copy search link"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy search
+                  </Button>
                   <Button
                     variant="ghost"
                     type="button"
