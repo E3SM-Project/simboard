@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     github_client_secret: str
     github_redirect_url: str
     github_state_secret_key: str
+    github_oauth_state_cookie_name: str = "simboard_github_oauth_state"
+    github_oauth_state_cookie_max_age: int = 600
 
     # --- Token lifetimes ---
     lifetime_seconds: int = 3600
