@@ -27,7 +27,7 @@ set +a
 : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in LCRC_V3_ENV_FILE.}"
 : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in LCRC_V3_ENV_FILE.}"
 
-export DRY_RUN="${DRY_RUN:-true}"
+export DRY_RUN="${LCRC_V3_DRY_RUN:-${DRY_RUN:-true}}"
 export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF}"
 
 cd "${BACKEND_DIR}"

@@ -56,6 +56,8 @@ help:
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
+	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
+	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make v3-hpss-link-dry-run                    # Reconcile v3 HPSS case links without writing"
 	@echo "  make v3-hpss-link-apply                      # Create or update reconciled v3 HPSS case links"
 	@echo ""
@@ -222,7 +224,7 @@ docs-build:
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-hpss-link-dry-run v3-hpss-link-apply
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply v3-hpss-link-dry-run v3-hpss-link-apply
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -266,6 +268,22 @@ backend-provision-service:
 	cd $(BACKEND_DIR) && \
 	uv run python -m app.scripts.users.provision_service_account \
 		--service-name "$(service_name)"
+
+v3-ingest-dry-run:
+	@if [ -z "$(LCRC_V3_ENV_FILE)" ]; then \
+		echo "Usage: make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path>"; \
+		exit 1; \
+	fi
+	LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
+
+v3-ingest-apply:
+	@if [ -z "$(LCRC_V3_ENV_FILE)" ]; then \
+		echo "Usage: make v3-ingest-apply LCRC_V3_ENV_FILE=<path>"; \
+		exit 1; \
+	fi
+	LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 v3-hpss-link-dry-run:
 	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker

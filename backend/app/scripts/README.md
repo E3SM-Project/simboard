@@ -1,58 +1,29 @@
-# Scripts
+# Operational Scripts
 
-This directory contains standalone operational scripts for the backend application.
+This directory contains administrative scripts for database management, account
+provisioning, archive ingestion, and diagnostics discovery. These scripts are
+internal operational entry points and are not part of the public API.
 
-These scripts are used for administrative and database-related tasks and are not part of the public API surface.
+## Quick Start
 
----
+### Requirements
 
-## Structure
+Before running a script:
 
-Scripts are organized by domain:
+1. Set the required environment variables.
+2. Confirm that the target database or API is accessible.
+3. Activate the correct local, staging, or production environment.
 
-```text
-scripts/
-├── ingestion/
-│   ├── archive_client.py
-│   ├── archive_discovery.py
-│   ├── archive_ingestor_core.py
-│   ├── archive_layout.py
-│   ├── archive_workflow.py
-│   ├── diagnostics_archives.py
-│   ├── diagnostics_link_scanner.py
-│   ├── hpc_upload_archive_ingestor.py
-│   ├── nersc_archive_ingestor.py
-│   ├── sites/
-│   │   ├── lcrc-diagnostics-scanner.sh
-│   │   ├── nersc-diagnostics-scanner.sh
-│   │   └── nersc.sh
-│   └── v3_data/
-│       ├── __init__.py
-│       ├── lcrc-v3.env.example
-│       ├── lcrc_v3.sh
-│       └── lcrc_v3_archive_ingestor.py
-├── db/
-│   ├── seed.py
-│   ├── rollback_seed.py
-│   └── catalog.json
-└── users/
-    ├── create_admin_account.py
-    └── provision_service_account.py
-```
+Scripts may depend on:
 
-### Domains
+- Application configuration from `app.core.config`
+- Database configuration from `app.core.database` or `database_async`
+- SQLAlchemy models and application services
 
-- **ingestion/** — Scheduled ingestion runners for HPC/performance archive workflows
-- **db/** — Database migration, seeding, and rollback utilities
-- **users/** — Administrative and service account management
+### Run Scripts as Modules
 
----
-
-## Execution
-
-All scripts must be executed as modules from the project root to ensure proper import resolution.
-
-Example:
+Run all scripts as modules from the project root. This ensures correct package
+imports, configuration loading, and environment behavior.
 
 ```bash
 python -m app.scripts.db.seed
@@ -60,6 +31,7 @@ python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
 python -m app.scripts.ingestion.nersc_archive_ingestor
 python -m app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor
+python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
 ```
 
 Do not execute scripts directly by file path:
@@ -69,69 +41,98 @@ Do not execute scripts directly by file path:
 python app/scripts/db/seed.py
 ```
 
-Module execution ensures:
+## Script Directory
 
-- Correct package imports
-- Proper configuration loading
-- Consistent environment behavior
+Scripts are organized by domain:
 
----
+| Domain       | Purpose                                                          |
+| ------------ | ---------------------------------------------------------------- |
+| `ingestion/` | Scheduled ingestion, archive backfill, and diagnostics workflows |
+| `db/`        | Database seeding and rollback utilities                          |
+| `users/`     | Administrative and service-account management                    |
 
-## Environment Requirements
+The primary operational entry points are:
 
-Scripts depend on:
+| Workflow                 | Entry point                           | Purpose                                           |
+| ------------------------ | ------------------------------------- | ------------------------------------------------- |
+| NERSC archive ingestion  | `nersc_archive_ingestor.py`           | Ingest cases from a backend-mounted archive       |
+| HPC upload ingestion     | `hpc_upload_archive_ingestor.py`      | Package and upload cases from a remote HPC system |
+| Diagnostics scanning     | `diagnostics_link_scanner.py`         | Discover and create case-scoped diagnostic links  |
+| E3SM v3 archive backfill | `v3_data/lcrc_v3_archive_ingestor.py` | Backfill selected Chrysalis simulations           |
+| E3SM v3 HPSS linking     | `v3_data/lcrc_v3_hpss_linker.py`      | Add documented HPSS URLs to existing cases        |
 
-- Application configuration (`app.core.config`)
-- Database configuration (`app.core.database` or `database_async`)
-- SQLAlchemy models and services
+## Common Ingestion Behavior
 
-Before running any script:
+The NERSC path-based and HPC upload ingestors share archive discovery,
+validation, deduplication, state tracking, dry-run, retry, and per-case
+submission behavior.
 
-1. Ensure required environment variables are set.
-2. Ensure the target database is accessible.
-3. Confirm you are using the correct environment (local, staging, etc.).
+### Scan Modes
 
----
+| Mode      | Root variable           | Default root           | Purpose                           |
+| --------- | ----------------------- | ---------------------- | --------------------------------- |
+| `staging` | `PERF_ARCHIVE_ROOT`     | `/performance_archive` | Scan the current staging archive  |
+| `archive` | `OLD_PERF_ARCHIVE_ROOT` | `/OLD_PERF`            | Scan historical archive snapshots |
 
-## Design Guidelines
+Archive mode has these constraints:
 
-When adding new scripts:
+- Only top-level `YYYY-MM` directories are traversed. Other directories are
+  ignored.
+- When a snapshot contains status buckets, only `COMPLETED/` is scanned.
+- Archives without a `COMPLETED/` directory remain supported.
+- Deduplication uses logical case identity and `execution_id`, not the full
+  timestamped snapshot path.
+- `ARCHIVE_YEAR_START` and `ARCHIVE_YEAR_END` can limit historical backfills.
+  Each value accepts `YYYY` or `YYYY-MM`.
+- A year expands to its full boundary: `START=2020` means `2020-01`, and
+  `END=2020` means `2020-12`.
 
-- Keep business logic inside `app.features.*` or service modules.
-- Keep scripts thin; they should:
-  - Initialize configuration
-  - Create database sessions if needed
-  - Call service-layer functions
+### Validation and State
 
-- Avoid duplicating application logic.
-- Make scripts idempotent where possible.
+Both automated ingestors persist immutable validation results before ingestion:
 
----
+- Results are keyed by machine, normalized case identity, and execution ID.
+- Stored outcomes are `accepted`, `rejected_incomplete`, or `rejected_invalid`.
+- Stored results bypass metadata validation on later runs.
+- An `accepted` result means validation passed. Only successful ingestion adds
+  the execution to `processed_execution_ids`.
+- Accepted executions deferred by `MAX_CASES_PER_RUN` or left after a failed
+  request remain eligible for a future run.
+- Typed archive-validation errors are stored as immutable content results.
+- Filesystem `OSError` failures and request failures are transient and are not
+  stored.
+- Persistence is batched and idempotent for exact repeats. A persistence failure
+  or conflicting stored outcome stops ingestion.
+- Dry runs do not write discovery results or processed state.
 
-## Scope
+### Common Environment Variables
 
-These scripts are intended for:
+| Variable                  | Required  | Default                | Purpose                                  |
+| ------------------------- | --------- | ---------------------- | ---------------------------------------- |
+| `SIMBOARD_API_BASE_URL`   | Live runs | None                   | SimBoard API endpoint                    |
+| `SIMBOARD_API_TOKEN`      | Live runs | None                   | Service-account token                    |
+| `SCAN_MODE`               | No        | `staging`              | Select staging or archive scanning       |
+| `PERF_ARCHIVE_ROOT`       | No        | `/performance_archive` | Staging archive root                     |
+| `OLD_PERF_ARCHIVE_ROOT`   | No        | `/OLD_PERF`            | Historical archive root                  |
+| `MACHINE_NAME`            | No        | `perlmutter`           | Source machine recorded during ingestion |
+| `DRY_RUN`                 | No        | `true`                 | Prevent ingestion and state changes      |
+| `MAX_CASES_PER_RUN`       | No        | Unlimited              | Limit submissions per invocation         |
+| `MAX_ATTEMPTS`            | No        | Unlimited              | Limit request attempts                   |
+| `REQUEST_TIMEOUT_SECONDS` | No        | `60`                   | Set the request timeout in seconds       |
+| `ARCHIVE_YEAR_START`      | No        | None                   | Earliest archive month to scan           |
+| `ARCHIVE_YEAR_END`        | No        | None                   | Latest archive month to scan             |
 
-- Development workflows
-- Controlled administrative operations
-- Environment setup tasks
+## Ingestion Workflows
 
-If operational complexity increases, these scripts may later be consolidated into a structured CLI entrypoint.
+### NERSC Path-Based Archive Ingestion
 
----
+#### When to Use It
 
-## NERSC Archive Ingestor
+Use the NERSC archive ingestor when the performance archive is bind-mounted in
+the SimBoard backend environment. It scans for new parseable execution
+directories and calls `/api/v1/ingestions/from-path` for changed cases.
 
-The NERSC archive ingestor scans a bind-mounted performance archive directory,
-detects new parseable execution directories, and calls the SimBoard
-`/api/v1/ingestions/from-path` API for changed cases. It can scan either the
-staging root or the archive root.
-
-Default archive mount path:
-
-- `/performance_archive`
-
-Example:
+#### Run It
 
 ```bash
 SIMBOARD_API_BASE_URL=http://backend:8000 \
@@ -139,160 +140,247 @@ MACHINE_NAME=perlmutter \
 uv run python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
 
-Configuration surface (via env vars):
+#### NERSC Wrapper
 
-- `SIMBOARD_API_BASE_URL`
-- `SIMBOARD_API_TOKEN`
-- `SCAN_MODE` (`staging` or `archive`, default `staging`)
-- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
-- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
-- `MACHINE_NAME` (default `perlmutter`)
-- `DRY_RUN` (default `true`)
-- `MAX_CASES_PER_RUN` (optional, default not set)
-- `MAX_ATTEMPTS` (optional, default not set)
-- `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
-- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
-- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+`backend/app/scripts/ingestion/sites/nersc.sh`:
 
-Helper wrapper:
+- Activates `backend/.venv`
+- Sets the documented NERSC staging and archive roots
+- Defaults to `SCAN_MODE=archive`
+- Defaults to `DRY_RUN=true`
+- Runs `python -m app.scripts.ingestion.nersc_archive_ingestor`
 
-- `backend/app/scripts/ingestion/sites/nersc.sh` activates `backend/.venv`, sets the documented NERSC staging and archive roots, defaults to `SCAN_MODE=archive`, defaults to `DRY_RUN=true`, and then runs `python -m app.scripts.ingestion.nersc_archive_ingestor`.
-- Override `SCAN_MODE`, `DRY_RUN`, or any other supported env var in the caller or cron entry when you need a different schedule or behavior.
+Override `SCAN_MODE`, `DRY_RUN`, or another supported variable in the calling
+environment or cron entry when a different behavior is required.
 
-Archive notes:
+### HPC Upload Archive Ingestion
 
-- Archive mode traverses only top-level `YYYY-MM` directories under `OLD_PERF_ARCHIVE_ROOT`. Other top-level directories are ignored.
-- Archive scans may include paths without a `COMPLETED/` directory. When snapshot status buckets exist, ingestor scans only `COMPLETED/` and ignores sibling directories in that snapshot bucket.
-- Archive dedupe is based on logical case identity plus `execution_id`, not the full timestamped snapshot path.
-- `ARCHIVE_YEAR_START` / `ARCHIVE_YEAR_END` are intended for scoped backfills so operators can avoid scanning the full historical tree when unnecessary.
-- `YYYY` values expand to full-year bounds (`START=2020` means `2020-01`; `END=2020` means `2020-12`), while `YYYY-MM` values target exact archive month buckets.
+#### When to Use It
 
-## One-Time Chrysalis E3SM v3 Archive Backfill
-
-`v3_data/lcrc_v3_archive_ingestor.py` is a targeted remote-upload backfill for
-simulations stored on LCRC Chrysalis and listed in
-the [E3SM v3 simulation table](https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/CoupledSystem/simulation_data/simulation_table.html).
-It uses a static copy of the table's `Simulation` values, matches archive case
-directory leaf names exactly, forces archive scanning from `2024-01`, and
-reuses the HPC upload runner's discovery, validation, deduplication, packaging,
-and `/api/v1/ingestions/from-hpc-upload` request logic.
-
-For this one-time backfill, copy the committed template outside the repository,
-secure it, replace its placeholders, then run a dry run:
-
-```bash
-mkdir -p ~/.config/simboard
-cp app/scripts/ingestion/v3_data/lcrc-v3.env.example ~/.config/simboard/lcrc-v3.env
-chmod 600 ~/.config/simboard/lcrc-v3.env
-# Edit ~/.config/simboard/lcrc-v3.env to replace placeholders.
-LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env \
-  ./app/scripts/ingestion/v3_data/lcrc_v3.sh
-```
-
-`backend/app/scripts/ingestion/v3_data/lcrc_v3.sh` sources the selected
-environment file, requires `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`,
-and defaults the LCRC archive root and dry-run mode. Set the optional
-`OLD_PERF_ARCHIVE_ROOT` in that file only when storage is mounted elsewhere.
-
-Review `v3_case_match`, `v3_case_missing`, and `v3_ingestion_summary` events.
-The command exits nonzero when an expected simulation is missing, filesystem
-traversal is incomplete, an execution has a transient validation error, or a
-live ingestion request fails. Set `DRY_RUN=false` only after every expected
-simulation maps to the intended archive case directories.
-
-This targeted runner deliberately ignores database-backed archive snapshot
-checkpoints and never writes new ones. A filtered backfill cannot safely mark a
-mixed snapshot complete for the general archive runner. Processed execution
-state and immutable discovery results still make repeated runs idempotent.
-
-Run this module on Chrysalis, where source case directories are readable. It
-requires explicit `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` values for an
-externally reachable SimBoard deployment, defaults `OLD_PERF_ARCHIVE_ROOT` to
-the documented Chrysalis archive root, and records uploads under machine
-`chrysalis`. Retry, timeout, case-limit, dry-run, and optional
-`ARCHIVE_YEAR_END` variables remain supported. `SCAN_MODE`,
-`ARCHIVE_YEAR_START`, and `MACHINE_NAME` are ignored because source site and
-scan scope are fixed.
-## Diagnostics Provenance Scanner
-
-Scans newest paired zppy provenance from the reviewed static registry and creates
-case-scoped diagnostic links. It never reads Mache configuration at runtime.
-
-Run through the NERSC wrapper:
-
-```bash
-SIMBOARD_API_TOKEN=<service-account-token> \
-MACHINE_NAME=perlmutter \
-DRY_RUN=true \
-backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
-```
-
-Use `sites/lcrc-diagnostics-scanner.sh` at LCRC with
-`MACHINE_NAME=chrysalis`. `MACHINE_NAME` is required for every diagnostics
-scanner invocation; wrappers do not assign a machine default. A non-dry run
-also requires an API base URL and service-account token. Roots and public URLs
-come only from `diagnostics_archives.py`.
-
-Start with `DRY_RUN=true`; it needs no API URL or token. Inspect logs, then
-schedule with `DRY_RUN=false`, which requires both API URL and service token.
-The scanner emits structured events for startup configuration, discovery,
-candidate selection, state lookups, retry outcomes, and completion; credentials
-are never logged. Dry runs also emit one candidate event per discovered link.
-Scanner account needs read/traverse access to `production/` and `development/`,
-provenance settings, and published output. Failed or not-ready candidates retry
-next run. Refresh registry entries from Mache `[web_portal]` cfg data only in a
-reviewed change; never add archive-path environment overrides.
-
-## HPC Upload Archive Ingestor
-
-The HPC upload archive ingestor uses the same scan, state, dry-run, retry, and
-per-case submission-state flow as the NERSC path ingestor, but packages each submission-qualified case
-directory into a temporary single-case `.tar.gz` archive and calls
+Use the HPC upload ingestor when the source filesystem is not mounted in the
+SimBoard backend environment. It packages each submission-qualified case as a
+temporary `.tar.gz` archive and calls
 `/api/v1/ingestions/from-hpc-upload`.
 
-Both automated runners persist immutable validation results before ingestion.
-Results are keyed by machine, normalized case identity, and execution ID with
-outcomes `accepted`, `rejected_incomplete`, or `rejected_invalid`. Stored
-results bypass later metadata validation. Discovery `accepted` means validation
-passed; only successful ingestion adds `processed_execution_ids`. Thus accepted
-executions deferred by `MAX_CASES_PER_RUN` or left after failed ingestion remain
-future candidates. Typed archive validation errors are immutable content
-results, while plain filesystem `OSError` failures and request failures remain
-transient and unstored. Persistence is batched, idempotent for exact repeats,
-and stops ingestion on failure or conflicting stored outcomes. Dry runs perform
-no discovery-result or processed-state writes.
-
-Use this runner when the source filesystem is not directly mounted in the
-SimBoard backend environment.
-
-One-case-per-request rule:
-
-- Each upload request contains exactly one case directory.
-- `case_path` is sent alongside the archive and becomes the stable case identifier in
-  the ingestion audit table.
-- Browser/manual uploads still use `/api/v1/ingestions/from-upload`; this runner
-  does not call that endpoint.
-
-Example:
+#### Run It
 
 ```bash
 uv run python -m app.scripts.ingestion.hpc_upload_archive_ingestor
 ```
 
-Configuration surface (via env vars):
+The common ingestion environment variables and archive rules apply.
+
+#### Upload Rules
+
+- Each request contains exactly one case directory.
+- `case_path` is sent with the archive and becomes the stable case identifier in
+  the ingestion audit table.
+- Browser and manual uploads continue to use
+  `/api/v1/ingestions/from-upload`. This runner does not call that endpoint.
+
+### Diagnostics Provenance Scanner
+
+#### When to Use It
+
+Use the diagnostics scanner to find the newest paired zppy provenance from the
+reviewed static registry and create case-scoped diagnostic links. The scanner
+does not read Mache configuration at runtime.
+
+#### Run It at NERSC
+
+Start with a dry run:
+
+```bash
+MACHINE_NAME=perlmutter \
+DRY_RUN=true \
+backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh
+```
+
+After reviewing the logs, run or schedule it with `DRY_RUN=false` and provide:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
-- `SCAN_MODE` (`staging` or `archive`, default `staging`)
-- `PERF_ARCHIVE_ROOT` (default `/performance_archive` for `SCAN_MODE=staging`)
-- `OLD_PERF_ARCHIVE_ROOT` (default `/OLD_PERF` for `SCAN_MODE=archive`)
-- `MACHINE_NAME` (default `perlmutter`)
-- `DRY_RUN` (default `true`)
-- `MAX_CASES_PER_RUN` (optional, default not set)
-- `MAX_ATTEMPTS` (optional, default not set)
-- `REQUEST_TIMEOUT_SECONDS` (optional, default 60)
-- `ARCHIVE_YEAR_START` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
-- `ARCHIVE_YEAR_END` (optional, archive mode only; accepts `YYYY` or `YYYY-MM`)
+- `MACHINE_NAME=perlmutter`
 
-Archive mode uses same `YYYY-MM` top-level bucket requirement described above
-for path-based ingestion.
+#### Run It at LCRC
+
+Use `sites/lcrc-diagnostics-scanner.sh` with `MACHINE_NAME=chrysalis`.
+
+`MACHINE_NAME` is required for every invocation. The wrappers do not assign a
+default machine.
+
+#### Operational Behavior
+
+- Dry runs require no API URL or token and emit one candidate event per
+  discovered link.
+- Structured events cover startup configuration, discovery, candidate
+  selection, state lookups, retry outcomes, and completion.
+- Credentials are never logged.
+- Failed or not-ready candidates are retried during the next run.
+- Archive roots and public URLs come only from `diagnostics_archives.py`.
+
+#### Required Filesystem Access
+
+The scanner account needs read and traverse access to:
+
+- `production/`
+- `development/`
+- Provenance settings
+- Published output
+
+Refresh registry entries from Mache `[web_portal]` configuration only through a
+reviewed code change. Do not add archive-path environment overrides.
+
+## One-Time E3SM v3 Backfills
+
+### Chrysalis Archive Backfill
+
+#### Purpose
+
+`v3_data/lcrc_v3_archive_ingestor.py` performs a targeted remote-upload backfill
+for simulations stored on LCRC Chrysalis and listed in the
+[E3SM v3 simulation table](https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/CoupledSystem/simulation_data/simulation_table.html).
+
+The runner:
+
+- Uses a static copy of the table's `Simulation` values.
+- Matches archive case-directory leaf names exactly.
+- Forces archive scanning to start at `2024-01`.
+- Reuses the HPC upload runner's discovery, validation, deduplication,
+  packaging, and `/api/v1/ingestions/from-hpc-upload` request logic.
+- Records uploads under machine `chrysalis`.
+
+Run the module on Chrysalis, where the source case directories are readable and
+the SimBoard deployment is externally reachable.
+
+#### Prepare Configuration
+
+Copy the committed template outside the repository, restrict its permissions,
+and replace its placeholders:
+
+```bash
+mkdir -p ~/.config/simboard
+cp app/scripts/ingestion/v3_data/lcrc-v3.env.example \
+  ~/.config/simboard/lcrc-v3.env
+chmod 600 ~/.config/simboard/lcrc-v3.env
+
+# Edit ~/.config/simboard/lcrc-v3.env and replace its placeholders.
+```
+
+The environment file must define:
+
+- `SIMBOARD_API_BASE_URL`
+- `SIMBOARD_API_TOKEN`
+
+Set `OLD_PERF_ARCHIVE_ROOT` only when the Chrysalis archive is mounted somewhere
+other than its documented default.
+
+#### Run from the Repository Root
+
+Start with the Make dry run:
+
+```bash
+make v3-ingest-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+```
+
+Review these events:
+
+- `v3_case_match`
+- `v3_case_missing`
+- `v3_ingestion_summary`
+
+The dry run exits nonzero when:
+
+- An expected simulation is missing.
+- Filesystem traversal is incomplete.
+- An execution has a transient validation error.
+- A simulated live-ingestion request would fail.
+
+After every expected simulation maps to the intended archive case directory,
+run the explicit apply target:
+
+```bash
+make v3-ingest-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+```
+
+The Make targets override `DRY_RUN`; keep the external environment file focused
+on the API credentials and optional archive-root override.
+
+#### Fixed and Supported Settings
+
+The source site and scan scope are fixed. The runner ignores:
+
+- `SCAN_MODE`
+- `ARCHIVE_YEAR_START`
+- `MACHINE_NAME`
+
+The following controls remain supported:
+
+- `MAX_ATTEMPTS`
+- `MAX_CASES_PER_RUN`
+- `REQUEST_TIMEOUT_SECONDS`
+- `ARCHIVE_YEAR_END`
+
+#### State Behavior
+
+This targeted runner does not read or write database-backed archive snapshot
+checkpoints. A filtered backfill cannot safely mark a mixed snapshot as complete
+for the general archive runner. Processed-execution state and immutable
+discovery results still make repeated runs idempotent.
+
+### E3SM v3 HPSS Linker
+
+#### Purpose
+
+`v3_data/lcrc_v3_hpss_linker.py` links existing Chrysalis cases to the HPSS URLs
+documented in the E3SM v3 simulation table. It does not ingest archive data or
+read the Chrysalis filesystem.
+
+Run it from a SimBoard backend environment with:
+
+- `DATABASE_URL` and the normal backend settings
+- Network access to the documentation page, unless `--source-file` is used
+
+It does not require `SIMBOARD_API_BASE_URL` or `SIMBOARD_API_TOKEN`.
+
+#### Matching and Safety Rules
+
+Before changing links, the linker loads the complete set of existing
+`chrysalis` cases and reports:
+
+- Documented mappings without a matching case
+- Cases with duplicate user-scoped matches
+
+The linker never guesses unresolved records. Matching cases may still be linked
+during `--apply`, but `--apply` refuses to make any changes if a documented case
+is missing from the loaded Chrysalis case set.
+
+#### Dry Run and Apply
+
+Review the dry-run reconciliation counts before applying changes:
+
+```bash
+make v3-hpss-link-dry-run
+make v3-hpss-link-apply
+```
+
+Use the direct module form only when providing a saved copy of the table:
+
+```bash
+uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker \
+  --source-file /path/to/simulation_table.html
+```
+
+## Development Guidelines
+
+When adding a script:
+
+- Keep business logic in `app.features.*` or service modules.
+- Keep the script focused on configuration, database-session setup, and calls
+  into the service layer.
+- Avoid duplicating application logic.
+- Make operations idempotent where possible.
+
+These scripts support development workflows, controlled administrative
+operations, and environment setup. If operational complexity grows, consolidate
+them behind a structured CLI entry point.
