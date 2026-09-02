@@ -19,6 +19,9 @@ if [[ ! -r "${site_config}" ]]; then
   exit 1
 fi
 
+echo "" >> TMPLOG 2>&1
+echo "DEBUG: TOPSIDE: site_config = ${site_config}" >> TMPLOG 2>&1
+
 # These can be standardized, or overridden by specifiying in the site_config file.
 export SIMBOARD_WORKDIR="${SIMBOARD_ROOT}/operations"
 export SIMBOARD_MODULES="${SIMBOARD_ROOT}/repository/simboard/backend"
@@ -48,7 +51,7 @@ echo "SIMBOARD_API_BASE_URL=${SIMBOARD_API_BASE_URL}" >> TMPLOG 2>&1
 echo "SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=${SIMBOARD_DEFAULT_ARCHIVE_YEAR_START}" >> TMPLOG 2>&1
 
 # Optional max cases per run, default is no limit.
-export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-1}"
+export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-}"
 
 # Dry runs default to read-only remote-state validation. Set
 # DRY_RUN_USE_REMOTE_STATE=false for credential-free offline scanning.
@@ -99,7 +102,7 @@ echo "DEBUG_pre-activate: SIMBOARD_API_BASE_URL = ${SIMBOARD_API_BASE_URL}" >> T
 printf 'DEBUG: ARCHIVE_YEAR_START=%q\n' "${ARCHIVE_YEAR_START-<unset>}" >> TMPLOG 2>&1
 
 ts=`date -u +%Y%m%d_%H%M%S`
-LOG_FILE="$SIMBOARD_WORKDIR/SBCS-$ts.log"
+LOG_FILE="$SIMBOARD_WORKDIR/SBCS-${scan_mode}-${site}-$ts.log"
 echo "DEBUG: LOG_FILE = ${LOG_FILE}" >> TMPLOG 2>&1
 
 echo "DEBUG_post-activate: SIMBOARD_INGESTOR_MODULE = ${SIMBOARD_INGESTOR_MODULE}" >> ${LOG_FILE} 2>&1
