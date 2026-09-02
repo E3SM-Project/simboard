@@ -53,6 +53,7 @@ import {
   type ResourceRowFieldErrors,
   toEditableLinkRows,
 } from '@/features/catalog/externalLinkEditing';
+import { caseDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type {
   ArtifactIn,
@@ -184,7 +185,7 @@ type ResourceRowErrorsState = {
 
 const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
   { value: 'output', label: 'Output' },
-  { value: 'archive', label: 'Archive' },
+  { value: 'archive', label: 'Short-Term Archive' },
   { value: 'run_script', label: 'Run Script' },
   { value: 'postprocessing_script', label: 'Post-processing Script' },
 ];
@@ -907,7 +908,11 @@ export const ExecutionDetailsView = ({
           </Button>
           <h1 className="text-2xl font-bold">{execution.executionId}</h1>
           <Link
-            to={`/cases/${execution.caseId}`}
+            to={caseDetailsPath({
+              machineName: execution.machine.name,
+              hpcUsername: execution.hpcUsername,
+              caseName: execution.caseName,
+            })}
             className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
           >
             <span>Case: {execution.caseName}</span>
@@ -1167,7 +1172,15 @@ export const ExecutionDetailsView = ({
                     compare for side-by-side review.
                   </p>
                   <Button variant="outline" asChild>
-                    <Link to={`/cases/${execution.caseId}`}>Open Case Details</Link>
+                    <Link
+                      to={caseDetailsPath({
+                        machineName: execution.machine.name,
+                        hpcUsername: execution.hpcUsername,
+                        caseName: execution.caseName,
+                      })}
+                    >
+                      Open Case Details
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -1438,7 +1451,7 @@ export const ExecutionDetailsView = ({
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
                           <div className="font-medium">Inherited case links</div>
                           <div className="mt-1 text-muted-foreground">
-                            These links come from case-level diagnostics. They stay visible here but
+                            These links come from the case. They stay visible here but
                             are not changed by execution save.
                           </div>
                           <ul className="mt-3 space-y-2">
@@ -1773,10 +1786,10 @@ export const ExecutionDetailsView = ({
               />
               <ExecutionPathCard
                 kind="archive"
-                title="Archive Paths"
-                description="These paths contain archived data files from the execution."
+                title="Short-Term Archive Paths"
+                description="These paths contain short-term archived data files from the execution."
                 paths={archiveArtifacts}
-                emptyText="No archive artifacts available."
+                emptyText="No short-term archive artifacts available."
               />
               <ExecutionPathCard
                 kind="run_script"

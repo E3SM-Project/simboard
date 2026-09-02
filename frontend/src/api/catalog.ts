@@ -38,6 +38,16 @@ export interface CaseFilterOptionsParams extends PageParams {
   createdBy?: string;
 }
 
+export interface CaseIdentityParams {
+  machineName: string;
+  hpcUsername: string;
+  caseName: string;
+}
+
+export interface ExecutionIdentityParams extends CaseIdentityParams {
+  executionId: string;
+}
+
 const toQueryParams = (params: PageParams) => {
   const query = new URLSearchParams();
 
@@ -154,6 +164,42 @@ export const getExecutionFilterOptions = async (): Promise<ExecutionFilterOption
 export const getCaseById = async (id: string): Promise<CaseDetailOut> => {
   const res = await api.get<CaseDetailOut>(`${CASES_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
+  });
+
+  return res.data;
+};
+
+export const getCaseByIdentity = async ({
+  machineName,
+  hpcUsername,
+  caseName,
+}: CaseIdentityParams): Promise<CaseDetailOut> => {
+  const res = await api.get<CaseDetailOut>(`${CASES_URL}/resolve`, {
+    headers: { 'Cache-Control': 'no-cache' },
+    params: {
+      machine: machineName,
+      hpc_username: hpcUsername,
+      case_name: caseName,
+    },
+  });
+
+  return res.data;
+};
+
+export const getExecutionByIdentity = async ({
+  machineName,
+  hpcUsername,
+  caseName,
+  executionId,
+}: ExecutionIdentityParams): Promise<ExecutionOut> => {
+  const res = await api.get<ExecutionOut>(`${EXECUTIONS_URL}/resolve`, {
+    headers: { 'Cache-Control': 'no-cache' },
+    params: {
+      machine: machineName,
+      hpc_username: hpcUsername,
+      case_name: caseName,
+      execution_id: executionId,
+    },
   });
 
   return res.data;

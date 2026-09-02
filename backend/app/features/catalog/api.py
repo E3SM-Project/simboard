@@ -11,6 +11,7 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.catalog.enums import (
+    ArtifactKind,
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
@@ -27,6 +28,7 @@ from app.features.catalog.models import (
 )
 from app.features.catalog.schemas import (
     CaseDetailOut,
+    CaseExecutionArtifactOut,
     CaseFilterOptionsOut,
     CaseListItemOut,
     CasePageOut,
@@ -451,6 +453,32 @@ def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
 
 
 @case_router.get(
+    "/resolve",
+    response_model=CaseDetailOut,
+    responses={
+        200: {"description": "Case found."},
+        404: {"description": "Case not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def resolve_case(
+    machine: str,
+    hpc_username: str,
+    case_name: str,
+    db: Session = Depends(get_database_session),
+) -> CaseDetailOut:
+    """Retrieve a case by its immutable human-readable identity."""
+    case = _get_case_by_identity(
+        db=db,
+        machine_name=machine,
+        hpc_username=hpc_username,
+        case_name=case_name,
+    )
+
+    return _case_to_detail_out(case)
+
+
+@case_router.get(
     "/{case_id}",
     response_model=CaseDetailOut,
     responses={
@@ -477,20 +505,7 @@ def get_case(
     CaseDetailOut
         The case object with nested execution summaries if found.
     """
-    case = (
-        db.query(Case)
-        .options(selectinload(Case.machine), selectinload(Case.executions))
-        .options(selectinload(Case.links))
-        .filter(Case.id == case_id)
-        .first()
-    )
-
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    resp = _case_to_detail_out(case)
-
-    return resp
+    return _case_to_detail_out(_get_case(case_id, db))
 
 
 @case_router.get(
@@ -901,7 +916,7 @@ def list_executions(  # noqa: C901
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
-            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
     ),
@@ -943,6 +958,42 @@ def get_execution_filter_options(
 ) -> ExecutionFilterOptionsOut:
     """Return distinct scalar execution filter values."""
     return _get_execution_filter_options(db)
+
+
+@execution_router.get(
+    "/resolve",
+    response_model=ExecutionOut,
+    responses={
+        200: {"description": "Execution found."},
+        404: {"description": "Execution not found."},
+        500: {"description": "Internal server error."},
+    },
+)
+def resolve_execution(
+    machine: str,
+    hpc_username: str,
+    case_name: str,
+    execution_id: str,
+    db: Session = Depends(get_database_session),
+) -> ExecutionOut:
+    """Retrieve an execution by its immutable human-readable identity."""
+    case = _get_case_by_identity(
+        db=db,
+        machine_name=machine,
+        hpc_username=hpc_username,
+        case_name=case_name,
+    )
+    execution = (
+        _execution_detail_query(db)
+        .filter(Execution.case_id == case.id)
+        .filter(Execution.execution_id == execution_id)
+        .one_or_none()
+    )
+
+    if execution is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    return _execution_to_out(execution)
 
 
 @execution_router.get(
@@ -1023,7 +1074,7 @@ def _list_executions(  # noqa: C901
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
-            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|"
+            "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
     ),
@@ -1131,12 +1182,15 @@ def _list_executions(  # noqa: C901
         "simulation_start_date": Execution.simulation_start_date,
         "simulation_end_date": Execution.simulation_end_date,
         "run_start_date": Execution.run_start_date,
+        "run_activity": func.coalesce(Execution.run_end_date, Execution.run_start_date),
         "grid_resolution": Execution.grid_resolution,
         "compset": Execution.compset,
         "grid_name": Execution.grid_name,
         "machine_name": Machine.name,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    if sort_by == "run_activity":
+        ordering = ordering.nullslast()
     rows = (
         rows_query.order_by(ordering, Execution.id.asc())
         .offset((page - 1) * page_size)
@@ -1399,6 +1453,55 @@ def _get_execution(
         )
 
     return execution
+
+
+def _case_detail_query(db: Session):
+    """Return a case detail query with all data required by its response."""
+    return (
+        db.query(Case)
+        .options(
+            selectinload(Case.machine),
+            selectinload(Case.executions).selectinload(Execution.artifacts),
+        )
+        .options(selectinload(Case.links))
+    )
+
+
+def _get_case(case_id: UUID, db: Session) -> Case:
+    """Retrieve a case by its immutable internal identifier."""
+    case = _case_detail_query(db).filter(Case.id == case_id).one_or_none()
+
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return case
+
+
+def _get_case_by_identity(
+    *,
+    db: Session,
+    machine_name: str,
+    hpc_username: str,
+    case_name: str,
+) -> Case:
+    """Retrieve a case by its immutable machine, user, and name identity."""
+    machine = resolve_machine_by_name(db, machine_name)
+
+    if machine is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case = (
+        _case_detail_query(db)
+        .filter(Case.machine_id == machine.id)
+        .filter(Case.hpc_username == hpc_username)
+        .filter(Case.name == case_name)
+        .one_or_none()
+    )
+
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return case
 
 
 def _build_case_summary(case: Case) -> dict:
@@ -1669,6 +1772,7 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
     """Convert a Case ORM instance to CaseDetailOut."""
     result = CaseDetailOut(
         **_build_case_summary(case),
+        artifacts=_case_execution_artifacts(case),
         description=case.description,
         key_features=case.key_features,
         known_issues=case.known_issues,
@@ -1676,6 +1780,38 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
     )
 
     return result
+
+
+def _case_execution_artifacts(case: Case) -> list[CaseExecutionArtifactOut]:
+    """Serialize execution-owned artifacts while retaining their execution identity."""
+    artifacts: list[CaseExecutionArtifactOut] = []
+
+    for execution in sorted(
+        case.executions,
+        key=lambda execution: (execution.execution_id, str(execution.id)),
+    ):
+        for artifact in sorted(
+            execution.artifacts,
+            key=lambda artifact: (
+                artifact.kind.value,
+                artifact.created_at,
+                str(artifact.id),
+            ),
+        ):
+            artifacts.append(
+                CaseExecutionArtifactOut(
+                    id=artifact.id,
+                    kind=ArtifactKind(artifact.kind),
+                    uri=artifact.uri,
+                    label=artifact.label,
+                    created_at=artifact.created_at,
+                    updated_at=artifact.updated_at,
+                    execution_uuid=execution.id,
+                    execution_id=execution.execution_id,
+                )
+            )
+
+    return artifacts
 
 
 def _build_artifact_models(artifacts: list) -> list[Artifact]:

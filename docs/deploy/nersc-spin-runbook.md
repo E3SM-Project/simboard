@@ -645,7 +645,7 @@ uploads before the API processes them.
 
 | Annotation key | Value |
 | -------------- | ----- |
-| `nginx.ingress.kubernetes.io/proxy-body-size` | `52m` |
+| `nginx.ingress.kubernetes.io/proxy-body-size` | `325m` |
 
 Keep this value slightly above the backend upload limit in
 `backend/app/features/ingestion/api.py` to allow multipart overhead. Update the

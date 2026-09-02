@@ -1154,7 +1154,12 @@ class TestIngestFromPathEndpoint:
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         case1 = _create_case(db, "test_case_errors", machine=machine)
-        case2 = _create_case(db, "case2_errors", machine=machine)
+        case2 = _create_case(
+            db,
+            "case2_errors",
+            machine=machine,
+            hpc_username="second-test-user",
+        )
 
         mock_executions = [
             ExecutionCreate.model_validate(
@@ -1219,6 +1224,16 @@ class TestIngestFromPathEndpoint:
         assert {execution["case_name"] for execution in data["executions"]} == {
             "test_case_errors",
             "case2_errors",
+        }
+        assert {
+            execution["execution_id"]: (
+                execution["machine_name"],
+                execution["hpc_username"],
+            )
+            for execution in data["executions"]
+        } == {
+            "exec-errors-1": (machine.name, case1.hpc_username),
+            "exec-errors-2": (machine.name, case2.hpc_username),
         }
         assert data["executions"] == data["executions"]
 
@@ -1989,10 +2004,16 @@ class TestIngestFromUploadEndpoint:
         )
 
     def test_save_uploaded_file_rejects_large_files(self, tmp_path: Path):
-        file_content = b"x" * (51 * 1024 * 1024)  # 51MB
+        file_content = b"x" * 11
         upload_file = UploadFile(file=BytesIO(file_content), filename="large_file.zip")
 
-        with pytest.raises(HTTPException) as exc_info:
+        with (
+            patch(
+                "app.features.ingestion.api.MAX_UPLOAD_SIZE_BYTES",
+                10,
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             _save_uploaded_file_and_hash(upload_file, tmp_path / "large_file.zip")
 
         assert exc_info.value.status_code == 413

@@ -21,6 +21,22 @@ from app.features.user.models import UserRole
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
+OAUTH_NONCE = "oauth-transaction-nonce"
+
+
+def oauth_callback_request(nonce: str = OAUTH_NONCE) -> Request:
+    """Build a callback request carrying the OAuth transaction cookie."""
+    return Request(
+        {
+            "type": "http",
+            "headers": [
+                (
+                    b"cookie",
+                    f"{settings.github_oauth_state_cookie_name}={nonce}".encode(),
+                )
+            ],
+        }
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +95,54 @@ class TestAuthRoutes:
         )
 
         assert state_data["return_to"] == return_to
+        assert state_data["nonce"]
+        cookie = response.cookies.get(settings.github_oauth_state_cookie_name)
+        assert cookie is not None
+        assert cookie == state_data["nonce"]
+        set_cookie_header = response.headers["set-cookie"].lower()
+        assert f"path={oauth.GITHUB_OAUTH_CALLBACK_PATH}" in set_cookie_header
+        assert "httponly" in set_cookie_header
+        assert "samesite=lax" in set_cookie_header
+
+    async def test_github_oauth_callback_rejects_mismatched_transaction_nonce(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        get_id_email = AsyncMock()
+        monkeypatch.setattr(oauth.GITHUB_OAUTH_CLIENT, "get_id_email", get_id_email)
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": "other"}
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                oauth_callback_request(),
+                access_token_state=({"access_token": "fake_token"}, "valid-state"),
+                user_manager=SimpleNamespace(),
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        get_id_email.assert_not_awaited()
+
+    async def test_github_oauth_callback_rejects_missing_transaction_cookie(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        get_id_email = AsyncMock()
+        monkeypatch.setattr(oauth.GITHUB_OAUTH_CLIENT, "get_id_email", get_id_email)
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                Request({"type": "http", "headers": []}),
+                access_token_state=({"access_token": "fake_token"}, "valid-state"),
+                user_manager=SimpleNamespace(),
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        get_id_email.assert_not_awaited()
 
     async def test_github_oauth_callback_invalid_state(
         self, async_client: AsyncClient
@@ -121,10 +185,13 @@ class TestAuthRoutes:
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", None)),
         )
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             await oauth.github_callback(
-                Request({"type": "http", "headers": []}),
+                oauth_callback_request(),
                 access_token_state=({"access_token": "fake_token"}, "valid-state"),
                 user_manager=SimpleNamespace(),
                 strategy=object(),
@@ -172,7 +239,9 @@ class TestAuthRoutes:
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
         )
-        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
         user_manager = SimpleNamespace(
             oauth_callback=AsyncMock(side_effect=UserAlreadyExists()),
             on_after_login=AsyncMock(),
@@ -180,7 +249,7 @@ class TestAuthRoutes:
 
         with pytest.raises(HTTPException) as exc_info:
             await oauth.github_callback(
-                Request({"type": "http", "headers": []}),
+                oauth_callback_request(),
                 access_token_state=({"access_token": "fake_token"}, "valid-state"),
                 user_manager=user_manager,
                 strategy=object(),
@@ -203,7 +272,9 @@ class TestAuthRoutes:
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
         )
-        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
         user_manager = SimpleNamespace(
             oauth_callback=AsyncMock(return_value=SimpleNamespace(is_active=False)),
             on_after_login=AsyncMock(),
@@ -211,7 +282,7 @@ class TestAuthRoutes:
 
         with pytest.raises(HTTPException) as exc_info:
             await oauth.github_callback(
-                Request({"type": "http", "headers": []}),
+                oauth_callback_request(),
                 access_token_state=({"access_token": "fake_token"}, "valid-state"),
                 user_manager=user_manager,
                 strategy=object(),
@@ -231,7 +302,9 @@ class TestAuthRoutes:
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
         )
         monkeypatch.setattr(
-            oauth, "decode_jwt", lambda *_args, **_kwargs: {"return_to": return_to}
+            oauth,
+            "decode_jwt",
+            lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE, "return_to": return_to},
         )
         monkeypatch.setattr(
             oauth,
@@ -251,7 +324,7 @@ class TestAuthRoutes:
         )
 
         response = await oauth.github_callback(
-            Request({"type": "http", "headers": []}),
+            oauth_callback_request(),
             access_token_state=({"access_token": "fake_token"}, "valid-state"),
             user_manager=user_manager,
             strategy=object(),
@@ -260,6 +333,11 @@ class TestAuthRoutes:
         assert response.status_code == status.HTTP_302_FOUND
         assert response.headers["location"].endswith(
             "auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fexecutions%2Ftest-run%3Ftab%3Dsummary"
+        )
+        assert any(
+            settings.github_oauth_state_cookie_name in set_cookie
+            and "Max-Age=0" in set_cookie
+            for set_cookie in response.headers.getlist("set-cookie")
         )
         user_manager.refresh_github_org_membership.assert_awaited_once()
         user_manager.on_after_login.assert_awaited_once_with(user, ANY, response)
@@ -272,7 +350,9 @@ class TestAuthRoutes:
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
         )
-        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
         monkeypatch.setattr(
             oauth,
             "_fetch_verified_e3sm_membership",
@@ -293,7 +373,7 @@ class TestAuthRoutes:
         )
 
         response = await oauth.github_callback(
-            Request({"type": "http", "headers": []}),
+            oauth_callback_request(),
             access_token_state=({"access_token": "fake_token"}, "valid-state"),
             user_manager=user_manager,
             strategy=object(),
@@ -399,7 +479,9 @@ class TestAuthRoutes:
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
         )
-        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"nonce": OAUTH_NONCE}
+        )
         monkeypatch.setattr(
             oauth,
             "_fetch_verified_e3sm_membership",
@@ -418,7 +500,7 @@ class TestAuthRoutes:
         )
 
         response = await oauth.github_callback(
-            Request({"type": "http", "headers": []}),
+            oauth_callback_request(),
             access_token_state=({"access_token": "fake_token"}, "valid-state"),
             user_manager=user_manager,
             strategy=object(),

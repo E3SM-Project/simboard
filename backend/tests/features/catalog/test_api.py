@@ -21,6 +21,7 @@ from app.features.catalog.api import (
     update_execution,
 )
 from app.features.catalog.enums import (
+    ArtifactKind,
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
@@ -914,6 +915,83 @@ class TestListCaseNames:
 
 
 class TestGetCase:
+    def test_resolve_endpoint_returns_case_by_human_readable_identity(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(
+            db,
+            "test_case_resolve",
+            hpc_username="case-resolve-user",
+        )
+        db.commit()
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(case.id)
+
+    def test_resolve_endpoint_accepts_machine_alias(self, client, db: Session):
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").one_or_none()
+        if machine is None:
+            pytest.skip("Test database does not include the perlmutter machine.")
+        case = _create_case(
+            db,
+            "test_case_resolve_alias",
+            machine_id=machine.id,
+            hpc_username="case-resolve-user",
+        )
+        db.commit()
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": "pm",
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(case.id)
+
+    def test_resolve_endpoint_raises_404_for_missing_case(self, client, db: Session):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": "missing-user",
+                "case_name": "missing-case",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Case not found"}
+
+    def test_resolve_endpoint_raises_404_for_unknown_machine(self, client):
+        response = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": "unknown-machine",
+                "hpc_username": "missing-user",
+                "case_name": "missing-case",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Case not found"}
+
     def test_case_summary_conversion(self, db: Session):
         case = _create_case(db, "summary-conversion-case")
         db.commit()
@@ -989,6 +1067,83 @@ class TestGetCase:
         assert data["executions"][0]["caseHash"] == "detail-hash-1"
         assert data["executions"][0]["simulationStartDate"] == "2023-01-01"
         assert data["links"] == []
+        assert data["artifacts"] == []
+
+    def test_endpoint_includes_artifacts_from_multiple_executions(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "test_case_detail_artifacts")
+        ingestion = _create_ingestion(
+            db,
+            machine.id,
+            normal_user_sync["id"],
+            source_reference="test_case_detail_artifacts",
+        )
+        first_execution = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="case-detail-artifacts-exec-1",
+        )
+        second_execution = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="case-detail-artifacts-exec-2",
+        )
+        db.add_all(
+            [
+                Artifact(
+                    execution_id=first_execution.id,
+                    kind=ArtifactKind.OUTPUT,
+                    uri="https://example.com/first-output",
+                    label="First output",
+                ),
+                Artifact(
+                    execution_id=first_execution.id,
+                    kind=ArtifactKind.ARCHIVE,
+                    uri="/archive/first",
+                ),
+                Artifact(
+                    execution_id=second_execution.id,
+                    kind=ArtifactKind.OUTPUT,
+                    uri="https://example.com/second-output",
+                    label="Second output",
+                ),
+                Artifact(
+                    execution_id=second_execution.id,
+                    kind=ArtifactKind.RUN_SCRIPT,
+                    uri="/scripts/second-run",
+                ),
+            ]
+        )
+        db.commit()
+
+        response = client.get(f"{API_BASE}/cases/{case.id}")
+
+        assert response.status_code == 200
+        artifacts_by_uri = {
+            artifact["uri"]: artifact for artifact in response.json()["artifacts"]
+        }
+        assert len(artifacts_by_uri) == 4
+        first_output = artifacts_by_uri["https://example.com/first-output"]
+        assert first_output["kind"] == "output"
+        assert first_output["label"] == "First output"
+        assert first_output["executionUuid"] == str(first_execution.id)
+        assert first_output["executionId"] == "case-detail-artifacts-exec-1"
+        second_output = artifacts_by_uri["https://example.com/second-output"]
+        assert second_output["kind"] == "output"
+        assert second_output["label"] == "Second output"
+        assert second_output["executionUuid"] == str(second_execution.id)
+        assert second_output["executionId"] == "case-detail-artifacts-exec-2"
+        assert artifacts_by_uri["/archive/first"]["kind"] == "archive"
+        assert artifacts_by_uri["/scripts/second-run"]["kind"] == "run_script"
 
     def test_endpoint_includes_case_level_diagnostic_links(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -2212,6 +2367,7 @@ class TestListExecutions:
             "simulation_start_date",
             "simulation_end_date",
             "run_start_date",
+            "run_activity",
             "grid_resolution",
             "compset",
             "grid_name",
@@ -2232,6 +2388,74 @@ class TestListExecutions:
             ).status_code
             == 422
         )
+
+    def test_run_activity_sort_uses_run_end_and_places_missing_dates_last(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case = _create_case(db, "run-activity-sort-case")
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        completed = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="completed-last",
+        )
+        running = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="running-middle",
+        )
+        missing_dates = _create_execution_record(
+            db,
+            case=case,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="missing-dates",
+        )
+        completed.run_start_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        completed.run_end_date = datetime(2026, 1, 5, tzinfo=timezone.utc)
+        running.run_start_date = datetime(2026, 1, 4, tzinfo=timezone.utc)
+        assert missing_dates.run_start_date is None
+        assert missing_dates.run_end_date is None
+        db.commit()
+
+        data = client.get(
+            f"{API_BASE}/executions",
+            params={
+                "case_id": str(case.id),
+                "sort_by": "run_activity",
+                "sort_order": "desc",
+            },
+        ).json()
+
+        assert [item["executionId"] for item in data["items"]] == [
+            "completed-last",
+            "running-middle",
+            "missing-dates",
+        ]
+
+        ascending_data = client.get(
+            f"{API_BASE}/executions",
+            params={
+                "case_id": str(case.id),
+                "sort_by": "run_activity",
+                "sort_order": "asc",
+            },
+        ).json()
+
+        assert [item["executionId"] for item in ascending_data["items"]] == [
+            "running-middle",
+            "completed-last",
+            "missing-dates",
+        ]
 
     def test_case_scoped_results_continue_after_one_hundred(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -2742,6 +2966,64 @@ class TestListExecutions:
 
 
 class TestGetExecution:
+    def test_resolve_endpoint_returns_execution_by_human_readable_identity(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case, execution = _create_matching_execution(
+            db,
+            case_name="test_execution_resolve",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=normal_user_sync["id"],
+            execution_id="execution-resolve-id",
+            hpc_username="execution-resolve-user",
+            source_reference="test_execution_resolve",
+        )
+
+        response = client.get(
+            f"{API_BASE}/executions/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+                "execution_id": execution.execution_id,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(execution.id)
+
+    def test_resolve_endpoint_raises_404_for_missing_execution(
+        self, client, db: Session, normal_user_sync
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+        case, _ = _create_matching_execution(
+            db,
+            case_name="test_execution_resolve_missing",
+            machine_id=machine.id,
+            machine_name=machine.name,
+            user_id=normal_user_sync["id"],
+            execution_id="existing-execution-id",
+            hpc_username="execution-resolve-user",
+            source_reference="test_execution_resolve_missing",
+        )
+
+        response = client.get(
+            f"{API_BASE}/executions/resolve",
+            params={
+                "machine": machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+                "execution_id": "missing-execution-id",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Execution not found"}
+
     def test_endpoint_succeeds_with_valid_id(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
     ):

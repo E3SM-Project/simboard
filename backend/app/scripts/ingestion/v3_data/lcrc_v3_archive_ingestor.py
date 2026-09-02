@@ -71,6 +71,14 @@ V3_SIMULATIONS = (
     "v3.LR.piClim-histaer_0101",
     "v3.LR.piClim-histaer_0151",
     "v3.LR.piClim-histaer_0201",
+    # v3.LR.amip_bonus_0101 ran on Perlmutter and is handled by its normal
+    # ingestion workflow, not this Chrysalis-targeted backfill.
+    "LR_ensemble",
+    "v3.NARRM.amip_0101",
+    "v3.NARRM_r0125.amip_0101",
+    "RRM_ensemble",
+    "v3.AMZRRM.amip_0101",
+    "v3.EARRM.amip_0101",
 )
 
 

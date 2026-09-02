@@ -1,7 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { getExecutionById } from '@/api/catalog';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
 import { useCase } from '@/lib/catalog/hooks/useCase';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
+import { caseDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionOut } from '@/types';
 
 interface CaseCompareRouteProps {
+  caseId: string;
   onClose?: () => void;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
@@ -21,15 +23,15 @@ interface CaseCompareRouteProps {
 const EMPTY_SELECTED_EXECUTION_IDS: string[] = [];
 
 export const CaseCompareRoute = ({
+  caseId,
   onClose,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
   setSelectedExecutionIds,
 }: CaseCompareRouteProps) => {
   const navigate = useNavigate();
-  const { id: caseId } = useParams<{ id: string }>();
 
-  const { data: caseRecord, error, loading } = useCase(caseId ?? '');
+  const { data: caseRecord, error, loading } = useCase(caseId);
 
   const caseExecutionIdSet = useMemo(
     () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
@@ -147,7 +149,14 @@ export const CaseCompareRoute = ({
     );
   }
 
-  const caseDetailsHref = `/cases/${caseId}`;
+  const caseDetailsHref =
+    caseRecord.machineNames[0] && caseRecord.hpcUsernames[0]
+      ? caseDetailsPath({
+          machineName: caseRecord.machineNames[0],
+          hpcUsername: caseRecord.hpcUsernames[0],
+          caseName: caseRecord.name,
+        })
+      : '/cases';
   const canOpenGlobalCompare = globalCompareCandidateIds.length >= 2;
 
   if (renderableSelectedExecutionIds.length < 2) {

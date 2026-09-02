@@ -8,7 +8,7 @@ import { ExecutionsPage } from '@/features/catalog/ExecutionsPage';
 import { LegacyExecutionRedirect } from '@/features/catalog/LegacyExecutionRedirect';
 
 interface CatalogRoutesProps {
-  renderCaseCompareSection?: (options: { onClose: () => void }) => ReactNode;
+  renderCaseCompareSection?: (options: { caseId: string; onClose: () => void }) => ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
   selectedExecutionIds: string[];
@@ -27,7 +27,7 @@ export const catalogRoutes = ({
     element: <CasesPage />,
   },
   {
-    path: '/cases/:id',
+    path: '/cases/:machine/:hpcUsername/:caseName',
     element: (
       <CaseDetailsPage
         renderCompareSection={renderCaseCompareSection}
@@ -41,7 +41,7 @@ export const catalogRoutes = ({
     element: <ExecutionsPage />,
   },
   {
-    path: '/executions/:id',
+    path: '/cases/:machine/:hpcUsername/:caseName/:executionId',
     element: (
       <ExecutionDetailsPage
         selectedExecutionIds={selectedExecutionIds}
@@ -51,10 +51,6 @@ export const catalogRoutes = ({
   },
   {
     path: '/simulations',
-    element: <LegacyExecutionRedirect />,
-  },
-  {
-    path: '/simulations/:id',
     element: <LegacyExecutionRedirect />,
   },
 ];

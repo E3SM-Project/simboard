@@ -11,6 +11,18 @@ inputs:
   password:
     description: Registry password
     required: true
+  retry-attempts:
+    description: Maximum number of attempts for transient registry failures
+    required: false
+    default: "6"
+  connect-timeout-seconds:
+    description: Per-attempt connection timeout for the registry preflight
+    required: false
+    default: "15"
+  request-timeout-seconds:
+    description: Per-attempt total timeout for the registry preflight
+    required: false
+    default: "30"
 
 runs:
   using: composite
@@ -19,13 +31,35 @@ runs:
       shell: bash
       env:
         REGISTRY: ${{ inputs.registry }}
+        RETRY_ATTEMPTS: ${{ inputs.retry-attempts }}
+        CONNECT_TIMEOUT_SECONDS: ${{ inputs.connect-timeout-seconds }}
+        REQUEST_TIMEOUT_SECONDS: ${{ inputs.request-timeout-seconds }}
       run: |
         set -euo pipefail
 
         registry="${REGISTRY%/}"
-        for attempt in 1 2 3; do
+        for value in "$RETRY_ATTEMPTS" "$CONNECT_TIMEOUT_SECONDS" "$REQUEST_TIMEOUT_SECONDS"; do
+          if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Retry and timeout inputs must be positive integers." >&2
+            exit 1
+          fi
+        done
+
+        retry_delay() {
+          local attempt="$1"
+          local delay=$((2 ** (attempt - 1)))
+          local jitter=$((RANDOM % 5))
+
+          if ((delay > 30)); then
+            delay=30
+          fi
+          echo "Registry preflight attempt ${attempt} failed; retrying in $((delay + jitter)) seconds." >&2
+          sleep $((delay + jitter))
+        }
+
+        for ((attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++)); do
           set +e
-          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "https://${registry}/v2/")"
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$REQUEST_TIMEOUT_SECONDS" "https://${registry}/v2/")"
           curl_exit=$?
           set -e
 
@@ -34,9 +68,9 @@ runs:
               exit 0
             fi
 
-            if [[ "$status" =~ ^5[0-9]{2}$ ]]; then
-              if [[ $attempt -lt 3 ]]; then
-                sleep $((attempt * 2))
+            if [[ "$status" =~ ^(408|425|429|5[0-9]{2})$ ]]; then
+              if [[ $attempt -lt $RETRY_ATTEMPTS ]]; then
+                retry_delay "$attempt"
                 continue
               fi
               echo "Registry preflight failed after retries: server returned HTTP ${status}." >&2
@@ -48,9 +82,9 @@ runs:
           fi
 
           case "$curl_exit" in
-            5|6|7|28|35|52|55|56)
-              if [[ $attempt -lt 3 ]]; then
-                sleep $((attempt * 2))
+            5|6|7|18|28|35|52|55|56|92)
+              if [[ $attempt -lt $RETRY_ATTEMPTS ]]; then
+                retry_delay "$attempt"
                 continue
               fi
               echo "Registry preflight failed after transient-network retries (curl exit ${curl_exit})." >&2
@@ -62,16 +96,37 @@ runs:
           exit 1
         done
 
+        echo "Registry preflight did not run." >&2
+        exit 1
+
     - name: Log in to registry
       shell: bash
       env:
         REGISTRY: ${{ inputs.registry }}
         USERNAME: ${{ inputs.username }}
         PASSWORD: ${{ inputs.password }}
+        RETRY_ATTEMPTS: ${{ inputs.retry-attempts }}
       run: |
         set -euo pipefail
 
-        for attempt in 1 2 3; do
+        if ! [[ "$RETRY_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+          echo "retry-attempts must be a positive integer." >&2
+          exit 1
+        fi
+
+        retry_delay() {
+          local attempt="$1"
+          local delay=$((2 ** (attempt - 1)))
+          local jitter=$((RANDOM % 5))
+
+          if ((delay > 30)); then
+            delay=30
+          fi
+          echo "Registry login attempt ${attempt} failed; retrying in $((delay + jitter)) seconds." >&2
+          sleep $((delay + jitter))
+        }
+
+        for ((attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++)); do
           set +e
           login_output="$(printf '%s' "$PASSWORD" | docker login "$REGISTRY" --username "$USERNAME" --password-stdin 2>&1)"
           login_exit=$?
@@ -87,8 +142,8 @@ runs:
             exit 1
           fi
 
-          if [[ "$login_output" =~ ([Cc]onnection|[Nn]etwork|[Dd]ial|[Ll]ookup|[Nn]o\ such\ host|[Tt]imeout|[Tt]imed\ out|[Tt]LS|[Xx]509|[Tt]emporary\ failure|[Rr]eset) ]] && [[ $attempt -lt 3 ]]; then
-            sleep $((attempt * 2))
+          if [[ $attempt -lt $RETRY_ATTEMPTS ]]; then
+            retry_delay "$attempt"
             continue
           fi
 
@@ -96,3 +151,6 @@ runs:
           echo "Registry login failed." >&2
           exit 1
         done
+
+        echo "Registry login did not run." >&2
+        exit 1

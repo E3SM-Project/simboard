@@ -9,7 +9,7 @@ interface ExecutionPathCard {
   kind: string;
   title: string;
   description?: string;
-  paths?: string[] | { url: string; label: string }[];
+  paths?: string[] | { id?: string; url: string; label: string }[];
   emptyText: string;
 }
 
@@ -79,8 +79,9 @@ export const ExecutionPathCard = ({
             {paths.map((path) => {
               const url = typeof path === 'string' ? path : path.url;
               const label = typeof path === 'string' ? path : path.label;
+              const key = typeof path === 'string' ? url || label : path.id || url || label;
               return (
-                <li key={url || label} className="flex items-start gap-2">
+                <li key={key} className="flex items-start gap-2">
                   {isExternalPath(url) ? (
                     <a
                       className="text-blue-600 hover:underline flex items-center gap-1 break-all"

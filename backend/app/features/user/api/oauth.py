@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -16,6 +17,7 @@ from fastapi_users.router.oauth import (
 from httpx import AsyncClient, HTTPError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 
+from app.api.version import API_BASE
 from app.core.config import settings
 from app.features.user.auth.oauth import (
     GITHUB_OAUTH_BACKEND,
@@ -39,6 +41,7 @@ oauth2_authorize_callback = OAuth2AuthorizeCallback(
 )
 E3SM_GITHUB_ORG = "E3SM-Project"
 GitHubOrgMembershipState = Literal[True, False, None]
+GITHUB_OAUTH_CALLBACK_PATH = f"{API_BASE}/auth/github/callback"
 
 
 # --- GitHub OAuth Routes ---
@@ -50,7 +53,7 @@ GitHubOrgMembershipState = Literal[True, False, None]
 async def github_authorize(
     return_to: str | None = Query(default=None),
     scopes: list[str] | None = Query(default=None),
-) -> OAuth2AuthorizeResponse:
+) -> JSONResponse:
     """Initiate the GitHub OAuth flow by generating an authorization URL.
 
     Parameters:
@@ -65,7 +68,7 @@ async def github_authorize(
     OAuth2AuthorizeResponse
         An object containing the GitHub authorization URL.
     """
-    state_data: dict[str, str] = {}
+    state_data: dict[str, str] = {"nonce": secrets.token_urlsafe()}
     normalized_return_to = _normalize_post_login_return_to(return_to)
     if normalized_return_to is not None:
         state_data["return_to"] = normalized_return_to
@@ -77,7 +80,21 @@ async def github_authorize(
         scopes,
     )
 
-    return OAuth2AuthorizeResponse(authorization_url=authorization_url)
+    response = JSONResponse(
+        content=OAuth2AuthorizeResponse(
+            authorization_url=authorization_url
+        ).model_dump()
+    )
+    response.set_cookie(
+        key=settings.github_oauth_state_cookie_name,
+        value=state_data["nonce"],
+        max_age=settings.github_oauth_state_cookie_max_age,
+        path=GITHUB_OAUTH_CALLBACK_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
+    return response
 
 
 @auth_router.get(
@@ -132,16 +149,6 @@ async def github_callback(
     """
 
     token, state = access_token_state
-    account_id, account_email = await GITHUB_OAUTH_CLIENT.get_id_email(
-        token["access_token"]
-    )
-
-    if account_email is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
-        )
-
     if state is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
 
@@ -153,6 +160,25 @@ async def github_callback(
         )
     except Exception as exc:  # pragma: no cover - library-specific decode failures
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST) from exc
+
+    state_nonce = state_data.get("nonce")
+    cookie_nonce = request.cookies.get(settings.github_oauth_state_cookie_name)
+    if (
+        not isinstance(state_nonce, str)
+        or cookie_nonce is None
+        or not secrets.compare_digest(state_nonce, cookie_nonce)
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+
+    account_id, account_email = await GITHUB_OAUTH_CLIENT.get_id_email(
+        token["access_token"]
+    )
+
+    if account_email is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+        )
 
     try:
         user = await user_manager.oauth_callback(
@@ -192,6 +218,13 @@ async def github_callback(
         )
 
     response = await GITHUB_OAUTH_BACKEND.login(strategy, user)
+    response.delete_cookie(
+        key=settings.github_oauth_state_cookie_name,
+        path=GITHUB_OAUTH_CALLBACK_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
     response.headers["location"] = _build_frontend_auth_redirect_url(
         state_data.get("return_to")
     )

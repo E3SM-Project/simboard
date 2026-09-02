@@ -80,10 +80,17 @@ export interface CaseSummaryOut {
 }
 
 export interface CaseDetailOut extends CaseSummaryOut {
+  artifacts: CaseExecutionArtifactOut[];
   description: string | null;
   keyFeatures: string | null;
   knownIssues: string | null;
   notesMarkdown: string | null;
+}
+
+/** An execution-owned artifact returned with a case-detail response. */
+export interface CaseExecutionArtifactOut extends ArtifactOut {
+  executionUuid: string;
+  executionId: string;
 }
 
 export interface CaseListItemOut {
@@ -282,7 +289,7 @@ export interface ExecutionOut extends ExecutionCreate {
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
   machineId: string;
-  hpcUsername?: string | null;
+  hpcUsername: string;
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field
   createdByUser?: ExecutionUserPreview | null;

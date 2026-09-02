@@ -442,7 +442,7 @@ export const ExecutionBrowseDetailsDialog = ({
                   {archivePaths.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                        Archive Paths
+                        Short-Term Archive Paths
                       </p>
                       <ul className="mt-2 space-y-2 text-sm text-slate-700">
                         {archivePaths.map((item) => (

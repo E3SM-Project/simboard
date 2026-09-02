@@ -44,6 +44,10 @@ import {
   matchesExecutionGroupFilter,
   MISSING_CASE_HASH_LABEL,
 } from '@/features/catalog/caseUtils';
+import {
+  CaseArtifactsTable,
+  type CaseArtifactValue,
+} from '@/features/catalog/components/CaseArtifactsTable';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
@@ -61,9 +65,10 @@ import {
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
 import { toast } from '@/hooks/use-toast';
-import { useCase } from '@/lib/catalog/hooks/useCase';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
+import { useReadableCase } from '@/lib/catalog/hooks/useReadableCase';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import type {
   CaseDetailOut,
   CaseEditableField,
@@ -146,7 +151,7 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 };
 
 interface CaseDetailsPageProps {
-  renderCompareSection?: (options: { onClose: () => void }) => React.ReactNode;
+  renderCompareSection?: (options: { caseId: string; onClose: () => void }) => React.ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -155,6 +160,24 @@ interface GroupExecution {
   summary: ExecutionSummaryOut;
   details?: ExecutionListItemOut;
 }
+
+const getRunActivityTime = ({ details }: GroupExecution) => {
+  const activityDate = details?.runEndDate ?? details?.runStartDate;
+  const timestamp = activityDate ? new Date(activityDate).getTime() : Number.NEGATIVE_INFINITY;
+
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+};
+
+const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
+  [...executions].sort((left, right) => {
+    const leftRunActivityTime = getRunActivityTime(left);
+    const rightRunActivityTime = getRunActivityTime(right);
+    if (leftRunActivityTime !== rightRunActivityTime) {
+      return rightRunActivityTime - leftRunActivityTime;
+    }
+
+    return right.summary.executionId.localeCompare(left.summary.executionId);
+  });
 
 type ExecutionViewMode = 'grouped' | 'flat';
 type EditableFormState = Record<CaseEditableField, string>;
@@ -341,7 +364,17 @@ export const CaseDetailsPage = ({
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
   const queryClient = useQueryClient();
-  const { id } = useParams<{ id: string }>();
+  const { caseName, hpcUsername, machine: machineName } = useParams<{
+    caseName: string;
+    hpcUsername: string;
+    machine: string;
+  }>();
+  const readableIdentity =
+    machineName && hpcUsername && caseName
+      ? { machineName, hpcUsername, caseName }
+      : null;
+  const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
+  const caseId = fetchedCaseRecord?.id;
   const {
     data: allExecutions,
     error: executionsError,
@@ -351,17 +384,18 @@ export const CaseDetailsPage = ({
     isFetchingNextPage,
     refetch: refetchExecutions,
     total: executionTotal,
-  } = useCaseExecutions(id);
+  } = useCaseExecutions(caseId, { sortBy: 'run_activity', sortOrder: 'desc' });
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
+  const executionsSectionRef = useRef<HTMLElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('flat');
   const [groupFilterMode, setGroupFilterMode] = useState<ExecutionSummaryGroupFilter>('all');
   const [caseHashQuery, setCaseHashQuery] = useState('');
+  const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
-  const { data: fetchedCaseRecord, loading, error } = useCase(id ?? '');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const history = useMetadataHistory('case', id ?? '', isHistoryOpen);
+  const history = useMetadataHistory('case', caseId ?? '', isHistoryOpen);
   const [caseRecord, setCaseRecord] = useState<CaseDetailOut | null>(null);
   const [formState, setFormState] = useState<EditableFormState | null>(null);
   const [linkRows, setLinkRows] = useState<EditableLinkRow[]>([]);
@@ -387,25 +421,20 @@ export const CaseDetailsPage = ({
     () =>
       rawExecutionGroups.map((group) => ({
         ...group,
-        executions: group.executions.map((execution) => ({
-          summary: execution,
-          details: executionDetailsById.get(execution.id),
-        })),
+        executions: sortExecutionsByRunDate(
+          group.executions.map((execution) => ({
+            summary: execution,
+            details: executionDetailsById.get(execution.id),
+          })),
+        ),
       })),
     [rawExecutionGroups, executionDetailsById],
   );
   const sortedExecutionGroups = useMemo(() => {
     const getLatestRunTime = (executions: GroupExecution[]) => {
       const timestamps = executions
-        .map(
-          ({ details, summary }) =>
-            details?.runEndDate ??
-            details?.runStartDate ??
-            summary.simulationEndDate ??
-            summary.simulationStartDate,
-        )
-        .map((value) => new Date(value).getTime())
-        .filter((value) => !Number.isNaN(value));
+        .map(getRunActivityTime)
+        .filter((value) => value !== Number.NEGATIVE_INFINITY);
 
       return timestamps.length > 0 ? Math.max(...timestamps) : 0;
     };
@@ -439,9 +468,24 @@ export const CaseDetailsPage = ({
     caseHashGroupCount === 0 &&
     missingCaseHashCount > 0;
   const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
+  const artifactFilteredExecutionGroups = useMemo(() => {
+    if (artifactExecutionIds == null) {
+      return sortedExecutionGroups;
+    }
+
+    const matchingExecutionIds = new Set(artifactExecutionIds);
+    return sortedExecutionGroups
+      .map((group) => ({
+        ...group,
+        executions: group.executions.filter(({ summary }) =>
+          matchingExecutionIds.has(summary.executionId),
+        ),
+      }))
+      .filter((group) => group.executions.length > 0);
+  }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      sortedExecutionGroups.filter((group) => {
+      artifactFilteredExecutionGroups.filter((group) => {
         if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
           return false;
         }
@@ -456,10 +500,10 @@ export const CaseDetailsPage = ({
 
         return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
       }),
-    [groupFilterMode, normalizedCaseHashQuery, sortedExecutionGroups],
+    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery],
   );
   const filteredFlatExecutions = useMemo(
-    () => filteredExecutionGroups.flatMap((group) => group.executions),
+    () => sortExecutionsByRunDate(filteredExecutionGroups.flatMap((group) => group.executions)),
     [filteredExecutionGroups],
   );
   const visibleExecutionIds = useMemo(
@@ -470,8 +514,8 @@ export const CaseDetailsPage = ({
     () => new Set(caseRecord?.executions.map((execution) => execution.id) ?? []),
     [caseRecord?.executions],
   );
-  const rawCaseSelectedExecutionIds = id
-    ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[id] ?? [])
+  const rawCaseSelectedExecutionIds = caseId
+    ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[caseId] ?? [])
     : [];
   const caseSelectedExecutionIds = rawCaseSelectedExecutionIds.filter((executionId) =>
     caseExecutionIdSet.has(executionId),
@@ -491,7 +535,7 @@ export const CaseDetailsPage = ({
       : filteredFlatExecutions.length > SCROLLABLE_FLAT_ROWS_THRESHOLD;
 
   useEffect(() => {
-    if (loading || (fetchedCaseRecord && fetchedCaseRecord.id !== id)) {
+    if (loading) {
       setCaseRecord(null);
       setFormState(null);
       setLinkRows([]);
@@ -500,7 +544,7 @@ export const CaseDetailsPage = ({
       return;
     }
 
-    if (fetchedCaseRecord && fetchedCaseRecord.id === id) {
+    if (fetchedCaseRecord) {
       setCaseRecord(fetchedCaseRecord);
       setFormState(toEditableFormState(fetchedCaseRecord));
       setLinkRows(toEditableLinkRows(fetchedCaseRecord.links, 'case'));
@@ -518,7 +562,7 @@ export const CaseDetailsPage = ({
       setIsEditing(false);
       setSaveError(null);
     }
-  }, [error, fetchedCaseRecord, id, loading]);
+  }, [error, fetchedCaseRecord, loading]);
 
   useEffect(() => {
     if (!caseRecord) {
@@ -596,9 +640,9 @@ export const CaseDetailsPage = ({
   }, [canShowCompare, isCompareVisible]);
 
   const handleShareCase = async () => {
-    if (!id) return;
+    if (!readableIdentity) return;
 
-    const shareUrl = new URL(`/cases/${id}`, window.location.origin).toString();
+    const shareUrl = new URL(caseDetailsPath(readableIdentity), window.location.origin).toString();
     const canUseWebShare = typeof navigator.share === 'function';
 
     try {
@@ -666,7 +710,7 @@ export const CaseDetailsPage = ({
   };
 
   const handleSave = async () => {
-    if (!id || !caseRecord || !formState) return;
+    if (!caseId || !caseRecord || !formState) return;
 
     if (hasAnyResourceRowErrors(getClientLinkRowErrors(linkRows))) {
       return;
@@ -687,7 +731,7 @@ export const CaseDetailsPage = ({
     setSaveError(null);
 
     try {
-      const updatedCaseRecord = await updateCase(id, payload);
+      const updatedCaseRecord = await updateCase(caseId, payload);
       setCaseRecord(updatedCaseRecord);
       setFormState(toEditableFormState(updatedCaseRecord));
       setLinkRows(toEditableLinkRows(updatedCaseRecord.links, 'case'));
@@ -702,15 +746,15 @@ export const CaseDetailsPage = ({
     }
   };
 
-  if (!id) {
+  if (!readableIdentity) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Invalid case ID</div>
+        <div className="text-center text-gray-500">Invalid case identity</div>
       </div>
     );
   }
 
-  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== id)) {
+  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== caseId)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-gray-500">Loading case details…</div>
@@ -763,6 +807,29 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
+  const artifactValuesByKey = caseRecord.artifacts.reduce((groups, artifact) => {
+    const key = JSON.stringify([artifact.kind, artifact.uri]);
+    const value = groups.get(key);
+    if (value) {
+      if (!value.executionIds.includes(artifact.executionId)) {
+        value.executionIds.push(artifact.executionId);
+      }
+      if (value.label == null && artifact.label != null) {
+        value.label = artifact.label;
+      }
+      return groups;
+    }
+
+    groups.set(key, {
+      id: artifact.id,
+      kind: artifact.kind,
+      uri: artifact.uri,
+      label: artifact.label ?? null,
+      executionIds: [artifact.executionId],
+    });
+    return groups;
+  }, new Map<string, CaseArtifactValue>());
+  const artifactValues = Array.from(artifactValuesByKey.values());
   const isCompareButtonDisabled = caseSelectedExecutionCount < 2;
   const filteredExecutionCount = filteredFlatExecutions.length;
   const activeExecutionCount =
@@ -798,9 +865,9 @@ export const CaseDetailsPage = ({
 
   const toggleExecutionSelection = (executionId: string) => {
     if (caseSelectedExecutionIds.includes(executionId)) {
-      if (id) {
+      if (caseId) {
         setSelectedCaseExecutionIdsForCase(
-          id,
+          caseId,
           caseSelectedExecutionIds.filter((selectedId) => selectedId !== executionId),
         );
       }
@@ -811,8 +878,8 @@ export const CaseDetailsPage = ({
       return;
     }
 
-    if (id) {
-      setSelectedCaseExecutionIdsForCase(id, [...caseSelectedExecutionIds, executionId]);
+    if (caseId) {
+      setSelectedCaseExecutionIdsForCase(caseId, [...caseSelectedExecutionIds, executionId]);
     }
   };
 
@@ -837,6 +904,20 @@ export const CaseDetailsPage = ({
   const resetGroupFilters = () => {
     setGroupFilterMode('all');
     setCaseHashQuery('');
+  };
+
+  const clearArtifactExecutionFilter = () => {
+    setArtifactExecutionIds(null);
+  };
+
+  const filterExecutionsForArtifact = (executionIds: string[]) => {
+    setArtifactExecutionIds([...new Set(executionIds)]);
+    setGroupFilterMode('all');
+    setCaseHashQuery('');
+    setViewMode('flat');
+    requestAnimationFrame(() => {
+      executionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -1117,7 +1198,7 @@ export const CaseDetailsPage = ({
         />
       </section>
 
-      <section className="space-y-4">
+      <section ref={executionsSectionRef} className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
@@ -1246,8 +1327,8 @@ export const CaseDetailsPage = ({
                             size="sm"
                             className="text-slate-600 hover:text-slate-900"
                             onClick={() => {
-                              if (id) {
-                                setSelectedCaseExecutionIdsForCase(id, []);
+                              if (caseId) {
+                                setSelectedCaseExecutionIdsForCase(caseId, []);
                               }
                             }}
                           >
@@ -1299,6 +1380,24 @@ export const CaseDetailsPage = ({
                   groups.
                 </div>
               ) : null}
+
+              {artifactExecutionIds != null ? (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+                  <p>
+                    Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
+                    artifact.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
+                    onClick={clearArtifactExecutionFilter}
+                  >
+                    Clear artifact filter
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
@@ -1344,11 +1443,11 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
+                            <TableHead>Run dates (latest first)</TableHead>
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
                             <TableHead>Initialization</TableHead>
                             <TableHead>Simulation dates</TableHead>
-                            <TableHead>Run dates</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1366,8 +1465,22 @@ export const CaseDetailsPage = ({
                                 />
                               </TableCell>
                               <TableCell className="align-top">
+                                {details?.runStartDate || details?.runEndDate ? (
+                                  <span
+                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
+                                  >
+                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="align-top">
                                 <Link
-                                  to={`/executions/${summary.id}`}
+                                  to={executionDetailsPath({
+                                    ...readableIdentity,
+                                    executionId: summary.executionId,
+                                  })}
                                   state={{ from: currentPath }}
                                   className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                 >
@@ -1392,17 +1505,6 @@ export const CaseDetailsPage = ({
                               </TableCell>
                               <TableCell className="align-top">
                                 {formatExecutionDateRange(summary)}
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {details?.runStartDate || details?.runEndDate ? (
-                                  <span
-                                    title={`${details?.runStartDate ?? '—'} → ${details?.runEndDate ?? '—'}`}
-                                  >
-                                    {formatRunDateRange(details?.runStartDate, details?.runEndDate)}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1592,7 +1694,10 @@ export const CaseDetailsPage = ({
                                                     </TableCell>
                                                     <TableCell className="align-top">
                                                       <Link
-                                                        to={`/executions/${summary.id}`}
+                                                        to={executionDetailsPath({
+                                                          ...readableIdentity,
+                                                          executionId: summary.executionId,
+                                                        })}
                                                         state={{ from: currentPath }}
                                                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                                       >
@@ -1685,6 +1790,14 @@ export const CaseDetailsPage = ({
             </div>
           ) : null}
 
+          <div className="border-t border-slate-200 px-5 py-5">
+            <CaseArtifactsTable
+              artifacts={artifactValues}
+              totalArtifactCount={caseRecord.artifacts.length}
+              onFilterExecutionIds={filterExecutionsForArtifact}
+            />
+          </div>
+
           {shouldRenderCompare && renderCompareSection ? (
             <div
               ref={compareSectionRef}
@@ -1711,6 +1824,7 @@ export const CaseDetailsPage = ({
               </div>
 
               {renderCompareSection({
+                caseId: caseRecord.id,
                 onClose: () => setIsCompareVisible(false),
               })}
             </div>

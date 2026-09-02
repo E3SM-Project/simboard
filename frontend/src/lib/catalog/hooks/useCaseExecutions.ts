@@ -1,13 +1,16 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { listExecutions } from '@/api/catalog';
+import { listExecutions, type PageParams } from '@/api/catalog';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 
 const CASE_EXECUTION_PAGE_SIZE = 100;
 
-export const useCaseExecutions = (caseId: string | undefined) => {
-  const params = { caseId, pageSize: CASE_EXECUTION_PAGE_SIZE };
+export const useCaseExecutions = (
+  caseId: string | undefined,
+  options: Pick<PageParams, 'sortBy' | 'sortOrder'> = {},
+) => {
+  const params = { caseId, pageSize: CASE_EXECUTION_PAGE_SIZE, ...options };
   const query = useInfiniteQuery({
     queryKey: catalogQueryKeys.executions.caseInfinite(caseId ?? '', params),
     queryFn: ({ pageParam }) => listExecutions({ ...params, page: pageParam }),

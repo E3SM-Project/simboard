@@ -1,8 +1,8 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Copy, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,17 +23,19 @@ import {
   MISSING_CASE_HASH_LABEL,
 } from '@/features/catalog/caseUtils';
 import { SearchableFilterSelect } from '@/features/catalog/components/SearchableFilterSelect';
+import { toast } from '@/hooks/use-toast';
 import { useCaseFilterOptions } from '@/lib/catalog/hooks/useCaseFilterOptions';
 import { useCases } from '@/lib/catalog/hooks/useCases';
 import { useExecutions } from '@/lib/catalog/hooks/useExecutions';
+import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type { CaseListItemOut, ExecutionListItemOut } from '@/types';
-import { compareModelDates, formatModelDate } from '@/utils/utils';
+import { formatModelDate } from '@/utils/utils';
 
 type ActiveFilterKey =
   | 'caseName'
   | 'hpcUsername'
-  | 'machineId'
+  | 'machineName'
   | 'campaign'
   | 'simulationType'
   | 'initializationType'
@@ -43,7 +45,7 @@ type ActiveFilterKey =
 
 interface CaseExecutionFilters {
   hpcUsername: string;
-  machineId: string;
+  machineName: string;
   campaign: string;
   simulationType: string;
   initializationType: string;
@@ -64,18 +66,13 @@ interface ActiveFilterPill {
 
 const createEmptyExecutionFilters = (): CaseExecutionFilters => ({
   hpcUsername: '',
-  machineId: '',
+  machineName: '',
   campaign: '',
   simulationType: '',
   initializationType: '',
   compiler: '',
   gitTag: '',
 });
-
-const sortCaseExecutions = (caseExecutions: ExecutionListItemOut[]) =>
-  [...caseExecutions].sort((left, right) =>
-    compareModelDates(right.simulationStartDate, left.simulationStartDate),
-  );
 
 const CASE_SORT_FIELDS: Record<string, string> = {
   latestRun: 'latest_run_activity',
@@ -86,22 +83,118 @@ const CASE_SORT_FIELDS: Record<string, string> = {
   caseGroup: 'case_group',
 };
 
+const DEFAULT_SORTING: SortingState = [{ id: 'latestRun', desc: true }];
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const CASE_SEARCH_PARAM_KEYS = [
+  'search',
+  'caseGroup',
+  'machine',
+  'machineId',
+  'hpcUsername',
+  'campaign',
+  'simulationType',
+  'initializationType',
+  'compiler',
+  'gitTag',
+  'sortBy',
+  'sortOrder',
+  'page',
+  'pageSize',
+] as const;
+
+interface CaseSearchState {
+  caseNameFilter: string;
+  caseGroupFilter: string;
+  executionFilters: CaseExecutionFilters;
+  legacyMachineId: string;
+  sorting: SortingState;
+  pagination: { pageIndex: number; pageSize: number };
+}
+
+const getTextParam = (params: URLSearchParams, key: string): string =>
+  params.get(key)?.trim() ?? '';
+
+const parsePositiveInteger = (value: string | null, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
+  const sortBy = params.get('sortBy');
+  const sortOrder = params.get('sortOrder');
+  const pageSize = parsePositiveInteger(params.get('pageSize'), DEFAULT_PAGE_SIZE);
+
+  return {
+    caseNameFilter: getTextParam(params, 'search'),
+    caseGroupFilter: getTextParam(params, 'caseGroup'),
+    executionFilters: {
+      hpcUsername: getTextParam(params, 'hpcUsername'),
+      machineName: getTextParam(params, 'machine'),
+      campaign: getTextParam(params, 'campaign'),
+      simulationType: getTextParam(params, 'simulationType'),
+      initializationType: getTextParam(params, 'initializationType'),
+      compiler: getTextParam(params, 'compiler'),
+      gitTag: getTextParam(params, 'gitTag'),
+    },
+    legacyMachineId: getTextParam(params, 'machineId'),
+    sorting:
+      sortBy &&
+      Object.prototype.hasOwnProperty.call(CASE_SORT_FIELDS, sortBy) &&
+      (sortOrder === 'asc' || sortOrder === 'desc')
+        ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+        : DEFAULT_SORTING,
+    pagination: {
+      pageIndex: parsePositiveInteger(params.get('page'), 1) - 1,
+      pageSize: PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE,
+    },
+  };
+};
+
+const serializeCaseSearchState = ({
+  caseNameFilter,
+  caseGroupFilter,
+  executionFilters,
+  legacyMachineId,
+  sorting,
+  pagination,
+}: CaseSearchState): URLSearchParams => {
+  const params = new URLSearchParams();
+  const search = caseNameFilter.trim();
+
+  if (search) params.set('search', search);
+  if (caseGroupFilter) params.set('caseGroup', caseGroupFilter);
+
+  if (executionFilters.machineName) params.set('machine', executionFilters.machineName);
+  else if (legacyMachineId) params.set('machineId', legacyMachineId);
+
+  (Object.entries(executionFilters) as [keyof CaseExecutionFilters, string][]).forEach(
+    ([key, value]) => {
+      if (key !== 'machineName' && value) params.set(key, value);
+    },
+  );
+
+  const primarySort = sorting[0];
+  if (primarySort && !(primarySort.id === 'latestRun' && primarySort.desc)) {
+    params.set('sortBy', primarySort.id);
+    params.set('sortOrder', primarySort.desc ? 'desc' : 'asc');
+  }
+  if (pagination.pageIndex > 0) params.set('page', String(pagination.pageIndex + 1));
+  if (pagination.pageSize !== DEFAULT_PAGE_SIZE)
+    params.set('pageSize', String(pagination.pageSize));
+
+  return params;
+};
+
 const getLatestExecution = (caseRecord: CaseListItemOut) => caseRecord.latestExecution;
 
 const formatLatestCompletedRun = (runEndDate: string | null) =>
   runEndDate ? formatCaseDate(runEndDate) : null;
 
-const formatCompletedRun = (runStartDate: string | null, runEndDate: string | null) => {
-  if (runEndDate) return `Ended ${formatCaseDate(runEndDate)}`;
-  if (runStartDate) return `Started ${formatCaseDate(runStartDate)}`;
-  return null;
-};
+const formatRunDateRange = (runStartDate: string | null, runEndDate: string | null) => {
+  if (!runStartDate && !runEndDate) return null;
 
-const formatRunTimeline = (runStartDate: string | null, runEndDate: string | null) => {
-  if (runStartDate && runEndDate) {
-    return `Started ${formatCaseDate(runStartDate)} → ended ${formatCaseDate(runEndDate)}`;
-  }
-  return formatCompletedRun(runStartDate, runEndDate);
+  return `${formatCaseDate(runStartDate)} → ${formatCaseDate(runEndDate)}`;
 };
 
 const UnavailableTimestamp = () => (
@@ -115,21 +208,41 @@ const UnavailableTimestamp = () => (
 
 export const CasesPage = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialSearchState] = useState(() => parseCaseSearchState(searchParams));
+  const isApplyingUrlState = useRef(false);
   const currentPath = `${location.pathname}${location.search}`;
 
-  const [caseNameFilter, setCaseNameFilter] = useState('');
-  const [debouncedCaseName, setDebouncedCaseName] = useState('');
-  const [caseGroupFilter, setCaseGroupFilter] = useState('');
+  const [caseNameFilter, setCaseNameFilter] = useState(initialSearchState.caseNameFilter);
+  const [debouncedCaseName, setDebouncedCaseName] = useState(initialSearchState.caseNameFilter);
+  const [caseGroupFilter, setCaseGroupFilter] = useState(initialSearchState.caseGroupFilter);
   const [executionFilters, setExecutionFilters] = useState<CaseExecutionFilters>(
-    createEmptyExecutionFilters,
+    initialSearchState.executionFilters,
   );
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [legacyMachineId, setLegacyMachineId] = useState(initialSearchState.legacyMachineId);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(() =>
+    [
+      initialSearchState.caseGroupFilter,
+      initialSearchState.executionFilters.campaign,
+      initialSearchState.executionFilters.simulationType,
+      initialSearchState.executionFilters.initializationType,
+      initialSearchState.executionFilters.compiler,
+      initialSearchState.executionFilters.gitTag,
+    ].some(Boolean),
+  );
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const requiresMachineLookup = Boolean(executionFilters.machineName || legacyMachineId);
+  const { data: allFilterOptions } = useCaseFilterOptions({}, requiresMachineLookup);
+  const allMachineOptions = useMemo(() => allFilterOptions?.machines ?? [], [allFilterOptions]);
+  const selectedMachineId =
+    allMachineOptions.find((option) => option.label === executionFilters.machineName)?.value ||
+    legacyMachineId ||
+    undefined;
   const caseFilterOptionParams = useMemo(
     () => ({
       search: debouncedCaseName || undefined,
       caseGroup: caseGroupFilter || undefined,
-      machineId: executionFilters.machineId || undefined,
+      machineId: selectedMachineId,
       hpcUsername: executionFilters.hpcUsername || undefined,
       simulationType: executionFilters.simulationType || undefined,
       campaign: executionFilters.campaign || undefined,
@@ -137,8 +250,9 @@ export const CasesPage = () => {
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters],
+    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId],
   );
+  const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
     data: executions,
     page: expandedExecutionPage,
@@ -148,10 +262,10 @@ export const CasesPage = () => {
       caseId: expandedCaseId ?? undefined,
       page: 1,
       pageSize: 5,
-      sortBy: 'simulation_start_date',
+      sortBy: 'run_activity',
       sortOrder: 'desc',
       hpcUsername: executionFilters.hpcUsername || undefined,
-      machineId: executionFilters.machineId || undefined,
+      machineId: selectedMachineId,
       campaign: executionFilters.campaign || undefined,
       simulationType: executionFilters.simulationType || undefined,
       initializationType: executionFilters.initializationType || undefined,
@@ -160,19 +274,83 @@ export const CasesPage = () => {
     },
     expandedCaseId != null,
   );
-  const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'latestRun', desc: true }]);
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [sorting, setSorting] = useState<SortingState>(initialSearchState.sorting);
+  const [pagination, setPagination] = useState(initialSearchState.pagination);
+  const canonicalSearchParams = useMemo(
+    () =>
+      serializeCaseSearchState({
+        caseNameFilter: debouncedCaseName,
+        caseGroupFilter,
+        executionFilters,
+        legacyMachineId,
+        sorting,
+        pagination,
+      }),
+    [caseGroupFilter, debouncedCaseName, executionFilters, legacyMachineId, pagination, sorting],
+  );
+
+  useEffect(() => {
+    const next = parseCaseSearchState(searchParams);
+    const canonicalParams = serializeCaseSearchState(next);
+    const normalizedParams = new URLSearchParams(searchParams);
+    CASE_SEARCH_PARAM_KEYS.forEach((key) => normalizedParams.delete(key));
+    canonicalParams.forEach((value, key) => normalizedParams.set(key, value));
+
+    isApplyingUrlState.current = true;
+    setCaseNameFilter(next.caseNameFilter);
+    setDebouncedCaseName(next.caseNameFilter);
+    setCaseGroupFilter(next.caseGroupFilter);
+    setExecutionFilters(next.executionFilters);
+    setLegacyMachineId(next.legacyMachineId);
+    setSorting(next.sorting);
+    setPagination(next.pagination);
+    setShowAdvancedFilters(
+      [
+        next.caseGroupFilter,
+        next.executionFilters.campaign,
+        next.executionFilters.simulationType,
+        next.executionFilters.initializationType,
+        next.executionFilters.compiler,
+        next.executionFilters.gitTag,
+      ].some(Boolean),
+    );
+
+    if (normalizedParams.toString() !== searchParams.toString()) {
+      setSearchParams(normalizedParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!legacyMachineId || executionFilters.machineName) return;
+
+    const legacyMachine = allMachineOptions.find((option) => option.value === legacyMachineId);
+    if (!legacyMachine) return;
+
+    setExecutionFilters((current) => ({ ...current, machineName: legacyMachine.label }));
+    setLegacyMachineId('');
+  }, [allMachineOptions, executionFilters.machineName, legacyMachineId]);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedCaseName(caseNameFilter.trim()), 300);
     return () => window.clearTimeout(timeout);
   }, [caseNameFilter]);
+
   useEffect(() => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [debouncedCaseName, caseGroupFilter, executionFilters]);
-  useEffect(() => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }));
-  }, [sorting]);
+    if (isApplyingUrlState.current) {
+      isApplyingUrlState.current = false;
+      return;
+    }
+
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        CASE_SEARCH_PARAM_KEYS.forEach((key) => next.delete(key));
+        canonicalSearchParams.forEach((value, key) => next.set(key, value));
+        return next.toString() === previous.toString() ? previous : next;
+      },
+      { replace: true },
+    );
+  }, [canonicalSearchParams, setSearchParams]);
   const primarySort = sorting[0];
   const {
     data: cases,
@@ -185,7 +363,7 @@ export const CasesPage = () => {
     search: debouncedCaseName || undefined,
     caseGroup: caseGroupFilter || undefined,
     hpcUsername: executionFilters.hpcUsername || undefined,
-    machineId: executionFilters.machineId || undefined,
+    machineId: selectedMachineId,
     campaign: executionFilters.campaign || undefined,
     simulationType: executionFilters.simulationType || undefined,
     initializationType: executionFilters.initializationType || undefined,
@@ -194,6 +372,15 @@ export const CasesPage = () => {
     sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'latest_run_activity',
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
+
+  useEffect(() => {
+    if (!casePage) return;
+
+    const lastPageIndex = Math.max(0, Math.ceil(casePage.total / pagination.pageSize) - 1);
+    setPagination((current) =>
+      current.pageIndex > lastPageIndex ? { ...current, pageIndex: lastPageIndex } : current,
+    );
+  }, [casePage, pagination.pageSize]);
 
   const executionsByCaseId = useMemo(() => {
     const caseMap = new Map<string, ExecutionListItemOut[]>();
@@ -225,7 +412,10 @@ export const CasesPage = () => {
         value: username,
         label: username,
       })),
-      machineOptions: filterOptions?.machines ?? [],
+      machineOptions: (filterOptions?.machines ?? []).map((machine) => ({
+        value: machine.label,
+        label: machine.label,
+      })),
       campaignOptions: (filterOptions?.campaigns ?? []).map((campaign) => ({
         value: campaign,
         label: campaign,
@@ -278,13 +468,11 @@ export const CasesPage = () => {
       filters.push({ key: 'hpcUsername', label: 'HPC', value: executionFilters.hpcUsername });
     }
 
-    if (executionFilters.machineId) {
+    if (executionFilters.machineName) {
       filters.push({
-        key: 'machineId',
+        key: 'machineName',
         label: 'Machine',
-        value:
-          machineOptions.find((option) => option.value === executionFilters.machineId)?.label ??
-          executionFilters.machineId,
+        value: executionFilters.machineName,
       });
     }
 
@@ -318,13 +506,14 @@ export const CasesPage = () => {
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
 
     return filters;
-  }, [caseGroupFilter, caseNameFilter, machineOptions, executionFilters]);
+  }, [caseGroupFilter, caseNameFilter, executionFilters]);
 
   const setExecutionFilter = (key: keyof CaseExecutionFilters, value: string) => {
     setExecutionFilters((current) => ({
       ...current,
       [key]: value,
     }));
+    if (key === 'machineName') setLegacyMachineId('');
     table.setPageIndex(0);
   };
 
@@ -332,6 +521,7 @@ export const CasesPage = () => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
     setExecutionFilters(createEmptyExecutionFilters());
+    setLegacyMachineId('');
     setShowAdvancedFilters(false);
     table.setPageIndex(0);
   };
@@ -349,10 +539,33 @@ export const CasesPage = () => {
           ...current,
           [filterKey]: '',
         }));
+        if (filterKey === 'machineName') setLegacyMachineId('');
         break;
     }
 
     table.setPageIndex(0);
+  };
+
+  const handleCopySearch = async () => {
+    const query = canonicalSearchParams.toString();
+    const searchUrl = new URL(
+      `${location.pathname}${query ? `?${query}` : ''}`,
+      window.location.origin,
+    ).toString();
+
+    try {
+      await navigator.clipboard.writeText(searchUrl);
+      toast({
+        title: 'Search link copied',
+        description: 'This link restores the current case search.',
+      });
+    } catch {
+      toast({
+        title: 'Unable to copy search link',
+        description: 'Copy the URL from your browser instead.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const filteredCases = useMemo(() => {
@@ -410,7 +623,11 @@ export const CasesPage = () => {
         cell: ({ row }) => (
           <div className="min-w-[14rem] max-w-[28rem]">
             <Link
-              to={`/cases/${row.original.id}`}
+              to={caseDetailsPath({
+                machineName: row.original.machineName,
+                hpcUsername: row.original.hpcUsername,
+                caseName: row.original.name,
+              })}
               state={{ from: currentPath }}
               className="block truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               title={row.original.name}
@@ -426,6 +643,7 @@ export const CasesPage = () => {
                 onClick={(event) => {
                   event.stopPropagation();
                   setCaseGroupFilter(row.original.caseGroup ?? '');
+                  setPagination((current) => ({ ...current, pageIndex: 0 }));
                 }}
               >
                 Group: {row.original.caseGroup}
@@ -478,7 +696,10 @@ export const CasesPage = () => {
     data: filteredCases,
     columns,
     state: { sorting, pagination },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting(updater);
+      setPagination((current) => ({ ...current, pageIndex: 0 }));
+    },
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
@@ -521,85 +742,57 @@ export const CasesPage = () => {
   };
 
   const renderExpandedContent = (caseRecord: CaseListItemOut) => {
-    const visibleCaseExecutions = sortCaseExecutions(executionsByCaseId.get(caseRecord.id) ?? []);
+    const visibleCaseExecutions = executionsByCaseId.get(caseRecord.id) ?? [];
     const expandedExecutionLabel = hasActiveExecutionFilters
       ? expandedExecutionsFetching || !expandedExecutionPage
-        ? 'View matching executions'
-        : `View all ${expandedExecutionPage.total} executions`
-      : `View all ${caseRecord.executionCount} executions`;
-    const latestExecution = getLatestExecution(caseRecord);
-
+        ? 'View matching executions on the case details page'
+        : `View all ${expandedExecutionPage.total} executions on the case details page`
+      : `View all ${caseRecord.executionCount} executions on the case details page`;
     return (
-      <div className="space-y-3 bg-muted/20 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium">Recent execution preview</p>
-            <p className="text-xs text-muted-foreground">
-              {hasActiveExecutionFilters
-                ? 'Showing executions in this case that match the current execution filters.'
-                : 'Showing the five most recent execution records by simulation start date.'}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/cases/${caseRecord.id}`} state={{ from: currentPath }}>
-              {expandedExecutionLabel}
-            </Link>
-          </Button>
+      <div className="mx-3 my-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:ml-12">
+        <div>
+          <p className="text-sm font-medium">Latest executions</p>
+          <p className="text-xs text-muted-foreground">
+            {hasActiveExecutionFilters
+              ? 'Matching current execution filters.'
+              : 'Five most recent runs by run date.'}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background px-3 py-2 text-xs text-slate-600">
-          {caseRecord.caseGroup && <span>Case group: {caseRecord.caseGroup}</span>}
-          <span>
-            Latest completed run:{' '}
-            {latestExecution ? (
-              (formatLatestCompletedRun(latestExecution.runEndDate) ?? <UnavailableTimestamp />)
-            ) : (
-              <UnavailableTimestamp />
-            )}
-          </span>
-        </div>
-
-        <div className="overflow-hidden rounded-md border bg-background">
-          <div className="max-h-[26rem] overflow-auto">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-background">
+          <div className="max-h-[20rem] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Run dates (latest first)</TableHead>
                   <TableHead>Execution ID</TableHead>
-                  <TableHead>Completed</TableHead>
-                  <TableHead>Run timeline</TableHead>
-                  <TableHead>Simulation Dates</TableHead>
                   <TableHead>Case Hash</TableHead>
-                  <TableHead>Machine</TableHead>
+                  <TableHead>Simulation dates</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visibleCaseExecutions.map((execution) => (
                   <TableRow key={execution.id}>
-                    <TableCell className="align-top">
+                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                      {formatRunDateRange(execution.runStartDate, execution.runEndDate) ?? (
+                        <UnavailableTimestamp />
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2 align-top">
                       <Link
-                        to={`/executions/${execution.id}`}
+                        to={executionDetailsPath({
+                          machineName: execution.machineName,
+                          hpcUsername: execution.hpcUsername,
+                          caseName: execution.caseName,
+                          executionId: execution.executionId,
+                        })}
                         state={{ from: currentPath }}
                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                       >
                         {execution.executionId}
                       </Link>
                     </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {formatCompletedRun(execution.runStartDate, execution.runEndDate) ?? (
-                        <UnavailableTimestamp />
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {formatRunTimeline(execution.runStartDate, execution.runEndDate) ?? (
-                        <UnavailableTimestamp />
-                      )}
-                    </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
-                        execution.simulationEndDate ?? null,
-                      )}`}
-                    </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="py-2 align-top">
                       <span
                         className="font-mono text-xs text-slate-700"
                         title={execution.caseHash ?? MISSING_CASE_HASH_LABEL}
@@ -607,14 +800,31 @@ export const CasesPage = () => {
                         {formatCaseHashLabel(execution.caseHash ?? null)}
                       </span>
                     </TableCell>
-                    <TableCell className="align-top text-xs text-slate-600">
-                      {execution.machineName}
+                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                      {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
+                        execution.simulationEndDate ?? null,
+                      )}`}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <Button variant="outline" size="sm" asChild>
+            <Link
+              to={caseDetailsPath({
+                machineName: caseRecord.machineName,
+                hpcUsername: caseRecord.hpcUsername,
+                caseName: caseRecord.name,
+              })}
+              state={{ from: currentPath }}
+            >
+              {expandedExecutionLabel}
+            </Link>
+          </Button>
         </div>
       </div>
     );
@@ -688,10 +898,10 @@ export const CasesPage = () => {
 
                   {renderSelectField({
                     label: 'Machine',
-                    value: executionFilters.machineId,
+                    value: executionFilters.machineName,
                     placeholder: 'All machines',
                     options: machineOptions,
-                    onValueChange: (value) => setExecutionFilter('machineId', value),
+                    onValueChange: (value) => setExecutionFilter('machineName', value),
                   })}
 
                   {renderSelectField({
@@ -722,6 +932,17 @@ export const CasesPage = () => {
                       />
                     </Button>
                   </CollapsibleTrigger>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => void handleCopySearch()}
+                    disabled={canonicalSearchParams.size === 0}
+                    className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                    aria-label="Copy search link"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy search
+                  </Button>
                   <Button
                     variant="ghost"
                     type="button"
@@ -883,7 +1104,7 @@ export const CasesPage = () => {
                         ))}
                       </TableRow>
                       {isExpanded && (
-                        <TableRow className="hover:bg-transparent">
+                        <TableRow className="bg-slate-50/40 hover:bg-slate-50/40">
                           <TableCell colSpan={columns.length} className="p-0">
                             {renderExpandedContent(row.original)}
                           </TableCell>
