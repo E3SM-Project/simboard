@@ -5,7 +5,7 @@ that is not mounted in the SimBoard backend environment. Runtime configuration
 is read from environment variables (for example ``SIMBOARD_API_BASE_URL``,
 ``SIMBOARD_API_TOKEN``, ``PERF_ARCHIVE_ROOT``, ``OLD_PERF_ARCHIVE_ROOT``, and ``DRY_RUN``).
 
-Each ingest run executes these phases:
+Non-dry-run ingestion executes these phases:
 
     1. In archive mode, fetch completed snapshot checkpoints.
     2. Fetch persisted per-case state from SimBoard API.
@@ -13,8 +13,10 @@ Each ingest run executes these phases:
     4. Persist discovery results, then package and submit each changed case.
     5. In archive mode, settle and persist completed snapshot checkpoints.
 
-Dry runs stop after discovery and emit a summary. Successful ingestions update
-database state used to keep future runs idempotent.
+Dry runs read remote state and checkpoints by default, stop after discovery,
+and emit a summary without writes. Set ``DRY_RUN_USE_REMOTE_STATE=false`` for
+an offline dry run with empty local state. Successful ingestions update database
+state used to keep future runs idempotent.
 
 Structured log metric definitions for this runner live in
 ``docs/architecture/metadata-ingestion.md``. This module emits those field names
@@ -33,7 +35,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
 from app.scripts.ingestion.archive_client import (
@@ -63,6 +65,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     MetadataLocator,
     SleepCallback,
     _build_config_from_env,
+    _fresh_state,
     _log_event,
 )
 from app.scripts.ingestion.archive_workflow import (
@@ -117,21 +120,13 @@ def _case_submission_callback(
     )
 
 
-def _run_ingestor(
+def _prepare_run_state(
     config: IngestorConfig,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
-    sleep_fn: SleepCallback = time.sleep,
-    post_request_fn: CaseSubmissionCallback | None = None,
-    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
-    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
-    case_path_filter: Callable[[Path], bool] | None = None,
-    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     archive_checkpointing: bool = True,
-    run_report: IngestorRunReport | None = None,
-) -> int:
-    """Execute one complete archive scan-and-upload cycle."""
-    use_prepared_archives = post_request_fn is None
-    post_request_fn = _case_submission_callback(post_request_fn)
+) -> tuple[dict[str, Any], set[str], str] | None:
+    """Build offline dry-run state or fetch state needed for this run."""
+    if config.dry_run and not config.dry_run_use_remote_state:
+        return _fresh_state(), set(), ""
 
     endpoint_url = _build_endpoint_url(config)
     state_endpoint_url = _build_state_endpoint_url(config)
@@ -141,10 +136,6 @@ def _run_ingestor(
         state_endpoint_url=state_endpoint_url,
         log_event_fn=_log_event,
     )
-
-    if not _validate_run_preconditions(config, log_event_fn=_log_event):
-        return 1
-
     completed_snapshot_keys: set[str] = set()
     if config.scan_mode == "archive" and archive_checkpointing:
         try:
@@ -162,7 +153,7 @@ def _run_ingestor(
                 "archive_checkpoint_fetch_failed",
                 {"status_code": exc.status_code, "error": str(exc)},
             )
-            return 1
+            return None
 
     try:
         state = _fetch_ingestion_state(
@@ -180,7 +171,37 @@ def _run_ingestor(
                 "error": str(exc),
             },
         )
+        return None
+
+    return state, completed_snapshot_keys, endpoint_url
+
+
+def _run_ingestor(
+    config: IngestorConfig,
+    metadata_locator: MetadataLocator = _locate_metadata_files,
+    sleep_fn: SleepCallback = time.sleep,
+    post_request_fn: CaseSubmissionCallback | None = None,
+    discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
+    checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
+    case_path_filter: Callable[[Path], bool] | None = None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
+    archive_checkpointing: bool = True,
+    run_report: IngestorRunReport | None = None,
+) -> int:
+    """Execute one complete archive scan-and-upload cycle."""
+    use_prepared_archives = post_request_fn is None
+    post_request_fn = _case_submission_callback(post_request_fn)
+
+    if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1
+
+    run_state = _prepare_run_state(
+        config,
+        archive_checkpointing=archive_checkpointing,
+    )
+    if run_state is None:
+        return 1
+    state, completed_snapshot_keys, endpoint_url = run_state
 
     new_discovery_results: list[ExecutionDiscoveryResult] = []
     try:

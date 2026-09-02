@@ -610,18 +610,32 @@ def test_run_ingestor_dry_run_does_not_upload(
     monkeypatch.setattr(
         upload_ingestor_module,
         "_fetch_ingestion_state",
-        lambda *args, **kwargs: _fresh_state(),
+        lambda *_args, **_kwargs: pytest.fail("dry run must not fetch API state"),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_build_endpoint_url",
+        lambda *_: pytest.fail("dry run must not build upload endpoint"),
+    )
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_archive_checkpoints",
+        lambda *_args, **_kwargs: pytest.fail(
+            "dry run must not fetch archive checkpoints"
+        ),
     )
 
     config = IngestorConfig(
-        api_base_url="http://backend:8000",
-        api_token="token",
+        api_base_url="",
+        api_token="",
         archive_root=archive_root,
         machine_name="perlmutter",
         dry_run=True,
+        dry_run_use_remote_state=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,
+        scan_mode="archive",
     )
 
     exit_code = _run_ingestor(
@@ -785,7 +799,7 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
 
 
-def test_run_ingestor_fetches_archive_checkpoints_before_state(
+def test_run_ingestor_default_dry_run_fetches_archive_checkpoints_before_state(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -863,7 +877,7 @@ def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
         api_token="token",
         archive_root=archive_root,
         machine_name="perlmutter",
-        dry_run=True,
+        dry_run=False,
         max_cases_per_run=None,
         max_attempts=1,
         request_timeout_seconds=30,

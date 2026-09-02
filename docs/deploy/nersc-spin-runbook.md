@@ -351,12 +351,12 @@ snapshots in any eligible month are discovered automatically.
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
    - Configure secret-backed environment variables from `nersc-staging-ingestor-env`.
-   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/nersc.sh`; that wrapper is for host-side NERSC cron usage and defaults to host filesystem paths and API values that do not match this Spin workload.
+   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
 
 5. **Create/update CronJob `nersc-archive-ingestor`**
    - Use the **Archive CronJob** section below.
    - Configure secret-backed environment variables from `nersc-archive-ingestor-env`.
-   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/nersc.sh`; that wrapper is for host-side NERSC cron usage and defaults to host filesystem paths and API values that do not match this Spin workload.
+   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
 
 6. **Validate both jobs once with dry run**
    - Set `DRY_RUN=true` in both ingestion secrets.

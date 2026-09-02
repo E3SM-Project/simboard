@@ -48,7 +48,7 @@ def _validate_run_preconditions(
         )
         return False
 
-    if not config.api_token:
+    if (not config.dry_run or config.dry_run_use_remote_state) and not config.api_token:
         log_event_fn(
             "configuration_error",
             {"error": "SIMBOARD_API_TOKEN is required"},
@@ -90,6 +90,7 @@ def _log_startup_configuration(
         {
             "machine_name": config.machine_name,
             "dry_run": config.dry_run,
+            "dry_run_use_remote_state": config.dry_run_use_remote_state,
             "max_cases_per_run": config.max_cases_per_run,
             "max_attempts": config.max_attempts,
             "request_timeout_seconds": config.request_timeout_seconds,

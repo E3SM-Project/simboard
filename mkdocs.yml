@@ -31,3 +31,4 @@ nav:
       - Deployment and Release: deploy/deployment-and-release.md
       - NERSC Spin Runbook: deploy/nersc-spin-runbook.md
       - HPC API Token Authentication: deploy/hpc-api-token-authentication.md
+      - Read-Only Database Access: deploy/read-only-database-access.md

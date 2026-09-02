@@ -301,7 +301,8 @@ flowchart TD
 
 ### Runner Configuration
 
-All automated ingestion requests require a bearer API token. Both site-side runners use:
+Automated ingestion and remote-state dry runs require a bearer API token. Both
+site-side runners use:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
@@ -310,6 +311,14 @@ All automated ingestion requests require a bearer API token. Both site-side runn
 - `OLD_PERF_ARCHIVE_ROOT`
 - `MACHINE_NAME`
 - `DRY_RUN`
+- `DRY_RUN_USE_REMOTE_STATE`
+
+With `DRY_RUN=true`, runners read remote ingestion state and archive checkpoints by
+default, then scan and report candidates without writes. This requires
+`SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`; the report excludes executions
+already ingested remotely and snapshots already checkpointed. Set
+`DRY_RUN_USE_REMOTE_STATE=false` for an offline scan using empty local state and no
+API requests.
 
 They also support these tuning options:
 
@@ -321,8 +330,10 @@ They also support these tuning options:
 
 `SCAN_MODE` selects whether a runner scans staging or archive roots. In archive
 mode, runners traverse only top-level `YYYY-MM` buckets under the configured
-archive root. Year-range filters apply only to archive mode and are intended
-for targeted backfills, not for normal staging collection.
+archive root. Year-range filters apply only to archive mode. Direct Python
+entrypoints leave both bounds unset; the NERSC and Chrysalis site wrappers
+default `ARCHIVE_YEAR_START=2025-01` and leave `ARCHIVE_YEAR_END` unset. Callers
+may override either bound for a differently scoped archive scan.
 
 `MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
 operation when runners should submit every submission-qualified case they find.
@@ -338,6 +349,21 @@ Before enabling or expanding remote archive uploads, benchmark a representative
 production-like archive at the target site. Record the observed archive creation,
 upload, and retry timings from the events above before rollout; this document does
 not supply synthetic benchmark measurements.
+
+### Operational Validation
+
+The runners use composable configuration rather than numbered dry-run modes:
+
+- Set `DRY_RUN=true` to scan and report candidates without persisted state changes;
+  it reads remote state by default. Set `DRY_RUN_USE_REMOTE_STATE=false` to avoid
+  API requests for an offline scan.
+- Set `DRY_RUN=false` and a small `MAX_CASES_PER_RUN` value to validate live
+  ingestion on a bounded batch. This is real ingestion and persists results.
+- Set `DRY_RUN=false` with no per-run cap for normal scheduled ingestion.
+
+Use one-off diagnostic scripts only for exceptional, data-specific
+investigations. Do not add a permanent runner mode unless that workflow becomes
+a recurring operational need.
 
 ### Stored Results
 

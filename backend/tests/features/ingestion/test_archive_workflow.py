@@ -74,8 +74,16 @@ def test_validate_run_preconditions_logs_failures(tmp_path: Path) -> None:
 
     archive_root = tmp_path / "archive"
     archive_root.mkdir()
-    config = replace(_config(archive_root), api_token="")
-    assert not _validate_run_preconditions(config, log_event_fn=log_event)
+    default_dry_run_config = replace(_config(archive_root, dry_run=True), api_token="")
+    assert not _validate_run_preconditions(
+        default_dry_run_config, log_event_fn=log_event
+    )
+
+    dry_run_config = replace(default_dry_run_config, dry_run_use_remote_state=False)
+    assert _validate_run_preconditions(dry_run_config, log_event_fn=log_event)
+
+    ingest_config = replace(_config(archive_root), api_token="")
+    assert not _validate_run_preconditions(ingest_config, log_event_fn=log_event)
     assert logged_events[-1] == (
         "configuration_error",
         {"error": "SIMBOARD_API_TOKEN is required"},
@@ -129,6 +137,7 @@ def test_log_startup_configuration_emits_structured_block(tmp_path: Path) -> Non
             {
                 "machine_name": "pm",
                 "dry_run": True,
+                "dry_run_use_remote_state": True,
                 "max_cases_per_run": 5,
                 "max_attempts": 2,
                 "request_timeout_seconds": 60,

@@ -132,6 +132,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "startup_configuration_runtime": (
         "machine_name",
         "dry_run",
+        "dry_run_use_remote_state",
         "max_cases_per_run",
         "max_attempts",
         "request_timeout_seconds",
@@ -261,6 +262,8 @@ class IngestorConfig:
     archive_year_start: str | None = None
     # Optional archive upper bound normalized to a YYYY-MM archive bucket.
     archive_year_end: str | None = None
+    # Whether a dry run reads existing state and archive checkpoints from SimBoard.
+    dry_run_use_remote_state: bool = True
 
 
 class IngestionRequestError(Exception):
@@ -504,6 +507,9 @@ def _build_config_from_env(
 
     machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=True)
+    dry_run_use_remote_state = _parse_bool(
+        os.getenv("DRY_RUN_USE_REMOTE_STATE"), default=True
+    )
     max_cases_per_run = _parse_optional_int(os.getenv("MAX_CASES_PER_RUN"))
 
     if max_cases_per_run is not None and max_cases_per_run <= 0:
@@ -557,6 +563,7 @@ def _build_config_from_env(
         machine_name=machine_name,
         scan_mode=cast(Literal["staging", "archive"], scan_mode),
         dry_run=dry_run,
+        dry_run_use_remote_state=dry_run_use_remote_state,
         max_cases_per_run=max_cases_per_run,
         max_attempts=max_attempts,
         request_timeout_seconds=timeout_seconds,

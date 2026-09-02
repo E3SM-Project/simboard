@@ -1,0 +1,27 @@
+# Example crontab entries for a generic site collection launcher.
+# Install with something like:
+#   crontab backend/app/scripts/ingestion/sites/<site>.crontab.example
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+CRON_TZ=UTC
+
+# Assume SIMBOARD_ROOT is a directory containing both
+#    "repository/simboard/backend/..." and 
+#    "operations" subdirectories.
+export SIMBOARD_ROOT=</path/to/simboard_root>
+
+# Staging scan: run every 15 minutes, offset 5 minutes into the hour.
+5 20 35 50 * * * * cd ${SIMBOARD_ROOT}/operations && ${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh <machine_name> staging
+
+# Archive scan: run daily at 03:15 UTC. The site config supplies the default
+# lower bound. Override `ARCHIVE_YEAR_START` or `ARCHIVE_YEAR_END` in the cron
+# environment for a differently scoped scan. Values may use YYYY or YYYY-MM.
+10 15 * * * cd ${SIMBOARD_ROOT}/operations && ${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive
+
+# I DON'T KNOW ABOUT THESE
+# Diagnostics provenance scan: start dry-run, inspect logs, then set DRY_RUN=false.
+# 20 * * * * cd ${REPO_DIR} && ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/nersc-diagnostics-scanner.log 2>&1
+
+# Chrysalis diagnostics provenance scan; use its local checkout path for REPO_DIR.
+# 25 * * * * cd ${REPO_DIR} && MACHINE_NAME=chrysalis ${REPO_DIR}/backend/app/scripts/ingestion/sites/lcrc-diagnostics-scanner.sh >> ${REPO_DIR}/backend/app/scripts/ingestion/sites/lcrc-diagnostics-scanner.log 2>&1
