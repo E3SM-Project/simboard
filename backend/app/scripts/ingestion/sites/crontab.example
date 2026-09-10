@@ -1,17 +1,24 @@
-# Example crontab entries for a generic site collection launcher.
-# Install with something like:
-#   crontab backend/app/scripts/ingestion/sites/<site>.crontab.example
+# Example crontab entries for a generic site collection launcher. Copy this file
+# outside the repository, replace the placeholders, then install the copy with:
+#   crontab /path/to/<site>.crontab
 
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 CRON_TZ=UTC
 
-# Assume SIMBOARD_ROOT is a directory containing both
-#    "repository/simboard/backend/..." and
-#    "operations" subdirectories.
+# Standard layout: SIMBOARD_ROOT contains both `repository/simboard/backend/`
+# and `operations/`. The launcher derives its module and work paths from it.
 SIMBOARD_ROOT=/path/to/simboard_root
 
-# Staging scan: run every 15 minutes, offset 5 minutes into the hour.
+# Deployment configuration: source the backend environment required to reach the
+# API. Store the API token in ${SIMBOARD_ROOT}/operations/.api_token_export;
+# it must be readable only by this cron user and export SIMBOARD_API_TOKEN.
+SIMBOARD_ENV_FILE=/path/to/backend/environment.sh
+
+# For a nonstandard layout only, set SIMBOARD_WORKDIR and SIMBOARD_MODULES here.
+# Otherwise, leave them unset.
+
+# Replace `chrysalis` with the site-config name. Staging scan: every 15 minutes.
 5,20,35,50 * * * * cd "${SIMBOARD_ROOT}/operations" && "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
 
 # Archive scan: run daily at 12:00 UTC. The site config supplies the default

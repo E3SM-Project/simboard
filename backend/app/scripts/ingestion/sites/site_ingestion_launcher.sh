@@ -17,14 +17,11 @@ if [[ ! -r "${site_config}" ]]; then
   exit 1
 fi
 
-if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
-  export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
-  export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
-fi
-
-# Site config provides paths, runner module, and optional authentication helpers.
+# Site config provides site-specific ingestion settings.
 source "${site_config}"
 
+# A standard deployment needs only SIMBOARD_ROOT. Explicit paths support
+# nonstandard layouts and take precedence over the derived defaults.
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
   export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
   export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
@@ -33,8 +30,11 @@ fi
 # SIMBOARD_REPODIR is retained as a compatibility alias for existing site configs.
 export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_REPODIR:-}}"
 
-: "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or the site configuration}"
-: "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or the site configuration}"
+: "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
+: "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
+
+# The default token-file location depends on the resolved work directory.
+export SIMBOARD_API_TOKEN_FILE="${SIMBOARD_API_TOKEN_FILE:-${SIMBOARD_WORKDIR}/.api_token_export}"
 
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 

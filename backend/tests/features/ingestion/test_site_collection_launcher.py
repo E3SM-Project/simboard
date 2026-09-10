@@ -103,7 +103,7 @@ def test_launcher_requires_root_or_explicit_paths(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert (
-        "SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or the site configuration"
+        "SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override"
         in result.stderr
     )
 
@@ -128,7 +128,7 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     site_config.write_text(
         "\n".join(
             [
-                f"export SIMBOARD_REPODIR={shlex.quote(str(backend_dir))}",
+                f"export SIMBOARD_MODULES={shlex.quote(str(backend_dir))}",
                 f"export SIMBOARD_WORKDIR={shlex.quote(str(work_dir))}",
                 "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
                 "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
@@ -158,33 +158,77 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     assert result.returncode == 0, result.stderr
 
 
+def test_launcher_derives_default_token_file_after_workdir(tmp_path: Path) -> None:
+    simboard_root = tmp_path / "simboard-root"
+    work_dir = simboard_root / "operations"
+    work_dir.mkdir(parents=True)
+    modules_dir = simboard_root / "repository/simboard/backend"
+    modules_dir.parent.mkdir(parents=True)
+    backend_dir = Path(__file__).resolve().parents[3]
+    modules_dir.symlink_to(backend_dir, target_is_directory=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    environment_file = tmp_path / "environment.sh"
+    environment_file.write_text(
+        "export SIMBOARD_API_BASE_URL=https://example.test\n", encoding="utf-8"
+    )
+    (work_dir / ".api_token_export").write_text(
+        "export SIMBOARD_API_TOKEN=test-token\n", encoding="utf-8"
+    )
+    site_config = tmp_path / "test.config"
+    site_config.write_text(
+        "\n".join(
+            [
+                "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
+                "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
+                f"export SIMBOARD_ENV_FILE={shlex.quote(str(environment_file))}",
+                "export DRY_RUN=true",
+                f"export PYTHON_BIN={shlex.quote(str(fake_python))}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env.pop("SIMBOARD_API_BASE_URL", None)
+    env.pop("SIMBOARD_API_TOKEN", None)
+    env.pop("SIMBOARD_API_TOKEN_FILE", None)
+    env["SIMBOARD_ROOT"] = str(simboard_root)
+    env["SIMBOARD_SITE_CONFIG"] = str(site_config)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+
+    result = subprocess.run(
+        [_launcher_path(), "test", "archive"],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_site_configs_define_their_ingestors() -> None:
     sites_dir = _launcher_path().parent
 
-    for config_name, expected_module, expected_machine in (
-        (
-            "nersc.config",
-            "app.scripts.ingestion.nersc_archive_ingestor",
-            "perlmutter",
-        ),
-        (
-            "chrysalis.config",
-            "app.scripts.ingestion.hpc_upload_archive_ingestor",
-            "chrysalis",
-        ),
-    ):
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                'source "$1"; printf "%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN"',
-                "bash",
-                str(sites_dir / config_name),
-            ],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; printf "%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN"',
+            "bash",
+            str(sites_dir / "chrysalis.config"),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
 
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.splitlines() == [expected_module, expected_machine, "true"]
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "app.scripts.ingestion.hpc_upload_archive_ingestor",
+        "chrysalis",
+        "true",
+    ]
