@@ -26,7 +26,6 @@ set +a
 
 : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in LCRC_V3_ENV_FILE.}"
 export DRY_RUN="${LCRC_V3_DRY_RUN:-${DRY_RUN:-true}}"
-export V3_DIAGNOSTICS_SOURCE_ROOT="${V3_DIAGNOSTICS_SOURCE_ROOT:-/lcrc/group/e3sm/public_html/diagnostic_output}"
 
 DRY_RUN_NORMALIZED="${DRY_RUN,,}"
 if [[ "${DRY_RUN_NORMALIZED}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN_NORMALIZED}" != "yes" ]]; then

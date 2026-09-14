@@ -17,6 +17,12 @@ def test_dry_run_defaults_to_true_and_matches_scanner_values(monkeypatch) -> Non
     assert backfill._dry_run_requested(True) is True
 
 
+def test_diagnostics_source_root_is_parent_of_reviewed_archive() -> None:
+    assert backfill._diagnostics_source_root(
+        "/lcrc/group/e3sm/public_html/diagnostic_output/diagnostics_archive"
+    ) == Path("/lcrc/group/e3sm/public_html/diagnostic_output")
+
+
 def test_manifest_covers_v3_cases_and_bonus_target() -> None:
     targets = {target.case_name: target for target in backfill.V3_DIAGNOSTIC_TARGETS}
 
