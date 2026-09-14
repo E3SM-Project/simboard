@@ -41,6 +41,7 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
         "missing": [],
         "unmapped": ["unmapped"],
         "zero_matches": [],
+        "owner_mismatch": [],
         "ambiguous": ["duplicate-a", "duplicate-b"],
         "machine_skipped": ["other-machine"],
         "failed": [],
@@ -187,6 +188,57 @@ def test_case_resolution_filters_by_exact_name_and_machine_id() -> None:
         "machine_id": "machine-id",
         "page_size": 100,
     }
+
+
+def test_owner_matching_selects_diagnostics_owner_from_multiple_cases() -> None:
+    cases = [
+        {"name": "case", "hpcUsername": "ac.golaz"},
+        {"name": "case", "hpcUsername": "ac.wlin"},
+    ]
+
+    assert backfill._matching_owner_cases(cases, "ac.wlin") == [cases[1]]
+
+
+def test_diagnostics_publisher_uses_known_simboard_username_alias() -> None:
+    target = backfill.Target("case", "ac.kzhang/E3SMv3", "chrysalis")
+
+    assert backfill._diagnostics_publisher(target) == "ac.kzhang"
+    assert backfill._diagnostics_hpc_username("ac.kzhang") == "ac.kai.zhang"
+
+
+def test_multiple_case_log_lists_candidate_case_and_owner(monkeypatch) -> None:
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        backfill,
+        "_log_multiline_event",
+        lambda event, fields: events.append((event, fields)),
+    )
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+
+    backfill._log_multiple_case_matches(
+        target,
+        "ac.wlin",
+        "ac.wlin",
+        [
+            {"name": "case", "hpcUsername": "ac.golaz"},
+            {"name": "case", "hpcUsername": "ac.wlin"},
+        ],
+    )
+
+    assert events == [
+        (
+            "v3_diagnostics_backfill_multiple_case_matches",
+            {
+                "case_name": "case",
+                "diagnostics_publisher": "ac.wlin",
+                "selected_hpc_username": "ac.wlin",
+                "matching_cases": [
+                    "case_name:case/hpc_username:ac.golaz",
+                    "case_name:case/hpc_username:ac.wlin",
+                ],
+            },
+        )
+    ]
 
 
 def test_backfill_uses_explicit_bonus_source_directory(
