@@ -30,3 +30,21 @@ Invalid, unreadable, unsafe, or malformed provenance and settings inputs are ski
 Scanner API access is permitted only for `ADMIN` and `SERVICE_ACCOUNT` roles. A state lookup can return no state, and it returns an error when the supplied machine is unknown. The scanner-link endpoint requires exactly one diagnostic and rejects unsafe archive-relative paths; case-resolution failures also prevent a successful state update.
 
 With `DRY_RUN` enabled, the scanner performs archive resolution and candidate discovery, logs the diagnostics case paths it would link, and exits without reading scanner state or submitting links. It therefore creates or updates no diagnostic links or scanner state; every discovered candidate is reported as a proposed link rather than classified as linked, unchanged, or deferred.
+
+## E3SM v3 One-Time Backfill
+
+After v3 case ingestion completes, run
+`app.scripts.ingestion.v3_data.diagnostics_backfill` once for each supported
+machine. It requires `--machine chrysalis` or `--machine perlmutter`,
+`SIMBOARD_API_BASE_URL`, and `V3_DIAGNOSTICS_SOURCE_ROOT`, which must contain
+the documented diagnostic-source directories. A non-dry-run execution also
+requires `SIMBOARD_API_TOKEN`. Use `--dry-run` first. The runner fails closed
+when a destination already exists; after investigating a failed copy, remove
+only that partial destination before retrying.
+
+The runner derives the case group and HPC username from the exactly one
+SimBoard case matching the selected machine ID and case name. It copies mapped
+diagnostics into the production archive, preserves the newest source
+`provenance.*.cfg`, writes only its paired settings file, and then invokes the
+normal scanner. Its reconciliation event reports copied, linked, missing,
+unmapped, zero-match, ambiguous, failed, and other-machine-skipped targets.
