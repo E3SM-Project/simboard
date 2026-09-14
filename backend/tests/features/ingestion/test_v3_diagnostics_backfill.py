@@ -23,6 +23,16 @@ def test_diagnostics_source_root_is_parent_of_reviewed_archive() -> None:
     ) == Path("/lcrc/group/e3sm/public_html/diagnostic_output")
 
 
+def test_api_base_url_accepts_host_or_versioned_api_url() -> None:
+    assert (
+        backfill._api_base_url("https://simboard.example") == "https://simboard.example"
+    )
+    assert (
+        backfill._api_base_url("https://simboard.example/api/v1/")
+        == "https://simboard.example"
+    )
+
+
 def test_manifest_covers_v3_cases_and_bonus_target() -> None:
     targets = {target.case_name: target for target in backfill.V3_DIAGNOSTIC_TARGETS}
 
