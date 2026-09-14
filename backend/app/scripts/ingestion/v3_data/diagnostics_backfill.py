@@ -6,7 +6,7 @@ import argparse
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,6 @@ RECONCILIATION_STATUSES = (
     "copied",
     "linked",
     "missing",
-    "missing_provenance",
     "unmapped",
     "zero_matches",
     "owner_mismatch",
@@ -182,7 +181,6 @@ def main() -> int:
         report[key]
         for key in (
             "missing",
-            "missing_provenance",
             "zero_matches",
             "owner_mismatch",
             "ambiguous",
@@ -317,9 +315,6 @@ def _backfill_target(
     if not source.is_dir():
         return "missing"
 
-    if _latest_cfg(source) is None:
-        return "missing_provenance"
-
     if dry_run:
         return "copied"
 
@@ -330,11 +325,7 @@ def _backfill_target(
 
     try:
         _copy_diagnostics(source, destination)
-        cfg = _latest_cfg(destination)
-
-        if cfg is None:
-            return "failed"
-
+        cfg = _latest_cfg(destination) or _create_provenance_cfg(destination)
         _write_settings(cfg, case, machine, public_base_url)
     except (OSError, shutil.Error) as exc:
         _log_event(
@@ -462,6 +453,14 @@ def _copy_diagnostics(source: Path, destination: Path) -> None:
     )
 
 
+def _create_provenance_cfg(directory: Path) -> Path:
+    """Create provenance for historic diagnostics that predate zppy provenance."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    cfg = directory / f"provenance.{timestamp}.cfg"
+    cfg.touch(exist_ok=False)
+    return cfg
+
+
 def _write_settings(
     cfg: Path, case: dict[str, Any], machine: str, public_base_url: str
 ) -> Path:
@@ -492,7 +491,6 @@ def _run_scanner_if_reconciled(
         report[status]
         for status in (
             "missing",
-            "missing_provenance",
             "zero_matches",
             "owner_mismatch",
             "ambiguous",
