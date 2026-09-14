@@ -417,7 +417,7 @@ def test_run_defers_after_exhausted_state_lookup(
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
-    run()
+    assert run() == 1
     assert client.post_calls == []
     assert (
         "diagnostics_scanner_request_retry_exhausted",

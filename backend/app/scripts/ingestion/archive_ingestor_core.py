@@ -160,6 +160,8 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "linked_cases",
         "missing_count",
         "missing_cases",
+        "missing_provenance_count",
+        "missing_provenance_cases",
         "unmapped_count",
         "unmapped_cases",
         "zero_matches_count",

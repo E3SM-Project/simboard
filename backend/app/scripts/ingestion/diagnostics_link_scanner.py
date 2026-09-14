@@ -185,6 +185,9 @@ def run() -> int:
 
     _log_event("diagnostics_scanner_completed", summary)
 
+    if summary["deferred_state_lookups"] or summary["failed_link_submissions"]:
+        return 1
+
     return 0
 
 

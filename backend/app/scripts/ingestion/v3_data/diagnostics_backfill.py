@@ -6,6 +6,7 @@ import argparse
 import os
 import shutil
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ RECONCILIATION_STATUSES = (
     "copied",
     "linked",
     "missing",
+    "missing_provenance",
     "unmapped",
     "zero_matches",
     "owner_mismatch",
@@ -178,7 +180,14 @@ def main() -> int:
 
     if any(
         report[key]
-        for key in ("missing", "zero_matches", "owner_mismatch", "ambiguous", "failed")
+        for key in (
+            "missing",
+            "missing_provenance",
+            "zero_matches",
+            "owner_mismatch",
+            "ambiguous",
+            "failed",
+        )
     ):
         return 1
 
@@ -308,6 +317,9 @@ def _backfill_target(
     if not source.is_dir():
         return "missing"
 
+    if _latest_cfg(source) is None:
+        return "missing_provenance"
+
     if dry_run:
         return "copied"
 
@@ -421,14 +433,23 @@ def _log_multiple_case_matches(
 
 
 def _latest_cfg(directory: Path) -> Path | None:
-    candidates = []
+    candidates: list[tuple[datetime, Path]] = []
     for path in directory.glob("provenance.*.cfg"):
-        if path.is_file() and TIMESTAMP_RE.match(path.name):
-            candidates.append(path)
+        match = TIMESTAMP_RE.match(path.name)
+        if not path.is_file() or match is None:
+            continue
+
+        try:
+            timestamp = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S_%f")
+        except ValueError:
+            continue
+
+        candidates.append((timestamp, path))
+
     if not candidates:
         return None
 
-    return max(candidates, key=lambda path: path.name)
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def _copy_diagnostics(source: Path, destination: Path) -> None:
@@ -471,6 +492,7 @@ def _run_scanner_if_reconciled(
         report[status]
         for status in (
             "missing",
+            "missing_provenance",
             "zero_matches",
             "owner_mismatch",
             "ambiguous",
