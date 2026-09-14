@@ -76,6 +76,10 @@ V3_DIAGNOSTIC_TARGETS = (
             "v3.LR.piClim-histaer_0101",
             "v3.LR.piClim-histaer_0151",
             "v3.LR.piClim-histaer_0201",
+            "v3.LR.piClim-control-iceini",
+            "v3.LR.piClim-histall_0101",
+            "v3.LR.piClim-histGHG_0101",
+            "v3.LR.piClim-histGHG_0151",
         ),
         "ac.kzhang/E3SMv3",
     ),
@@ -87,15 +91,6 @@ V3_DIAGNOSTIC_TARGETS = (
             "v3.EARRM.amip_0101",
         ),
         "ac.qtang/E3SMv3",
-    ),
-    *_targets(
-        (
-            "v3.LR.piClim-control-iceini",
-            "v3.LR.piClim-histall_0101",
-            "v3.LR.piClim-histGHG_0101",
-            "v3.LR.piClim-histGHG_0151",
-        ),
-        None,
     ),
     Target(
         "v3.LR.amip_bonus_0101",
