@@ -38,6 +38,7 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
     report = {
         "copied": ["copied"],
         "linked": [],
+        "skipped_existing": [],
         "missing": [],
         "unmapped": ["unmapped"],
         "zero_matches": [],
@@ -312,6 +313,47 @@ def test_backfill_generates_provenance_for_historic_source(
     assert len(cfgs) == 1
     assert cfgs[0].read_text() == ""
     assert cfgs[0].with_suffix(".settings").is_file()
+
+
+def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> None:
+    source_root = tmp_path / "source-root"
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+        )
+        == "skipped_existing"
+    )
+
+
+def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
+    report = backfill._new_report("chrysalis")
+    report["skipped_existing"].append("case")
+    scanner_calls: list[None] = []
+    monkeypatch.setattr(backfill, "run_scanner", lambda: scanner_calls.append(None))
+
+    backfill._run_scanner_if_reconciled(report, "chrysalis", dry_run=False)
+
+    assert scanner_calls == [None]
 
 
 def test_backfill_uses_explicit_bonus_source_directory(
