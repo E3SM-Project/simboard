@@ -47,10 +47,11 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
         "failed": [],
     }
 
-    fields = backfill._reconciliation_fields(report, 4)
+    fields = backfill._reconciliation_fields(report, 4, dry_run=True)
 
     assert fields["selected_target_count"] == 4
-    assert fields["copied_count"] == "1/4"
+    assert fields["ready_to_copy_count"] == "1/4"
+    assert "copied_count" not in fields
     assert fields["ambiguous_count"] == "2/4"
     assert fields["ambiguous_cases"] == ["duplicate-a", "duplicate-b"]
     assert fields["machine_skipped_count"] == f"1/{len(backfill.V3_DIAGNOSTIC_TARGETS)}"

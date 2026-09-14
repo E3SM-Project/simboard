@@ -152,6 +152,8 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "machine",
         "dry_run",
         "selected_target_count",
+        "ready_to_copy_count",
+        "ready_to_copy_cases",
         "copied_count",
         "copied_cases",
         "linked_count",

@@ -487,7 +487,7 @@ def _run_scanner_if_reconciled(
 
 
 def _reconciliation_fields(
-    report: dict[str, list[str]], selected_target_count: int
+    report: dict[str, list[str]], selected_target_count: int, dry_run: bool
 ) -> dict[str, object]:
     """Return count-qualified, per-outcome reconciliation fields for logs."""
     fields: dict[str, object] = {
@@ -496,8 +496,9 @@ def _reconciliation_fields(
         "machine_skipped_cases": report["machine_skipped"],
     }
     for status in RECONCILIATION_STATUSES:
-        fields[f"{status}_count"] = f"{len(report[status])}/{selected_target_count}"
-        fields[f"{status}_cases"] = report[status]
+        label = "ready_to_copy" if dry_run and status == "copied" else status
+        fields[f"{label}_count"] = f"{len(report[status])}/{selected_target_count}"
+        fields[f"{label}_cases"] = report[status]
     return fields
 
 
@@ -513,7 +514,7 @@ def _log_reconciliation(
         {
             "machine": machine,
             "dry_run": dry_run,
-            **_reconciliation_fields(report, selected_target_count),
+            **_reconciliation_fields(report, selected_target_count, dry_run),
         },
     )
 
