@@ -26,6 +26,7 @@ SUPPORTED_MACHINES = frozenset({"chrysalis", "perlmutter"})
 RECONCILIATION_STATUSES = (
     "copied",
     "linked",
+    "skipped_existing",
     "missing",
     "unmapped",
     "zero_matches",
@@ -308,6 +309,16 @@ def _backfill_target(
         return resolution_status
 
     assert case is not None
+    destination = archive_root / "production"
+    if group := case.get("caseGroup"):
+        destination /= group
+    destination /= target.case_name
+
+    if destination.is_dir():
+        return "skipped_existing"
+    if destination.exists():
+        return "failed"
+
     source = source_root / target.source
     if not target.source_is_case_dir:
         source /= target.case_name
@@ -317,11 +328,6 @@ def _backfill_target(
 
     if dry_run:
         return "copied"
-
-    destination = archive_root / "production"
-    if group := case.get("caseGroup"):
-        destination /= group
-    destination /= target.case_name
 
     try:
         _copy_diagnostics(source, destination)
@@ -501,7 +507,7 @@ def _run_scanner_if_reconciled(
     os.environ["MACHINE_NAME"] = machine
     os.environ["DRY_RUN"] = "false"
     if run_scanner() != 0:
-        report["failed"].extend(report["copied"])
+        report["failed"].extend(report["copied"] + report["skipped_existing"])
     else:
         report["linked"] = report["copied"].copy()
 
