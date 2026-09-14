@@ -22,7 +22,6 @@ from app.scripts.ingestion.diagnostics_link_scanner import (
 from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import V3_CASE_NAMES
 
 SUPPORTED_MACHINES = frozenset({"chrysalis", "perlmutter"})
-SOURCE_ROOT_ENV = "V3_DIAGNOSTICS_SOURCE_ROOT"
 
 
 @dataclass(frozen=True)
@@ -129,6 +128,11 @@ def _dry_run_requested(command_line_dry_run: bool) -> bool:
 def _api_headers() -> dict[str, str]:
     token = os.environ.get("SIMBOARD_API_TOKEN", "").strip()
     return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _diagnostics_source_root(archive_root: str) -> Path:
+    """Return the diagnostic-output root containing the reviewed archive root."""
+    return Path(archive_root).parent
 
 
 def _resolve_machine_id(client: httpx.Client, api_base: str, machine: str) -> str:
@@ -261,7 +265,7 @@ def main() -> int:
     dry_run = _dry_run_requested(args.dry_run)
     machine = args.machine
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE[machine]
-    source_root = Path(os.environ[SOURCE_ROOT_ENV]).resolve()
+    source_root = _diagnostics_source_root(archive.root)
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
     if not dry_run and not os.environ.get("SIMBOARD_API_TOKEN", "").strip():
         raise ValueError("SIMBOARD_API_TOKEN is required when --dry-run is not set")
@@ -289,9 +293,7 @@ def main() -> int:
     ]
 
     if not source_root.is_dir():
-        raise ValueError(
-            f"{SOURCE_ROOT_ENV} is not a readable directory: {source_root}"
-        )
+        raise ValueError(f"Diagnostics source root is not readable: {source_root}")
 
     with httpx.Client(timeout=30) as client:
         machine_id = _resolve_machine_id(client, api_base, machine)

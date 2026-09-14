@@ -301,9 +301,8 @@ The environment file must define:
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
 
-It also supplies `V3_DIAGNOSTICS_SOURCE_ROOT` to the diagnostics backfill. The
-template defaults this to the Chrysalis diagnostic-output root; override it
-only when that directory is mounted elsewhere.
+The diagnostics backfill derives its source root from the configured Chrysalis
+diagnostics archive location.
 
 Set `OLD_PERF_ARCHIVE_ROOT` only when the Chrysalis archive is mounted somewhere
 other than its documented default.

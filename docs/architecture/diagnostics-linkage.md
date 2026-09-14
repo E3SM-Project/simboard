@@ -36,9 +36,9 @@ With `DRY_RUN` enabled, the scanner performs archive resolution and candidate di
 After v3 case ingestion completes, run
 `app.scripts.ingestion.v3_data.diagnostics_backfill` once for each supported
 machine. It requires `--machine chrysalis` or `--machine perlmutter`,
-`SIMBOARD_API_BASE_URL`, and `V3_DIAGNOSTICS_SOURCE_ROOT`, which must contain
-the documented diagnostic-source directories. A non-dry-run execution also
-requires `SIMBOARD_API_TOKEN`. Like the diagnostics scanner, it defaults to
+and `SIMBOARD_API_BASE_URL`. It derives the diagnostic source root from the
+selected machine's reviewed diagnostics archive location. A non-dry-run
+execution also requires `SIMBOARD_API_TOKEN`. Like the diagnostics scanner, it defaults to
 `DRY_RUN=true`; set `DRY_RUN=false` only after reviewing the dry-run
 reconciliation. The `--dry-run` flag always forces a dry run. The runner fails
 closed when a destination already exists; after investigating a failed copy,
