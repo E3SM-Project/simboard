@@ -52,4 +52,5 @@ the case group and HPC username from that record, copies mapped diagnostics into
 the production archive, preserves the newest source
 `provenance.*.cfg`, writes only its paired settings file, and then invokes the
 normal scanner. Its reconciliation event reports copied, linked, missing,
-unmapped, zero-match, ambiguous, failed, and other-machine-skipped targets.
+missing-provenance, unmapped, zero-match, owner-mismatch, ambiguous, failed,
+and other-machine-skipped targets.
