@@ -44,9 +44,12 @@ reconciliation. The `--dry-run` flag always forces a dry run. The runner fails
 closed when a destination already exists; after investigating a failed copy,
 remove only that partial destination before retrying.
 
-The runner derives the case group and HPC username from the exactly one
-SimBoard case matching the selected machine ID and case name. It copies mapped
-diagnostics into the production archive, preserves the newest source
+The runner selects the SimBoard case matching the selected machine ID, case
+name, and diagnostics publisher's HPC username from the mapped source path.
+When multiple name-and-machine candidates exist, it logs every candidate's case
+name and HPC username before selecting the publisher-owned record. It derives
+the case group and HPC username from that record, copies mapped diagnostics into
+the production archive, preserves the newest source
 `provenance.*.cfg`, writes only its paired settings file, and then invokes the
 normal scanner. Its reconciliation event reports copied, linked, missing,
 unmapped, zero-match, ambiguous, failed, and other-machine-skipped targets.

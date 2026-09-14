@@ -28,9 +28,13 @@ RECONCILIATION_STATUSES = (
     "missing",
     "unmapped",
     "zero_matches",
+    "owner_mismatch",
     "ambiguous",
     "failed",
 )
+CASE_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER = {
+    "ac.kzhang": "ac.kai.zhang",
+}
 
 
 @dataclass(frozen=True)
@@ -172,7 +176,10 @@ def main() -> int:
     _run_scanner_if_reconciled(report, machine, dry_run)
     _log_reconciliation(report, machine, dry_run, len(selected))
 
-    if any(report[key] for key in ("missing", "zero_matches", "ambiguous", "failed")):
+    if any(
+        report[key]
+        for key in ("missing", "zero_matches", "owner_mismatch", "ambiguous", "failed")
+    ):
         return 1
 
     return 0
@@ -284,15 +291,16 @@ def _backfill_target(
 ) -> str:
     """Copy one target and return its reconciliation outcome."""
     assert target.source is not None
-    matches, total = _resolve_cases(client, api_base, target, machine_id)
+    case, resolution_status = _resolve_owner_case(
+        client,
+        api_base,
+        target,
+        machine_id,
+    )
+    if resolution_status:
+        return resolution_status
 
-    if total == 0:
-        return "zero_matches"
-
-    if total != 1 or len(matches) != 1:
-        return "ambiguous"
-
-    case = matches[0]
+    assert case is not None
     source = source_root / target.source
     if not target.source_is_case_dir:
         source /= target.case_name
@@ -326,6 +334,32 @@ def _backfill_target(
     return "copied"
 
 
+def _resolve_owner_case(
+    client: httpx.Client,
+    api_base: str,
+    target: Target,
+    machine_id: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Resolve the one case owned by the mapped diagnostics publisher."""
+    matches, total = _resolve_cases(client, api_base, target, machine_id)
+    if total == 0:
+        return None, "zero_matches"
+
+    diagnostics_publisher = _diagnostics_publisher(target)
+    hpc_username = _diagnostics_hpc_username(diagnostics_publisher)
+    if total > 1:
+        _log_multiple_case_matches(target, diagnostics_publisher, hpc_username, matches)
+
+    owner_matches = _matching_owner_cases(matches, hpc_username)
+    if not owner_matches:
+        return None, "owner_mismatch"
+
+    if len(owner_matches) != 1:
+        return None, "ambiguous"
+
+    return owner_matches[0], None
+
+
 def _resolve_cases(
     client: httpx.Client, api_base: str, target: Target, machine_id: str
 ) -> tuple[list[dict[str, Any]], int]:
@@ -337,6 +371,53 @@ def _resolve_cases(
     response.raise_for_status()
     payload = response.json()
     return payload["items"], payload["total"]
+
+
+def _diagnostics_publisher(target: Target) -> str:
+    """Extract the production diagnostics owner from the mapped source path."""
+    assert target.source is not None
+    publisher = target.source.split("/", maxsplit=1)[0]
+
+    if not publisher:
+        raise ValueError(f"Missing diagnostics owner for {target.case_name}")
+
+    return publisher
+
+
+def _diagnostics_hpc_username(diagnostics_publisher: str) -> str:
+    """Return the SimBoard username corresponding to the diagnostics publisher."""
+    return CASE_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER.get(
+        diagnostics_publisher,
+        diagnostics_publisher,
+    )
+
+
+def _matching_owner_cases(
+    cases: list[dict[str, Any]], hpc_username: str
+) -> list[dict[str, Any]]:
+    """Return case records owned by the user who published the diagnostics."""
+    return [case for case in cases if case["hpcUsername"] == hpc_username]
+
+
+def _log_multiple_case_matches(
+    target: Target,
+    diagnostics_publisher: str,
+    hpc_username: str,
+    cases: list[dict[str, Any]],
+) -> None:
+    """Log every candidate identity before owner-based case selection."""
+    _log_multiline_event(
+        "v3_diagnostics_backfill_multiple_case_matches",
+        {
+            "case_name": target.case_name,
+            "diagnostics_publisher": diagnostics_publisher,
+            "selected_hpc_username": hpc_username,
+            "matching_cases": [
+                f"case_name:{case['name']}/hpc_username:{case['hpcUsername']}"
+                for case in cases
+            ],
+        },
+    )
 
 
 def _latest_cfg(directory: Path) -> Path | None:
@@ -387,7 +468,14 @@ def _run_scanner_if_reconciled(
     report: dict[str, list[str]], machine: str, dry_run: bool
 ) -> None:
     if dry_run or any(
-        report[status] for status in ("missing", "zero_matches", "ambiguous", "failed")
+        report[status]
+        for status in (
+            "missing",
+            "zero_matches",
+            "owner_mismatch",
+            "ambiguous",
+            "failed",
+        )
     ):
         return
     os.environ["MACHINE_NAME"] = machine
