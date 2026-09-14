@@ -22,6 +22,15 @@ from app.scripts.ingestion.diagnostics_link_scanner import (
 from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import V3_CASE_NAMES
 
 SUPPORTED_MACHINES = frozenset({"chrysalis", "perlmutter"})
+RECONCILIATION_STATUSES = (
+    "copied",
+    "linked",
+    "missing",
+    "unmapped",
+    "zero_matches",
+    "ambiguous",
+    "failed",
+)
 
 
 @dataclass(frozen=True)
@@ -265,6 +274,21 @@ def _run_scanner_if_reconciled(
         report["linked"] = report["copied"].copy()
 
 
+def _reconciliation_fields(
+    report: dict[str, list[str]], selected_target_count: int
+) -> dict[str, object]:
+    """Return count-qualified, per-outcome reconciliation fields for logs."""
+    fields: dict[str, object] = {
+        "selected_target_count": selected_target_count,
+        "machine_skipped_count": f"{len(report['machine_skipped'])}/{len(V3_DIAGNOSTIC_TARGETS)}",
+        "machine_skipped_cases": report["machine_skipped"],
+    }
+    for status in RECONCILIATION_STATUSES:
+        fields[f"{status}_count"] = f"{len(report[status])}/{selected_target_count}"
+        fields[f"{status}_cases"] = report[status]
+    return fields
+
+
 def main() -> int:
     args = _parse_args()
     dry_run = _dry_run_requested(args.dry_run)
@@ -304,6 +328,20 @@ def main() -> int:
     if not source_root.is_dir():
         raise ValueError(f"Diagnostics source root is not readable: {source_root}")
 
+    _log_event(
+        "v3_diagnostics_backfill_startup_configuration",
+        {
+            "machine": machine,
+            "dry_run": dry_run,
+            "simboard_api_base_url": api_base,
+            "has_api_token": bool(os.environ.get("SIMBOARD_API_TOKEN", "").strip()),
+            "diagnostics_source_root": str(source_root),
+            "diagnostics_archive_root": archive.root,
+            "diagnostics_public_base_url": archive.public_base_url,
+            "selected_target_count": len(selected),
+        },
+    )
+
     with httpx.Client(timeout=30) as client:
         machine_id = _resolve_machine_id(client, api_base, machine)
         for target in selected:
@@ -329,8 +367,7 @@ def main() -> int:
         {
             "machine": machine,
             "dry_run": dry_run,
-            "targets": [target.case_name for target in selected],
-            **report,
+            **_reconciliation_fields(report, len(selected)),
         },
     )
     return (
