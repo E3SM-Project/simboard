@@ -58,6 +58,8 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
+	@echo "  make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=<path> # Reconcile Chrysalis v3 diagnostics without writes"
+	@echo "  make v3-diagnostics-apply LCRC_V3_ENV_FILE=<path>   # Backfill and link Chrysalis v3 diagnostics"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -222,7 +224,7 @@ docs-build:
 # 🧑‍💻 BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply v3-diagnostics-dry-run v3-diagnostics-apply
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -282,6 +284,22 @@ v3-ingest-apply:
 	fi
 	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
+
+v3-diagnostics-dry-run:
+	@if [ -z "$(LCRC_V3_ENV_FILE)" ]; then \
+		echo "Usage: make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=<path>"; \
+		exit 1; \
+	fi
+	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
+
+v3-diagnostics-apply:
+	@if [ -z "$(LCRC_V3_ENV_FILE)" ]; then \
+		echo "Usage: make v3-diagnostics-apply LCRC_V3_ENV_FILE=<path>"; \
+		exit 1; \
+	fi
+	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=false \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
 # ============================================================
 # 🧑‍💻 FRONTEND COMMANDS
