@@ -2,6 +2,7 @@ from pathlib import Path
 
 import httpx
 
+from app.scripts.ingestion import archive_ingestor_core
 from app.scripts.ingestion.v3_data import diagnostics_backfill as backfill
 
 
@@ -52,6 +53,25 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
     assert fields["ambiguous_count"] == "2/4"
     assert fields["ambiguous_cases"] == ["duplicate-a", "duplicate-b"]
     assert fields["machine_skipped_count"] == f"1/{len(backfill.V3_DIAGNOSTIC_TARGETS)}"
+
+
+def test_multiline_event_lists_each_case_on_its_own_line(monkeypatch) -> None:
+    messages: list[str] = []
+    monkeypatch.setattr(archive_ingestor_core.logger, "info", messages.append)
+
+    archive_ingestor_core._log_multiline_event(
+        "event",
+        {"empty_cases": [], "cases": ["first", "second"], "count": "2/2"},
+    )
+
+    assert messages == [
+        "event=event\n"
+        "  cases:\n"
+        "    - first\n"
+        "    - second\n"
+        "  count=2/2\n"
+        "  empty_cases=[]"
+    ]
 
 
 def test_manifest_covers_v3_cases_and_bonus_target() -> None:

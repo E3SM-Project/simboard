@@ -924,6 +924,26 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
     logger.info(" ".join(parts))
 
 
+def _log_multiline_event(event: str, fields: dict[str, Any] | None = None) -> None:
+    """Emit a structured event with one field or list entry per line."""
+    fields = {} if fields is None else fields
+    lines = [f"event={event}"]
+
+    for key, value in _ordered_event_fields(event, fields):
+        if isinstance(value, list):
+            if not value:
+                lines.append(f"  {key}=[]")
+                continue
+
+            lines.append(f"  {key}:")
+            lines.extend(f"    - {_render_log_value(item)}" for item in value)
+            continue
+
+        lines.append(f"  {key}={_render_log_value(value)}")
+
+    logger.info("\n".join(lines))
+
+
 def _utc_now_iso() -> str:
     """Return the current UTC timestamp as an ISO-8601 string.
 
