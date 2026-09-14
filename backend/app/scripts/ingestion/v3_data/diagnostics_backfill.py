@@ -135,6 +135,11 @@ def _diagnostics_source_root(archive_root: str) -> Path:
     return Path(archive_root).parent
 
 
+def _api_base_url(value: str) -> str:
+    """Normalize a deployment URL with or without the API version prefix."""
+    return value.strip().rstrip("/").removesuffix("/api/v1")
+
+
 def _resolve_machine_id(client: httpx.Client, api_base: str, machine: str) -> str:
     response = client.get(f"{api_base}/api/v1/machines", headers=_api_headers())
     response.raise_for_status()
@@ -266,7 +271,11 @@ def main() -> int:
     machine = args.machine
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE[machine]
     source_root = _diagnostics_source_root(archive.root)
-    api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
+    api_base = _api_base_url(os.environ["SIMBOARD_API_BASE_URL"])
+    if not api_base:
+        raise ValueError("SIMBOARD_API_BASE_URL is required")
+    # The scanner uses the same host-level base URL and appends /api/v1 itself.
+    os.environ["SIMBOARD_API_BASE_URL"] = api_base
     if not dry_run and not os.environ.get("SIMBOARD_API_TOKEN", "").strip():
         raise ValueError("SIMBOARD_API_TOKEN is required when --dry-run is not set")
     report: dict[str, list[str]] = {
