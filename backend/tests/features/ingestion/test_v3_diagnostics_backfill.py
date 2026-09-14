@@ -27,6 +27,27 @@ def test_api_base_url_accepts_host_or_versioned_api_url() -> None:
     assert (
         backfill._api_base_url("https://simboard.example") == "https://simboard.example"
     )
+
+
+def test_reconciliation_fields_include_counts_and_case_lists() -> None:
+    report = {
+        "copied": ["copied"],
+        "linked": [],
+        "missing": [],
+        "unmapped": ["unmapped"],
+        "zero_matches": [],
+        "ambiguous": ["duplicate-a", "duplicate-b"],
+        "machine_skipped": ["other-machine"],
+        "failed": [],
+    }
+
+    fields = backfill._reconciliation_fields(report, 4)
+
+    assert fields["selected_target_count"] == 4
+    assert fields["copied_count"] == "1/4"
+    assert fields["ambiguous_count"] == "2/4"
+    assert fields["ambiguous_cases"] == ["duplicate-a", "duplicate-b"]
+    assert fields["machine_skipped_count"] == f"1/{len(backfill.V3_DIAGNOSTIC_TARGETS)}"
     assert (
         backfill._api_base_url("https://simboard.example/api/v1/")
         == "https://simboard.example"
