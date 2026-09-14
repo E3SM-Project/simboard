@@ -17,7 +17,7 @@ def test_manifest_covers_v3_cases_and_bonus_target() -> None:
         "perlmutter",
         True,
     )
-    assert targets["v3.LR.piClim-histGHG_0101"].source is None
+    assert targets["v3.LR.piClim-histGHG_0101"].source == "ac.kzhang/E3SMv3"
 
 
 def test_latest_cfg_selects_newest_valid_timestamp(tmp_path: Path) -> None:
