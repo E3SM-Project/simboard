@@ -5,6 +5,18 @@ import httpx
 from app.scripts.ingestion.v3_data import diagnostics_backfill as backfill
 
 
+def test_dry_run_defaults_to_true_and_matches_scanner_values(monkeypatch) -> None:
+    monkeypatch.delenv("DRY_RUN", raising=False)
+    assert backfill._dry_run_requested(False) is True
+
+    monkeypatch.setenv("DRY_RUN", "false")
+    assert backfill._dry_run_requested(False) is False
+
+    monkeypatch.setenv("DRY_RUN", "yes")
+    assert backfill._dry_run_requested(False) is True
+    assert backfill._dry_run_requested(True) is True
+
+
 def test_manifest_covers_v3_cases_and_bonus_target() -> None:
     targets = {target.case_name: target for target in backfill.V3_DIAGNOSTIC_TARGETS}
 

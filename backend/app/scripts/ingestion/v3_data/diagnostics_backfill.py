@@ -112,9 +112,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report actions without writing or scanning.",
+        help="Report actions without writing or scanning, overriding DRY_RUN.",
     )
     return parser.parse_args()
+
+
+def _dry_run_requested(command_line_dry_run: bool) -> bool:
+    """Use the diagnostics-scanner DRY_RUN contract unless CLI opts in."""
+    return command_line_dry_run or os.environ.get("DRY_RUN", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def _api_headers() -> dict[str, str]:
@@ -249,11 +258,12 @@ def _run_scanner_if_reconciled(
 
 def main() -> int:
     args = _parse_args()
+    dry_run = _dry_run_requested(args.dry_run)
     machine = args.machine
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE[machine]
     source_root = Path(os.environ[SOURCE_ROOT_ENV]).resolve()
     api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
-    if not args.dry_run and not os.environ.get("SIMBOARD_API_TOKEN", "").strip():
+    if not dry_run and not os.environ.get("SIMBOARD_API_TOKEN", "").strip():
         raise ValueError("SIMBOARD_API_TOKEN is required when --dry-run is not set")
     report: dict[str, list[str]] = {
         key: []
@@ -297,17 +307,17 @@ def main() -> int:
                 target=target,
                 machine=machine,
                 machine_id=machine_id,
-                dry_run=args.dry_run,
+                dry_run=dry_run,
             )
             report[status].append(target.case_name)
 
-    _run_scanner_if_reconciled(report, machine, args.dry_run)
+    _run_scanner_if_reconciled(report, machine, dry_run)
 
     _log_event(
         "v3_diagnostics_backfill_reconciliation",
         {
             "machine": machine,
-            "dry_run": args.dry_run,
+            "dry_run": dry_run,
             "targets": [target.case_name for target in selected],
             **report,
         },
