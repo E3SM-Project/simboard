@@ -38,9 +38,11 @@ After v3 case ingestion completes, run
 machine. It requires `--machine chrysalis` or `--machine perlmutter`,
 `SIMBOARD_API_BASE_URL`, and `V3_DIAGNOSTICS_SOURCE_ROOT`, which must contain
 the documented diagnostic-source directories. A non-dry-run execution also
-requires `SIMBOARD_API_TOKEN`. Use `--dry-run` first. The runner fails closed
-when a destination already exists; after investigating a failed copy, remove
-only that partial destination before retrying.
+requires `SIMBOARD_API_TOKEN`. Like the diagnostics scanner, it defaults to
+`DRY_RUN=true`; set `DRY_RUN=false` only after reviewing the dry-run
+reconciliation. The `--dry-run` flag always forces a dry run. The runner fails
+closed when a destination already exists; after investigating a failed copy,
+remove only that partial destination before retrying.
 
 The runner derives the case group and HPC username from the exactly one
 SimBoard case matching the selected machine ID and case name. It copies mapped
