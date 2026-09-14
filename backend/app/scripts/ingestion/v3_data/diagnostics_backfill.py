@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from app.scripts.ingestion.archive_ingestor_core import _log_event
+from app.scripts.ingestion.archive_ingestor_core import _log_event, _log_multiline_event
 from app.scripts.ingestion.diagnostics_archives import DIAGNOSTICS_ARCHIVES_BY_MACHINE
 from app.scripts.ingestion.diagnostics_link_scanner import (
     TIMESTAMP_RE,
@@ -246,7 +246,7 @@ def _log_startup_configuration(
     source_root: Path,
 ) -> None:
     """Log effective configuration without exposing the API token."""
-    _log_event(
+    _log_multiline_event(
         "v3_diagnostics_backfill_startup_configuration",
         {
             "machine": machine,
@@ -420,7 +420,7 @@ def _log_reconciliation(
     selected_target_count: int,
 ) -> None:
     """Log the completed reconciliation with counts before case lists."""
-    _log_event(
+    _log_multiline_event(
         "v3_diagnostics_backfill_reconciliation",
         {
             "machine": machine,
