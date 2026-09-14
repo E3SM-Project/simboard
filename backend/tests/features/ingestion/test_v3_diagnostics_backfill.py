@@ -39,7 +39,6 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
         "copied": ["copied"],
         "linked": [],
         "missing": [],
-        "missing_provenance": [],
         "unmapped": ["unmapped"],
         "zero_matches": [],
         "owner_mismatch": [],
@@ -244,7 +243,7 @@ def test_multiple_case_log_lists_candidate_case_and_owner(monkeypatch) -> None:
     ]
 
 
-def test_backfill_requires_source_provenance_before_dry_run(
+def test_backfill_allows_historic_source_without_provenance_during_dry_run(
     tmp_path: Path, monkeypatch
 ) -> None:
     source_root = tmp_path / "source-root"
@@ -273,8 +272,46 @@ def test_backfill_requires_source_provenance_before_dry_run(
             machine_id="machine-id",
             dry_run=True,
         )
-        == "missing_provenance"
+        == "copied"
     )
+
+
+def test_backfill_generates_provenance_for_historic_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("output")
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+        )
+        == "copied"
+    )
+    destination = tmp_path / "archive/production/case"
+    cfgs = list(destination.glob("provenance.*.cfg"))
+    assert len(cfgs) == 1
+    assert cfgs[0].read_text() == ""
+    assert cfgs[0].with_suffix(".settings").is_file()
 
 
 def test_backfill_uses_explicit_bonus_source_directory(
