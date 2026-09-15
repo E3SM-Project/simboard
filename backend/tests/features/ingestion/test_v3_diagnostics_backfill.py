@@ -136,6 +136,25 @@ def test_copy_omits_source_settings_and_write_settings_preserves_cfg(
     )
 
 
+def test_make_publicly_readable_preserves_owner_and_group_permissions(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "diagnostics"
+    nested = directory / "nested"
+    nested.mkdir(parents=True)
+    output = nested / "index.html"
+    output.write_text("output")
+    directory.chmod(0o750)
+    nested.chmod(0o750)
+    output.chmod(0o640)
+
+    backfill._make_publicly_readable(directory)
+
+    assert directory.stat().st_mode & 0o755 == 0o755
+    assert nested.stat().st_mode & 0o755 == 0o755
+    assert output.stat().st_mode & 0o644 == 0o644
+
+
 def test_write_settings_includes_case_group_and_refuses_replacement(
     tmp_path: Path,
 ) -> None:
