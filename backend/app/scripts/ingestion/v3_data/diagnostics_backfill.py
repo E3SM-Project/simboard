@@ -365,19 +365,24 @@ def _resolve_owner_case(
 
     diagnostics_publisher = _diagnostics_publisher(target)
     hpc_username = _diagnostics_hpc_username(diagnostics_publisher)
+    owner_matches = _matching_owner_cases(matches, hpc_username)
+    selected_case = owner_matches[0] if len(owner_matches) == 1 else None
     if total > 1:
         _log_multiple_case_matches(
-            target, diagnostics_publisher, hpc_username, source, matches
+            target,
+            diagnostics_publisher,
+            source,
+            selected_case,
+            [case for case in matches if case is not selected_case],
         )
 
-    owner_matches = _matching_owner_cases(matches, hpc_username)
     if not owner_matches:
         return None, "owner_mismatch"
 
     if len(owner_matches) != 1:
         return None, "ambiguous"
 
-    return owner_matches[0], None
+    return selected_case, None
 
 
 def _resolve_cases(
@@ -423,21 +428,28 @@ def _matching_owner_cases(
 def _log_multiple_case_matches(
     target: Target,
     diagnostics_publisher: str,
-    hpc_username: str,
     source: Path,
-    cases: list[dict[str, Any]],
+    selected_case: dict[str, Any] | None,
+    ignored_cases: list[dict[str, Any]],
 ) -> None:
-    """Log every candidate identity before owner-based case selection."""
+    """Log the selected case and ignored alternatives for a duplicate name."""
     _log_multiline_event(
         "v3_diagnostics_backfill_multiple_case_matches",
         {
             "case_name": target.case_name,
             "diagnostics_publisher": diagnostics_publisher,
             "diagnostics_source_path": str(source),
-            "selected_hpc_username": hpc_username,
-            "matching_cases": [
+            "selected_case": (
+                None
+                if selected_case is None
+                else (
+                    f"case_name:{selected_case['name']}"
+                    f"/hpc_username:{selected_case['hpcUsername']}"
+                )
+            ),
+            "ignored_matching_cases": [
                 f"case_name:{case['name']}/hpc_username:{case['hpcUsername']}"
-                for case in cases
+                for case in ignored_cases
             ],
         },
     )
