@@ -1363,6 +1363,51 @@ class TestUpdateCase:
             normal_user_sync["email"]
         }
 
+    def test_endpoint_sets_and_clears_case_simulation_type(self, client, db: Session):
+        case = _create_case(db, "test_case_simulation_type")
+
+        set_response = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"simulationType": "development", "editReason": "Classified case"},
+        )
+
+        assert set_response.status_code == 200
+        assert set_response.json()["simulationType"] == "development"
+        db.expire_all()
+        assert db.get(Case, case.id).simulation_type == "development"
+
+        clear_response = client.patch(
+            f"{API_BASE}/cases/{case.id}", json={"simulationType": None}
+        )
+
+        assert clear_response.status_code == 200
+        assert clear_response.json()["simulationType"] is None
+        changes = (
+            db.query(MetadataChange)
+            .filter(
+                MetadataChange.entity_type == "case",
+                MetadataChange.entity_id == case.id,
+                MetadataChange.field_name == "simulation_type",
+            )
+            .order_by(MetadataChange.changed_at)
+            .all()
+        )
+        assert [(change.old_value, change.new_value) for change in changes] == [
+            (None, "development"),
+            ("development", None),
+        ]
+
+    def test_endpoint_rejects_execution_only_case_simulation_type(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_invalid_simulation_type")
+
+        response = client.patch(
+            f"{API_BASE}/cases/{case.id}", json={"simulationType": "experimental"}
+        )
+
+        assert response.status_code == 422
+
     def test_endpoint_skips_history_for_unchanged_values(self, client, db: Session):
         case = _create_case(db, "test_case_metadata_noop")
         case.description = "Unchanged"

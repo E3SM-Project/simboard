@@ -21,6 +21,13 @@ class SimulationType(StrEnum):
     TEST = "test"
 
 
+class CaseSimulationType(StrEnum):
+    """User-managed classification for a case."""
+
+    PRODUCTION = "production"
+    DEVELOPMENT = "development"
+
+
 class ArtifactKind(StrEnum):
     """Enumeration of possible artifact types."""
 

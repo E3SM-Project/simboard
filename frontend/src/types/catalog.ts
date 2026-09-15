@@ -23,6 +23,7 @@ export interface MetadataChangeOut {
 }
 
 export type SimulationTypeValue = 'unknown' | 'production' | 'experimental' | 'test' | 'master';
+export type CaseSimulationTypeValue = 'production' | 'development' | null;
 export type ExecutionStatusValue =
   | 'unknown'
   | 'created'
@@ -71,6 +72,8 @@ export interface CaseSummaryOut {
   id: string;
   name: string;
   caseGroup: string | null;
+  simulationType: CaseSimulationTypeValue;
+  diagnosticsTiers: Exclude<CaseSimulationTypeValue, null>[];
   executions: ExecutionSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
@@ -156,6 +159,7 @@ export interface CaseFilterOptionsOut {
 }
 
 export const CASE_EDITABLE_FIELDS = [
+  'simulationType',
   'description',
   'keyFeatures',
   'knownIssues',
@@ -164,7 +168,8 @@ export const CASE_EDITABLE_FIELDS = [
 
 export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
 
-export type CaseUpdate = Partial<Record<CaseEditableField, string | null>> & {
+export type CaseUpdate = Partial<Record<Exclude<CaseEditableField, 'simulationType'>, string | null>> & {
+  simulationType?: CaseSimulationTypeValue;
   links?: ExternalLinkIn[];
   editReason?: string | null;
 };

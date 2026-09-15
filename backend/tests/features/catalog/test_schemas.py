@@ -311,6 +311,17 @@ class TestCaseUpdateSchema:
         assert update.model_dump(exclude_unset=True) == {"description": None}
         assert "description" in update.model_fields_set
 
+    @pytest.mark.parametrize("value", ["production", "development", None])
+    def test_case_simulation_type_accepts_supported_values(self, value):
+        update = CaseUpdate(simulationType=value)
+
+        assert update.simulation_type == value
+
+    @pytest.mark.parametrize("value", ["experimental", "unknown", "test"])
+    def test_case_simulation_type_rejects_execution_only_values(self, value):
+        with pytest.raises(ValidationError):
+            CaseUpdate(simulationType=value)
+
     def test_edit_reason_is_trimmed_and_exposed_by_alias(self):
         update = CaseUpdate(editReason="  corrected metadata  ")
 
@@ -744,6 +755,8 @@ class TestCaseSchemas:
         )
         assert case_out.name == "v3.LR.historical_0121"
         assert case_out.case_group == "ensemble_v3"
+        assert case_out.simulation_type is None
+        assert case_out.diagnostics_tiers == []
         assert len(case_out.executions) == 2
         assert case_out.executions[0].case_hash == "hash-1"
         assert case_out.machine_names == ["chrysalis"]

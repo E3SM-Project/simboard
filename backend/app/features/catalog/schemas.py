@@ -14,6 +14,7 @@ from pydantic import (
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.catalog.enums import (
     ArtifactKind,
+    CaseSimulationType,
     ExecutionStatus,
     ExperimentType,
     ExternalLinkKind,
@@ -746,6 +747,8 @@ class CaseSummaryOut(CamelOutBaseModel):
             ),
         ),
     ]
+    simulation_type: CaseSimulationType | None = None
+    diagnostics_tiers: list[CaseSimulationType] = Field(default_factory=list)
     executions: Annotated[
         list[ExecutionSummaryOut],
         Field(
@@ -835,6 +838,16 @@ class CaseUpdate(CamelInBaseModel):
         str | None,
         Field(
             None, description="Optional shared notes for the case in markdown format"
+        ),
+    ]
+    simulation_type: Annotated[
+        CaseSimulationType | None,
+        Field(
+            None,
+            description=(
+                "User-managed case classification. Omit to leave unchanged; send null "
+                "to clear."
+            ),
         ),
     ]
     links: Annotated[

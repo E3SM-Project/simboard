@@ -12,6 +12,7 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.catalog.enums import (
     ArtifactKind,
+    CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
@@ -617,7 +618,9 @@ def update_case(
         .options(
             selectinload(Case.machine),
             selectinload(Case.executions),
-            selectinload(Case.links),
+            selectinload(Case.links).selectinload(
+                ExternalLink.diagnostic_provenance_state
+            ),
         )
         .filter(Case.id == case_id)
         .one_or_none()
@@ -1463,7 +1466,11 @@ def _case_detail_query(db: Session):
             selectinload(Case.machine),
             selectinload(Case.executions).selectinload(Execution.artifacts),
         )
-        .options(selectinload(Case.links))
+        .options(
+            selectinload(Case.links).selectinload(
+                ExternalLink.diagnostic_provenance_state
+            )
+        )
     )
 
 
@@ -1531,10 +1538,28 @@ def _build_case_summary(case: Case) -> dict:
             )
         )
 
+    diagnostics_tiers = sorted(
+        {
+            CaseSimulationType(path_parts[0])
+            for link in case.links
+            if link.diagnostic_provenance_state is not None
+            and (
+                path_parts
+                := link.diagnostic_provenance_state.archive_relative_case_path.split(
+                    "/"
+                )
+            )
+            and path_parts[0] in {tier.value for tier in CaseSimulationType}
+        },
+        key=lambda tier: tier.value,
+    )
+
     return {
         "id": case.id,
         "name": case.name,
         "case_group": case.case_group,
+        "simulation_type": case.simulation_type,
+        "diagnostics_tiers": diagnostics_tiers,
         "executions": summaries,
         "machine_names": machine_names,
         "hpc_usernames": hpc_usernames,

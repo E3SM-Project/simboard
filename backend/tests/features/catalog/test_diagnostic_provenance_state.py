@@ -1,10 +1,12 @@
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.features.catalog.enums import ExternalLinkKind
 from app.features.catalog.models import DiagnosticProvenanceState, ExternalLink
 from app.features.machine.models import Machine
 from app.features.user.manager import current_active_user
@@ -234,3 +236,100 @@ def test_deleting_scanner_link_cascades_provenance_state(client, db: Session) ->
     db.delete(link)
     db.commit()
     assert db.query(DiagnosticProvenanceState).count() == 0
+
+
+def test_case_response_exposes_ambiguous_diagnostics_tiers(client, db: Session) -> None:
+    machine, _, _, case = _matching_case(db)
+    links = [
+        ExternalLink(
+            case_id=case.id,
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url=f"https://diagnostics.example.org/{tier}",
+            label=tier,
+        )
+        for tier in ("production", "development")
+    ]
+    db.add_all(links)
+    db.flush()
+    db.add_all(
+        [
+            DiagnosticProvenanceState(
+                link_id=link.id,
+                machine_name=machine.name,
+                archive_relative_case_path=f"{tier}/e3sm/{case.name}",
+                settings_filename=f"{tier}.settings",
+                provenance_timestamp="2026-08-11T12:00:00Z",
+                fingerprint=tier[0] * 64,
+                linked_url=link.url,
+                submitted_at="2026-08-11T12:00:00Z",
+            )
+            for link, tier in zip(links, ("production", "development"), strict=True)
+        ]
+    )
+    db.commit()
+
+    response = client.get(f"{API_BASE}/cases/{case.id}")
+
+    assert response.status_code == 200
+    assert response.json()["simulationType"] is None
+    assert response.json()["diagnosticsTiers"] == ["development", "production"]
+
+
+@pytest.mark.parametrize(
+    ("case_type", "observed_tier"),
+    [("production", "production"), ("production", "development")],
+)
+def test_case_response_keeps_classification_separate_from_observed_diagnostics_tier(
+    client, db: Session, case_type: str, observed_tier: str
+) -> None:
+    machine, _, _, case = _matching_case(db)
+    case.simulation_type = case_type
+    link = ExternalLink(
+        case_id=case.id,
+        kind=ExternalLinkKind.DIAGNOSTIC,
+        url="https://diagnostics.example.org/observed-tier",
+        label="observed tier",
+    )
+    db.add(link)
+    db.flush()
+    db.add(
+        DiagnosticProvenanceState(
+            link_id=link.id,
+            machine_name=machine.name,
+            archive_relative_case_path=f"{observed_tier}/e3sm/{case.name}",
+            settings_filename="observed.settings",
+            provenance_timestamp="2026-08-11T12:00:00Z",
+            fingerprint="b" * 64,
+            linked_url=link.url,
+            submitted_at="2026-08-11T12:00:00Z",
+        )
+    )
+    db.commit()
+
+    response = client.get(f"{API_BASE}/cases/{case.id}")
+
+    assert response.status_code == 200
+    assert response.json()["simulationType"] == case_type
+    assert response.json()["diagnosticsTiers"] == [observed_tier]
+
+
+def test_case_response_ignores_diagnostics_links_without_provenance(
+    client, db: Session
+) -> None:
+    _, _, _, case = _matching_case(db)
+    case.simulation_type = "production"
+    db.add(
+        ExternalLink(
+            case_id=case.id,
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://diagnostics.example.org/unobserved",
+            label="unobserved diagnostics",
+        )
+    )
+    db.commit()
+
+    response = client.get(f"{API_BASE}/cases/{case.id}")
+
+    assert response.status_code == 200
+    assert response.json()["simulationType"] == "production"
+    assert response.json()["diagnosticsTiers"] == []
