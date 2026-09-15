@@ -194,6 +194,8 @@ def _run_ingestor(
     archive_checkpointing: bool = True,
     run_report: IngestorRunReport | None = None,
     case_simulation_type: str | None = None,
+    case_hpc_username_resolver: Callable[[IngestionCandidate], str | None]
+    | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     use_prepared_archives = post_request_fn is None
@@ -281,7 +283,14 @@ def _run_ingestor(
         candidate_preparer=(
             (
                 lambda candidate: _prepared_hpc_case_submission(
-                    candidate, config.machine_name, case_simulation_type
+                    candidate,
+                    config.machine_name,
+                    case_simulation_type,
+                    (
+                        case_hpc_username_resolver(candidate)
+                        if case_hpc_username_resolver is not None
+                        else None
+                    ),
                 )
             )
             if use_prepared_archives
@@ -373,6 +382,7 @@ def _prepared_hpc_case_submission(
     candidate: IngestionCandidate,
     machine_name: str,
     case_simulation_type: str | None = None,
+    hpc_username: str | None = None,
 ) -> Iterator[CaseSubmissionCallback]:
     """Stage a candidate once and retain its immutable upload body for retries."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -388,6 +398,7 @@ def _prepared_hpc_case_submission(
             case_path=candidate.case_path,
             processed_execution_ids=candidate.new_execution_ids,
             case_simulation_type=case_simulation_type,
+            hpc_username=hpc_username,
         )
         _log_event(
             "archive_created",
@@ -441,6 +452,7 @@ def _encode_multipart_form_data(
     case_path: str,
     processed_execution_ids: list[str],
     case_simulation_type: str | None = None,
+    hpc_username: str | None = None,
 ) -> tuple[bytes, str]:
     """Build multipart/form-data body for one archive upload request."""
     boundary = f"----SimBoardBoundary{uuid.uuid4().hex}"
@@ -452,6 +464,8 @@ def _encode_multipart_form_data(
         _append_multipart_text_part(
             body, boundary, "simulation_type", case_simulation_type
         )
+    if hpc_username is not None:
+        _append_multipart_text_part(body, boundary, "hpc_username", hpc_username)
     for execution_id in processed_execution_ids:
         _append_multipart_text_part(
             body,

@@ -519,6 +519,7 @@ def ingest_from_hpc_upload(
             db=db,
             case_simulation_type=simulation_type,
             case_name_for_simulation_type=Path(payload.case_path).name,
+            hpc_username_for_simulation_type=payload.hpc_username,
         )
     finally:
         try:
@@ -834,6 +835,7 @@ def _process_ingestion(
     processed_execution_ids: list[str] | None = None,
     case_simulation_type: CaseSimulationType | None = None,
     case_name_for_simulation_type: str | None = None,
+    hpc_username_for_simulation_type: str | None = None,
 ) -> IngestionResponse:
     """Finalize and persist an ingestion operation.
 
@@ -900,6 +902,7 @@ def _process_ingestion(
             _set_ingested_case_simulation_type(
                 machine_id,
                 case_name_for_simulation_type,
+                hpc_username_for_simulation_type,
                 case_simulation_type,
                 db,
             )
@@ -915,6 +918,7 @@ def _process_ingestion(
 def _set_ingested_case_simulation_type(
     machine_id: UUID,
     case_name: str | None,
+    hpc_username: str | None,
     simulation_type: CaseSimulationType,
     db: Session,
 ) -> None:
@@ -923,11 +927,20 @@ def _set_ingested_case_simulation_type(
     The source case path remains available even when every submitted execution
     was a duplicate, allowing a rerun to classify already-ingested cases.
     """
-    if not case_name:
+    if not case_name or not hpc_username:
         return
 
-    db.query(Case).filter(Case.machine_id == machine_id, Case.name == case_name).update(
-        {Case.simulation_type: simulation_type.value}, synchronize_session=False
+    (
+        db.query(Case)
+        .filter(
+            Case.machine_id == machine_id,
+            Case.name == case_name,
+            Case.hpc_username == hpc_username,
+            Case.simulation_type.is_(None),
+        )
+        .update(
+            {Case.simulation_type: simulation_type.value}, synchronize_session=False
+        )
     )
 
 

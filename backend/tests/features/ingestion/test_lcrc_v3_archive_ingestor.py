@@ -10,6 +10,7 @@ from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor
 from app.scripts.ingestion.archive_discovery import _new_discovery_stats
 from app.scripts.ingestion.archive_ingestor_core import (
     CaseCollectionLogData,
+    IngestionCandidate,
     IngestionRequestResponse,
     IngestorConfig,
     IngestorRunReport,
@@ -344,6 +345,43 @@ def test_targeted_dry_run_never_calls_write_functions(
     )
 
     assert exit_code == 0
+
+
+def test_v3_prepared_upload_includes_production_classification(
+    tmp_path: Path, monkeypatch
+) -> None:
+    case_path = tmp_path / "user" / "v3.LR.piControl"
+    execution_path = case_path / "100.1-1"
+    execution_path.mkdir(parents=True)
+    captured_requests: list[urllib.request.Request] = []
+    candidate = IngestionCandidate(
+        case_path=str(case_path),
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fingerprint",
+    )
+    monkeypatch.setattr(
+        upload_ingestor.urllib.request, "urlopen", _FakeUrlopen(captured_requests)
+    )
+
+    with upload_ingestor._prepared_hpc_case_submission(
+        candidate,
+        "chrysalis",
+        "production",
+        "user",
+    ) as submit:
+        submit(
+            "https://simboard.example/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_path),
+            "chrysalis",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=30,
+        )
+
+    assert len(captured_requests) == 1
+    assert b'name="simulation_type"\r\n\r\nproduction' in captured_requests[0].data
+    assert b'name="hpc_username"\r\n\r\nuser' in captured_requests[0].data
 
 
 def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(

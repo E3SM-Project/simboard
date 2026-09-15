@@ -199,6 +199,9 @@ def main() -> int:
         archive_checkpointing=False,
         run_report=report,
         case_simulation_type=V3_PRODUCTION_SIMULATION_TYPE,
+        case_hpc_username_resolver=lambda candidate: Path(
+            candidate.case_path
+        ).parent.name,
     )
 
     if report.scan_completed:
