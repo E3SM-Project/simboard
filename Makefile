@@ -362,7 +362,7 @@ v3-diagnostics-dry-run:
 		echo "Usage: make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=<path>"; \
 		exit 1; \
 	fi
-	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true \
+	PYTHONUNBUFFERED=1 LCRC_V3_ENV_FILE="$(LCRC_V3_ENV_FILE)" LCRC_V3_DRY_RUN=true V3_DIAGNOSTICS_INCLUDE_SIZES="$(V3_DIAGNOSTICS_INCLUDE_SIZES)" \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
 v3-diagnostics-apply:

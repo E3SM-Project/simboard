@@ -296,6 +296,41 @@ def test_backfill_allows_historic_source_without_provenance_during_dry_run(
     )
 
 
+def test_backfill_logs_source_size_during_dry_run(tmp_path: Path, monkeypatch) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("output")
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    source_sizes: dict[str, int] = {}
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=True,
+            include_sizes=True,
+            source_sizes=source_sizes,
+        )
+        == "copied"
+    )
+    assert source_sizes == {"case": 6}
+
+
 def test_backfill_generates_provenance_for_historic_source(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -336,9 +371,13 @@ def test_backfill_generates_provenance_for_historic_source(
 
 def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> None:
     source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("output")
     destination = tmp_path / "archive/production/case"
     destination.mkdir(parents=True)
     target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    source_sizes: dict[str, int] = {}
     monkeypatch.setattr(
         backfill,
         "_resolve_owner_case",
@@ -358,10 +397,13 @@ def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> Non
             target=target,
             machine="chrysalis",
             machine_id="machine-id",
-            dry_run=False,
+            dry_run=True,
+            include_sizes=True,
+            source_sizes=source_sizes,
         )
         == "skipped_existing"
     )
+    assert source_sizes == {"case": 6}
 
 
 def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
