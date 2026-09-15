@@ -178,8 +178,9 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "v3_diagnostics_backfill_multiple_case_matches": (
         "case_name",
         "diagnostics_publisher",
-        "selected_hpc_username",
-        "matching_cases",
+        "diagnostics_source_path",
+        "selected_case",
+        "ignored_matching_cases",
     ),
     "dry_run_summary_counts": (
         "mode",
