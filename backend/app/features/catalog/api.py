@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, and_, asc, desc, distinct, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, lazyload, selectinload
@@ -62,16 +62,6 @@ case_router = APIRouter(prefix="/cases", tags=["Cases"])
 diagnostics_router = APIRouter(prefix="/diagnostics", tags=["Diagnostics"])
 
 
-def _reject_legacy_execution_simulation_type(request: Request) -> None:
-    """Reject removed execution filter parameters instead of ignoring them."""
-    removed_parameters = {"simulation_type", "simulationType"}
-    if removed_parameters.intersection(request.query_params):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Execution simulation type filters are no longer supported.",
-        )
-
-
 @case_router.get(
     "",
     response_model=CasePageOut,
@@ -104,7 +94,6 @@ def list_cases(
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
-    _: None = Depends(_reject_legacy_execution_simulation_type),
 ) -> CasePageOut:
     """Return one lightweight, server-filtered case page."""
     query = _filtered_case_list_query(
@@ -374,7 +363,6 @@ def get_case_filter_options(
     compiler: str | None = Query(None),
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
-    _: None = Depends(_reject_legacy_execution_simulation_type),
 ) -> CaseFilterOptionsOut:
     """Return scalar case facets constrained by all other active filters."""
     filters = {
@@ -924,7 +912,6 @@ def list_executions(  # noqa: C901
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
-    _: None = Depends(_reject_legacy_execution_simulation_type),
 ) -> ExecutionPageOut:
     """Return one lightweight, server-filtered execution page."""
     return _list_executions(
