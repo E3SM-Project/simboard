@@ -23,6 +23,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -72,6 +79,7 @@ import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import type {
   CaseDetailOut,
   CaseEditableField,
+  CaseSimulationTypeValue,
   CaseUpdate,
   ExecutionListItemOut,
   ExecutionSummaryOut,
@@ -180,7 +188,9 @@ const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
   });
 
 type ExecutionViewMode = 'grouped' | 'flat';
-type EditableFormState = Record<CaseEditableField, string>;
+type EditableFormState = {
+  [K in Exclude<CaseEditableField, 'simulationType'>]: string;
+} & { simulationType: CaseSimulationTypeValue };
 type CaseSaveError = {
   message: string;
   validationDetails: ValidationDetail[];
@@ -232,6 +242,7 @@ const getGroupRunDateWindow = (executions: GroupExecution[]) => {
 const countDistinctValues = (values: string[]) => new Set(values).size;
 
 const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
+  'simulationType',
   'description',
   'keyFeatures',
   'knownIssues',
@@ -239,6 +250,7 @@ const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
 ];
 
 const toEditableFormState = (caseRecord: CaseDetailOut): EditableFormState => ({
+  simulationType: caseRecord.simulationType,
   description: caseRecord.description ?? '',
   keyFeatures: caseRecord.keyFeatures ?? '',
   knownIssues: caseRecord.knownIssues ?? '',
@@ -258,6 +270,13 @@ const buildUpdatePayload = (
   const payload: CaseUpdate = {};
 
   for (const field of CASE_EDIT_FIELDS) {
+    if (field === 'simulationType') {
+      if (formState.simulationType !== caseRecord.simulationType) {
+        payload.simulationType = formState.simulationType;
+      }
+      continue;
+    }
+
     const nextValue = normalizeEditableValue(formState[field]);
     const currentValue = caseRecord[field] ?? null;
 
@@ -678,7 +697,7 @@ export const CaseDetailsPage = ({
     ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
     : 'Log in with GitHub to edit case metadata.';
 
-  const updateField = (field: CaseEditableField, value: string) => {
+  const updateField = (field: Exclude<CaseEditableField, 'simulationType'>, value: string) => {
     setSaveError(null);
     setFormState((current) => (current ? { ...current, [field]: value } : current));
   };
@@ -807,6 +826,12 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
+  const diagnosticsTierLabel = caseRecord.diagnosticsTiers.join(' and ');
+  const hasAmbiguousDiagnosticsTiers = caseRecord.diagnosticsTiers.length > 1;
+  const hasDiagnosticsMismatch =
+    caseRecord.simulationType != null &&
+    caseRecord.diagnosticsTiers.length === 1 &&
+    caseRecord.diagnosticsTiers[0] !== caseRecord.simulationType;
   const artifactValuesByKey = caseRecord.artifacts.reduce((groups, artifact) => {
     const key = JSON.stringify([artifact.kind, artifact.uri]);
     const value = groups.get(key);
@@ -1077,6 +1102,48 @@ export const CaseDetailsPage = ({
 
             {formState ? (
               <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label className="block text-xs text-muted-foreground">Case classification</Label>
+                  {isEditing ? (
+                    <Select
+                      value={formState.simulationType ?? 'unset'}
+                      onValueChange={(value) => {
+                        setSaveError(null);
+                        setFormState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                simulationType:
+                                  value === 'unset' ? null : (value as CaseSimulationTypeValue),
+                              }
+                            : current,
+                        );
+                      }}
+                    >
+                      <SelectTrigger aria-label="Case classification" className="max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unset">Unset</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                        <SelectItem value="production">Production</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm font-medium capitalize text-slate-950">
+                      {caseRecord.simulationType ?? 'Unset'}
+                    </p>
+                  )}
+                  {hasAmbiguousDiagnosticsTiers ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers; SimBoard cannot determine one observed tier.
+                    </div>
+                  ) : hasDiagnosticsMismatch ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Case classification is {caseRecord.simulationType}, but diagnostics provenance is {diagnosticsTierLabel}.
+                    </div>
+                  ) : null}
+                </div>
                 <div>
                   {isEditing ? (
                     <MarkdownEditorField

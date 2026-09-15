@@ -27,6 +27,7 @@ from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
 from app.features.catalog.enums import (
     ArtifactKind,
+    CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
     SimulationType,
@@ -53,6 +54,10 @@ class Case(Base, IDMixin, TimestampMixin):
             "hpc_username",
             name="uq_cases_name_machine_id_hpc_username",
         ),
+        CheckConstraint(
+            "simulation_type IS NULL OR simulation_type IN ('production', 'development')",
+            name="case_simulation_type",
+        ),
     )
 
     name: Mapped[str] = mapped_column(Text, index=True)
@@ -65,6 +70,9 @@ class Case(Base, IDMixin, TimestampMixin):
     key_features: Mapped[str | None] = mapped_column(Text, nullable=True)
     known_issues: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    simulation_type: Mapped[CaseSimulationType | None] = mapped_column(
+        String(20), nullable=True
+    )
 
     # Relationships
     machine: Mapped[Machine] = relationship("Machine", foreign_keys=[machine_id])
