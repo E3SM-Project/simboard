@@ -250,6 +250,16 @@ def test_openapi_exposes_only_canonical_execution_contract(client) -> None:
 
 
 @pytest.mark.parametrize(
+    "endpoint",
+    [f"{API_BASE}/executions", f"{API_BASE}/cases", f"{API_BASE}/cases/filter-options"],
+)
+def test_execution_simulation_type_filters_are_rejected(client, endpoint: str) -> None:
+    response = client.get(endpoint, params={"simulation_type": "experimental"})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
     ("method", "path"),
     [
         ("GET", f"{API_BASE}/simulations"),
@@ -2222,7 +2232,6 @@ class TestListExecutions:
                 ("campaign", "campaign-a"),
                 ("campaign", "campaign-b"),
                 ("status", "created"),
-                ("simulation_type", "experimental"),
                 ("machine_id", str(machine.id)),
                 ("hpc_username", case.hpc_username),
             ],

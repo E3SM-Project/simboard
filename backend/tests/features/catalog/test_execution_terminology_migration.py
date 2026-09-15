@@ -80,12 +80,13 @@ def test_execution_terminology_migration_preserves_schema_data_and_behavior() ->
                     """
                     INSERT INTO simulations (
                         id, case_id, execution_id, compset, compset_alias,
-                        grid_name, grid_resolution, status,
+                        grid_name, grid_resolution, simulation_type, status,
                         initialization_type, simulation_start_date, created_by,
                         last_updated_by, ingestion_id, extra
                     ) VALUES (
                         :id, :case_id, 'migration-execution', 'AQUAPLANET',
-                        'QPC4', 'f19_f19', '1.9x2.5', 'created', 'startup', DATE '2023-01-01', :user_id,
+                        'QPC4', 'f19_f19', '1.9x2.5', 'experimental', 'created',
+                        'startup', DATE '2023-01-01', :user_id,
                         :user_id, :ingestion_id, '{}'::jsonb
                     )
                     """
