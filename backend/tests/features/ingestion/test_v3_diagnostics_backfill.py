@@ -348,12 +348,21 @@ def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> Non
 def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
     report = backfill._new_report("chrysalis")
     report["skipped_existing"].append("case")
-    scanner_calls: list[None] = []
-    monkeypatch.setattr(backfill, "run_scanner", lambda: scanner_calls.append(None))
+    scanner_paths: list[set[Path]] = []
+    monkeypatch.setattr(
+        backfill,
+        "run_scanner",
+        lambda *, included_case_paths: scanner_paths.append(included_case_paths) or 0,
+    )
 
-    backfill._run_scanner_if_reconciled(report, "chrysalis", dry_run=False)
+    backfill._run_scanner_if_reconciled(
+        report,
+        "chrysalis",
+        dry_run=False,
+        scanner_case_paths={Path("production/case")},
+    )
 
-    assert scanner_calls == [None]
+    assert scanner_paths == [{Path("production/case")}]
 
 
 def test_backfill_uses_explicit_bonus_source_directory(
