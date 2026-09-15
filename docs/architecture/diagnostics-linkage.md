@@ -30,3 +30,28 @@ Invalid, unreadable, unsafe, or malformed provenance and settings inputs are ski
 Scanner API access is permitted only for `ADMIN` and `SERVICE_ACCOUNT` roles. A state lookup can return no state, and it returns an error when the supplied machine is unknown. The scanner-link endpoint requires exactly one diagnostic and rejects unsafe archive-relative paths; case-resolution failures also prevent a successful state update.
 
 With `DRY_RUN` enabled, the scanner performs archive resolution and candidate discovery, logs the diagnostics case paths it would link, and exits without reading scanner state or submitting links. It therefore creates or updates no diagnostic links or scanner state; every discovered candidate is reported as a proposed link rather than classified as linked, unchanged, or deferred.
+
+## E3SM v3 One-Time Backfill
+
+After v3 case ingestion completes, run
+`app.scripts.ingestion.v3_data.diagnostics_backfill` once for each supported
+machine. It requires `--machine chrysalis` or `--machine perlmutter`,
+and `SIMBOARD_API_BASE_URL`. It derives the diagnostic source root from the
+selected machine's reviewed diagnostics archive location. A non-dry-run
+execution also requires `SIMBOARD_API_TOKEN`. Like the diagnostics scanner, it defaults to
+`DRY_RUN=true`; set `DRY_RUN=false` only after reviewing the dry-run
+reconciliation. The `--dry-run` flag always forces a dry run. The runner fails
+closed when a destination already exists; after investigating a failed copy,
+remove only that partial destination before retrying.
+
+The runner selects the SimBoard case matching the selected machine ID, case
+name, and diagnostics publisher's HPC username from the mapped source path.
+When multiple name-and-machine candidates exist, it logs every candidate's case
+name and HPC username before selecting the publisher-owned record. It derives
+the case group and HPC username from that record, copies mapped diagnostics into
+the production archive, preserves the newest source `provenance.*.cfg` when
+available or creates one for historic output, writes its paired settings file,
+ensures the copied archive is publicly readable, and then invokes the normal
+scanner. Its reconciliation event reports copied, linked, skipped-existing,
+missing, unmapped, zero-match, owner-mismatch, ambiguous, failed, and
+other-machine-skipped targets.

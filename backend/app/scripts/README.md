@@ -301,6 +301,9 @@ The environment file must define:
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
 
+The diagnostics backfill derives its source root from the configured Chrysalis
+diagnostics archive location.
+
 Set `OLD_PERF_ARCHIVE_ROOT` only when the Chrysalis archive is mounted somewhere
 other than its documented default.
 
@@ -335,6 +338,25 @@ make v3-ingest-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
 The Make targets override `DRY_RUN`; keep the external environment file focused
 on the API credentials and optional archive-root override. They run Python with
 unbuffered output so emitted structured events appear in the console immediately.
+
+#### Backfill v3 Diagnostics
+
+Use the same `lcrc-v3.env` file for diagnostics. Start with reconciliation-only
+mode, which does not copy diagnostics, generate settings, or run the scanner:
+
+```bash
+make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+
+# Include per-source and aggregate selected-source sizes (may take longer).
+make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env V3_DIAGNOSTICS_INCLUDE_SIZES=true
+```
+
+After reviewing the reconciliation event, run the explicit write-enabled
+backfill and scanner linkage:
+
+```bash
+make v3-diagnostics-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+```
 
 #### Fixed and Supported Settings
 
