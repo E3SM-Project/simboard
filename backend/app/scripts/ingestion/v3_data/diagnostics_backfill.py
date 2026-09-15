@@ -34,7 +34,7 @@ RECONCILIATION_STATUSES = (
     "ambiguous",
     "failed",
 )
-CASE_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER = {
+SIMBOARD_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER = {
     "ac.kzhang": "ac.kai.zhang",
 }
 
@@ -201,6 +201,7 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Report actions without writing or scanning, overriding DRY_RUN.",
     )
+
     return parser.parse_args()
 
 
@@ -236,7 +237,9 @@ def _api_base_url(value: str) -> str:
 
 def _new_report(machine: str) -> dict[str, list[str]]:
     """Initialize reconciliation categories for the selected machine."""
-    report = {status: [] for status in (*RECONCILIATION_STATUSES, "machine_skipped")}
+    report: dict[str, list[str]] = {
+        status: [] for status in (*RECONCILIATION_STATUSES, "machine_skipped")
+    }
     report["machine_skipped"] = [
         target.case_name
         for target in V3_DIAGNOSTIC_TARGETS
@@ -278,10 +281,13 @@ def _log_startup_configuration(
 
 def _resolve_machine_id(client: httpx.Client, api_base: str, machine: str) -> str:
     response = client.get(f"{api_base}/api/v1/machines", headers=_api_headers())
+
     response.raise_for_status()
     matches = [item for item in response.json() if item["name"] == machine]
+
     if len(matches) != 1:
         raise ValueError(f"Expected exactly one SimBoard machine named {machine}")
+
     return str(matches[0]["id"])
 
 
@@ -299,16 +305,22 @@ def _backfill_target(
 ) -> str:
     """Copy one target and return its reconciliation outcome."""
     assert target.source is not None
+    source = source_root / target.source
+    if not target.source_is_case_dir:
+        source /= target.case_name
+
     case, resolution_status = _resolve_owner_case(
         client,
         api_base,
         target,
         machine_id,
+        source,
     )
     if resolution_status:
         return resolution_status
 
     assert case is not None
+
     destination = archive_root / "production"
     if group := case.get("caseGroup"):
         destination /= group
@@ -318,10 +330,6 @@ def _backfill_target(
         return "skipped_existing"
     if destination.exists():
         return "failed"
-
-    source = source_root / target.source
-    if not target.source_is_case_dir:
-        source /= target.case_name
 
     if not source.is_dir():
         return "missing"
@@ -348,6 +356,7 @@ def _resolve_owner_case(
     api_base: str,
     target: Target,
     machine_id: str,
+    source: Path,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Resolve the one case owned by the mapped diagnostics publisher."""
     matches, total = _resolve_cases(client, api_base, target, machine_id)
@@ -357,7 +366,9 @@ def _resolve_owner_case(
     diagnostics_publisher = _diagnostics_publisher(target)
     hpc_username = _diagnostics_hpc_username(diagnostics_publisher)
     if total > 1:
-        _log_multiple_case_matches(target, diagnostics_publisher, hpc_username, matches)
+        _log_multiple_case_matches(
+            target, diagnostics_publisher, hpc_username, source, matches
+        )
 
     owner_matches = _matching_owner_cases(matches, hpc_username)
     if not owner_matches:
@@ -379,6 +390,7 @@ def _resolve_cases(
     )
     response.raise_for_status()
     payload = response.json()
+
     return payload["items"], payload["total"]
 
 
@@ -395,7 +407,7 @@ def _diagnostics_publisher(target: Target) -> str:
 
 def _diagnostics_hpc_username(diagnostics_publisher: str) -> str:
     """Return the SimBoard username corresponding to the diagnostics publisher."""
-    return CASE_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER.get(
+    return SIMBOARD_HPC_USERNAME_BY_DIAGNOSTICS_PUBLISHER.get(
         diagnostics_publisher,
         diagnostics_publisher,
     )
@@ -412,6 +424,7 @@ def _log_multiple_case_matches(
     target: Target,
     diagnostics_publisher: str,
     hpc_username: str,
+    source: Path,
     cases: list[dict[str, Any]],
 ) -> None:
     """Log every candidate identity before owner-based case selection."""
@@ -420,6 +433,7 @@ def _log_multiple_case_matches(
         {
             "case_name": target.case_name,
             "diagnostics_publisher": diagnostics_publisher,
+            "diagnostics_source_path": str(source),
             "selected_hpc_username": hpc_username,
             "matching_cases": [
                 f"case_name:{case['name']}/hpc_username:{case['hpcUsername']}"
@@ -464,6 +478,7 @@ def _create_provenance_cfg(directory: Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     cfg = directory / f"provenance.{timestamp}.cfg"
     cfg.touch(exist_ok=False)
+
     return cfg
 
 
@@ -480,12 +495,15 @@ def _write_settings(
         f"machine = {machine}",
         f"hpc_username = {case['hpcUsername']}",
     ]
+
     if case_group:
         lines.append(f"case_group = {case_group}")
     lines.append(f"diagnostics_url = {diagnostics_url}")
+
     settings = cfg.with_suffix(".settings")
     if settings.exists():
         raise FileExistsError(f"Refusing to replace existing settings: {settings}")
+
     settings.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return settings
 
@@ -504,8 +522,10 @@ def _run_scanner_if_reconciled(
         )
     ):
         return
+
     os.environ["MACHINE_NAME"] = machine
     os.environ["DRY_RUN"] = "false"
+
     if run_scanner() != 0:
         report["failed"].extend(report["copied"] + report["skipped_existing"])
     else:
@@ -521,10 +541,12 @@ def _reconciliation_fields(
         "machine_skipped_count": f"{len(report['machine_skipped'])}/{len(V3_DIAGNOSTIC_TARGETS)}",
         "machine_skipped_cases": report["machine_skipped"],
     }
+
     for status in RECONCILIATION_STATUSES:
         label = "ready_to_copy" if dry_run and status == "copied" else status
         fields[f"{label}_count"] = f"{len(report[status])}/{selected_target_count}"
         fields[f"{label}_cases"] = report[status]
+
     return fields
 
 
