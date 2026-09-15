@@ -1,4 +1,7 @@
-"""Shared identity rules for the Chrysalis E3SM v3 production backfill."""
+"""Shared identity rules for the Chrysalis E3SM v3 production backfill.
+
+Source: https://docs.e3sm.org/e3sm_data_docs/_build/html/v3/CoupledSystem/simulation_data/simulation_table.html
+"""
 
 from app.features.catalog.enums import CaseSimulationType
 
