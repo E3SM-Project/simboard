@@ -276,7 +276,6 @@ export const CompareWorkspace = ({
       makeMetricRow('Compiler', 'compiler', ''),
     ],
     modelSetup: [
-      makeMetricRow('Simulation Type', 'simulationType', ''),
       makeMetricRow('Status', 'status', ''),
       makeMetricRow('Campaign ID', 'campaign', ''),
       makeMetricRow('Experiment Type ID', 'experimentType', ''),

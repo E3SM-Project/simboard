@@ -38,7 +38,6 @@ import {
 } from '@/features/catalog/components/ExecutionSummaryPanel';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
-import { SimulationTypeBadge } from '@/features/catalog/components/SimulationTypeBadge';
 import {
   areResourceListsEqual,
   createEmptyRowErrors,
@@ -66,7 +65,6 @@ import type {
   ExternalLinkKind,
   ExternalLinkOut,
   MetadataChangeOut,
-  SimulationTypeValue,
 } from '@/types';
 import { EXECUTION_EDITABLE_FIELDS } from '@/types';
 import { getArtifactsByKind } from '@/types/artifact';
@@ -519,21 +517,10 @@ type EditableField = ExecutionEditableField;
 type EditableFormState = Record<EditableField, string>;
 
 const SINGLE_LINE_FIELDS: ReadonlySet<EditableField> = new Set([
-  'simulationType',
   'status',
   'campaign',
   'experimentType',
 ]);
-
-const SIMULATION_TYPE_OPTIONS: ReadonlyArray<{
-  value: SimulationTypeValue;
-  label: string;
-}> = [
-  { value: 'unknown', label: 'Not set' },
-  { value: 'production', label: 'Production' },
-  { value: 'experimental', label: 'Experimental' },
-  { value: 'test', label: 'Test' },
-];
 
 const STATUS_OPTIONS: ReadonlyArray<{
   value: ExecutionStatusValue;
@@ -548,7 +535,6 @@ const STATUS_OPTIONS: ReadonlyArray<{
 ];
 
 const toEditableFormState = (execution: ExecutionOut): EditableFormState => ({
-  simulationType: execution.simulationType,
   status: execution.status,
   description: execution.description ?? '',
   campaign: execution.campaign ?? '',
@@ -919,9 +905,6 @@ export const ExecutionDetailsView = ({
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>Type:</span>
-            <SimulationTypeBadge simulationType={execution.simulationType} />
-            <span>•</span>
             <span>Status:</span>
             <ExecutionStatusBadge status={execution.status} />
             {execution.gitTag && (
@@ -1087,29 +1070,6 @@ export const ExecutionDetailsView = ({
                     <CardTitle className="text-base">Model Setup</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <FieldRow label="Simulation Type">
-                      {isEditing ? (
-                        <Select
-                          value={formState.simulationType}
-                          onValueChange={(value: SimulationTypeValue) =>
-                            updateField('simulationType', value)
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue placeholder="Select execution type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SIMULATION_TYPE_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <SimulationTypeBadge simulationType={execution.simulationType} />
-                      )}
-                    </FieldRow>
                     <FieldRow label="Status">
                       {isEditing ? (
                         <Select

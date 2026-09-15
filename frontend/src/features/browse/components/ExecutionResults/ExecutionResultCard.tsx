@@ -1,8 +1,6 @@
 import {
-  BadgeCheck,
   Clock,
   FlaskConical,
-  GitBranch,
   Lightbulb,
   Rocket,
   Server,
@@ -180,42 +178,6 @@ export const ExecutionResultCard = ({
               >
                 Case Hash:
                 <span className="ml-1 px-1 py-1 text-xs">{execution.caseHash ?? '—'}</span>
-              </Badge>
-              <Badge
-                className={`text-xs px-2 py-1 ${
-                  execution.simulationType === 'production'
-                    ? 'bg-green-600 text-white'
-                    : execution.simulationType === 'master'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-yellow-400 text-black'
-                }`}
-                style={{
-                  backgroundColor:
-                    execution.simulationType === 'production'
-                      ? '#16a34a'
-                      : execution.simulationType === 'master'
-                        ? '#2563eb'
-                        : '#facc15',
-                  color:
-                    execution.simulationType === 'production' ||
-                    execution.simulationType === 'master'
-                      ? '#fff'
-                      : '#000',
-                }}
-              >
-                {execution.simulationType === 'production' ? (
-                  <>
-                    <BadgeCheck className="w-4 h-4 mr-1" /> Production
-                  </>
-                ) : execution.simulationType === 'master' ? (
-                  <>
-                    <GitBranch className="w-4 h-4 mr-1" /> Master
-                  </>
-                ) : (
-                  <>
-                    <FlaskConical className="w-4 h-4 mr-1" /> Experimental
-                  </>
-                )}
               </Badge>
             </div>
 

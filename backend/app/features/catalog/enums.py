@@ -12,15 +12,6 @@ class ExecutionStatus(StrEnum):
     COMPLETED = "completed"
 
 
-class SimulationType(StrEnum):
-    """Enumeration of possible simulation types."""
-
-    UNKNOWN = "unknown"
-    PRODUCTION = "production"
-    EXPERIMENTAL = "experimental"
-    TEST = "test"
-
-
 class CaseSimulationType(StrEnum):
     """User-managed classification for a case."""
 

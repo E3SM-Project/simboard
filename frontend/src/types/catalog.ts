@@ -22,7 +22,6 @@ export interface MetadataChangeOut {
   reason: string | null;
 }
 
-export type SimulationTypeValue = 'unknown' | 'production' | 'experimental' | 'test' | 'master';
 export type CaseSimulationTypeValue = 'production' | 'development' | null;
 export type ExecutionStatusValue =
   | 'unknown'
@@ -149,7 +148,6 @@ export interface CaseFilterOptionsOut {
   machineIds: string[];
   machines: FilterOptionOut[];
   statuses: ExecutionStatusValue[];
-  simulationTypes: SimulationTypeValue[];
   campaigns: string[];
   initializationTypes: string[];
   compilers: string[];
@@ -206,7 +204,6 @@ export interface ExecutionCreate {
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
-  simulationType: SimulationTypeValue;
   status: ExecutionStatusValue;
   campaign?: string | null;
   experimentType?: string | null;
@@ -250,7 +247,6 @@ export interface ExecutionCreate {
 }
 
 export const EXECUTION_EDITABLE_FIELDS = [
-  'simulationType',
   'status',
   'description',
   'campaign',
@@ -320,7 +316,6 @@ export interface ExecutionListItemOut {
   caseGroup: string | null;
   executionId: string;
   caseHash: string | null;
-  simulationType: SimulationTypeValue;
   status: ExecutionStatusValue;
   campaign: string | null;
   experimentType: string | null;
@@ -360,7 +355,6 @@ export interface ExecutionFilterOptionsOut {
   compsets: string[];
   gridNames: string[];
   gridResolutions: string[];
-  simulationTypes: SimulationTypeValue[];
   initializationTypes: string[];
   compilers: string[];
   statuses: ExecutionStatusValue[];

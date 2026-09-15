@@ -18,7 +18,6 @@ from app.features.assistant.snapshot import (
 from app.features.catalog.enums import (
     ExecutionStatus,
     ExternalLinkKind,
-    SimulationType,
 )
 from app.features.catalog.models import Case, Execution, ExternalLink
 
@@ -33,7 +32,6 @@ def _make_snapshot() -> ExecutionSnapshot:
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
-            simulation_type="experimental",
             status="completed",
             initialization_type="startup",
             notes_markdown="Notes " * 5,
@@ -218,7 +216,6 @@ class TestSnapshotHelpers:
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
-            simulation_type=SimulationType.EXPERIMENTAL,
             status=ExecutionStatus.COMPLETED,
             initialization_type="startup",
             simulation_start_date=date(2024, 1, 1),

@@ -36,7 +36,6 @@ def _make_snapshot() -> ExecutionSnapshot:
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
-            simulation_type="experimental",
             status="completed",
             campaign="historical",
             experiment_type="historical",

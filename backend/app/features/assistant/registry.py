@@ -48,10 +48,6 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Grid resolution",
     ),
-    "execution.simulation_type": CitationRegistryEntry(
-        source_type="execution_field",
-        label="Simulation type",
-    ),
     "execution.status": CitationRegistryEntry(
         source_type="execution_field",
         label="Execution status",

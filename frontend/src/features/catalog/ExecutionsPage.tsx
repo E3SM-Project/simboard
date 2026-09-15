@@ -57,14 +57,6 @@ const statusColors: Record<string, string> = {
   'not-started': 'bg-gray-100 text-gray-800',
 };
 
-const typeColors: Record<ExecutionListItemOut['simulationType'], string> = {
-  production: 'border-green-600 text-green-700',
-  master: 'border-blue-600 text-blue-700',
-  experimental: 'border-amber-600 text-amber-700',
-  test: 'border-purple-600 text-purple-700',
-  unknown: 'border-slate-400 text-slate-600',
-};
-
 /**
  * Formats a given date string into the 'yyyy-MM-dd' format.
  * If the input is undefined or an invalid date, it returns a placeholder ('—').
@@ -92,7 +84,6 @@ const SIMULATION_SORT_FIELDS: Record<string, string> = {
   executionId: 'execution_id',
   caseName: 'case_name',
   caseHash: 'case_hash',
-  simulationType: 'simulation_type',
   status: 'status',
   gitTag: 'git_tag',
   gridName: 'grid_name',
@@ -207,19 +198,6 @@ export const ExecutionsPage = () => {
         header: 'Case Hash',
         cell: ({ row }) => <TableCellText value={row.original.caseHash ?? '—'} />,
         size: 180,
-      },
-      {
-        accessorKey: 'simulationType',
-        header: 'Type',
-        cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className={cn('capitalize', typeColors[row.original.simulationType])}
-          >
-            {row.original.simulationType}
-          </Badge>
-        ),
-        size: 130,
       },
       {
         accessorKey: 'status',
