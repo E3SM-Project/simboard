@@ -8,7 +8,7 @@ import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
-from app.features.catalog.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.catalog.enums import ArtifactKind, ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.ingest import (
@@ -20,7 +20,6 @@ from app.features.ingestion.ingest import (
     _normalize_execution_status,
     _normalize_git_url,
     _normalize_path_candidate,
-    _normalize_simulation_type,
     _track_case_hash_grouping,
     _validate_execution_create,
     ingest_archive,
@@ -153,7 +152,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -201,7 +199,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -225,7 +222,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -278,7 +274,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -320,7 +315,6 @@ class TestIngestArchive:
                 "machine": "nonexistent-machine",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -377,7 +371,6 @@ class TestIngestArchive:
                     "machine": machine.name,
                     "simulation_start_date": date_str,
                     "initialization_type": "test",
-                    "simulation_type": "test_type",
                     "status": None,
                     "experiment_type": None,
                     "campaign": None,
@@ -478,7 +471,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": None,
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -529,7 +521,6 @@ class TestIngestArchive:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -571,7 +562,6 @@ class TestIngestArchive:
                 "machine": "nonexistent",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -634,7 +624,6 @@ class TestIngestArchive:
                 "machine": machine_alias,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -667,15 +656,6 @@ class TestIngestArchive:
 
 
 class TestIngestArchiveContinued(TestIngestArchive):
-    def test_normalize_simulation_type_handles_none_and_blank(self) -> None:
-        assert _normalize_simulation_type(None) == SimulationType.UNKNOWN
-        assert _normalize_simulation_type("   ") == SimulationType.UNKNOWN
-
-    def test_normalize_simulation_type_handles_valid_and_unknown_values(self) -> None:
-        assert _normalize_simulation_type("production") == SimulationType.PRODUCTION
-        assert _normalize_simulation_type("TEST") == SimulationType.TEST
-        assert _normalize_simulation_type("not-a-type") == SimulationType.UNKNOWN
-
     def test_normalize_execution_status_handles_none_and_blank(self) -> None:
         assert _normalize_execution_status(None) == ExecutionStatus.CREATED
         assert _normalize_execution_status("   ") == ExecutionStatus.CREATED
@@ -705,7 +685,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -756,7 +735,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "BRANCH",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": "historical",
                 "campaign": "CMIP6",
@@ -840,7 +818,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            simulation_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
@@ -861,7 +838,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -905,7 +881,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": None,
                 "initialization_type": "test",
-                "simulation_type": "test",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -971,7 +946,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            simulation_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
@@ -991,7 +965,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1058,7 +1031,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
             grid_resolution="0.9x1.25",
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
-            simulation_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
@@ -1078,7 +1050,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1102,7 +1073,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2021-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1166,7 +1136,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1216,7 +1185,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1271,7 +1239,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": None,  # Missing machine
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1315,7 +1282,6 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "machine": machine.name,
                 "simulation_start_date": None,  # Missing or invalid
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1424,7 +1390,6 @@ class TestNormalizeGitUrl:
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
-                "simulation_type": "test_type",
                 "status": None,
                 "experiment_type": None,
                 "campaign": None,
@@ -1508,7 +1473,6 @@ class TestCaseHashIngestion:
             "hpc_username": "test-user",
             "simulation_start_date": simulation_start_date,
             "initialization_type": "test",
-            "simulation_type": "test_type",
             "status": None,
             "experiment_type": None,
             "campaign": None,
@@ -1590,7 +1554,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1653,7 +1616,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1716,7 +1678,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1779,7 +1740,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1852,7 +1812,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -1921,7 +1880,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.PRODUCTION,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -2136,7 +2094,6 @@ class TestCaseHashIngestion:
             simulation_start_date=datetime(2020, 1, 1),
             initialization_type="test",
             status=ExecutionStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
@@ -2218,7 +2175,6 @@ class TestCaseHashIngestion:
                 simulation_start_date=datetime(2020, 1, 1),
                 initialization_type="test",
                 status=ExecutionStatus.CREATED,
-                simulation_type=SimulationType.UNKNOWN,
                 created_by=user.id,
                 last_updated_by=user.id,
                 ingestion_id=ingestion.id,
@@ -2559,7 +2515,6 @@ class TestIngestHelpers:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_type=SimulationType.UNKNOWN,
             status=ExecutionStatus.CREATED,
             campaign="campaign",
             experiment_type="historical",
@@ -2620,7 +2575,6 @@ class TestIngestHelpers:
             case_id=uuid4(),
         )
 
-        assert draft.simulation_type == SimulationType.UNKNOWN
         assert draft.status == ExecutionStatus.COMPLETED
         assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
         assert draft.case_hash == "hash123"

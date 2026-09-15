@@ -59,7 +59,6 @@ export interface FilterState {
   // Scientific Goal
   campaign: string[];
   experimentType: string[];
-  simulationType: string[];
   initializationType: string[];
 
   // Simulation Context
@@ -90,7 +89,6 @@ const createEmptyFilters = (): FilterState => ({
   // Scientific Goal
   campaign: [],
   experimentType: [],
-  simulationType: [],
   initializationType: [],
 
   // Simulation Context
@@ -200,7 +198,6 @@ export const BrowsePage = ({
       caseName: filterOptions?.caseNames ?? [],
       campaign: filterOptions?.campaigns ?? [],
       experimentType: filterOptions?.experimentTypes ?? [],
-      simulationType: filterOptions?.simulationTypes ?? [],
       initializationType: filterOptions?.initializationTypes ?? [],
       compset: filterOptions?.compsets ?? [],
       gridName: filterOptions?.gridNames ?? [],

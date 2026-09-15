@@ -90,13 +90,6 @@ export const BrowseFiltersSidePanel = ({
         />
 
         <MultiSelectCheckboxGroup
-          label="Simulation Type"
-          options={availableFilters.simulationType || []}
-          selected={appliedFilters.simulationType || []}
-          onChange={(next) => handleChange('simulationType', next)}
-        />
-
-        <MultiSelectCheckboxGroup
           label="Initialization Type"
           options={availableFilters.initializationType || []}
           selected={appliedFilters.initializationType || []}

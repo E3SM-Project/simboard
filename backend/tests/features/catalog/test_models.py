@@ -12,7 +12,6 @@ from app.common.models.base import Base
 from app.features.catalog.enums import (
     ExecutionStatus,
     ExternalLinkKind,
-    SimulationType,
 )
 from app.features.catalog.models import Case, Execution, ExternalLink
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -152,7 +151,6 @@ def _create_execution(
         compset_alias="QPC4",
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
-        simulation_type=SimulationType.EXPERIMENTAL,
         status=ExecutionStatus.CREATED,
         initialization_type="startup",
         simulation_start_date=date(2023, 1, 1),

@@ -40,7 +40,6 @@ _SNAPSHOT_PATH_ACCESSORS = {
     "execution.compset_alias": lambda snapshot: snapshot.execution.compset_alias,
     "execution.grid_name": lambda snapshot: snapshot.execution.grid_name,
     "execution.grid_resolution": lambda snapshot: snapshot.execution.grid_resolution,
-    "execution.simulation_type": lambda snapshot: snapshot.execution.simulation_type,
     "execution.status": lambda snapshot: snapshot.execution.status,
     "execution.campaign": lambda snapshot: snapshot.execution.campaign,
     "execution.experiment_type": lambda snapshot: snapshot.execution.experiment_type,

@@ -1,5 +1,5 @@
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ArrowRight, Check, GitBranch } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -14,23 +14,6 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { executionDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionOut } from '@/types/index';
-
-const simulationTypeIcon = (execution: ExecutionOut) => {
-  if (execution.simulationType === 'production') {
-    return (
-      <span title="Production" className="inline-flex items-center gap-1.5 text-foreground">
-        <Check className="h-4 w-4" />
-        Production
-      </span>
-    );
-  }
-  return (
-    <span title="Master" className="inline-flex items-center gap-1.5 text-foreground">
-      <GitBranch className="h-4 w-4" />
-      Master
-    </span>
-  );
-};
 
 interface LatestExecutionsTableProps {
   latestExecutions: ExecutionOut[];
@@ -62,11 +45,6 @@ const LatestExecutionsTable = ({ latestExecutions }: LatestExecutionsTableProps)
         const value = info.getValue();
         return value ? new Date(value as string).toLocaleDateString() : 'N/A';
       },
-    },
-    {
-      accessorKey: 'simulationType',
-      header: 'Type',
-      cell: (info) => simulationTypeIcon(info.row.original) || 'N/A',
     },
     {
       id: 'details',

@@ -24,7 +24,6 @@ from app.features.catalog.enums import (
     ArtifactKind,
     ExecutionStatus,
     ExternalLinkKind,
-    SimulationType,
 )
 from app.features.catalog.models import (
     Artifact,
@@ -180,7 +179,6 @@ def _create_matching_execution(
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
         initialization_type="startup",
-        simulation_type=SimulationType.EXPERIMENTAL,
         status=ExecutionStatus.CREATED,
         simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
         created_by=user_id,
@@ -210,7 +208,6 @@ def test_openapi_exposes_only_canonical_execution_contract(client) -> None:
         "ExecutionSummaryCapabilitiesOut",
         "ExecutionSummaryOut",
         "ExecutionSummaryResponse",
-        "SimulationType",
         "ExecutionUpdate",
     }
 
@@ -317,7 +314,6 @@ def _create_execution_record(
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
         initialization_type="startup",
-        simulation_type="experimental",
         status=execution_status,
         campaign=campaign,
         experiment_type="historical",
@@ -394,7 +390,6 @@ class TestListCases:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date=date(2023, 1, 1),
             created_by=normal_user_sync["id"],
@@ -410,7 +405,6 @@ class TestListCases:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-02-01T00:00:00Z",
             created_by=normal_user_sync["id"],
@@ -503,7 +497,6 @@ class TestListCases:
                 "hpc_username": matching_case.hpc_username,
                 "execution_id": "combined-match",
                 "status": ExecutionStatus.CREATED.value,
-                "simulation_type": SimulationType.EXPERIMENTAL.value,
                 "campaign": "campaign-a",
                 "compiler": "gcc",
             },
@@ -1038,7 +1031,6 @@ class TestGetCase:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date=date(2023, 1, 1),
             compute_type="gpu",
@@ -1176,7 +1168,6 @@ class TestGetCase:
                 grid_name="f19_f19",
                 grid_resolution="1.9x2.5",
                 initialization_type="startup",
-                simulation_type="experimental",
                 status="created",
                 simulation_start_date="2023-01-01T00:00:00Z",
                 created_by=normal_user_sync["id"],
@@ -1233,7 +1224,6 @@ class TestCreateExecution:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
             "gitTag": "v1.0",
@@ -1282,7 +1272,6 @@ class TestCreateExecution:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
@@ -1995,7 +1984,6 @@ class TestUpdateCase:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
@@ -2027,7 +2015,6 @@ class TestUpdateCase:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
             "machineId": str(machine.id),
@@ -2055,7 +2042,6 @@ class TestUpdateCase:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
@@ -2091,7 +2077,6 @@ class TestUpdateCase:
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
-            "simulationType": "experimental",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
         }
@@ -2119,7 +2104,6 @@ class TestUpdateCase:
                 "gridName": "f19_f19",
                 "gridResolution": "1.9x2.5",
                 "initializationType": "startup",
-                "simulationType": "experimental",
                 "status": "created",
                 "simulationStartDate": "2023-01-01T00:00:00Z",
             }
@@ -2186,7 +2170,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2375,13 +2358,12 @@ class TestListExecutions:
         )
         early = datetime(2026, 1, 1, tzinfo=timezone.utc)
         late = datetime(2026, 2, 1, tzinfo=timezone.utc)
-        for execution, prefix, timestamp, simulation_type in (
-            (first, "z", late, SimulationType.PRODUCTION),
-            (second, "a", early, SimulationType.EXPERIMENTAL),
+        for execution, prefix, timestamp in (
+            (first, "z", late),
+            (second, "a", early),
         ):
             execution.case_hash = f"{prefix}-hash"
             execution.experiment_type = f"{prefix}-experiment"
-            execution.simulation_type = simulation_type
             execution.git_branch = f"{prefix}-branch"
             execution.git_tag = f"{prefix}-tag"
             execution.git_commit_hash = f"{prefix}-commit"
@@ -2404,7 +2386,6 @@ class TestListExecutions:
             "case_hash",
             "campaign",
             "experiment_type",
-            "simulation_type",
             "status",
             "git_branch",
             "git_tag",
@@ -2549,7 +2530,6 @@ class TestListExecutions:
                 grid_name="f19_f19",
                 grid_resolution="1.9x2.5",
                 initialization_type="startup",
-                simulation_type="experimental",
                 status="created",
                 simulation_start_date="2023-01-01T00:00:00Z",
                 created_by=normal_user_sync["id"],
@@ -2607,7 +2587,6 @@ class TestListExecutions:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             git_tag="v1.0",
@@ -2673,7 +2652,6 @@ class TestListExecutions:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
@@ -2720,7 +2698,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2782,7 +2759,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2846,7 +2822,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2861,7 +2836,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-02T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2916,7 +2890,6 @@ class TestListExecutions:
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
                     initialization_type="startup",
-                    simulation_type="experimental",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
                     created_by=normal_user_sync["id"],
@@ -2967,7 +2940,6 @@ class TestListExecutions:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             compute_type="gpu",
@@ -3105,7 +3077,6 @@ class TestGetExecution:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             compute_type="cpu",
@@ -3166,7 +3137,6 @@ class TestGetExecution:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
@@ -3220,7 +3190,6 @@ class TestGetExecution:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],
@@ -3304,7 +3273,6 @@ class TestUpdateExecution:
         db.commit()
 
         payload = {
-            "simulationType": "production",
             "status": "completed",
             "description": "Updated description",
             "campaign": "campaign-updated",
@@ -3316,7 +3284,6 @@ class TestUpdateExecution:
 
         assert res.status_code == 200
         data = res.json()
-        assert data["simulationType"] == payload["simulationType"]
         assert data["status"] == payload["status"]
         assert data["description"] == payload["description"]
         assert data["campaign"] == payload["campaign"]
@@ -3333,7 +3300,6 @@ class TestUpdateExecution:
         updated_execution = (
             db.query(Execution).filter(Execution.id == execution.id).one()
         )
-        assert updated_execution.simulation_type == payload["simulationType"]
         assert updated_execution.status == payload["status"]
         assert updated_execution.description == payload["description"]
         assert updated_execution.campaign == payload["campaign"]
@@ -3353,7 +3319,6 @@ class TestUpdateExecution:
             .all()
         )
         assert {entry.field_name for entry in history} == {
-            "simulation_type",
             "status",
             "description",
             "campaign",
@@ -3366,7 +3331,7 @@ class TestUpdateExecution:
 
         history_res = client.get(f"{API_BASE}/executions/{execution.id}/history")
         assert history_res.status_code == 200
-        assert len(history_res.json()["items"]) == 5
+        assert len(history_res.json()["items"]) == 4
         assert {entry["editor"]["email"] for entry in history_res.json()["items"]} == {
             normal_user_sync["email"]
         }
@@ -3913,7 +3878,7 @@ class TestUpdateExecution:
         assert unchanged_execution.compiler == "gcc"
         assert unchanged_execution.case_id == case.id
 
-    @pytest.mark.parametrize("payload", [{"status": None}, {"simulationType": None}])
+    @pytest.mark.parametrize("payload", [{"status": None}])
     def test_endpoint_rejects_explicit_null_for_enum_fields(
         self, client, db: Session, normal_user_sync, payload
     ):
@@ -3949,7 +3914,6 @@ class TestUpdateExecution:
             db.query(Execution).filter(Execution.id == execution.id).one()
         )
         assert unchanged_execution.status == ExecutionStatus.CREATED
-        assert unchanged_execution.simulation_type == SimulationType.EXPERIMENTAL
         assert unchanged_execution.updated_at == original_updated_at
 
     @pytest.mark.parametrize(
@@ -4116,7 +4080,6 @@ class TestExecutionBrowserIncludesCaseMetadata:
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
             initialization_type="startup",
-            simulation_type="experimental",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             created_by=normal_user_sync["id"],

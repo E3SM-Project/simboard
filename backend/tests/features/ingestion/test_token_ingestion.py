@@ -9,7 +9,7 @@ from fastapi import status
 
 from app.api.version import API_BASE
 from app.common.models.base import Base
-from app.features.catalog.enums import ExecutionStatus, SimulationType
+from app.features.catalog.enums import ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -104,7 +104,6 @@ class TestIngestionWithAPIToken:
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
-                simulation_type=SimulationType.PRODUCTION,
                 status=ExecutionStatus.COMPLETED,
                 initialization_type="branch",
                 simulation_start_date=datetime.now(timezone.utc),
@@ -410,7 +409,6 @@ class TestIngestionWithAPIToken:
                 compsetAlias="test_alias",
                 gridName="test_grid",
                 gridResolution="1x1",
-                simulationType=SimulationType.PRODUCTION,
                 status=ExecutionStatus.RUNNING,
                 initializationType="cold",
                 simulationStartDate=date.today(),

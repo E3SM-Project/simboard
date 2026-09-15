@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
-from app.features.catalog.enums import ArtifactKind, ExecutionStatus, SimulationType
+from app.features.catalog.enums import ArtifactKind, ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ArtifactCreate, ExecutionCreate
 from app.features.ingestion.parsers.parser import main_parser
@@ -66,7 +66,6 @@ class ExecutionCreateDraft:
     compset_alias: str | None
     grid_name: str | None
     grid_resolution: str | None
-    simulation_type: SimulationType
     status: ExecutionStatus
     campaign: str | None
     experiment_type: str | None
@@ -746,7 +745,6 @@ def _build_execution_create_draft(
     run_end_date = _parse_datetime_field(parsed_execution.run_end_date)
 
     git_repository_url = _normalize_git_url(parsed_execution.git_repository_url)
-    simulation_type = _normalize_simulation_type(None)
     status = _normalize_execution_status(parsed_execution.status)
     _, compute_type = parse_machine_name(parsed_execution.machine or "")
 
@@ -757,7 +755,6 @@ def _build_execution_create_draft(
         compset_alias=parsed_execution.compset_alias,
         grid_name=parsed_execution.grid_name,
         grid_resolution=parsed_execution.grid_resolution,
-        simulation_type=simulation_type,
         status=status,
         campaign=parsed_execution.campaign,
         experiment_type=parsed_execution.experiment_type,
@@ -787,29 +784,6 @@ def _validate_execution_create(draft: ExecutionCreateDraft) -> ExecutionCreate:
         by_name=True,
         from_attributes=True,
     )
-
-
-def _normalize_simulation_type(value: str | None) -> SimulationType:
-    """Return a valid SimulationType enum value with UNKNOWN fallback."""
-    if not value:
-        return SimulationType.UNKNOWN
-
-    normalized = value.strip()
-    if not normalized:
-        return SimulationType.UNKNOWN
-
-    try:
-        return SimulationType(normalized)
-    except ValueError:
-        try:
-            return SimulationType[normalized.upper()]
-        except KeyError:
-            logger.warning(
-                "Unknown simulation_type '%s'; defaulting to '%s'.",
-                value,
-                SimulationType.UNKNOWN.value,
-            )
-            return SimulationType.UNKNOWN
 
 
 def _normalize_execution_status(value: str | None) -> ExecutionStatus:

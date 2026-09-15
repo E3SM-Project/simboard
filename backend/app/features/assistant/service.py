@@ -57,18 +57,14 @@ def _add_identity_and_status(
 
     if snapshot.machine and snapshot.machine.name:
         draft.sentences.append(
-            f"It is recorded as a {snapshot.execution.simulation_type} simulation on "
-            f"machine {snapshot.machine.name} with status {snapshot.execution.status}."
+            f"It ran on machine {snapshot.machine.name} with status "
+            f"{snapshot.execution.status}."
         )
         draft.add_citation("machine.name")
     else:
-        draft.sentences.append(
-            f"It is recorded as a {snapshot.execution.simulation_type} simulation "
-            f"with status {snapshot.execution.status}."
-        )
+        draft.sentences.append(f"It has status {snapshot.execution.status}.")
         draft.caveats.append("Machine information is not recorded for this execution.")
 
-    draft.add_citation("execution.simulation_type")
     draft.add_citation("execution.status")
 
 

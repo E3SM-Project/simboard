@@ -37,7 +37,6 @@ type ActiveFilterKey =
   | 'hpcUsername'
   | 'machineName'
   | 'campaign'
-  | 'simulationType'
   | 'initializationType'
   | 'compiler'
   | 'gitTag'
@@ -47,7 +46,6 @@ interface CaseExecutionFilters {
   hpcUsername: string;
   machineName: string;
   campaign: string;
-  simulationType: string;
   initializationType: string;
   compiler: string;
   gitTag: string;
@@ -68,7 +66,6 @@ const createEmptyExecutionFilters = (): CaseExecutionFilters => ({
   hpcUsername: '',
   machineName: '',
   campaign: '',
-  simulationType: '',
   initializationType: '',
   compiler: '',
   gitTag: '',
@@ -93,7 +90,6 @@ const CASE_SEARCH_PARAM_KEYS = [
   'machineId',
   'hpcUsername',
   'campaign',
-  'simulationType',
   'initializationType',
   'compiler',
   'gitTag',
@@ -132,7 +128,6 @@ const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
       hpcUsername: getTextParam(params, 'hpcUsername'),
       machineName: getTextParam(params, 'machine'),
       campaign: getTextParam(params, 'campaign'),
-      simulationType: getTextParam(params, 'simulationType'),
       initializationType: getTextParam(params, 'initializationType'),
       compiler: getTextParam(params, 'compiler'),
       gitTag: getTextParam(params, 'gitTag'),
@@ -224,7 +219,6 @@ export const CasesPage = () => {
     [
       initialSearchState.caseGroupFilter,
       initialSearchState.executionFilters.campaign,
-      initialSearchState.executionFilters.simulationType,
       initialSearchState.executionFilters.initializationType,
       initialSearchState.executionFilters.compiler,
       initialSearchState.executionFilters.gitTag,
@@ -244,7 +238,6 @@ export const CasesPage = () => {
       caseGroup: caseGroupFilter || undefined,
       machineId: selectedMachineId,
       hpcUsername: executionFilters.hpcUsername || undefined,
-      simulationType: executionFilters.simulationType || undefined,
       campaign: executionFilters.campaign || undefined,
       initializationType: executionFilters.initializationType || undefined,
       compiler: executionFilters.compiler || undefined,
@@ -267,7 +260,6 @@ export const CasesPage = () => {
       hpcUsername: executionFilters.hpcUsername || undefined,
       machineId: selectedMachineId,
       campaign: executionFilters.campaign || undefined,
-      simulationType: executionFilters.simulationType || undefined,
       initializationType: executionFilters.initializationType || undefined,
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
@@ -308,7 +300,6 @@ export const CasesPage = () => {
       [
         next.caseGroupFilter,
         next.executionFilters.campaign,
-        next.executionFilters.simulationType,
         next.executionFilters.initializationType,
         next.executionFilters.compiler,
         next.executionFilters.gitTag,
@@ -365,7 +356,6 @@ export const CasesPage = () => {
     hpcUsername: executionFilters.hpcUsername || undefined,
     machineId: selectedMachineId,
     campaign: executionFilters.campaign || undefined,
-    simulationType: executionFilters.simulationType || undefined,
     initializationType: executionFilters.initializationType || undefined,
     compiler: executionFilters.compiler || undefined,
     gitTag: executionFilters.gitTag || undefined,
@@ -398,7 +388,6 @@ export const CasesPage = () => {
     hpcUsernameOptions,
     machineOptions,
     campaignOptions,
-    simulationTypeOptions,
     initializationTypeOptions,
     compilerOptions,
     gitTagOptions,
@@ -419,10 +408,6 @@ export const CasesPage = () => {
       campaignOptions: (filterOptions?.campaigns ?? []).map((campaign) => ({
         value: campaign,
         label: campaign,
-      })),
-      simulationTypeOptions: (filterOptions?.simulationTypes ?? []).map((simulationType) => ({
-        value: simulationType,
-        label: simulationType,
       })),
       initializationTypeOptions: (filterOptions?.initializationTypes ?? []).map(
         (initializationType) => ({ value: initializationType, label: initializationType }),
@@ -449,7 +434,6 @@ export const CasesPage = () => {
     () =>
       [
         executionFilters.campaign,
-        executionFilters.simulationType,
         executionFilters.initializationType,
         executionFilters.compiler,
         executionFilters.gitTag,
@@ -478,13 +462,6 @@ export const CasesPage = () => {
 
     if (executionFilters.campaign) {
       filters.push({ key: 'campaign', label: 'Campaign', value: executionFilters.campaign });
-    }
-    if (executionFilters.simulationType) {
-      filters.push({
-        key: 'simulationType',
-        label: 'Type',
-        value: executionFilters.simulationType,
-      });
     }
 
     if (executionFilters.initializationType) {
@@ -972,13 +949,6 @@ export const CasesPage = () => {
                           placeholder: 'All campaigns',
                           options: campaignOptions,
                           onValueChange: (value) => setExecutionFilter('campaign', value),
-                        })}
-                        {renderSelectField({
-                          label: 'Type',
-                          value: executionFilters.simulationType,
-                          placeholder: 'All types',
-                          options: simulationTypeOptions,
-                          onValueChange: (value) => setExecutionFilter('simulationType', value),
                         })}
                         {renderSelectField({
                           label: 'Initialization',

@@ -76,7 +76,6 @@ async def _create_execution(
         compset_alias="QPC4",
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
-        simulation_type="experimental",
         status="completed",
         initialization_type="startup",
         simulation_start_date="2023-01-01T00:00:00Z",

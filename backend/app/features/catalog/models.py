@@ -30,7 +30,6 @@ from app.features.catalog.enums import (
     CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
-    SimulationType,
 )
 
 if TYPE_CHECKING:
@@ -124,15 +123,6 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~
-    simulation_type: Mapped[SimulationType] = mapped_column(
-        SAEnum(
-            SimulationType,
-            name="simulation_type_enum",
-            native_enum=False,
-            values_callable=lambda obj: [e.value for e in obj],
-            validate_strings=True,
-        )
-    )
     status: Mapped[ExecutionStatus] = mapped_column(
         SAEnum(
             ExecutionStatus,

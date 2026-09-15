@@ -18,7 +18,6 @@ from app.features.catalog.enums import (
     ExecutionStatus,
     ExperimentType,
     ExternalLinkKind,
-    SimulationType,
 )
 from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
@@ -291,11 +290,6 @@ class ExecutionCreate(CamelInBaseModel):
         str, Field(..., description="Grid resolution used in the simulation")
     ]
 
-    # Model setup/context
-    # -------------------
-    simulation_type: Annotated[
-        SimulationType, Field(..., description="Type of the simulation")
-    ]
     status: Annotated[
         ExecutionStatus, Field(..., description="Current status of the execution")
     ]
@@ -441,7 +435,7 @@ class ExecutionUpdate(CamelInBaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("simulation_type", "status", mode="before")
+    @field_validator("status", mode="before")
     @classmethod
     def reject_null_enum_updates(cls, value: Any) -> Any:
         if value is None:
@@ -457,9 +451,6 @@ class ExecutionUpdate(CamelInBaseModel):
             raise ValueError(msg)
         return value
 
-    simulation_type: Annotated[
-        SimulationType | None, Field(None, description="Type of the simulation")
-    ]
     status: Annotated[
         ExecutionStatus | None,
         Field(None, description="Current status of the execution"),
@@ -646,7 +637,6 @@ class CaseFilterOptionsOut(CamelOutBaseModel):
     machine_ids: list[UUID]
     machines: list[FilterOptionOut]
     statuses: list[ExecutionStatus]
-    simulation_types: list[SimulationType]
     campaigns: list[str]
     initialization_types: list[str]
     compilers: list[str]
@@ -664,7 +654,6 @@ class ExecutionListItemOut(CamelOutBaseModel):
     case_group: str | None = None
     execution_id: str
     case_hash: str | None = None
-    simulation_type: SimulationType
     status: ExecutionStatus
     campaign: str | None = None
     experiment_type: str | None = None
@@ -713,7 +702,6 @@ class ExecutionFilterOptionsOut(CamelOutBaseModel):
     compsets: list[str]
     grid_names: list[str]
     grid_resolutions: list[str]
-    simulation_types: list[SimulationType]
     initialization_types: list[str]
     compilers: list[str]
     statuses: list[ExecutionStatus]
@@ -970,9 +958,6 @@ class ExecutionOut(CamelOutBaseModel):
 
     # Model setup/context
     # -------------------
-    simulation_type: Annotated[
-        SimulationType, Field(..., description="Type of the simulation")
-    ]
     status: Annotated[
         ExecutionStatus, Field(..., description="Current status of the execution")
     ]

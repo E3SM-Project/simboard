@@ -30,7 +30,6 @@ export interface CaseFilterOptionsParams extends PageParams {
   machineId?: string;
   hpcUsername?: string;
   executionId?: string;
-  simulationType?: string;
   campaign?: string;
   initializationType?: string;
   compiler?: string;

@@ -15,7 +15,6 @@ from app.features.catalog.enums import (
     CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
-    SimulationType,
 )
 from app.features.catalog.history import EntityType, changed_metadata, snapshot_metadata
 from app.features.catalog.link_utils import merge_execution_and_case_links
@@ -82,7 +81,6 @@ def list_cases(
     hpc_username: str | None = Query(None),
     execution_id: str | None = Query(None),
     status_filter: ExecutionStatus | None = Query(None, alias="status"),
-    simulation_type: SimulationType | None = Query(None),
     campaign: str | None = Query(None),
     initialization_type: str | None = Query(None),
     compiler: str | None = Query(None),
@@ -107,7 +105,6 @@ def list_cases(
         hpc_username=hpc_username,
         execution_id=execution_id,
         status_filter=status_filter,
-        simulation_type=simulation_type,
         campaign=campaign,
         initialization_type=initialization_type,
         compiler=compiler,
@@ -145,7 +142,6 @@ def _filtered_case_list_query(
     hpc_username: str | None,
     execution_id: str | None,
     status_filter: ExecutionStatus | None,
-    simulation_type: SimulationType | None,
     campaign: str | None,
     initialization_type: str | None,
     compiler: str | None,
@@ -170,8 +166,6 @@ def _filtered_case_list_query(
         predicates.append(Execution.execution_id.ilike(f"%{execution_id.strip()}%"))
     if status_filter:
         predicates.append(Execution.status == ExecutionStatus(status_filter.value))
-    if simulation_type:
-        predicates.append(Execution.simulation_type == simulation_type)
     for column, value in (
         (Execution.campaign, campaign),
         (Execution.initialization_type, initialization_type),
@@ -364,7 +358,6 @@ def get_case_filter_options(
     hpc_username: str | None = Query(None),
     execution_id: str | None = Query(None),
     status_filter: ExecutionStatus | None = Query(None, alias="status"),
-    simulation_type: SimulationType | None = Query(None),
     campaign: str | None = Query(None),
     initialization_type: str | None = Query(None),
     compiler: str | None = Query(None),
@@ -380,7 +373,6 @@ def get_case_filter_options(
         "hpc_username": hpc_username,
         "execution_id": execution_id,
         "status": status_filter,
-        "simulation_type": simulation_type,
         "campaign": campaign,
         "initialization_type": initialization_type,
         "compiler": compiler,
@@ -403,9 +395,6 @@ def get_case_filter_options(
         machine_ids=_distinct_query_values(case_query("machine_id"), Case.machine_id),
         machines=_machine_filter_options_for_query(case_query("machine_id")),
         statuses=_distinct_query_values(execution_query("status"), Execution.status),
-        simulation_types=_distinct_query_values(
-            execution_query("simulation_type"), Execution.simulation_type
-        ),
         campaigns=_distinct_query_values(
             execution_query("campaign"), Execution.campaign
         ),
@@ -902,7 +891,6 @@ def list_executions(  # noqa: C901
         description="Filter executions by exact case group.",
     ),
     status_filter: list[ExecutionStatus] | None = Query(None, alias="status"),
-    simulation_type: list[SimulationType] | None = Query(None),
     machine_id: list[UUID] | None = Query(None),
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
@@ -918,7 +906,7 @@ def list_executions(  # noqa: C901
         "created_at",
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
-            "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
+            "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
@@ -935,7 +923,6 @@ def list_executions(  # noqa: C901
         case_name=case_name,
         case_group=case_group,
         status_filter=status_filter,
-        simulation_type=simulation_type,
         machine_id=machine_id,
         hpc_username=hpc_username,
         campaign=campaign,
@@ -1060,7 +1047,6 @@ def _list_executions(  # noqa: C901
         description="Filter executions by exact case group.",
     ),
     status_filter: list[ExecutionStatus] | None = Query(None, alias="status"),
-    simulation_type: list[SimulationType] | None = Query(None),
     machine_id: list[UUID] | None = Query(None),
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
@@ -1076,7 +1062,7 @@ def _list_executions(  # noqa: C901
         "created_at",
         pattern=(
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
-            "case_group|experiment_type|simulation_type|status|git_branch|git_tag|"
+            "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
             "grid_resolution|compset|grid_name|machine_name)$"
         ),
@@ -1114,8 +1100,6 @@ def _list_executions(  # noqa: C901
         query = query.filter(Case.case_group.in_(case_group))
     if status_filter:
         query = query.filter(Execution.status.in_(status_filter))
-    if simulation_type:
-        query = query.filter(Execution.simulation_type.in_(simulation_type))
     if machine_id:
         query = query.filter(Case.machine_id.in_(machine_id))
     if hpc_username:
@@ -1142,7 +1126,6 @@ def _list_executions(  # noqa: C901
         Case.case_group,
         Execution.execution_id,
         Execution.case_hash,
-        Execution.simulation_type,
         Execution.status,
         Execution.campaign,
         Execution.experiment_type,
@@ -1177,7 +1160,6 @@ def _list_executions(  # noqa: C901
         "case_hash": Execution.case_hash,
         "campaign": Execution.campaign,
         "experiment_type": Execution.experiment_type,
-        "simulation_type": Execution.simulation_type,
         "status": Execution.status,
         "git_branch": Execution.git_branch,
         "git_tag": Execution.git_tag,
@@ -1221,7 +1203,6 @@ def _get_execution_filter_options(db: Session) -> ExecutionFilterOptionsOut:
         compsets=_distinct_values(db, Execution.compset),
         grid_names=_distinct_values(db, Execution.grid_name),
         grid_resolutions=_distinct_values(db, Execution.grid_resolution),
-        simulation_types=_distinct_values(db, Execution.simulation_type),
         initialization_types=_distinct_values(db, Execution.initialization_type),
         compilers=_distinct_values(db, Execution.compiler),
         statuses=_distinct_values(db, Execution.status),
@@ -1658,7 +1639,6 @@ def _case_execution_facet_predicates(filters: dict, *, exclude: str):
         )
     for key, column in (
         ("status", Execution.status),
-        ("simulation_type", Execution.simulation_type),
         ("campaign", Execution.campaign),
         ("initialization_type", Execution.initialization_type),
         ("compiler", Execution.compiler),
