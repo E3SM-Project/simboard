@@ -91,6 +91,20 @@ def test_discovery_accepts_supported_archive_layouts(
     assert candidates[0].values.get("case_group") == expected_group
 
 
+def test_discovery_limits_candidates_to_included_case_paths(tmp_path: Path) -> None:
+    included = _case(tmp_path, "production/group/included")
+    _case(tmp_path, "production/group/excluded")
+
+    candidates = _discover(
+        tmp_path,
+        BASE_URL,
+        "perlmutter",
+        {Path("production/group/included")},
+    )
+
+    assert [candidate.path.parent for candidate in candidates] == [included]
+
+
 def test_discovery_requires_machine_matching_configured_archive(tmp_path: Path) -> None:
     directory = _case(tmp_path, "development/case")
 
