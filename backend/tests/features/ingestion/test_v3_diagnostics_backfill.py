@@ -222,6 +222,7 @@ def test_multiple_case_log_lists_candidate_case_and_owner(monkeypatch) -> None:
         target,
         "ac.wlin",
         "ac.wlin",
+        Path("/diagnostics/ac.wlin/E3SMv3/case"),
         [
             {"name": "case", "hpcUsername": "ac.golaz"},
             {"name": "case", "hpcUsername": "ac.wlin"},
@@ -234,6 +235,7 @@ def test_multiple_case_log_lists_candidate_case_and_owner(monkeypatch) -> None:
             {
                 "case_name": "case",
                 "diagnostics_publisher": "ac.wlin",
+                "diagnostics_source_path": "/diagnostics/ac.wlin/E3SMv3/case",
                 "selected_hpc_username": "ac.wlin",
                 "matching_cases": [
                     "case_name:case/hpc_username:ac.golaz",
