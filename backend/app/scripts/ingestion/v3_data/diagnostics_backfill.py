@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import stat
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -345,6 +346,7 @@ def _backfill_target(
         _copy_diagnostics(source, destination)
         cfg = _latest_cfg(destination) or _create_provenance_cfg(destination)
         _write_settings(cfg, case, machine, public_base_url)
+        _make_publicly_readable(destination)
     except (OSError, shutil.Error) as exc:
         _log_event(
             "v3_diagnostics_backfill_target_failed",
@@ -506,6 +508,26 @@ def _create_provenance_cfg(directory: Path) -> Path:
     cfg.touch(exist_ok=False)
 
     return cfg
+
+
+def _make_publicly_readable(directory: Path) -> None:
+    """Ensure copied diagnostics can be served from the public web archive."""
+    for root, directories, filenames in os.walk(directory, followlinks=False):
+        current = Path(root)
+        _add_mode(current, stat.S_IROTH | stat.S_IXOTH)
+        directories[:] = [
+            name for name in directories if not (current / name).is_symlink()
+        ]
+
+        for filename in filenames:
+            path = current / filename
+            if not path.is_symlink() and path.is_file():
+                _add_mode(path, stat.S_IROTH)
+
+
+def _add_mode(path: Path, mode: int) -> None:
+    """Add permission bits without weakening existing owner or group access."""
+    path.chmod(path.stat().st_mode | mode)
 
 
 def _write_settings(
