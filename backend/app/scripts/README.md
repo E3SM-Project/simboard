@@ -346,6 +346,9 @@ mode, which does not copy diagnostics, generate settings, or run the scanner:
 
 ```bash
 make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+
+# Include per-source and aggregate selected-source sizes (may take longer).
+make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env V3_DIAGNOSTICS_INCLUDE_SIZES=true
 ```
 
 After reviewing the reconciliation event, run the explicit write-enabled

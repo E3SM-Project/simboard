@@ -126,6 +126,7 @@ def main() -> int:
     """Backfill diagnostics for one supported machine."""
     args = _parse_args()
     dry_run = _dry_run_requested(args.dry_run)
+    include_sizes = args.include_sizes
     machine = args.machine
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE[machine]
     source_root = _diagnostics_source_root(archive.root)
@@ -143,6 +144,7 @@ def main() -> int:
     selected = [target for target in V3_DIAGNOSTIC_TARGETS if target.machine == machine]
     report = _new_report(machine)
     scanner_case_paths: set[Path] = set()
+    source_sizes: dict[str, int] = {}
 
     if not source_root.is_dir():
         raise ValueError(f"Diagnostics source root is not readable: {source_root}")
@@ -151,6 +153,7 @@ def main() -> int:
         archive_root=archive.root,
         api_base=api_base,
         dry_run=dry_run,
+        include_sizes=include_sizes,
         machine=machine,
         public_base_url=archive.public_base_url,
         selected_target_count=len(selected),
@@ -174,11 +177,15 @@ def main() -> int:
                 machine=machine,
                 machine_id=machine_id,
                 dry_run=dry_run,
+                include_sizes=include_sizes,
                 scanner_case_paths=scanner_case_paths,
+                source_sizes=source_sizes,
             )
             report[status].append(target.case_name)
 
     _run_scanner_if_reconciled(report, machine, dry_run, scanner_case_paths)
+    if dry_run and include_sizes:
+        _log_source_size_summary(source_sizes)
     _log_reconciliation(report, machine, dry_run, len(selected))
 
     if any(
@@ -203,6 +210,11 @@ def _parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Report actions without writing or scanning, overriding DRY_RUN.",
+    )
+    parser.add_argument(
+        "--include-sizes",
+        action="store_true",
+        help="Log source-directory sizes during a dry run.",
     )
 
     return parser.parse_args()
@@ -261,6 +273,7 @@ def _log_startup_configuration(
     archive_root: str,
     api_base: str,
     dry_run: bool,
+    include_sizes: bool,
     machine: str,
     public_base_url: str,
     selected_target_count: int,
@@ -272,6 +285,7 @@ def _log_startup_configuration(
         {
             "machine": machine,
             "dry_run": dry_run,
+            "include_source_sizes": include_sizes,
             "simboard_api_base_url": api_base,
             "has_api_token": bool(os.environ.get("SIMBOARD_API_TOKEN", "").strip()),
             "diagnostics_source_root": str(source_root),
@@ -305,7 +319,9 @@ def _backfill_target(
     machine: str,
     machine_id: str,
     dry_run: bool,
+    include_sizes: bool = False,
     scanner_case_paths: set[Path] | None = None,
+    source_sizes: dict[str, int] | None = None,
 ) -> str:
     """Copy one target and return its reconciliation outcome."""
     assert target.source is not None
@@ -330,16 +346,20 @@ def _backfill_target(
         destination /= group
     destination /= target.case_name
 
+    source_exists = source.is_dir()
     if destination.is_dir():
         _record_scanner_case_path(scanner_case_paths, archive_root, destination)
+        if source_exists:
+            _record_dry_run_source_size(include_sizes, source, target, source_sizes)
         return "skipped_existing"
     if destination.exists():
         return "failed"
 
-    if not source.is_dir():
+    if not source_exists:
         return "missing"
 
     if dry_run:
+        _record_dry_run_source_size(include_sizes, source, target, source_sizes)
         return "copied"
 
     try:
@@ -399,6 +419,30 @@ def _record_scanner_case_path(
     """Register a copied or existing target for the restricted scanner pass."""
     if scanner_case_paths is not None:
         scanner_case_paths.add(destination.relative_to(archive_root))
+
+
+def _record_dry_run_source_size(
+    include_sizes: bool,
+    source: Path,
+    target: Target,
+    source_sizes: dict[str, int] | None,
+) -> None:
+    """Measure and log a planned source copy when size reporting is enabled."""
+    if not include_sizes:
+        return
+
+    source_size = _directory_size_bytes(source)
+    if source_sizes is not None:
+        source_sizes[target.case_name] = source_size
+    _log_event(
+        "v3_diagnostics_backfill_dry_run_source_size",
+        {
+            "case_name": target.case_name,
+            "diagnostics_source_path": str(source),
+            "source_size_bytes": source_size,
+            "source_size_human": _human_readable_size(source_size),
+        },
+    )
 
 
 def _resolve_cases(
@@ -508,6 +552,44 @@ def _create_provenance_cfg(directory: Path) -> Path:
     cfg.touch(exist_ok=False)
 
     return cfg
+
+
+def _directory_size_bytes(directory: Path) -> int:
+    """Return the total size of regular files beneath a diagnostics directory."""
+    total = 0
+    for root, directories, filenames in os.walk(directory, followlinks=False):
+        current = Path(root)
+        directories[:] = [
+            name for name in directories if not (current / name).is_symlink()
+        ]
+        for filename in filenames:
+            path = current / filename
+            if not path.is_symlink() and path.is_file():
+                total += path.stat().st_size
+    return total
+
+
+def _human_readable_size(size_bytes: int) -> str:
+    """Render a byte size using binary units for operational logs."""
+    size = float(size_bytes)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
+        if size < 1024 or unit == "PiB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    raise AssertionError("unreachable")
+
+
+def _log_source_size_summary(source_sizes: dict[str, int]) -> None:
+    """Log the aggregate size of selected v3 source directories."""
+    total_size = sum(source_sizes.values())
+    _log_event(
+        "v3_diagnostics_backfill_dry_run_source_size_summary",
+        {
+            "source_directory_count": len(source_sizes),
+            "source_total_size_bytes": total_size,
+            "source_total_size_human": _human_readable_size(total_size),
+        },
+    )
 
 
 def _make_publicly_readable(directory: Path) -> None:
