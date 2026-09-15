@@ -141,6 +141,7 @@ def main() -> int:
 
     selected = [target for target in V3_DIAGNOSTIC_TARGETS if target.machine == machine]
     report = _new_report(machine)
+    scanner_case_paths: set[Path] = set()
 
     if not source_root.is_dir():
         raise ValueError(f"Diagnostics source root is not readable: {source_root}")
@@ -172,10 +173,11 @@ def main() -> int:
                 machine=machine,
                 machine_id=machine_id,
                 dry_run=dry_run,
+                scanner_case_paths=scanner_case_paths,
             )
             report[status].append(target.case_name)
 
-    _run_scanner_if_reconciled(report, machine, dry_run)
+    _run_scanner_if_reconciled(report, machine, dry_run, scanner_case_paths)
     _log_reconciliation(report, machine, dry_run, len(selected))
 
     if any(
@@ -302,6 +304,7 @@ def _backfill_target(
     machine: str,
     machine_id: str,
     dry_run: bool,
+    scanner_case_paths: set[Path] | None = None,
 ) -> str:
     """Copy one target and return its reconciliation outcome."""
     assert target.source is not None
@@ -327,6 +330,7 @@ def _backfill_target(
     destination /= target.case_name
 
     if destination.is_dir():
+        _record_scanner_case_path(scanner_case_paths, archive_root, destination)
         return "skipped_existing"
     if destination.exists():
         return "failed"
@@ -347,6 +351,8 @@ def _backfill_target(
             {"case_name": target.case_name, "error": str(exc)},
         )
         return "failed"
+
+    _record_scanner_case_path(scanner_case_paths, archive_root, destination)
 
     return "copied"
 
@@ -383,6 +389,14 @@ def _resolve_owner_case(
         return None, "ambiguous"
 
     return selected_case, None
+
+
+def _record_scanner_case_path(
+    scanner_case_paths: set[Path] | None, archive_root: Path, destination: Path
+) -> None:
+    """Register a copied or existing target for the restricted scanner pass."""
+    if scanner_case_paths is not None:
+        scanner_case_paths.add(destination.relative_to(archive_root))
 
 
 def _resolve_cases(
@@ -521,7 +535,10 @@ def _write_settings(
 
 
 def _run_scanner_if_reconciled(
-    report: dict[str, list[str]], machine: str, dry_run: bool
+    report: dict[str, list[str]],
+    machine: str,
+    dry_run: bool,
+    scanner_case_paths: set[Path],
 ) -> None:
     if dry_run or any(
         report[status]
@@ -538,7 +555,7 @@ def _run_scanner_if_reconciled(
     os.environ["MACHINE_NAME"] = machine
     os.environ["DRY_RUN"] = "false"
 
-    if run_scanner() != 0:
+    if run_scanner(included_case_paths=scanner_case_paths) != 0:
         report["failed"].extend(report["copied"] + report["skipped_existing"])
     else:
         report["linked"] = report["copied"].copy()

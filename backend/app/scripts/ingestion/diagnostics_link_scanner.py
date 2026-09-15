@@ -36,7 +36,8 @@ class Candidate:
     fingerprint: str
 
 
-def run() -> int:
+def run(included_case_paths: set[Path] | None = None) -> int:
+    """Scan the archive, optionally limited to root-relative case paths."""
     configured_machine = os.environ.get("MACHINE_NAME", "").strip()
     if not configured_machine:
         raise ValueError("MACHINE_NAME is required")
@@ -66,7 +67,7 @@ def run() -> int:
         },
     )
 
-    candidates = _discover(root, archive.public_base_url, machine)
+    candidates = _discover(root, archive.public_base_url, machine, included_case_paths)
     summary["discovered_candidates"] = len(candidates)
     _log_event("diagnostics_scanner_discovery_completed", summary.copy())
 
@@ -221,7 +222,10 @@ def _sanitize_url(url: str) -> str:
 
 
 def _discover(  # noqa: C901
-    root: Path, public_base_url: str, machine_name: str
+    root: Path,
+    public_base_url: str,
+    machine_name: str,
+    included_case_paths: set[Path] | None = None,
 ) -> list[Candidate]:
     base = urlparse(public_base_url)
     candidates: list[Candidate] = []
@@ -247,6 +251,12 @@ def _discover(  # noqa: C901
                 continue
 
             case_dir = cfg.parent
+            if (
+                included_case_paths is not None
+                and case_dir.relative_to(root) not in included_case_paths
+            ):
+                continue
+
             prior = newest_by_case.get(case_dir)
 
             if prior is None or timestamp > prior[1]:
