@@ -2466,6 +2466,97 @@ class TestIngestFromHpcUploadEndpoint:
         assert len(ingestion.archive_sha256) == 64
         assert ingestion.processed_execution_ids == ["100.1-1", "101.1-1"]
 
+    def test_endpoint_classifies_hpc_upload_case_when_requested(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).filter(Machine.name == "chrysalis").one()
+        assert machine is not None
+        case = _create_case(db, "v3.LR.piControl", machine=machine)
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                executions=[], created_count=0, duplicate_count=1, errors=[]
+            ),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": machine.name,
+                    "case_path": "/archive/v3.LR.piControl",
+                    "processed_execution_ids": ["100.1-1"],
+                    "simulation_type": "production",
+                },
+                files={
+                    "file": (
+                        "case.tar.gz",
+                        BytesIO(b"case-archive"),
+                        "application/gzip",
+                    )
+                },
+            )
+
+        assert res.status_code == 201
+        db.refresh(case)
+        assert case.simulation_type == "production"
+
+    def test_endpoint_rejects_classification_outside_v3_allowlist(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).filter(Machine.name == "chrysalis").one()
+        assert machine is not None
+
+        res = client.post(
+            f"{API_BASE}/ingestions/from-hpc-upload",
+            data={
+                "machine_name": machine.name,
+                "case_path": "/archive/not-a-v3-case",
+                "processed_execution_ids": ["100.1-1"],
+                "simulation_type": "production",
+            },
+            files={
+                "file": ("case.tar.gz", BytesIO(b"case-archive"), "application/gzip")
+            },
+        )
+
+        assert res.status_code == 400
+        assert res.json()["detail"] == (
+            "simulation_type is reserved for the Chrysalis E3SM v3 production "
+            "allowlist."
+        )
+
+    @pytest.mark.parametrize(
+        ("machine_name", "case_path", "simulation_type"),
+        [
+            ("chrysalis", "/archive/v3.LR.piControl", "development"),
+            ("perlmutter", "/archive/v3.LR.piControl", "production"),
+        ],
+    )
+    def test_endpoint_rejects_non_v3_production_classification(
+        self,
+        client,
+        db: Session,
+        machine_name: str,
+        case_path: str,
+        simulation_type: str,
+    ):
+        machine = db.query(Machine).filter(Machine.name == machine_name).one()
+
+        res = client.post(
+            f"{API_BASE}/ingestions/from-hpc-upload",
+            data={
+                "machine_name": machine.name,
+                "case_path": case_path,
+                "processed_execution_ids": ["100.1-1"],
+                "simulation_type": simulation_type,
+            },
+            files={
+                "file": ("case.tar.gz", BytesIO(b"case-archive"), "application/gzip")
+            },
+        )
+
+        assert res.status_code == 400
+
     def test_endpoint_allows_partial_and_duplicate_only_results_for_stateful_dedupe(
         self, client, db: Session
     ):

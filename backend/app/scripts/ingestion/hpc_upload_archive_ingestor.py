@@ -193,9 +193,14 @@ def _run_ingestor(
     additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     archive_checkpointing: bool = True,
     run_report: IngestorRunReport | None = None,
+    case_simulation_type: str | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     use_prepared_archives = post_request_fn is None
+    if case_simulation_type is not None and not use_prepared_archives:
+        raise ValueError(
+            "case_simulation_type requires the built-in HPC upload transport"
+        )
     post_request_fn = _case_submission_callback(post_request_fn)
 
     if not _validate_run_preconditions(config, log_event_fn=_log_event):
@@ -276,7 +281,7 @@ def _run_ingestor(
         candidate_preparer=(
             (
                 lambda candidate: _prepared_hpc_case_submission(
-                    candidate, config.machine_name
+                    candidate, config.machine_name, case_simulation_type
                 )
             )
             if use_prepared_archives
@@ -367,6 +372,7 @@ def _create_case_archive(
 def _prepared_hpc_case_submission(
     candidate: IngestionCandidate,
     machine_name: str,
+    case_simulation_type: str | None = None,
 ) -> Iterator[CaseSubmissionCallback]:
     """Stage a candidate once and retain its immutable upload body for retries."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -381,6 +387,7 @@ def _prepared_hpc_case_submission(
             machine_name=machine_name,
             case_path=candidate.case_path,
             processed_execution_ids=candidate.new_execution_ids,
+            case_simulation_type=case_simulation_type,
         )
         _log_event(
             "archive_created",
@@ -433,6 +440,7 @@ def _encode_multipart_form_data(
     machine_name: str,
     case_path: str,
     processed_execution_ids: list[str],
+    case_simulation_type: str | None = None,
 ) -> tuple[bytes, str]:
     """Build multipart/form-data body for one archive upload request."""
     boundary = f"----SimBoardBoundary{uuid.uuid4().hex}"
@@ -440,6 +448,10 @@ def _encode_multipart_form_data(
 
     _append_multipart_text_part(body, boundary, "machine_name", machine_name)
     _append_multipart_text_part(body, boundary, "case_path", case_path)
+    if case_simulation_type is not None:
+        _append_multipart_text_part(
+            body, boundary, "simulation_type", case_simulation_type
+        )
     for execution_id in processed_execution_ids:
         _append_multipart_text_part(
             body,
@@ -486,6 +498,7 @@ def _post_hpc_upload_ingestion_request(
     *,
     processed_execution_ids: list[str],
     timeout_seconds: int,
+    case_simulation_type: str | None = None,
 ) -> IngestionRequestResponse:
     """Upload one case directory as a multipart archive request."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -497,6 +510,7 @@ def _post_hpc_upload_ingestion_request(
             machine_name=machine_name,
             case_path=archive_path,
             processed_execution_ids=processed_execution_ids,
+            case_simulation_type=case_simulation_type,
         )
 
         return _send_hpc_upload_request(

@@ -281,6 +281,8 @@ It uses a static copy of the table's `Simulation` values, matches archive case
 directory leaf names exactly, forces archive scanning from `2024-01`, and
 reuses the HPC upload runner's discovery, validation, deduplication, packaging,
 and `/api/v1/ingestions/from-hpc-upload` request logic.
+Each case ingested by this workflow is classified as `production`; diagnostics
+backfill workflows do not set case classifications.
 
 For this one-time backfill, copy the committed template outside the repository,
 secure it, replace its placeholders, then run a dry run:
@@ -355,6 +357,49 @@ This targeted runner does not read or write database-backed archive snapshot
 checkpoints. A filtered backfill cannot safely mark a mixed snapshot as complete
 for the general archive runner. Processed-execution state and immutable
 discovery results still make repeated runs idempotent.
+
+#### Existing-Case Classification Backfill
+
+Before or after the archive backfill, run the following one-time WSQL update to
+classify existing, unclassified Chrysalis v3 cases. Its `IS NULL` condition
+preserves deliberate classifications, and its exact names match this workflow's
+`V3_SIMULATIONS` allowlist.
+
+```sql
+BEGIN;
+
+WITH v3_case_names(name) AS (
+  VALUES
+    ('v3.LR.piControl'), ('v3.LR.abrupt-4xCO2_0101_bcdt15m'),
+    ('v3.LR.1pctCO2_0101_bcdt15m'), ('v3.LR.historical_0051'),
+    ('v3.LR.historical_0101'), ('v3.LR.historical_0151'),
+    ('v3.LR.historical_0201'), ('v3.LR.historical_0251'),
+    ('v3.LR.hist-GHG_0101'), ('v3.LR.hist-GHG_0151'),
+    ('v3.LR.hist-GHG_0201'), ('v3.LR.hist-aer_0101'),
+    ('v3.LR.hist-aer_0151'), ('v3.LR.hist-aer_0201'),
+    ('v3.LR.hist-xGHG-xaer_0101'), ('v3.LR.hist-xGHG-xaer_0151'),
+    ('v3.LR.hist-xGHG-xaer_0201'), ('v3.LR.amip_0101'),
+    ('v3.LR.amip_0151'), ('v3.LR.amip_0201'),
+    ('v3.LR.piClim-control-iceini'), ('v3.LR.piClim-histall_0101'),
+    ('v3.LR.piClim-histall_0151'), ('v3.LR.piClim-histall_0201'),
+    ('v3.LR.piClim-histGHG_0101'), ('v3.LR.piClim-histGHG_0151'),
+    ('v3.LR.piClim-histGHG_0201'), ('v3.LR.piClim-histaer_0101'),
+    ('v3.LR.piClim-histaer_0151'), ('v3.LR.piClim-histaer_0201'),
+    ('v3.NARRM.amip_0101'), ('v3.NARRM_r0125.amip_0101'),
+    ('v3.AMZRRM.amip_0101'), ('v3.EARRM.amip_0101'),
+    ('RRM_ensemble'), ('LR_ensemble')
+)
+UPDATE cases AS c
+SET simulation_type = 'production'
+FROM v3_case_names AS v, machines AS m
+WHERE c.name = v.name
+  AND c.machine_id = m.id
+  AND m.name = 'chrysalis'
+  AND c.simulation_type IS NULL
+RETURNING c.id, c.name, c.hpc_username, c.simulation_type;
+
+COMMIT;
+```
 
 ### E3SM v3 HPSS Linker
 

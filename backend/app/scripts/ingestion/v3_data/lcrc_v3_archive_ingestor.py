@@ -16,6 +16,12 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
+from app.features.ingestion.v3_classification import (
+    CHRYSALIS_MACHINE_NAME,
+    V3_CASE_NAMES,
+    V3_PRODUCTION_SIMULATION_TYPE,
+    V3_SIMULATIONS,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     IngestorConfig,
     IngestorRunReport,
@@ -37,53 +43,7 @@ V3_SIMULATION_TABLE_URL = (
 )
 V3_ARCHIVE_YEAR_START = "2024-01"
 CHRYSALIS_ARCHIVE_ROOT = "/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF"
-CHRYSALIS_MACHINE_NAME = "chrysalis"
-
-# Normalized archive case names from the source table's Simulation column.
-V3_SIMULATIONS = (
-    "v3.LR.piControl",
-    "v3.LR.abrupt-4xCO2_0101_bcdt15m",
-    "v3.LR.1pctCO2_0101_bcdt15m",
-    "v3.LR.historical_0051",
-    "v3.LR.historical_0101",
-    "v3.LR.historical_0151",
-    "v3.LR.historical_0201",
-    "v3.LR.historical_0251",
-    "v3.LR.hist-GHG_0101",
-    "v3.LR.hist-GHG_0151",
-    "v3.LR.hist-GHG_0201",
-    "v3.LR.hist-aer_0101",
-    "v3.LR.hist-aer_0151",
-    "v3.LR.hist-aer_0201",
-    "v3.LR.hist-xGHG-xaer_0101",
-    "v3.LR.hist-xGHG-xaer_0151",
-    "v3.LR.hist-xGHG-xaer_0201",
-    "v3.LR.amip_0101",
-    "v3.LR.amip_0151",
-    "v3.LR.amip_0201",
-    "v3.LR.piClim-control-iceini",
-    "v3.LR.piClim-histall_0101",
-    "v3.LR.piClim-histall_0151",
-    "v3.LR.piClim-histall_0201",
-    "v3.LR.piClim-histGHG_0101",
-    "v3.LR.piClim-histGHG_0151",
-    "v3.LR.piClim-histGHG_0201",
-    "v3.LR.piClim-histaer_0101",
-    "v3.LR.piClim-histaer_0151",
-    "v3.LR.piClim-histaer_0201",
-    # v3.LR.amip_bonus_0101 ran on Perlmutter and is handled by its normal
-    # ingestion workflow, not this Chrysalis-targeted backfill.
-    "LR_ensemble",
-    "v3.NARRM.amip_0101",
-    "v3.NARRM_r0125.amip_0101",
-    "RRM_ensemble",
-    "v3.AMZRRM.amip_0101",
-    "v3.EARRM.amip_0101",
-)
-
-
 V3_CASE_NAMES_BY_SIMULATION = {simulation: simulation for simulation in V3_SIMULATIONS}
-V3_CASE_NAMES = frozenset(V3_CASE_NAMES_BY_SIMULATION.values())
 
 if len(V3_CASE_NAMES) != len(V3_SIMULATIONS):
     raise RuntimeError("Documented v3 simulations must map to unique case names")
@@ -238,6 +198,7 @@ def main() -> int:
         ),
         archive_checkpointing=False,
         run_report=report,
+        case_simulation_type=V3_PRODUCTION_SIMULATION_TYPE,
     )
 
     if report.scan_completed:

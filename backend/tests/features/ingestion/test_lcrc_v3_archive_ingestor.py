@@ -305,6 +305,7 @@ def test_targeted_archive_run_filters_cases_and_skips_all_checkpoints(
     assert request.headers["Content-type"].startswith("multipart/form-data;")
     assert isinstance(request.data, bytes)
     assert b'name="machine_name"\r\n\r\nchrysalis' in request.data
+    assert b'name="simulation_type"\r\n\r\nproduction' not in request.data
     assert str(v3_execution.parent).encode() in request.data
     assert b'filename="v3.LR.piControl-' in request.data
     assert b"unrelated-case" not in request.data
@@ -364,6 +365,7 @@ def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(
 
     assert v3_ingestor.main() == 0
     assert captured_kwargs["archive_checkpointing"] is False
+    assert captured_kwargs["case_simulation_type"] == "production"
     assert captured_kwargs["case_path_filter"] is v3_ingestor._is_v3_case_path
     additional_dir_pruner = captured_kwargs["additional_dir_pruner"]
     assert isinstance(additional_dir_pruner, partial)
