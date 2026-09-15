@@ -10,6 +10,7 @@ from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor
 from app.scripts.ingestion.archive_discovery import _new_discovery_stats
 from app.scripts.ingestion.archive_ingestor_core import (
     CaseCollectionLogData,
+    IngestionCandidate,
     IngestionRequestResponse,
     IngestorConfig,
     IngestorRunReport,
@@ -305,6 +306,7 @@ def test_targeted_archive_run_filters_cases_and_skips_all_checkpoints(
     assert request.headers["Content-type"].startswith("multipart/form-data;")
     assert isinstance(request.data, bytes)
     assert b'name="machine_name"\r\n\r\nchrysalis' in request.data
+    assert b'name="simulation_type"\r\n\r\nproduction' not in request.data
     assert str(v3_execution.parent).encode() in request.data
     assert b'filename="v3.LR.piControl-' in request.data
     assert b"unrelated-case" not in request.data
@@ -345,6 +347,43 @@ def test_targeted_dry_run_never_calls_write_functions(
     assert exit_code == 0
 
 
+def test_v3_prepared_upload_includes_production_classification(
+    tmp_path: Path, monkeypatch
+) -> None:
+    case_path = tmp_path / "user" / "v3.LR.piControl"
+    execution_path = case_path / "100.1-1"
+    execution_path.mkdir(parents=True)
+    captured_requests: list[urllib.request.Request] = []
+    candidate = IngestionCandidate(
+        case_path=str(case_path),
+        execution_ids=["100.1-1"],
+        new_execution_ids=["100.1-1"],
+        fingerprint="fingerprint",
+    )
+    monkeypatch.setattr(
+        upload_ingestor.urllib.request, "urlopen", _FakeUrlopen(captured_requests)
+    )
+
+    with upload_ingestor._prepared_hpc_case_submission(
+        candidate,
+        "chrysalis",
+        "production",
+        "user",
+    ) as submit:
+        submit(
+            "https://simboard.example/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_path),
+            "chrysalis",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=30,
+        )
+
+    assert len(captured_requests) == 1
+    assert b'name="simulation_type"\r\n\r\nproduction' in captured_requests[0].data
+    assert b'name="hpc_username"\r\n\r\nuser' in captured_requests[0].data
+
+
 def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -364,6 +403,7 @@ def test_v3_main_disables_checkpoints_and_succeeds_when_all_cases_match(
 
     assert v3_ingestor.main() == 0
     assert captured_kwargs["archive_checkpointing"] is False
+    assert captured_kwargs["case_simulation_type"] == "production"
     assert captured_kwargs["case_path_filter"] is v3_ingestor._is_v3_case_path
     additional_dir_pruner = captured_kwargs["additional_dir_pruner"]
     assert isinstance(additional_dir_pruner, partial)

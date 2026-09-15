@@ -281,6 +281,8 @@ It uses a static copy of the table's `Simulation` values, matches archive case
 directory leaf names exactly, forces archive scanning from `2024-01`, and
 reuses the HPC upload runner's discovery, validation, deduplication, packaging,
 and `/api/v1/ingestions/from-hpc-upload` request logic.
+Each case ingested by this workflow is classified as `production`; diagnostics
+backfill workflows do not set case classifications.
 
 For this one-time backfill, copy the committed template outside the repository,
 secure it, replace its placeholders, then run a dry run:

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
+from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import ExecutionCreate
 from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
@@ -49,6 +50,10 @@ from app.features.ingestion.schemas import (
     IngestionStateCase,
     IngestionStateResponse,
     IngestionStatus,
+)
+from app.features.ingestion.v3_classification import (
+    CHRYSALIS_MACHINE_NAME,
+    V3_CASE_NAMES,
 )
 from app.features.machine.utils import resolve_machine_by_name
 from app.features.user.manager import current_active_user
@@ -428,6 +433,7 @@ def ingest_from_hpc_upload(
     case_path: str = Form(...),
     hpc_username: str | None = Form(None),
     processed_execution_ids: list[str] | None = Form(None),
+    simulation_type: CaseSimulationType | None = Form(None),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
@@ -466,6 +472,11 @@ def ingest_from_hpc_upload(
             ),
         )
 
+    # Direct unit-test and internal function calls use FastAPI's ``Form``
+    # placeholder when this optional argument is omitted.
+    if not isinstance(simulation_type, CaseSimulationType):
+        simulation_type = None
+
     payload = _build_hpc_upload_payload(
         machine_name=machine_name,
         case_path=case_path,
@@ -473,6 +484,9 @@ def ingest_from_hpc_upload(
         processed_execution_ids=processed_execution_ids,
     )
     machine = _resolve_request_machine(db, payload.machine_name)
+    _validate_v3_production_classification(
+        simulation_type, Path(payload.case_path).name, machine.name
+    )
 
     _validate_upload_file(file)
     filename = file.filename
@@ -503,6 +517,9 @@ def ingest_from_hpc_upload(
             hpc_username=payload.hpc_username,
             processed_execution_ids=payload.processed_execution_ids,
             db=db,
+            case_simulation_type=simulation_type,
+            case_name_for_simulation_type=Path(payload.case_path).name,
+            hpc_username_for_simulation_type=payload.hpc_username,
         )
     finally:
         try:
@@ -816,6 +833,9 @@ def _process_ingestion(
     db: Session,
     hpc_username: str | None = None,
     processed_execution_ids: list[str] | None = None,
+    case_simulation_type: CaseSimulationType | None = None,
+    case_name_for_simulation_type: str | None = None,
+    hpc_username_for_simulation_type: str | None = None,
 ) -> IngestionResponse:
     """Finalize and persist an ingestion operation.
 
@@ -878,6 +898,14 @@ def _process_ingestion(
         created_executions = _persist_executions(
             ingestion.id, ingest_result.executions, db, user, hpc_username
         )
+        if case_simulation_type is not None:
+            _set_ingested_case_simulation_type(
+                machine_id,
+                case_name_for_simulation_type,
+                hpc_username_for_simulation_type,
+                case_simulation_type,
+                db,
+            )
 
     return IngestionResponse(
         created_count=ingest_result.created_count,
@@ -885,6 +913,58 @@ def _process_ingestion(
         executions=_build_ingestion_execution_summaries(created_executions, db),
         errors=ingest_result.errors,
     )
+
+
+def _set_ingested_case_simulation_type(
+    machine_id: UUID,
+    case_name: str | None,
+    hpc_username: str | None,
+    simulation_type: CaseSimulationType,
+    db: Session,
+) -> None:
+    """Classify one case identity after trusted specialized ingestion.
+
+    The source case path remains available even when every submitted execution
+    was a duplicate, allowing a rerun to classify already-ingested cases.
+    """
+    if not case_name or not hpc_username:
+        return
+
+    (
+        db.query(Case)
+        .filter(
+            Case.machine_id == machine_id,
+            Case.name == case_name,
+            Case.hpc_username == hpc_username,
+            Case.simulation_type.is_(None),
+        )
+        .update(
+            {Case.simulation_type: simulation_type.value}, synchronize_session=False
+        )
+    )
+
+
+def _validate_v3_production_classification(
+    simulation_type: CaseSimulationType | None,
+    case_name: str,
+    machine_name: str,
+) -> None:
+    """Allow automated classification only for the Chrysalis v3 allowlist."""
+    if simulation_type is None:
+        return
+
+    if (
+        simulation_type is not CaseSimulationType.PRODUCTION
+        or machine_name != CHRYSALIS_MACHINE_NAME
+        or case_name not in V3_CASE_NAMES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "simulation_type is reserved for the Chrysalis E3SM v3 "
+                "production allowlist."
+            ),
+        )
 
 
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
