@@ -1,28 +1,54 @@
-# Example crontab entries for a generic site collection launcher. Copy this file
-# outside the repository, replace the placeholders, then install the copy with:
-#   crontab /path/to/<site>.crontab
+# SimBoard site-ingestion crontab. Copy this file outside the repository,
+# replace the placeholders, then install it with: crontab /path/to/<site>.crontab
 
+# =============================================================================
+# Cron runtime
+# =============================================================================
+# Use Bash, a minimal command path, and UTC for every schedule below.
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 CRON_TZ=UTC
 
+# =============================================================================
+# Deployment location
+# =============================================================================
 # Bootstrap location for cron: this is needed to locate the launcher before it
 # loads the site config. It must match the standard root in that site config.
 SIMBOARD_ROOT=/path/to/simboard_root
 
-# The site config selects a protected environment file that exports both
-# SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN. To target a different API
-# environment for this job, uncomment and set this override:
-# SIMBOARD_ENV_FILE=${SIMBOARD_ROOT}/operations/env.prod.sh
+# =============================================================================
+# API environment and run mode
+# =============================================================================
+# Each cron command selects its protected API environment file. Both variables
+# are exported by that file. Change an individual command to `env.dev.sh` when
+# it must target development; keep production jobs on `env.prod.sh`. The
+# launcher uses a separate lock for each environment file, so matching
+# development and production schedules can run independently.
 
 # The launcher defaults to a dry run. Uncomment only after reviewing dry-run
 # logs and enabling live ingestion for this scheduler.
 # DRY_RUN=false
 
-# Replace `chrysalis` with the site-config name. Staging scan: every 15 minutes.
-5,20,35,50 * * * * cd "${SIMBOARD_ROOT}/operations" && "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
+# =============================================================================
+# Staging scans
+# =============================================================================
+# Replace `chrysalis` with the site-config name. Scan current performance output
+# every 15 minutes for each API environment.
 
-# Archive scan: run daily at 12:00 UTC. The site config supplies the default
-# lower bound. Override `ARCHIVE_YEAR_START` or `ARCHIVE_YEAR_END` in the cron
-# environment for a differently scoped scan. Values may use YYYY or YYYY-MM.
-0 12 * * * cd "${SIMBOARD_ROOT}/operations" && "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
+# Development
+5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
+# Production
+5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
+
+# =============================================================================
+# Archive scans
+# =============================================================================
+# Scan historical archive snapshots daily at 12:00 UTC for each API environment.
+# The site config supplies the default lower bound. Set ARCHIVE_YEAR_START or
+# ARCHIVE_YEAR_END above these entries for a differently scoped scan; values may
+# use YYYY or YYYY-MM.
+
+# Development
+0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
+# Production
+0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
