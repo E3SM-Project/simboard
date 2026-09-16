@@ -67,9 +67,9 @@ In archive mode, `ARCHIVE_YEAR_START` and `ARCHIVE_YEAR_END` accept `YYYY` or `Y
 ## 3. Schedule remote-site collection with cron
 
 1. Copy `backend/app/scripts/ingestion/sites/crontab.example` outside the repository.
-2. Set the bootstrap `SIMBOARD_ROOT` in that copy so cron can locate the launcher. Keep it aligned with the default in the site configuration. Set `SIMBOARD_ENV_FILE` only when the job must use a protected API file other than the site default.
+2. Set the bootstrap `SIMBOARD_ROOT` in that copy so cron can locate the launcher. Keep it aligned with the default in the site configuration.
 3. Replace `chrysalis` with the configured site name, if needed.
-4. Keep the staging and archive schedule appropriate for the site. The example runs staging every 15 minutes and archive daily in UTC.
+4. Set `SIMBOARD_ENV_FILE` immediately before each launcher command. The example includes matching development and production jobs: `env.prod.sh` targets production and `env.dev.sh` targets development. The launcher keeps one lock per environment file, so jobs for different environments can run independently. Keep the staging and archive schedule appropriate for the site. The example runs staging every 15 minutes and archive daily in UTC.
 5. Install the copied file with `crontab /path/to/site.crontab`.
 6. Confirm that the scheduler account can read the protected API file, the performance roots, and the backend Python interpreter, then review the first `SBCS-*.log` file.
 
@@ -78,7 +78,8 @@ In archive mode, `ARCHIVE_YEAR_START` and `ARCHIVE_YEAR_END` accept `YYYY` or `Y
 | Configure in | Variables | Purpose |
 | --- | --- | --- |
 | Copied crontab | `SHELL`, `PATH`, `CRON_TZ`, `SIMBOARD_ROOT` | Shell, command path, UTC schedule interpretation, and the bootstrap root needed to locate the launcher before it loads the site config. |
-| Copied crontab, only when needed | `SIMBOARD_ENV_FILE`, `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END`, `DRY_RUN`, `MAX_CASES_PER_RUN` | Alternate API file, scan controls, and bounded rollout. |
+| Each cron command | `SIMBOARD_ENV_FILE` | Selects that job's protected `env.dev.sh` or `env.prod.sh` API file. |
+| Copied crontab, only when needed | `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END`, `DRY_RUN`, `MAX_CASES_PER_RUN` | Scan controls and bounded rollout. |
 | Protected API file referenced by the site config or crontab | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Credentials. Never place these values directly in crontab. |
 
 ## 4. Run the targeted E3SM v3 metadata backfill
