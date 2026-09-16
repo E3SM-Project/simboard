@@ -20,18 +20,11 @@ fi
 # Site config provides site-specific ingestion settings.
 source "${site_config}"
 
-# A standard deployment needs only SIMBOARD_ROOT. Explicit paths support
-# nonstandard layouts and take precedence over the derived defaults.
-if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
-  export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
-  export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
-fi
-
-# SIMBOARD_REPODIR is retained as a compatibility alias for existing site configs.
-export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_REPODIR:-}}"
-
-: "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
-: "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
+# Every site uses the standard deployment layout. The site configuration owns
+# its root; scheduler jobs do not supply alternate repository or work paths.
+: "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set by the site configuration}"
+SIMBOARD_WORKDIR="${SIMBOARD_ROOT}/operations"
+SIMBOARD_MODULES="${SIMBOARD_ROOT}/repository/simboard/backend"
 
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 
