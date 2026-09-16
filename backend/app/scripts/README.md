@@ -195,14 +195,26 @@ app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive
 
 | Location | Configure | Notes |
 | --- | --- | --- |
-| Committed site config | Machine name, archive roots, API URL, archive lower bound, ingestor module | Never store credentials here. |
-| Deployment configuration | `SIMBOARD_ROOT`, `SIMBOARD_ENV_FILE`, and protected token file | Required for the standard layout. |
-| Nonstandard deployment only | `SIMBOARD_MODULES`, `SIMBOARD_WORKDIR`, `SIMBOARD_API_TOKEN_FILE` | Overrides the standard derived paths. |
+| Committed site config | Machine name, archive roots, environment-file default, archive lower bound, ingestor module | Never store credentials here. |
+| Standard deployment configuration | `SIMBOARD_ROOT` and protected environment file containing API URL and token | Required for remote API access. |
+| Deployment overrides | `SIMBOARD_MODULES`, `SIMBOARD_WORKDIR`, `SIMBOARD_ENV_FILE` | Supports nonstandard layouts and alternate API targets. |
 
 For the standard layout, `SIMBOARD_ROOT` contains both
 `repository/simboard/backend` and `operations`. The launcher derives its module
-and working paths, then defaults the token file to
-`$SIMBOARD_WORKDIR/.api_token_export`.
+and working paths. The Chrysalis site configuration defaults
+`SIMBOARD_ENV_FILE` to
+`/lcrc/group/e3sm2/simboard/operations/environment.sh`; a job can override the
+path to select another API environment.
+
+The environment file is a group-protected Bash file that exports both
+`SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`; every reader in that group
+must be authorized to use the token. Initialize a new file from the committed
+template without overwriting an existing file:
+
+```bash
+make chrysalis-init-environment
+make chrysalis-init-environment ENV_FILE=/lcrc/group/e3sm2/simboard/operations/environment.production.sh
+```
 
 #### Run Safely
 
@@ -213,20 +225,18 @@ and working paths, then defaults the token file to
 4. Set `DRY_RUN=false` only after that review. Use `MAX_CASES_PER_RUN` to cap a
    live run; it limits submissions but still persists validation results.
 
-Site configs are operational inputs. Keep credentials in their referenced,
-protected files rather than committing them to a config file.
-
-> **Upgrade note:** Remove any externally managed token-file default that expands
-> `SIMBOARD_WORKDIR` while the site config is sourced. The launcher now derives
-> that path after loading the config.
+Site configs are operational inputs. Keep credentials in protected environment
+files rather than committing them to a site config.
 
 ### Cron Setup
 
 1. Copy `sites/crontab.example` outside the repository.
-2. Set the deployment's `SIMBOARD_ROOT` and `SIMBOARD_ENV_FILE`.
-3. Ensure `$SIMBOARD_ROOT/operations/.api_token_export` is readable only by the
-   cron user and exports `SIMBOARD_API_TOKEN`.
-4. Install the adjusted copy with `crontab`.
+2. Set the deployment's `SIMBOARD_ROOT`.
+3. Create and populate the protected Chrysalis environment file with
+   `make chrysalis-init-environment`; it must export the API URL and token.
+4. Set `SIMBOARD_ENV_FILE` in the cron environment only to override the
+   Chrysalis default, such as for a production-targeting job.
+5. Install the adjusted copy with `crontab`.
 
 The example schedules staging scans every 15 minutes and archive scans daily at
 12:00 UTC. Never place token values in the repository or crontab.

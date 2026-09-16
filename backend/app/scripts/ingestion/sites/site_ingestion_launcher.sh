@@ -33,9 +33,6 @@ export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_REPODIR:-}}"
 : "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
 : "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
 
-# The default token-file location depends on the resolved work directory.
-export SIMBOARD_API_TOKEN_FILE="${SIMBOARD_API_TOKEN_FILE:-${SIMBOARD_WORKDIR}/.api_token_export}"
-
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 
 export SCAN_MODE="${scan_mode}"
@@ -59,9 +56,7 @@ remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*
 
 load_api_configuration() {
     : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
-    : "${SIMBOARD_API_TOKEN_FILE:?SIMBOARD_API_TOKEN_FILE must be set when remote API access is enabled}"
     source "${SIMBOARD_ENV_FILE}"
-    source "${SIMBOARD_API_TOKEN_FILE}"
     : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
     : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
 }

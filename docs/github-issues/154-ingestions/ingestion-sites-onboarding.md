@@ -48,18 +48,27 @@ Committed site configs should set only site-specific defaults such as:
 - `DRY_RUN_USE_REMOTE_STATE`
 - `SIMBOARD_INGESTOR_MODULE`
 
-Deployment configuration must set `SIMBOARD_ENV_FILE` and keep the API token in
-a protected file. For the standard layout, set only `SIMBOARD_ROOT`; it must
-contain `repository/simboard/backend` and `operations`. The launcher derives its
-module and working paths, then defaults the token file to
-`$SIMBOARD_ROOT/operations/.api_token_export`. Set `SIMBOARD_MODULES`,
-`SIMBOARD_WORKDIR`, or `SIMBOARD_API_TOKEN_FILE` only for a nonstandard layout.
+For the standard layout, set only `SIMBOARD_ROOT`; it must contain
+`repository/simboard/backend` and `operations`. The launcher derives its module
+and working paths. The Chrysalis config defaults `SIMBOARD_ENV_FILE` to
+`/lcrc/group/e3sm2/simboard/operations/environment.sh`. Override that variable
+per job when it must target another API environment.
 
-For normal execution and default dry runs, the launcher loads the API environment
-and token from the deployment-configured protected files:
+For normal execution and default dry runs, the launcher loads API configuration
+from one group-protected, deployment-managed environment file. Every member of
+the file's group must be authorized to use its token:
 
 - `SIMBOARD_API_BASE_URL`
 - `SIMBOARD_API_TOKEN`
+
+Create a new environment file without overwriting an existing one:
+
+```bash
+make chrysalis-init-environment
+```
+
+Populate its URL and token manually. To initialize a separate production file,
+pass its destination as `ENV_FILE` and set `SIMBOARD_ENV_FILE` for that job.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API
 token setup.
@@ -87,7 +96,7 @@ Before enabling real ingestion, validate:
 
 - The archive path exists and is readable from the Jenkins runtime.
 - Jenkins can run the backend Python environment.
-- Jenkins can provide `SIMBOARD_ENV_FILE` and the protected token file without logging the token.
+- Jenkins can read the protected environment file without logging its token.
 - The Jenkins host has network egress to the SimBoard API.
 - Dry-run output shows expected candidate counts.
 - The SimBoard ingestion-state and archive-checkpoint API calls succeed during
@@ -101,7 +110,8 @@ Do not set `DRY_RUN=false` until the dry-run behavior has been reviewed.
 2. Rerun backend tests for PR 169 in an environment with PostgreSQL available.
 3. Validate the Chrysalis archive path and Jenkins environment.
 4. Create or identify the SimBoard service account and API token for HPC ingestion.
-5. Configure Jenkins to provide `SIMBOARD_ENV_FILE` and the protected token file securely.
+5. Create and secure the environment file, then configure Jenkins to use the
+   default or an appropriate `SIMBOARD_ENV_FILE` override.
 6. Run the Chrysalis launcher with the default dry-run mode.
 7. Review candidate counts, skipped cases, errors, and remote-state behavior.
 8. Enable non-dry-run ingestion only after validation.
