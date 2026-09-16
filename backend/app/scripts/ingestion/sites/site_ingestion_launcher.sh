@@ -17,6 +17,12 @@ if [[ ! -r "${site_config}" ]]; then
   exit 1
 fi
 
+rm -f LAUNCH_LOG
+echo "" >> LAUNCH_LOG 2>&1
+chgrp simboard LAUNCH_LOG
+ts=`date -u +%Y%m%d_%H%M%S`
+echo "$ts: DEBUG: TOPSIDE: site_config = ${site_config}" >> LAUNCH_LOG 2>&1
+
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
   export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
   export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
@@ -39,6 +45,8 @@ export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_REPODIR:-}}"
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 
 export SCAN_MODE="${scan_mode}"
+ts=`date -u +%Y%m%d_%H%M%S`
+echo "$ts: DEBUG: scan_mode = ${scan_mode}" >> LAUNCH_LOG 2>&1
 
 # Site config supplies archive lower bound; callers may override it.
 if [[ $scan_mode == "archive" ]]; then
@@ -56,6 +64,9 @@ dry_run_normalized="${dry_run_normalized%"${dry_run_normalized##*[![:space:]]}"}
 remote_state_normalized="${DRY_RUN_USE_REMOTE_STATE:-true}"
 remote_state_normalized="${remote_state_normalized#"${remote_state_normalized%%[![:space:]]*}"}"
 remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*[![:space:]]}"}"
+
+ts=`date -u +%Y%m%d_%H%M%S`
+echo "$ts: DEBUG: DRY_RUN_USE_REMOTE_STATE = ${remote_state_normalized}" >> LAUNCH_LOG 2>&1
 
 load_api_configuration() {
     : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
@@ -83,17 +94,18 @@ shopt -u nocasematch
 export PYTHON_BIN="${PYTHON_BIN:-${SIMBOARD_MODULES}/.venv/bin/python}"
 
 if [[ ! -d "${SIMBOARD_MODULES}/.venv" || ! -x "${PYTHON_BIN}" ]]; then
-  echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
-  echo "Run 'make install' from the repository root to create it." >&2
+  echo "Expected Python interpreter at ${PYTHON_BIN}" >> LAUNCH_LOG 2>&1
+  echo "Run 'make install' from the repository root to create it." >> LAUNCH_LOG 2>&1
   exit 1
 fi
 
 ts="$(date -u +%Y%m%d_%H%M%S)"
-LOG_FILE="${SIMBOARD_WORKDIR}/SBCS-${scan_mode}-${site}-${ts}.log"
+LOG_FILE="${SIMBOARD_WORKDIR}/raw_logs/SBCS-${scan_mode}-${site}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
+chgrp simboard ${LOG_FILE}
 
-LOCK_FILE="$SIMBOARD_WORKDIR/SBCS.lock"
+LOCK_FILE="$SIMBOARD_WORKDIR/SB-${scan_mode}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   echo "[$(date -Is)] SKIP launch simboard collection, lock already held, pid $$" >> "$LOG_FILE"
@@ -106,6 +118,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+
+ts="$(date -u +%Y%m%d_%H%M%S)"
+echo "$ts: DEBUG: DRY_RUN = ${DRY_RUN}: Invoking ${SIMBOARD_INGESTOR_MODULE}" >> LAUNCH_LOG 2>&1
+cat LAUNCH_LOG >> "$LOG_FILE"
 # Run the app
 cd "${SIMBOARD_MODULES}"
 "${PYTHON_BIN}" -m "${SIMBOARD_INGESTOR_MODULE}" >> "$LOG_FILE" 2>&1
