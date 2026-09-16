@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Deployment-managed API configuration. Copy this file outside the repository
-# and set values appropriate to the target SimBoard environment.
-export SIMBOARD_API_BASE_URL=""
-export SIMBOARD_API_TOKEN=""

@@ -63,12 +63,13 @@ the file's group must be authorized to use its token:
 Create a new environment file without overwriting an existing one:
 
 ```bash
-make chrysalis-init-environment
+make ingestion-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
 ```
 
-Populate its URL and token manually. To initialize a production file, pass its
-`env.prod.sh` destination as `ENV_FILE`, then set `SIMBOARD_ENV_FILE` for that
-job.
+The development and production templates supply their respective public API
+URLs; add the matching service-account token. To initialize a production file,
+pass `environment=prod`; the target writes `env.prod.sh` below
+`SIMBOARD_ROOT/operations`, then set `SIMBOARD_ENV_FILE` for that job.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API
 token setup.
