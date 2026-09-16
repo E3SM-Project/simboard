@@ -10,10 +10,11 @@ CRON_TZ=UTC
 # and `operations/`. The launcher derives its module and work paths from it.
 SIMBOARD_ROOT=/path/to/simboard_root
 
-# Deployment configuration: source the backend environment required to reach the
-# API. Store the API token in ${SIMBOARD_ROOT}/operations/.api_token_export;
-# it must be readable only by this cron user and export SIMBOARD_API_TOKEN.
-SIMBOARD_ENV_FILE=/path/to/backend/environment.sh
+# The Chrysalis site config defaults to
+# /lcrc/group/e3sm2/simboard/operations/environment.sh. It must be protected
+# and export both SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN. To target a
+# different API environment for this job, uncomment and set this override:
+# SIMBOARD_ENV_FILE=${SIMBOARD_ROOT}/operations/environment.production.sh
 
 # For a nonstandard layout only, set SIMBOARD_WORKDIR and SIMBOARD_MODULES here.
 # Otherwise, leave them unset.

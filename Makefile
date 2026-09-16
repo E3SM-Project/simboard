@@ -58,6 +58,7 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
+	@echo "  make chrysalis-init-environment [ENV_FILE=<path>] # Create a group-protected Chrysalis API environment template"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -103,7 +104,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install chrysalis-init-environment
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -176,6 +177,22 @@ copy-env-files:
 	else \
 		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 	fi
+
+CHRYSALIS_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/environment.sh.example
+ENV_FILE ?= /lcrc/group/e3sm2/simboard/operations/environment.sh
+
+chrysalis-init-environment:
+	@if [ ! -d "$(dir $(ENV_FILE))" ]; then \
+		echo "$(RED)Destination directory does not exist: $(dir $(ENV_FILE))$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	if [ -e "$(ENV_FILE)" ]; then \
+		echo "$(YELLOW)$(ENV_FILE) already exists; refusing to overwrite it.$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	install -m 640 "$(CHRYSALIS_ENV_TEMPLATE)" "$(ENV_FILE)"; \
+	echo "$(GREEN)Created $(ENV_FILE).$(NC)"; \
+	echo "$(YELLOW)Set SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN before using this file.$(NC)"
 
 gen-certs:
 	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"

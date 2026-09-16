@@ -119,10 +119,10 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
     environment_file = tmp_path / "environment.sh"
     environment_file.write_text(
-        "export SIMBOARD_API_BASE_URL=https://example.test\n", encoding="utf-8"
+        "export SIMBOARD_API_BASE_URL=https://example.test\n"
+        "export SIMBOARD_API_TOKEN=test-token\n",
+        encoding="utf-8",
     )
-    token_file = tmp_path / "token.sh"
-    token_file.write_text("export SIMBOARD_API_TOKEN=test-token\n", encoding="utf-8")
     backend_dir = Path(__file__).resolve().parents[3]
     site_config = tmp_path / "test.config"
     site_config.write_text(
@@ -133,7 +133,6 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
                 "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
                 "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
                 f"export SIMBOARD_ENV_FILE={shlex.quote(str(environment_file))}",
-                f"export SIMBOARD_API_TOKEN_FILE={shlex.quote(str(token_file))}",
                 "export DRY_RUN=true",
                 f"export PYTHON_BIN={shlex.quote(str(fake_python))}",
             ]
@@ -157,48 +156,9 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
 
     assert result.returncode == 0, result.stderr
 
-
-def test_launcher_derives_default_token_file_after_workdir(tmp_path: Path) -> None:
-    simboard_root = tmp_path / "simboard-root"
-    work_dir = simboard_root / "operations"
-    work_dir.mkdir(parents=True)
-    modules_dir = simboard_root / "repository/simboard/backend"
-    modules_dir.parent.mkdir(parents=True)
-    backend_dir = Path(__file__).resolve().parents[3]
-    modules_dir.symlink_to(backend_dir, target_is_directory=True)
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
-    environment_file = tmp_path / "environment.sh"
     environment_file.write_text(
         "export SIMBOARD_API_BASE_URL=https://example.test\n", encoding="utf-8"
     )
-    (work_dir / ".api_token_export").write_text(
-        "export SIMBOARD_API_TOKEN=test-token\n", encoding="utf-8"
-    )
-    site_config = tmp_path / "test.config"
-    site_config.write_text(
-        "\n".join(
-            [
-                "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
-                "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
-                f"export SIMBOARD_ENV_FILE={shlex.quote(str(environment_file))}",
-                "export DRY_RUN=true",
-                f"export PYTHON_BIN={shlex.quote(str(fake_python))}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    env = os.environ.copy()
-    env.pop("SIMBOARD_API_BASE_URL", None)
-    env.pop("SIMBOARD_API_TOKEN", None)
-    env.pop("SIMBOARD_API_TOKEN_FILE", None)
-    env["SIMBOARD_ROOT"] = str(simboard_root)
-    env["SIMBOARD_SITE_CONFIG"] = str(site_config)
-    env["PATH"] = f"{bin_dir}:{env['PATH']}"
-
     result = subprocess.run(
         [_launcher_path(), "test", "archive"],
         capture_output=True,
@@ -207,22 +167,26 @@ def test_launcher_derives_default_token_file_after_workdir(tmp_path: Path) -> No
         text=True,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1
+    assert "SIMBOARD_API_TOKEN failed to be set" in result.stderr
 
 
 def test_site_configs_define_their_ingestors() -> None:
     sites_dir = _launcher_path().parent
+    env = os.environ.copy()
+    env.pop("SIMBOARD_ENV_FILE", None)
 
     result = subprocess.run(
         [
             "bash",
             "-c",
-            'source "$1"; printf "%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN"',
+            'source "$1"; printf "%s\\n%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN" "$SIMBOARD_ENV_FILE"',
             "bash",
             str(sites_dir / "chrysalis.config"),
         ],
         capture_output=True,
         check=False,
+        env=env,
         text=True,
     )
 
@@ -231,4 +195,75 @@ def test_site_configs_define_their_ingestors() -> None:
         "app.scripts.ingestion.hpc_upload_archive_ingestor",
         "chrysalis",
         "true",
+        "/lcrc/group/e3sm2/simboard/operations/environment.sh",
     ]
+
+
+def test_chrysalis_config_preserves_environment_file_override() -> None:
+    sites_dir = _launcher_path().parent
+    override = "/tmp/simboard-production-environment.sh"
+    env = os.environ.copy()
+    env["SIMBOARD_ENV_FILE"] = override
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; printf "%s\\n" "$SIMBOARD_ENV_FILE"',
+            "bash",
+            str(sites_dir / "chrysalis.config"),
+        ],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{override}\n"
+
+
+def test_chrysalis_environment_initializer_creates_non_overwritable_template(
+    tmp_path: Path,
+) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    missing_file = tmp_path / "missing" / "environment.sh"
+    result = subprocess.run(
+        ["make", "chrysalis-init-environment", f"ENV_FILE={missing_file}"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Destination directory does not exist" in result.stderr
+
+    destination_dir = tmp_path / "operations"
+    destination_dir.mkdir()
+    environment_file = destination_dir / "environment.sh"
+
+    result = subprocess.run(
+        ["make", "chrysalis-init-environment", f"ENV_FILE={environment_file}"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert environment_file.read_text(encoding="utf-8") == (
+        repository_root / "backend/app/scripts/ingestion/sites/environment.sh.example"
+    ).read_text(encoding="utf-8")
+    assert environment_file.stat().st_mode & 0o777 == 0o640
+
+    result = subprocess.run(
+        ["make", "chrysalis-init-environment", f"ENV_FILE={environment_file}"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite it" in result.stderr
