@@ -51,7 +51,7 @@ Committed site configs should set only site-specific defaults such as:
 For the standard layout, set only `SIMBOARD_ROOT`; it must contain
 `repository/simboard/backend` and `operations`. The launcher derives its module
 and working paths. The Chrysalis config defaults `SIMBOARD_ENV_FILE` to
-`/lcrc/group/e3sm2/simboard/operations/environment.sh`. Override that variable
+`/lcrc/group/e3sm2/simboard/operations/env.dev.sh`. Override that variable
 per job when it must target another API environment.
 
 For normal execution and default dry runs, the launcher loads API configuration
