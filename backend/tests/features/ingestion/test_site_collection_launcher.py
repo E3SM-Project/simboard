@@ -41,6 +41,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     site_config.write_text(
         "\n".join(
             [
+                f"export SIMBOARD_ROOT={shlex.quote(str(simboard_root))}",
                 "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
                 "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
                 "export MACHINE_NAME=test-machine",
@@ -55,6 +56,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("SIMBOARD_API_BASE_URL", None)
     env.pop("SIMBOARD_API_TOKEN", None)
+    env.pop("SIMBOARD_ROOT", None)
     env["CAPTURE_PATH"] = str(capture_path)
     env["SIMBOARD_ROOT"] = str(simboard_root)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
@@ -102,17 +104,17 @@ def test_launcher_requires_root_or_explicit_paths(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 1
-    assert (
-        "SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override"
-        in result.stderr
-    )
+    assert "SIMBOARD_ROOT must be set by the site configuration" in result.stderr
 
 
 def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     tmp_path: Path,
 ) -> None:
-    work_dir = tmp_path / "work"
-    work_dir.mkdir()
+    simboard_root = tmp_path / "simboard-root"
+    work_dir = simboard_root / "operations"
+    work_dir.mkdir(parents=True)
+    modules_dir = simboard_root / "repository/simboard/backend"
+    modules_dir.parent.mkdir(parents=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
@@ -124,12 +126,12 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
         encoding="utf-8",
     )
     backend_dir = Path(__file__).resolve().parents[3]
+    modules_dir.symlink_to(backend_dir, target_is_directory=True)
     site_config = tmp_path / "test.config"
     site_config.write_text(
         "\n".join(
             [
-                f"export SIMBOARD_MODULES={shlex.quote(str(backend_dir))}",
-                f"export SIMBOARD_WORKDIR={shlex.quote(str(work_dir))}",
+                f"export SIMBOARD_ROOT={shlex.quote(str(simboard_root))}",
                 "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
                 "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
                 f"export SIMBOARD_ENV_FILE={shlex.quote(str(environment_file))}",
@@ -143,6 +145,7 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     env = os.environ.copy()
     env.pop("SIMBOARD_API_BASE_URL", None)
     env.pop("SIMBOARD_API_TOKEN", None)
+    env.pop("SIMBOARD_ROOT", None)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
 
@@ -180,7 +183,7 @@ def test_site_configs_define_their_ingestors() -> None:
         [
             "bash",
             "-c",
-            'source "$1"; printf "%s\\n%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN" "$SIMBOARD_ENV_FILE"',
+            'source "$1"; printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN" "$SIMBOARD_ENV_FILE" "$SIMBOARD_ROOT"',
             "bash",
             str(sites_dir / "chrysalis.config"),
         ],
@@ -196,6 +199,7 @@ def test_site_configs_define_their_ingestors() -> None:
         "chrysalis",
         "true",
         "/lcrc/group/e3sm2/simboard/operations/environment.sh",
+        "/lcrc/group/e3sm2/simboard",
     ]
 
 
