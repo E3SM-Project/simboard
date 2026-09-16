@@ -44,15 +44,14 @@ Committed site configs should set only site-specific defaults such as:
 
 - `MACHINE_NAME`
 - `PERF_ARCHIVE_ROOT`
-- `DRY_RUN`
-- `DRY_RUN_USE_REMOTE_STATE`
+- `OLD_PERF_ARCHIVE_ROOT`
 - `SIMBOARD_INGESTOR_MODULE`
+- `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`
 
-For the standard layout, set only `SIMBOARD_ROOT`; it must contain
+Set `SIMBOARD_ROOT` in the scheduler environment; it must contain
 `repository/simboard/backend` and `operations`. The launcher derives its module
-and working paths. The Chrysalis config defaults `SIMBOARD_ENV_FILE` to
-`/lcrc/group/e3sm2/simboard/operations/env.dev.sh`. Override that variable
-per job when it must target another API environment.
+and working paths from that root. Each scheduled command sets
+`SIMBOARD_ENV_FILE` to its `env.dev.sh` or `env.prod.sh` API environment file.
 
 For normal execution and default dry runs, the launcher loads API configuration
 from one group-protected, deployment-managed environment file. Every member of
@@ -67,8 +66,9 @@ Create a new environment file without overwriting an existing one:
 make chrysalis-init-environment
 ```
 
-Populate its URL and token manually. To initialize a separate production file,
-pass its destination as `ENV_FILE` and set `SIMBOARD_ENV_FILE` for that job.
+Populate its URL and token manually. To initialize a production file, pass its
+`env.prod.sh` destination as `ENV_FILE`, then set `SIMBOARD_ENV_FILE` for that
+job.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API
 token setup.
@@ -83,11 +83,10 @@ Current launcher invocation:
 backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis staging
 ```
 
-The Chrysalis config defaults to:
+The Chrysalis config supplies:
 
 - `MACHINE_NAME=chrysalis`
 - `PERF_ARCHIVE_ROOT=/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`
-- `DRY_RUN=true`
 
 Set `DRY_RUN_USE_REMOTE_STATE=false` only when a credential-free offline scan is
 needed; default dry runs read remote state and checkpoints without writing data.
