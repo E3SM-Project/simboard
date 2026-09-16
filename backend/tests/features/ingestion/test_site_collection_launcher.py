@@ -196,7 +196,7 @@ def test_site_configs_define_their_ingestors() -> None:
     ]
 
 
-def test_ingestion_environment_initializer_creates_non_overwritable_templates(
+def test_ingestion_initializers_create_non_overwritable_site_files(
     tmp_path: Path,
 ) -> None:
     repository_root = Path(__file__).resolve().parents[4]
@@ -261,10 +261,46 @@ def test_ingestion_environment_initializer_creates_non_overwritable_templates(
         repository_root / "backend/app/scripts/ingestion/sites/env.prod.sh.example"
     ).read_text(encoding="utf-8")
 
+    crontab_file = destination_dir / "chrysalis.crontab"
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-init-cron",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert crontab_file.read_text(encoding="utf-8") == (
+        repository_root / "backend/app/scripts/ingestion/sites/crontab.example"
+    ).read_text(encoding="utf-8")
+    assert crontab_file.stat().st_mode & 0o777 == 0o640
+
     result = subprocess.run(
         [
             "make",
             "ingestion-init-env",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite it" in result.stderr
+
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-init-cron",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],

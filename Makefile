@@ -59,6 +59,7 @@ help:
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Create a protected site API environment file"
+	@echo "  make ingestion-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -104,7 +105,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-init-env
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-init-env ingestion-init-cron
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -180,6 +181,7 @@ copy-env-files:
 
 INGESTION_DEV_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.dev.sh.example
 INGESTION_PROD_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.prod.sh.example
+INGESTION_CRONTAB_TEMPLATE := backend/app/scripts/ingestion/sites/crontab.example
 INGESTION_SITES_DIR := backend/app/scripts/ingestion/sites
 environment ?= dev
 
@@ -213,6 +215,32 @@ ingestion-init-env:
 	install -m 640 "$$template" "$$env_file"; \
 	echo "$(GREEN)Created $$env_file.$(NC)"; \
 	echo "$(YELLOW)Set SIMBOARD_API_TOKEN before using this file.$(NC)"
+
+ingestion-init-cron:
+	@if [ -z "$(site)" ]; then \
+		echo "$(RED)Usage: make ingestion-init-cron site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \
+		echo "$(RED)Site configuration not readable: $(INGESTION_SITES_DIR)/$(site).config$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	if [ -z "$(SIMBOARD_ROOT)" ]; then \
+		echo "$(RED)SIMBOARD_ROOT must be set$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	cron_file="$(SIMBOARD_ROOT)/operations/$(site).crontab"; \
+	if [ ! -d "$${cron_file%/*}" ]; then \
+		echo "$(RED)Destination directory does not exist: $${cron_file%/*}$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	if [ -e "$$cron_file" ]; then \
+		echo "$(YELLOW)$$cron_file already exists; refusing to overwrite it.$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	install -m 640 "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file"; \
+	echo "$(GREEN)Created $$cron_file.$(NC)"; \
+	echo "$(YELLOW)Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file.$(NC)"
 
 gen-certs:
 	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"
