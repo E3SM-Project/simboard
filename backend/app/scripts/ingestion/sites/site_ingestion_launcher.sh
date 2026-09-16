@@ -17,14 +17,11 @@ if [[ ! -r "${site_config}" ]]; then
   exit 1
 fi
 
-if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
-  export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
-  export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
-fi
-
-# Site config provides paths, runner module, and optional authentication helpers.
+# Site config provides site-specific ingestion settings.
 source "${site_config}"
 
+# A standard deployment needs only SIMBOARD_ROOT. Explicit paths support
+# nonstandard layouts and take precedence over the derived defaults.
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
   export SIMBOARD_WORKDIR="${SIMBOARD_WORKDIR:-${SIMBOARD_ROOT}/operations}"
   export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_ROOT}/repository/simboard/backend}"
@@ -33,8 +30,8 @@ fi
 # SIMBOARD_REPODIR is retained as a compatibility alias for existing site configs.
 export SIMBOARD_MODULES="${SIMBOARD_MODULES:-${SIMBOARD_REPODIR:-}}"
 
-: "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or the site configuration}"
-: "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or the site configuration}"
+: "${SIMBOARD_WORKDIR:?SIMBOARD_WORKDIR must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
+: "${SIMBOARD_MODULES:?SIMBOARD_MODULES must be set by SIMBOARD_ROOT or a nonstandard deployment override}"
 
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 
@@ -59,9 +56,7 @@ remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*
 
 load_api_configuration() {
     : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
-    : "${SIMBOARD_API_TOKEN_FILE:?SIMBOARD_API_TOKEN_FILE must be set when remote API access is enabled}"
     source "${SIMBOARD_ENV_FILE}"
-    source "${SIMBOARD_API_TOKEN_FILE}"
     : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
     : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
 }

@@ -1,85 +1,47 @@
 # Operational Scripts
 
-This directory contains administrative scripts for database management, account
-provisioning, archive ingestion, and diagnostics discovery. These scripts are
-internal operational entry points and are not part of the public API.
+This directory contains internal operational entry points for database
+management, account provisioning, archive ingestion, and diagnostics discovery.
+They are not part of the public API.
 
-## Quick Start
+## In This Guide
 
-### Requirements
+- [Run a script](#run-a-script)
+- [Choose an ingestion workflow](#ingestion-workflows)
+- [Configure and schedule site collection](#site-collection-launcher)
+- [Run the diagnostics scanner](#nersc-diagnostics-link-scanner)
+- [Backfill E3SM v3 data](#one-time-chrysalis-e3sm-v3-archive-backfill)
+- [Link E3SM v3 HPSS archives](#e3sm-v3-hpss-linker)
 
-Before running a script:
+## Run a Script
 
-1. Set the required environment variables.
-2. Confirm that the target database or API is accessible.
-3. Activate the correct local, staging, or production environment.
+Before running an operational script:
 
-Scripts are organized by domain:
+1. Set its required environment variables.
+2. Confirm the target database or API is reachable.
+3. Select the intended local, staging, or production environment.
 
-```text
-scripts/
-├── ingestion/
-│   ├── archive_client.py
-│   ├── archive_discovery.py
-│   ├── archive_ingestor_core.py
-│   ├── archive_layout.py
-│   ├── archive_workflow.py
-│   ├── diagnostics_archives.py
-│   ├── diagnostics_link_scanner.py
-│   ├── hpc_upload_archive_ingestor.py
-│   ├── nersc_archive_ingestor.py
-│   ├── sites/
-│   │   ├── lcrc-diagnostics-scanner.sh
-│   │   ├── nersc-diagnostics-scanner.sh
-│   │   ├── site_ingestion_launcher.sh
-│   │   ├── chrysalis.config
-│   │   └── nersc.config
-│   └── v3_data/
-│       ├── __init__.py
-│       ├── lcrc-v3.env.example
-│       ├── lcrc_v3.sh
-│       ├── lcrc_v3_archive_ingestor.py
-│       └── lcrc_v3_hpss_linker.py
-├── db/
-│   ├── seed.py
-│   ├── rollback_seed.py
-│   └── catalog.json
-└── users/
-    ├── create_admin_account.py
-    └── provision_service_account.py
-```
-
-Scripts may depend on:
-
-- Application configuration from `app.core.config`
-- Database configuration from `app.core.database` or `database_async`
-- SQLAlchemy models and application services
-
-### Run Scripts as Modules
-
-Run all scripts as modules from the project root. This ensures correct package
-imports, configuration loading, and environment behavior.
+Run Python scripts as modules from the backend project root. This preserves
+package imports, application configuration, and environment behavior.
 
 ```bash
-python -m app.scripts.db.seed
-python -m app.scripts.db.rollback_seed
-python -m app.scripts.users.create_admin_account
-python -m app.scripts.ingestion.hpc_upload_archive_ingestor
-python -m app.scripts.ingestion.nersc_archive_ingestor
-python -m app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor
-python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
+uv run python -m app.scripts.db.seed
+uv run python -m app.scripts.db.rollback_seed
+uv run python -m app.scripts.users.create_admin_account
+uv run python -m app.scripts.ingestion.hpc_upload_archive_ingestor
+uv run python -m app.scripts.ingestion.nersc_archive_ingestor
+uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor
+uv run python -m app.scripts.ingestion.v3_data.lcrc_v3_hpss_linker
 ```
 
-Do not execute scripts directly by file path:
+> **Do not** execute a Python script directly by file path:
 
 ```bash
-# Avoid
-python app/scripts/db/seed.py
+# Incorrect
+uv run python app/scripts/ingestion/nersc_archive_ingestor.py
 ```
 
-## Script Directory
-
-Scripts are organized by domain:
+### Script Areas
 
 | Domain       | Purpose                                                          |
 | ------------ | ---------------------------------------------------------------- |
@@ -87,7 +49,7 @@ Scripts are organized by domain:
 | `db/`        | Database seeding and rollback utilities                          |
 | `users/`     | Administrative and service-account management                    |
 
-The primary operational entry points are:
+### Primary Entry Points
 
 | Workflow                 | Entry point                           | Purpose                                           |
 | ------------------------ | ------------------------------------- | ------------------------------------------------- |
@@ -97,11 +59,19 @@ The primary operational entry points are:
 | E3SM v3 archive backfill | `v3_data/lcrc_v3_archive_ingestor.py` | Backfill selected Chrysalis simulations           |
 | E3SM v3 HPSS linking     | `v3_data/lcrc_v3_hpss_linker.py`      | Add documented HPSS URLs to existing cases        |
 
-## Common Ingestion Behavior
+## Ingestion Workflows
 
-The NERSC path-based and HPC upload ingestors share archive discovery,
-validation, deduplication, state tracking, dry-run, retry, and per-case
-submission behavior.
+Choose the runner based on where the archive filesystem is available:
+
+| Archive location | Runner | Submission method |
+| --- | --- | --- |
+| Mounted in the SimBoard backend environment | `nersc_archive_ingestor.py` | API path submission |
+| Available only at a remote HPC site | `hpc_upload_archive_ingestor.py` | Per-case archive upload |
+
+Both runners share archive discovery, validation, deduplication, state tracking,
+dry-run, retry, and per-case submission behavior.
+
+## Common Ingestion Behavior
 
 ### Scan Modes
 
@@ -110,7 +80,7 @@ submission behavior.
 | `staging` | `PERF_ARCHIVE_ROOT`     | `/performance_archive` | Scan the current staging archive  |
 | `archive` | `OLD_PERF_ARCHIVE_ROOT` | `/OLD_PERF`            | Scan historical archive snapshots |
 
-Archive mode has these constraints:
+In archive mode:
 
 - Only top-level `YYYY-MM` directories are traversed. Other directories are
   ignored.
@@ -141,24 +111,34 @@ Both automated ingestors persist immutable validation results before ingestion:
   or conflicting stored outcome stops ingestion.
 - Dry runs do not write discovery results or processed state.
 
-### Common Environment Variables
+### Environment Variables
 
-| Variable                  | Required  | Default                | Purpose                                  |
-| ------------------------- | --------- | ---------------------- | ---------------------------------------- |
-| `SIMBOARD_API_BASE_URL`   | Live runs | None                   | SimBoard API endpoint                    |
-| `SIMBOARD_API_TOKEN`      | Live runs | None                   | Service-account token                    |
-| `SCAN_MODE`               | No        | `staging`              | Select staging or archive scanning       |
-| `PERF_ARCHIVE_ROOT`       | No        | `/performance_archive` | Staging archive root                     |
-| `OLD_PERF_ARCHIVE_ROOT`   | No        | `/OLD_PERF`            | Historical archive root                  |
-| `MACHINE_NAME`            | No        | `perlmutter`           | Source machine recorded during ingestion |
-| `DRY_RUN`                 | No        | `true`                 | Prevent ingestion and state changes      |
-| `MAX_CASES_PER_RUN`       | No        | Unlimited              | Limit submissions per invocation         |
-| `MAX_ATTEMPTS`            | No        | Unlimited              | Limit request attempts                   |
-| `REQUEST_TIMEOUT_SECONDS` | No        | `60`                   | Set the request timeout in seconds       |
-| `ARCHIVE_YEAR_START`      | No        | None                   | Earliest archive month to scan           |
-| `ARCHIVE_YEAR_END`        | No        | None                   | Latest archive month to scan             |
+**API access**
 
-## Ingestion Workflows
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SIMBOARD_API_BASE_URL` | Live runs and remote-state dry runs | SimBoard API endpoint |
+| `SIMBOARD_API_TOKEN` | Live runs and remote-state dry runs | Service-account token |
+
+**Archive selection**
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SCAN_MODE` | `staging` | Select staging or archive scanning |
+| `PERF_ARCHIVE_ROOT` | `/performance_archive` | Staging archive root |
+| `OLD_PERF_ARCHIVE_ROOT` | `/OLD_PERF` | Historical archive root |
+| `MACHINE_NAME` | `perlmutter` | Source machine recorded during ingestion |
+| `ARCHIVE_YEAR_START` | None | Earliest archive month to scan |
+| `ARCHIVE_YEAR_END` | None | Latest archive month to scan |
+
+**Run controls**
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DRY_RUN` | `true` | Prevent ingestion and state changes |
+| `MAX_CASES_PER_RUN` | Unlimited | Limit submissions per invocation |
+| `MAX_ATTEMPTS` | Unlimited | Limit request attempts |
+| `REQUEST_TIMEOUT_SECONDS` | `60` | Request timeout in seconds |
 
 ### NERSC Path-Based Archive Ingestion
 
@@ -175,14 +155,6 @@ SIMBOARD_API_BASE_URL=http://backend:8000 \
 MACHINE_NAME=perlmutter \
 uv run python -m app.scripts.ingestion.nersc_archive_ingestor
 ```
-
-#### NERSC Site Launcher
-
-Use `sites/site_ingestion_launcher.sh nersc <staging|archive>` for host-side
-NERSC collection. The launcher loads `sites/nersc.config` and runs
-`python -m app.scripts.ingestion.nersc_archive_ingestor`. Override `SCAN_MODE`,
-`DRY_RUN`, or another supported variable in the calling environment or cron
-entry when a different behavior is required.
 
 ### HPC Upload Archive Ingestion
 
@@ -213,36 +185,61 @@ The common ingestion environment variables and archive rules apply.
 
 `app/scripts/ingestion/sites/site_ingestion_launcher.sh` is the host-side
 launcher for site collection. It loads `sites/<site>.config`, then selects the
-configured Python ingestor. Use it as:
+configured Python ingestor.
 
 ```bash
-app/scripts/ingestion/sites/site_ingestion_launcher.sh nersc staging
 app/scripts/ingestion/sites/site_ingestion_launcher.sh chrysalis archive
 ```
 
-Each site config defines its machine name, archive roots, Python environment
-file, token export file, API base URL, archive lower bound, and ingestor module.
-Set `SIMBOARD_ROOT` to a shared operational directory containing
-`repository/simboard` and `operations`; the launcher derives the backend and
-working paths from it. A site config may instead set `SIMBOARD_MODULES` and
-`SIMBOARD_WORKDIR` explicitly before using either variable. The launcher defaults to `DRY_RUN=true` with
-`DRY_RUN_USE_REMOTE_STATE=true`, so it loads API credentials and performs
-read-only state validation. Set `DRY_RUN_USE_REMOTE_STATE=false` for a
-credential-free offline scan. Set `DRY_RUN=false` only after validating archive
-access, token storage, network egress, and candidate counts. A capped
-`MAX_CASES_PER_RUN` value limits real ingestion but still persists results.
+#### Configuration Ownership
 
-Site configs are operational inputs. Keep credentials in their referenced,
-protected files rather than committing them to a config file.
+| Location | Configure | Notes |
+| --- | --- | --- |
+| Committed site config | Machine name, archive roots, environment-file default, archive lower bound, ingestor module | Never store credentials here. |
+| Standard deployment configuration | `SIMBOARD_ROOT` and protected environment file containing API URL and token | Required for remote API access. |
+| Deployment overrides | `SIMBOARD_MODULES`, `SIMBOARD_WORKDIR`, `SIMBOARD_ENV_FILE` | Supports nonstandard layouts and alternate API targets. |
+
+For the standard layout, `SIMBOARD_ROOT` contains both
+`repository/simboard/backend` and `operations`. The launcher derives its module
+and working paths. The Chrysalis site configuration defaults
+`SIMBOARD_ENV_FILE` to
+`/lcrc/group/e3sm2/simboard/operations/environment.sh`; a job can override the
+path to select another API environment.
+
+The environment file is a group-protected Bash file that exports both
+`SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`; every reader in that group
+must be authorized to use the token. Initialize a new file from the committed
+template without overwriting an existing file:
+
+```bash
+make chrysalis-init-environment
+make chrysalis-init-environment ENV_FILE=/lcrc/group/e3sm2/simboard/operations/environment.production.sh
+```
+
+#### Run Safely
+
+1. Start with the default `DRY_RUN=true`. It also defaults
+   `DRY_RUN_USE_REMOTE_STATE=true`, which validates remote state without writing.
+2. Use `DRY_RUN_USE_REMOTE_STATE=false` only for a credential-free offline scan.
+3. Confirm archive access, token storage, network egress, and candidate counts.
+4. Set `DRY_RUN=false` only after that review. Use `MAX_CASES_PER_RUN` to cap a
+   live run; it limits submissions but still persists validation results.
+
+Site configs are operational inputs. Keep credentials in protected environment
+files rather than committing them to a site config.
 
 ### Cron Setup
 
-Copy `sites/crontab.example` outside the repository, set `SIMBOARD_ROOT` to the
-shared operational directory, and install the adjusted file with `crontab`.
+1. Copy `sites/crontab.example` outside the repository.
+2. Set the deployment's `SIMBOARD_ROOT`.
+3. Create and populate the protected Chrysalis environment file with
+   `make chrysalis-init-environment`; it must export the API URL and token.
+4. Set `SIMBOARD_ENV_FILE` in the cron environment only to override the
+   Chrysalis default, such as for a production-targeting job.
+5. Install the adjusted copy with `crontab`.
+
 The example schedules staging scans every 15 minutes and archive scans daily at
-12:00 UTC. The token file referenced by the site config must be readable only by
-the account that runs the scheduled job and export `SIMBOARD_API_TOKEN` when
-sourced. Keep token values out of the repository and crontab.
+12:00 UTC. Never place token values in the repository or crontab.
 
 ## NERSC Diagnostics Link Scanner
 
@@ -284,8 +281,10 @@ and `/api/v1/ingestions/from-hpc-upload` request logic.
 Each case ingested by this workflow is classified as `production`; diagnostics
 backfill workflows do not set case classifications.
 
-For this one-time backfill, copy the committed template outside the repository,
-secure it, replace its placeholders, then run a dry run:
+### Configure
+
+Copy the committed template outside the repository, secure it, and replace its
+placeholders:
 
 ```bash
 mkdir -p ~/.config/simboard
@@ -304,7 +303,7 @@ The environment file must define:
 Set `OLD_PERF_ARCHIVE_ROOT` only when the Chrysalis archive is mounted somewhere
 other than its documented default.
 
-#### Run from the Repository Root
+### Run from the Repository Root
 
 Start with the Make dry run:
 
@@ -336,7 +335,7 @@ The Make targets override `DRY_RUN`; keep the external environment file focused
 on the API credentials and optional archive-root override. They run Python with
 unbuffered output so emitted structured events appear in the console immediately.
 
-#### Fixed and Supported Settings
+### Fixed and Supported Settings
 
 The source site and scan scope are fixed. The runner ignores:
 
@@ -351,14 +350,14 @@ The following controls remain supported:
 - `REQUEST_TIMEOUT_SECONDS`
 - `ARCHIVE_YEAR_END`
 
-#### State Behavior
+### State Behavior
 
 This targeted runner does not read or write database-backed archive snapshot
 checkpoints. A filtered backfill cannot safely mark a mixed snapshot as complete
 for the general archive runner. Processed-execution state and immutable
 discovery results still make repeated runs idempotent.
 
-### E3SM v3 HPSS Linker
+## E3SM v3 HPSS Linker
 
 #### Purpose
 
