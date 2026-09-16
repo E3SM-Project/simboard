@@ -23,10 +23,11 @@ This procedure applies to Chrysalis and to a new remote site after a reviewed si
 2. Create a protected API environment file outside the repository. For Chrysalis, create it with:
 
    ```bash
-   make chrysalis-init-environment
+   make ingestion-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+   make ingestion-init-env site=chrysalis environment=prod SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
    ```
 
-3. Edit that file with the API URL and service-account token. Do not put the token in the site configuration or crontab.
+3. `SIMBOARD_ROOT` determines the output location: `operations/env.dev.sh` by default, or `operations/env.prod.sh` with `environment=prod`. Each template supplies its public API URL: `env.dev.sh` uses `https://simboard-dev-api.e3sm.org` and `env.prod.sh` uses `https://simboard-api.e3sm.org`. Add the matching service-account token. Do not put the token in the site configuration or crontab.
 4. Confirm the site configuration supplies the machine name and performance roots. The committed Chrysalis configuration is `backend/app/scripts/ingestion/sites/chrysalis.config`. For a new site, add a reviewed `<site>.config` with the site-specific machine name, staging root, archive root, runner module, and archive lower bound.
 5. Run a staging dry run from the site operations directory:
 

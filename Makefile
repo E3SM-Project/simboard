@@ -58,7 +58,7 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make chrysalis-init-environment [ENV_FILE=<path>] # Create a group-protected Chrysalis API environment template"
+	@echo "  make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Create a protected site API environment file"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -104,7 +104,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install chrysalis-init-environment
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-init-env
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -178,21 +178,41 @@ copy-env-files:
 		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 	fi
 
-CHRYSALIS_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/environment.sh.example
-ENV_FILE ?= /lcrc/group/e3sm2/simboard/operations/env.dev.sh
+INGESTION_DEV_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.dev.sh.example
+INGESTION_PROD_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.prod.sh.example
+INGESTION_SITES_DIR := backend/app/scripts/ingestion/sites
+environment ?= dev
 
-chrysalis-init-environment:
-	@if [ ! -d "$(dir $(ENV_FILE))" ]; then \
-		echo "$(RED)Destination directory does not exist: $(dir $(ENV_FILE))$(NC)" >&2; \
+ingestion-init-env:
+	@if [ -z "$(site)" ]; then \
+		echo "$(RED)Usage: make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod]$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	if [ -e "$(ENV_FILE)" ]; then \
-		echo "$(YELLOW)$(ENV_FILE) already exists; refusing to overwrite it.$(NC)" >&2; \
+	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \
+		echo "$(RED)Site configuration not readable: $(INGESTION_SITES_DIR)/$(site).config$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	install -m 640 "$(CHRYSALIS_ENV_TEMPLATE)" "$(ENV_FILE)"; \
-	echo "$(GREEN)Created $(ENV_FILE).$(NC)"; \
-	echo "$(YELLOW)Set SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN before using this file.$(NC)"
+	if [ -z "$(SIMBOARD_ROOT)" ]; then \
+		echo "$(RED)SIMBOARD_ROOT must be set$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	case "$(environment)" in \
+		dev) template="$(INGESTION_DEV_ENV_TEMPLATE)" ;; \
+		prod) template="$(INGESTION_PROD_ENV_TEMPLATE)" ;; \
+		*) echo "$(RED)environment must be dev or prod: $(environment)$(NC)" >&2; exit 1 ;; \
+	esac; \
+	env_file="$(SIMBOARD_ROOT)/operations/env.$(environment).sh"; \
+	if [ ! -d "$${env_file%/*}" ]; then \
+		echo "$(RED)Destination directory does not exist: $${env_file%/*}$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	if [ -e "$$env_file" ]; then \
+		echo "$(YELLOW)$$env_file already exists; refusing to overwrite it.$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	install -m 640 "$$template" "$$env_file"; \
+	echo "$(GREEN)Created $$env_file.$(NC)"; \
+	echo "$(YELLOW)Set SIMBOARD_API_TOKEN before using this file.$(NC)"
 
 gen-certs:
 	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"

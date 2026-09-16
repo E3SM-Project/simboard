@@ -196,13 +196,18 @@ def test_site_configs_define_their_ingestors() -> None:
     ]
 
 
-def test_chrysalis_environment_initializer_creates_non_overwritable_template(
+def test_ingestion_environment_initializer_creates_non_overwritable_templates(
     tmp_path: Path,
 ) -> None:
     repository_root = Path(__file__).resolve().parents[4]
-    missing_file = tmp_path / "missing" / "environment.sh"
+    missing_root = tmp_path / "missing"
     result = subprocess.run(
-        ["make", "chrysalis-init-environment", f"ENV_FILE={missing_file}"],
+        [
+            "make",
+            "ingestion-init-env",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={missing_root}",
+        ],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -212,12 +217,18 @@ def test_chrysalis_environment_initializer_creates_non_overwritable_template(
     assert result.returncode != 0
     assert "Destination directory does not exist" in result.stderr
 
-    destination_dir = tmp_path / "operations"
-    destination_dir.mkdir()
-    environment_file = destination_dir / "environment.sh"
+    simboard_root = tmp_path / "simboard"
+    destination_dir = simboard_root / "operations"
+    destination_dir.mkdir(parents=True)
+    environment_file = destination_dir / "env.dev.sh"
 
     result = subprocess.run(
-        ["make", "chrysalis-init-environment", f"ENV_FILE={environment_file}"],
+        [
+            "make",
+            "ingestion-init-env",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -226,12 +237,37 @@ def test_chrysalis_environment_initializer_creates_non_overwritable_template(
 
     assert result.returncode == 0, result.stderr
     assert environment_file.read_text(encoding="utf-8") == (
-        repository_root / "backend/app/scripts/ingestion/sites/environment.sh.example"
+        repository_root / "backend/app/scripts/ingestion/sites/env.dev.sh.example"
     ).read_text(encoding="utf-8")
     assert environment_file.stat().st_mode & 0o777 == 0o640
 
+    production_file = destination_dir / "env.prod.sh"
     result = subprocess.run(
-        ["make", "chrysalis-init-environment", f"ENV_FILE={environment_file}"],
+        [
+            "make",
+            "ingestion-init-env",
+            "site=chrysalis",
+            "environment=prod",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert production_file.read_text(encoding="utf-8") == (
+        repository_root / "backend/app/scripts/ingestion/sites/env.prod.sh.example"
+    ).read_text(encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-init-env",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
         capture_output=True,
         check=False,
         cwd=repository_root,
