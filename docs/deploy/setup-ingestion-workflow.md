@@ -27,7 +27,7 @@ This procedure applies to Chrysalis and to a new remote site after a reviewed si
    ```
 
 3. Edit that file with the API URL and service-account token. Do not put the token in the site configuration or crontab.
-4. Confirm the site configuration supplies the standard deployment root, machine name, and performance roots. The committed Chrysalis configuration is `backend/app/scripts/ingestion/sites/chrysalis.config`. For a new site, add a reviewed `<site>.config` with the site-specific `SIMBOARD_ROOT`, machine name, staging root, archive root, runner module, API environment-file default, and archive lower bound.
+4. Confirm the site configuration supplies the machine name and performance roots. The committed Chrysalis configuration is `backend/app/scripts/ingestion/sites/chrysalis.config`. For a new site, add a reviewed `<site>.config` with the site-specific machine name, staging root, archive root, runner module, and archive lower bound.
 5. Run a staging dry run from the site operations directory:
 
    ```bash
@@ -42,7 +42,8 @@ This procedure applies to Chrysalis and to a new remote site after a reviewed si
 | Configure in | Variables | Purpose |
 | --- | --- | --- |
 | Protected API file, normally `/lcrc/group/e3sm2/simboard/operations/env.dev.sh` for Chrysalis | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Required for live runs and remote-state dry runs. The token authenticates state, discovery-result, and upload requests. |
-| Committed reviewed site file, such as `backend/app/scripts/ingestion/sites/chrysalis.config` | `SIMBOARD_ROOT`, `SIMBOARD_ENV_FILE`, `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` | Site defaults, including the standard root containing `repository/simboard/backend` and `operations`. Do not store credentials or run controls here. |
+| Committed reviewed site file, such as `backend/app/scripts/ingestion/sites/chrysalis.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` | Site-specific runner and archive defaults. Do not store credentials or run controls here. |
+| Scheduler or crontab environment | `SIMBOARD_ROOT` | Standard deployment root containing `repository/simboard/backend` and `operations`. |
 | Scheduler or crontab environment, only when needed | `SIMBOARD_ENV_FILE`, `SIMBOARD_SITE_CONFIG`, `PYTHON_BIN`, `DRY_RUN`, `DRY_RUN_USE_REMOTE_STATE`, `MAX_CASES_PER_RUN`, `MAX_ATTEMPTS`, `REQUEST_TIMEOUT_SECONDS`, `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END` | Per-job API target, selected site configuration, interpreter, execution controls, and archive scope. `DRY_RUN_USE_REMOTE_STATE=false` permits a credential-free offline scan only. |
 
 The launcher sets `SCAN_MODE` from its second argument (`staging` or `archive`). Do not set it separately for launcher jobs.
@@ -67,7 +68,7 @@ In archive mode, `ARCHIVE_YEAR_START` and `ARCHIVE_YEAR_END` accept `YYYY` or `Y
 ## 3. Schedule remote-site collection with cron
 
 1. Copy `backend/app/scripts/ingestion/sites/crontab.example` outside the repository.
-2. Set the bootstrap `SIMBOARD_ROOT` in that copy so cron can locate the launcher. Keep it aligned with the default in the site configuration.
+2. Set `SIMBOARD_ROOT` in that copy so cron can locate the launcher and the launcher can derive its work and backend paths.
 3. Replace `chrysalis` with the configured site name, if needed.
 4. Set `SIMBOARD_ENV_FILE` immediately before each launcher command. The example includes matching development and production jobs: `env.prod.sh` targets production and `env.dev.sh` targets development. The launcher keeps one lock per environment file, so jobs for different environments can run independently. Keep the staging and archive schedule appropriate for the site. The example runs staging every 15 minutes and archive daily in UTC.
 5. Install the copied file with `crontab /path/to/site.crontab`.
@@ -77,10 +78,10 @@ In archive mode, `ARCHIVE_YEAR_START` and `ARCHIVE_YEAR_END` accept `YYYY` or `Y
 
 | Configure in | Variables | Purpose |
 | --- | --- | --- |
-| Copied crontab | `SHELL`, `PATH`, `CRON_TZ`, `SIMBOARD_ROOT` | Shell, command path, UTC schedule interpretation, and the bootstrap root needed to locate the launcher before it loads the site config. |
+| Copied crontab | `SHELL`, `PATH`, `CRON_TZ`, `SIMBOARD_ROOT` | Shell, command path, UTC schedule interpretation, and the standard root used to locate the launcher and derive its paths. |
 | Each cron command | `SIMBOARD_ENV_FILE` | Selects that job's protected `env.dev.sh` or `env.prod.sh` API file. |
 | Copied crontab, only when needed | `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END`, `DRY_RUN`, `MAX_CASES_PER_RUN` | Scan controls and bounded rollout. |
-| Protected API file referenced by the site config or crontab | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Credentials. Never place these values directly in crontab. |
+| Protected API file referenced by each cron command | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Credentials. Never place these values directly in crontab. |
 
 ## 4. Run the targeted E3SM v3 metadata backfill
 

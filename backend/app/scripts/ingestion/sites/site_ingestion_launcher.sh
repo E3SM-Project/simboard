@@ -17,7 +17,7 @@ scan_mode=$2
 # Site configuration and standard layout
 # =============================================================================
 # Load the selected site's reviewed settings, then derive all repository paths
-# from its standard deployment root.
+# from the scheduler-provided standard deployment root.
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 site_config="${SIMBOARD_SITE_CONFIG:-${script_dir}/${site}.config}"
 
@@ -29,9 +29,9 @@ fi
 # Site config provides site-specific ingestion settings.
 source "${site_config}"
 
-# Every site uses the standard deployment layout. The site configuration owns
-# its root; scheduler jobs do not supply alternate repository or work paths.
-: "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set by the site configuration}"
+# Every site uses the standard deployment layout. The scheduler supplies its
+# root; site configuration does not supply alternate repository or work paths.
+: "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set by the scheduler environment}"
 SIMBOARD_WORKDIR="${SIMBOARD_ROOT}/operations"
 SIMBOARD_MODULES="${SIMBOARD_ROOT}/repository/simboard/backend"
 
