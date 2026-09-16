@@ -183,7 +183,7 @@ def test_site_configs_define_their_ingestors() -> None:
         [
             "bash",
             "-c",
-            'source "$1"; printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$DRY_RUN" "$SIMBOARD_ENV_FILE" "$SIMBOARD_ROOT"',
+            'source "$1"; printf "%s\\n%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME" "$SIMBOARD_ENV_FILE" "$SIMBOARD_ROOT"',
             "bash",
             str(sites_dir / "chrysalis.config"),
         ],
@@ -197,15 +197,14 @@ def test_site_configs_define_their_ingestors() -> None:
     assert result.stdout.splitlines() == [
         "app.scripts.ingestion.hpc_upload_archive_ingestor",
         "chrysalis",
-        "true",
-        "/lcrc/group/e3sm2/simboard/operations/environment.sh",
+        "/lcrc/group/e3sm2/simboard/operations/env.dev.sh",
         "/lcrc/group/e3sm2/simboard",
     ]
 
 
 def test_chrysalis_config_preserves_environment_file_override() -> None:
     sites_dir = _launcher_path().parent
-    override = "/tmp/simboard-production-environment.sh"
+    override = "/tmp/env.prod.sh"
     env = os.environ.copy()
     env["SIMBOARD_ENV_FILE"] = override
 

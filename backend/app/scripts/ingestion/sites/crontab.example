@@ -10,11 +10,14 @@ CRON_TZ=UTC
 # loads the site config. It must match the standard root in that site config.
 SIMBOARD_ROOT=/path/to/simboard_root
 
-# The Chrysalis site config defaults to
-# /lcrc/group/e3sm2/simboard/operations/environment.sh. It must be protected
-# and export both SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN. To target a
-# different API environment for this job, uncomment and set this override:
-# SIMBOARD_ENV_FILE=${SIMBOARD_ROOT}/operations/environment.production.sh
+# The site config selects a protected environment file that exports both
+# SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN. To target a different API
+# environment for this job, uncomment and set this override:
+# SIMBOARD_ENV_FILE=${SIMBOARD_ROOT}/operations/env.prod.sh
+
+# The launcher defaults to a dry run. Uncomment only after reviewing dry-run
+# logs and enabling live ingestion for this scheduler.
+# DRY_RUN=false
 
 # Replace `chrysalis` with the site-config name. Staging scan: every 15 minutes.
 5,20,35,50 * * * * cd "${SIMBOARD_ROOT}/operations" && "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging

@@ -179,7 +179,7 @@ copy-env-files:
 	fi
 
 CHRYSALIS_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/environment.sh.example
-ENV_FILE ?= /lcrc/group/e3sm2/simboard/operations/environment.sh
+ENV_FILE ?= /lcrc/group/e3sm2/simboard/operations/env.dev.sh
 
 chrysalis-init-environment:
 	@if [ ! -d "$(dir $(ENV_FILE))" ]; then \

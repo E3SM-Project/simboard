@@ -41,8 +41,8 @@ This procedure applies to Chrysalis and to a new remote site after a reviewed si
 
 | Configure in | Variables | Purpose |
 | --- | --- | --- |
-| Protected API file, normally `/lcrc/group/e3sm2/simboard/operations/environment.sh` for Chrysalis | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Required for live runs and remote-state dry runs. The token authenticates state, discovery-result, and upload requests. |
-| Committed reviewed site file, such as `backend/app/scripts/ingestion/sites/chrysalis.config` | `SIMBOARD_ROOT`, `SIMBOARD_ENV_FILE`, `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `DRY_RUN`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` | Site defaults, including the standard root containing `repository/simboard/backend` and `operations`. Do not store credentials here. |
+| Protected API file, normally `/lcrc/group/e3sm2/simboard/operations/env.dev.sh` for Chrysalis | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` | Required for live runs and remote-state dry runs. The token authenticates state, discovery-result, and upload requests. |
+| Committed reviewed site file, such as `backend/app/scripts/ingestion/sites/chrysalis.config` | `SIMBOARD_ROOT`, `SIMBOARD_ENV_FILE`, `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` | Site defaults, including the standard root containing `repository/simboard/backend` and `operations`. Do not store credentials or run controls here. |
 | Scheduler or crontab environment, only when needed | `SIMBOARD_ENV_FILE`, `SIMBOARD_SITE_CONFIG`, `PYTHON_BIN`, `DRY_RUN`, `DRY_RUN_USE_REMOTE_STATE`, `MAX_CASES_PER_RUN`, `MAX_ATTEMPTS`, `REQUEST_TIMEOUT_SECONDS`, `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END` | Per-job API target, selected site configuration, interpreter, execution controls, and archive scope. `DRY_RUN_USE_REMOTE_STATE=false` permits a credential-free offline scan only. |
 
 The launcher sets `SCAN_MODE` from its second argument (`staging` or `archive`). Do not set it separately for launcher jobs.
