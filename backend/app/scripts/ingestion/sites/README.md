@@ -8,7 +8,7 @@ remote-site ingestion jobs.
 | `site_ingestion_launcher.sh` | Stable scheduler entrypoint. Loads one reviewed site config and starts the configured Python ingestor. |
 | `configs/` | Reviewed site-specific defaults such as archive roots, machine name, ingestor module, and archive lower bound. Never store tokens or deployment paths here. |
 | `templates/` | Committed templates for deployment-local API environment files and scheduler crontabs. |
-| `operations/` | Helpers used by the `make operations-*` targets to provision a checkout and create protected environment files. |
+| `operations/` | Helpers used by the `make operations-*` targets to provision or refresh a checkout and create protected environment files. |
 | `diagnostics/` | Wrappers for diagnostics operations that are separate from performance ingestion. |
 
 `SIMBOARD_ROOT`, API tokens, and installed crontabs are deployment-local. See

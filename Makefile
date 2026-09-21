@@ -59,6 +59,7 @@ help:
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision the checkout, backend runtime, and operations workspace"
+	@echo "  make operations-refresh SIMBOARD_ROOT=<path>    # Refresh an existing clean checkout and its backend runtime"
 	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
@@ -106,7 +107,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install operations-provision operations-init-env operations-init-cron
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install operations-provision operations-refresh operations-init-env operations-init-cron
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -188,6 +189,7 @@ INGESTION_PROD_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.prod.sh.example
 INGESTION_CRONTAB_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/crontab.example
 INGESTION_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_api_environment.sh
 INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
+INGESTION_REFRESH_SCRIPT := $(INGESTION_OPERATIONS_DIR)/refresh_repository.sh
 
 operations-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
@@ -195,6 +197,13 @@ operations-provision:
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_PROVISION_SCRIPT)"
+
+operations-refresh:
+	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
+		echo "$(RED)Usage: make operations-refresh SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	bash "$(INGESTION_REFRESH_SCRIPT)"
 
 operations-init-env:
 	@if [ -z "$(site)" ]; then \

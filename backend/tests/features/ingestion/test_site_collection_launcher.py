@@ -353,6 +353,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
         '  printf "%s\\n" "${GIT_STATUS_OUTPUT}"\n'
         "fi\n",
     )
+    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
     env = os.environ.copy()
     backend_install_capture_path = tmp_path / "backend-install.txt"
     env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
@@ -492,3 +493,114 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
 
     assert result.returncode != 0
     assert "SimBoard checkout is not a Git repository" in result.stderr
+
+
+def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    simboard_root = tmp_path / "simboard"
+    operations_dir = simboard_root / "operations"
+    operations_dir.mkdir(parents=True)
+    checkout_dir = simboard_root / "repository/simboard"
+    (checkout_dir / ".git").mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    backend_install_capture_path = tmp_path / "backend-install.txt"
+    _write_executable(
+        bin_dir / "git",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "$*" == *"status --porcelain" ]]; then\n'
+        '  printf "%s\\n" "${GIT_STATUS_OUTPUT:-}"\n'
+        'elif [[ "$*" == *"rev-parse HEAD" ]]; then\n'
+        '  printf "%s\\n" "${GIT_CURRENT_REVISION}"\n'
+        'elif [[ "$*" == *"rev-parse FETCH_HEAD" ]]; then\n'
+        '  printf "%s\\n" "${GIT_FETCHED_REVISION}"\n'
+        "fi\n",
+    )
+    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    (checkout_dir / "Makefile").write_text(
+        'backend-install:\n\t@touch "$$BACKEND_INSTALL_CAPTURE_PATH"\n',
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
+    env["GIT_CURRENT_REVISION"] = "current-revision"
+    env["GIT_FETCHED_REVISION"] = "current-revision"
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["SIMBOARD_ROOT"] = str(simboard_root)
+
+    result = subprocess.run(
+        ["make", "operations-refresh"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "already current" in result.stdout
+    assert not backend_install_capture_path.exists()
+
+    env["GIT_FETCHED_REVISION"] = "updated-revision"
+    result = subprocess.run(
+        ["make", "operations-refresh"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Refreshed SimBoard checkout" in result.stdout
+    assert backend_install_capture_path.exists()
+
+    env["GIT_STATUS_OUTPUT"] = " M deployment-change"
+    result = subprocess.run(
+        ["make", "operations-refresh"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "SimBoard checkout has uncommitted changes" in result.stderr
+
+    empty_root = tmp_path / "empty"
+    (empty_root / "operations").mkdir(parents=True)
+    env["SIMBOARD_ROOT"] = str(empty_root)
+    env.pop("GIT_STATUS_OUTPUT")
+    result = subprocess.run(
+        ["make", "operations-refresh"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert (
+        "SimBoard checkout does not exist; run operations-provision first"
+        in result.stderr
+    )
+
+    missing_root = tmp_path / "missing"
+    env["SIMBOARD_ROOT"] = str(missing_root)
+    result = subprocess.run(
+        ["make", "operations-refresh"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert (
+        "Operations directory does not exist; run operations-provision first"
+        in result.stderr
+    )

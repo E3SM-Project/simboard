@@ -62,7 +62,8 @@ without echoing either token. It creates `operations/env.dev.sh` and
 
 ### Install scheduler configuration
 
-Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedule if needed, then install it:
+Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedules
+if needed, then install it:
 
 ```bash
 make operations-init-cron site=chrysalis
@@ -71,7 +72,17 @@ crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
 
 Review the `SBCS-*.log` files. After the dry-run results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use `MAX_CASES_PER_RUN` for a bounded first live run.
 
-The cron example creates staging and archive jobs for both development and production. Each command selects its own `SIMBOARD_ENV_FILE`; development and production jobs use separate locks and may run at the same time.
+The copied crontab:
+
+- runs `make operations-refresh` (via the deployed refresh helper) weekly to
+  refresh a clean checkout;
+- synchronizes the backend runtime only after a revision change;
+- writes refresh output to `SBCS-provision.log`; review it after each update;
+- adds the standard user-level `uv` location to the refresh command's `PATH`;
+  adjust it if the scheduler account installs `uv` elsewhere;
+- creates staging and archive jobs for both development and production; and
+- gives each ingestion command its own `SIMBOARD_ENV_FILE`; development and
+  production jobs use separate locks and may run at the same time.
 
 ### Reference: configuration files and variables
 
@@ -79,7 +90,7 @@ The cron example creates staging and archive jobs for both development and produ
 | --- | --- |
 | `sites/configs/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
 | `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, logs, locks, and copied crontabs |
-| `repository/simboard` | Deployment checkout, cloned, updated, and prepared by `make operations-provision` |
+| `repository/simboard` | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh` |
 | `operations/env.dev.sh` | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
 | `operations/env.prod.sh` | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
 | Copied crontab | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END` |
