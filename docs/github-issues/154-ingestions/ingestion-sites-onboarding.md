@@ -67,9 +67,9 @@ make operations-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
 ```
 
 The development and production templates supply their respective public API
-URLs; the target prompts for the matching service-account token. To initialize
-a production file, pass `environment=prod`; the target writes `env.prod.sh` below
-`SIMBOARD_ROOT/operations`, then set `SIMBOARD_ENV_FILE` for that job.
+URLs; the target prompts for both matching service-account tokens and writes
+`env.dev.sh` and `env.prod.sh` below `SIMBOARD_ROOT/operations`. Set
+`SIMBOARD_ENV_FILE` for each job.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API
 token setup.

@@ -53,13 +53,12 @@ Create the protected API files:
 
 ```bash
 make operations-init-env site=chrysalis
-make operations-init-env site=chrysalis environment=prod
 ```
 
 Each command prompts for `SIMBOARD_API_BASE_URL` (with the environment
 template's public URL as the default) and the matching `SIMBOARD_API_TOKEN`,
-without echoing the token. These create `operations/env.dev.sh` and
-`operations/env.prod.sh` only after both values are supplied.
+without echoing either token. It creates `operations/env.dev.sh` and
+`operations/env.prod.sh` only after all values are supplied.
 
 ### Install scheduler configuration
 

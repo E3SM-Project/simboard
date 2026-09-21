@@ -59,7 +59,7 @@ help:
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision the checkout, backend runtime, and operations workspace"
-	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Interactively create a protected site API environment file"
+	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
 
@@ -188,7 +188,6 @@ INGESTION_PROD_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.prod.sh.example
 INGESTION_CRONTAB_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/crontab.example
 INGESTION_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_api_environment.sh
 INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
-environment ?= dev
 
 operations-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
@@ -199,7 +198,7 @@ operations-provision:
 
 operations-init-env:
 	@if [ -z "$(site)" ]; then \
-		echo "$(RED)Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod]$(NC)" >&2; \
+		echo "$(RED)Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
@@ -210,23 +209,20 @@ operations-init-env:
 		echo "$(RED)SIMBOARD_ROOT must be set$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	case "$(environment)" in \
-		dev) template="$(INGESTION_DEV_ENV_TEMPLATE)" ;; \
-		prod) template="$(INGESTION_PROD_ENV_TEMPLATE)" ;; \
-		*) echo "$(RED)environment must be dev or prod: $(environment)$(NC)" >&2; exit 1 ;; \
-	esac; \
-	env_file="$(SIMBOARD_ROOT)/operations/env.$(environment).sh"; \
-	if [ ! -d "$${env_file%/*}" ]; then \
-		echo "$(RED)Destination directory does not exist: $${env_file%/*}$(NC)" >&2; \
+	operations_dir="$(SIMBOARD_ROOT)/operations"; \
+	if [ ! -d "$$operations_dir" ]; then \
+		echo "$(RED)Destination directory does not exist: $$operations_dir$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	if [ -e "$$env_file" ]; then \
-		echo "$(YELLOW)$$env_file already exists; refusing to overwrite it.$(NC)" >&2; \
+	dev_env_file="$$operations_dir/env.dev.sh"; \
+	prod_env_file="$$operations_dir/env.prod.sh"; \
+	if [ -e "$$dev_env_file" ] || [ -e "$$prod_env_file" ]; then \
+		echo "$(YELLOW)$$dev_env_file or $$prod_env_file already exists; refusing to overwrite either file.$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	bash "$(INGESTION_ENV_INITIALIZER)" "$(environment)" "$$template" "$$env_file" || exit $$?; \
-	echo "$(GREEN)Created $$env_file.$(NC)"; \
-	echo "$(YELLOW)Keep this file protected; it contains a service-account token.$(NC)"
+	bash "$(INGESTION_ENV_INITIALIZER)" "$(INGESTION_DEV_ENV_TEMPLATE)" "$(INGESTION_PROD_ENV_TEMPLATE)" "$$dev_env_file" "$$prod_env_file" || exit $$?; \
+	echo "$(GREEN)Created $$dev_env_file and $$prod_env_file.$(NC)"; \
+	echo "$(YELLOW)Keep these files protected; they contain service-account tokens.$(NC)"
 
 operations-init-cron:
 	@if [ -z "$(site)" ]; then \

@@ -220,7 +220,8 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     simboard_root = tmp_path / "simboard"
     destination_dir = simboard_root / "operations"
     destination_dir.mkdir(parents=True)
-    environment_file = destination_dir / "env.dev.sh"
+    development_file = destination_dir / "env.dev.sh"
+    production_file = destination_dir / "env.prod.sh"
 
     result = subprocess.run(
         [
@@ -232,13 +233,16 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
         capture_output=True,
         check=False,
         cwd=repository_root,
-        input="\n\n",
+        input="\n\n\n\n",
         text=True,
     )
 
     assert result.returncode != 0
-    assert "SIMBOARD_API_TOKEN must be set" in result.stderr
-    assert not environment_file.exists()
+    assert (
+        "dev SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN must be set" in result.stderr
+    )
+    assert not development_file.exists()
+    assert not production_file.exists()
 
     result = subprocess.run(
         [
@@ -250,12 +254,15 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
         capture_output=True,
         check=False,
         cwd=repository_root,
-        input="https://dev-api.example.test\ntest-dev-token\n",
+        input=(
+            "https://dev-api.example.test\ntest-dev-token\n"
+            "https://prod-api.example.test\ntest-prod-token\n"
+        ),
         text=True,
     )
 
     assert result.returncode == 0, result.stderr
-    assert environment_file.read_text(encoding="utf-8") == (
+    assert development_file.read_text(encoding="utf-8") == (
         "#!/usr/bin/env bash\n"
         "# Development SimBoard API configuration. Keep this file outside the repository.\n"
         "export SIMBOARD_API_BASE_URL=https://dev-api.example.test\n"
@@ -263,31 +270,14 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     )
     assert "test-dev-token" not in result.stdout
     assert "test-dev-token" not in result.stderr
-    assert environment_file.stat().st_mode & 0o777 == 0o640
-
-    production_file = destination_dir / "env.prod.sh"
-    result = subprocess.run(
-        [
-            "make",
-            "operations-init-env",
-            "site=chrysalis",
-            "environment=prod",
-            f"SIMBOARD_ROOT={simboard_root}",
-        ],
-        capture_output=True,
-        check=False,
-        cwd=repository_root,
-        input="https://prod-api.example.test\ntest-prod-token\n",
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
+    assert development_file.stat().st_mode & 0o777 == 0o640
     assert production_file.read_text(encoding="utf-8") == (
         "#!/usr/bin/env bash\n"
         "# Production SimBoard API configuration. Keep this file outside the repository.\n"
         "export SIMBOARD_API_BASE_URL=https://prod-api.example.test\n"
         "export SIMBOARD_API_TOKEN=test-prod-token\n"
     )
+    assert production_file.stat().st_mode & 0o777 == 0o640
 
     crontab_file = destination_dir / "chrysalis.crontab"
     result = subprocess.run(
@@ -324,7 +314,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     )
 
     assert result.returncode != 0
-    assert "refusing to overwrite it" in result.stderr
+    assert "refusing to overwrite either file" in result.stderr
 
     result = subprocess.run(
         [
