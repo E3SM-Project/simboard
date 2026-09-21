@@ -58,7 +58,8 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Create a protected site API environment file"
+	@echo "  make ingestion-provision SIMBOARD_ROOT=<path>  # Provision the checkout and protected operations workspace"
+	@echo "  make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Interactively create a protected site API environment file"
 	@echo "  make ingestion-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
 
@@ -105,7 +106,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-init-env ingestion-init-cron
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-provision ingestion-init-env ingestion-init-cron
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -182,8 +183,17 @@ copy-env-files:
 INGESTION_DEV_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.dev.sh.example
 INGESTION_PROD_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.prod.sh.example
 INGESTION_CRONTAB_TEMPLATE := backend/app/scripts/ingestion/sites/crontab.example
+INGESTION_ENV_INITIALIZER := backend/app/scripts/ingestion/sites/initialize_api_environment.sh
+INGESTION_PROVISION_SCRIPT := backend/app/scripts/ingestion/sites/provision_operations.sh
 INGESTION_SITES_DIR := backend/app/scripts/ingestion/sites
 environment ?= dev
+
+ingestion-provision:
+	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
+		echo "$(RED)Usage: make ingestion-provision SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		exit 1; \
+	fi; \
+	bash "$(INGESTION_PROVISION_SCRIPT)"
 
 ingestion-init-env:
 	@if [ -z "$(site)" ]; then \
@@ -212,9 +222,9 @@ ingestion-init-env:
 		echo "$(YELLOW)$$env_file already exists; refusing to overwrite it.$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	install -m 640 "$$template" "$$env_file"; \
+	bash "$(INGESTION_ENV_INITIALIZER)" "$(environment)" "$$template" "$$env_file" || exit $$?; \
 	echo "$(GREEN)Created $$env_file.$(NC)"; \
-	echo "$(YELLOW)Set SIMBOARD_API_TOKEN before using this file.$(NC)"
+	echo "$(YELLOW)Keep this file protected; it contains a service-account token.$(NC)"
 
 ingestion-init-cron:
 	@if [ -z "$(site)" ]; then \

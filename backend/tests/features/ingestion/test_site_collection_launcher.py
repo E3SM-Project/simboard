@@ -232,13 +232,37 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
         capture_output=True,
         check=False,
         cwd=repository_root,
+        input="\n\n",
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "SIMBOARD_API_TOKEN must be set" in result.stderr
+    assert not environment_file.exists()
+
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-init-env",
+            "site=chrysalis",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        input="https://dev-api.example.test\ntest-dev-token\n",
         text=True,
     )
 
     assert result.returncode == 0, result.stderr
     assert environment_file.read_text(encoding="utf-8") == (
-        repository_root / "backend/app/scripts/ingestion/sites/env.dev.sh.example"
-    ).read_text(encoding="utf-8")
+        "#!/usr/bin/env bash\n"
+        "# Development SimBoard API configuration. Keep this file outside the repository.\n"
+        "export SIMBOARD_API_BASE_URL=https://dev-api.example.test\n"
+        "export SIMBOARD_API_TOKEN=test-dev-token\n"
+    )
+    assert "test-dev-token" not in result.stdout
+    assert "test-dev-token" not in result.stderr
     assert environment_file.stat().st_mode & 0o777 == 0o640
 
     production_file = destination_dir / "env.prod.sh"
@@ -253,13 +277,17 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
         capture_output=True,
         check=False,
         cwd=repository_root,
+        input="https://prod-api.example.test\ntest-prod-token\n",
         text=True,
     )
 
     assert result.returncode == 0, result.stderr
     assert production_file.read_text(encoding="utf-8") == (
-        repository_root / "backend/app/scripts/ingestion/sites/env.prod.sh.example"
-    ).read_text(encoding="utf-8")
+        "#!/usr/bin/env bash\n"
+        "# Production SimBoard API configuration. Keep this file outside the repository.\n"
+        "export SIMBOARD_API_BASE_URL=https://prod-api.example.test\n"
+        "export SIMBOARD_API_TOKEN=test-prod-token\n"
+    )
 
     crontab_file = destination_dir / "chrysalis.crontab"
     result = subprocess.run(
@@ -312,3 +340,157 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
 
     assert result.returncode != 0
     assert "refusing to overwrite it" in result.stderr
+
+
+def test_ingestion_provisioning_creates_and_preserves_operations_directory(
+    tmp_path: Path,
+) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    git_capture_path = tmp_path / "git-commands.txt"
+    _write_executable(
+        bin_dir / "git",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'printf "%s\\n" "$*" >> "${GIT_CAPTURE_PATH}"\n'
+        'if [[ "$1" == "clone" ]]; then\n'
+        '  mkdir -p "${!#}/.git"\n'
+        "fi\n"
+        'if [[ "$*" == *"status --porcelain" ]] && [[ -n "${GIT_STATUS_OUTPUT:-}" ]]; then\n'
+        '  printf "%s\\n" "${GIT_STATUS_OUTPUT}"\n'
+        "fi\n",
+    )
+    env = os.environ.copy()
+    env["GIT_CAPTURE_PATH"] = str(git_capture_path)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    missing_root = tmp_path / "missing"
+
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={missing_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "SIMBOARD_ROOT is not an existing directory" in result.stderr
+
+    simboard_root = tmp_path / "simboard"
+    simboard_root.mkdir()
+    operations_dir = simboard_root / "operations"
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Created operations directory" in result.stdout
+    assert "Cloned SimBoard checkout" in result.stdout
+    assert operations_dir.is_dir()
+    assert operations_dir.stat().st_mode & 0o777 == 0o750
+    checkout_dir = simboard_root / "repository/simboard"
+    assert (checkout_dir / ".git").is_dir()
+    assert git_capture_path.read_text(encoding="utf-8").splitlines() == [
+        "clone --branch main --single-branch --depth 1 "
+        f"https://github.com/E3SM-Project/simboard.git {checkout_dir}"
+    ]
+
+    operations_dir.chmod(0o700)
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Verified existing operations directory" in result.stdout
+    assert "Updated SimBoard checkout" in result.stdout
+    assert operations_dir.stat().st_mode & 0o777 == 0o700
+    assert git_capture_path.read_text(encoding="utf-8").splitlines()[-3:] == [
+        f"-C {checkout_dir} status --porcelain",
+        f"-C {checkout_dir} fetch --depth 1 origin main",
+        f"-C {checkout_dir} checkout --detach --force FETCH_HEAD",
+    ]
+
+    env["GIT_STATUS_OUTPUT"] = " M deployment-change"
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={simboard_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "SimBoard checkout has uncommitted changes" in result.stderr
+    assert git_capture_path.read_text(encoding="utf-8").splitlines()[-1] == (
+        f"-C {checkout_dir} status --porcelain"
+    )
+    env.pop("GIT_STATUS_OUTPUT")
+
+    collision_root = tmp_path / "collision"
+    collision_root.mkdir()
+    (collision_root / "operations").write_text("not a directory", encoding="utf-8")
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={collision_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Operations path exists but is not a directory" in result.stderr
+
+    checkout_collision_root = tmp_path / "checkout-collision"
+    (checkout_collision_root / "repository").mkdir(parents=True)
+    (checkout_collision_root / "repository/simboard").write_text(
+        "not a Git checkout", encoding="utf-8"
+    )
+    result = subprocess.run(
+        [
+            "make",
+            "ingestion-provision",
+            f"SIMBOARD_ROOT={checkout_collision_root}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "SimBoard checkout is not a Git repository" in result.stderr
