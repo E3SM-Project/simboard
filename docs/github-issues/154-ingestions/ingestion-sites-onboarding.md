@@ -48,9 +48,9 @@ Committed site configs should set only site-specific defaults such as:
 - `SIMBOARD_INGESTOR_MODULE`
 - `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`
 
-Set `SIMBOARD_ROOT` in the scheduler environment; it must contain
-`repository/simboard/backend` and `operations`. The launcher derives its module
-and working paths from that root. Each scheduled command sets
+Set `SIMBOARD_ROOT` in the scheduler environment. `make operations-provision`
+creates `repository/simboard/backend` and `operations`; the launcher derives
+its module and working paths from that root. Each scheduled command sets
 `SIMBOARD_ENV_FILE` to its `env.dev.sh` or `env.prod.sh` API environment file.
 
 For normal execution and default dry runs, the launcher loads API configuration
@@ -63,12 +63,12 @@ the file's group must be authorized to use its token:
 Create a new environment file without overwriting an existing one:
 
 ```bash
-make ingestion-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+make operations-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
 ```
 
 The development and production templates supply their respective public API
-URLs; add the matching service-account token. To initialize a production file,
-pass `environment=prod`; the target writes `env.prod.sh` below
+URLs; the target prompts for the matching service-account token. To initialize
+a production file, pass `environment=prod`; the target writes `env.prod.sh` below
 `SIMBOARD_ROOT/operations`, then set `SIMBOARD_ENV_FILE` for that job.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API

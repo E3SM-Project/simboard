@@ -204,7 +204,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-env",
+            "operations-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={missing_root}",
         ],
@@ -225,7 +225,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-env",
+            "operations-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -243,7 +243,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-env",
+            "operations-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -269,7 +269,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-env",
+            "operations-init-env",
             "site=chrysalis",
             "environment=prod",
             f"SIMBOARD_ROOT={simboard_root}",
@@ -293,7 +293,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-cron",
+            "operations-init-cron",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -312,7 +312,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-env",
+            "operations-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -328,7 +328,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "ingestion-init-cron",
+            "operations-init-cron",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -342,7 +342,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     assert "refusing to overwrite it" in result.stderr
 
 
-def test_ingestion_provisioning_creates_and_preserves_operations_directory(
+def test_operations_provisioning_creates_and_preserves_operations_directory(
     tmp_path: Path,
 ) -> None:
     repository_root = Path(__file__).resolve().parents[4]
@@ -356,21 +356,25 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
         'printf "%s\\n" "$*" >> "${GIT_CAPTURE_PATH}"\n'
         'if [[ "$1" == "clone" ]]; then\n'
         '  mkdir -p "${!#}/.git"\n'
+        '  printf \'backend-install:\\n\\t@touch "$$BACKEND_INSTALL_CAPTURE_PATH"\\n\' > "${!#}/Makefile"\n'
         "fi\n"
         'if [[ "$*" == *"status --porcelain" ]] && [[ -n "${GIT_STATUS_OUTPUT:-}" ]]; then\n'
         '  printf "%s\\n" "${GIT_STATUS_OUTPUT}"\n'
         "fi\n",
     )
     env = os.environ.copy()
+    backend_install_capture_path = tmp_path / "backend-install.txt"
+    env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
     env["GIT_CAPTURE_PATH"] = str(git_capture_path)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    missing_root = tmp_path / "missing"
+    invalid_root = tmp_path / "invalid-root"
+    invalid_root.write_text("not a directory", encoding="utf-8")
 
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
-            f"SIMBOARD_ROOT={missing_root}",
+            "operations-provision",
+            f"SIMBOARD_ROOT={invalid_root}",
         ],
         capture_output=True,
         check=False,
@@ -380,16 +384,15 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     )
 
     assert result.returncode != 0
-    assert "SIMBOARD_ROOT is not an existing directory" in result.stderr
+    assert "SIMBOARD_ROOT exists but is not a directory" in result.stderr
 
     simboard_root = tmp_path / "simboard"
-    simboard_root.mkdir()
     operations_dir = simboard_root / "operations"
+    env["SIMBOARD_ROOT"] = str(simboard_root)
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
-            f"SIMBOARD_ROOT={simboard_root}",
+            "operations-provision",
         ],
         capture_output=True,
         check=False,
@@ -399,12 +402,16 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     )
 
     assert result.returncode == 0, result.stderr
+    assert "Created SimBoard deployment root" in result.stdout
     assert "Created operations directory" in result.stdout
     assert "Cloned SimBoard checkout" in result.stdout
+    assert "Installed SimBoard backend runtime" in result.stdout
     assert operations_dir.is_dir()
     assert operations_dir.stat().st_mode & 0o777 == 0o750
+    assert simboard_root.stat().st_mode & 0o777 == 0o750
     checkout_dir = simboard_root / "repository/simboard"
     assert (checkout_dir / ".git").is_dir()
+    assert backend_install_capture_path.exists()
     assert git_capture_path.read_text(encoding="utf-8").splitlines() == [
         "clone --branch main --single-branch --depth 1 "
         f"https://github.com/E3SM-Project/simboard.git {checkout_dir}"
@@ -414,7 +421,7 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
+            "operations-provision",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
         capture_output=True,
@@ -438,7 +445,7 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
+            "operations-provision",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
         capture_output=True,
@@ -461,7 +468,7 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
+            "operations-provision",
             f"SIMBOARD_ROOT={collision_root}",
         ],
         capture_output=True,
@@ -482,7 +489,7 @@ def test_ingestion_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "ingestion-provision",
+            "operations-provision",
             f"SIMBOARD_ROOT={checkout_collision_root}",
         ],
         capture_output=True,

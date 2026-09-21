@@ -10,7 +10,7 @@ Follow the section that matches the work you are doing.
 ## Add or operate an HPC site job
 
 1. [HPC API Token Authentication](hpc-api-token-authentication.md) — create the service account and token used by the job.
-2. [Set Up an Ingestion Workflow](setup-ingestion-workflow.md) — configure site files, dev/prod environment files, cron jobs, v3 backfill, and diagnostics discovery.
+2. [Set Up Ingestion Operations](setup-ingestion-operations.md) — provision remote-site operations, configure protected environments and cron jobs, and run v3 backfill or diagnostics discovery.
 
 ## Database access
 

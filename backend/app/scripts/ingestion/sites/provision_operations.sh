@@ -8,13 +8,20 @@ set -euo pipefail
 repository_url="${SIMBOARD_REPOSITORY_URL:-https://github.com/E3SM-Project/simboard.git}"
 repository_ref="${SIMBOARD_REPOSITORY_REF:-main}"
 
-if [[ ! -d "${SIMBOARD_ROOT}" ]]; then
-  echo "SIMBOARD_ROOT is not an existing directory: ${SIMBOARD_ROOT}" >&2
+if [[ ( -e "${SIMBOARD_ROOT}" || -L "${SIMBOARD_ROOT}" ) && ! -d "${SIMBOARD_ROOT}" ]]; then
+  echo "SIMBOARD_ROOT exists but is not a directory: ${SIMBOARD_ROOT}" >&2
   exit 1
 fi
 
-if ! command -v git >/dev/null; then
-  echo "git must be available to provision the SimBoard checkout" >&2
+if [[ -d "${SIMBOARD_ROOT}" ]]; then
+  echo "Verified existing SimBoard deployment root: ${SIMBOARD_ROOT}"
+else
+  mkdir -p -m 750 "${SIMBOARD_ROOT}"
+  echo "Created SimBoard deployment root: ${SIMBOARD_ROOT}"
+fi
+
+if ! command -v git >/dev/null || ! command -v make >/dev/null; then
+  echo "git and make must be available to provision SimBoard operations" >&2
   exit 1
 fi
 
@@ -60,3 +67,6 @@ else
     "${repository_url}" "${checkout_dir}"
   echo "Cloned SimBoard checkout: ${checkout_dir}"
 fi
+
+make -C "${checkout_dir}" backend-install
+echo "Installed SimBoard backend runtime: ${checkout_dir}/backend/.venv"

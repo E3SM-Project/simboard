@@ -58,9 +58,9 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make ingestion-provision SIMBOARD_ROOT=<path>  # Provision the checkout and protected operations workspace"
-	@echo "  make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Interactively create a protected site API environment file"
-	@echo "  make ingestion-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
+	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision the checkout, backend runtime, and operations workspace"
+	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod] # Interactively create a protected site API environment file"
+	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
 
 	@echo "$(BLUE)Frontend:$(NC)"
@@ -106,7 +106,7 @@ help:
 # ⚙️ CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install ingestion-provision ingestion-init-env ingestion-init-cron
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install operations-provision operations-init-env operations-init-cron
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -188,16 +188,16 @@ INGESTION_PROVISION_SCRIPT := backend/app/scripts/ingestion/sites/provision_oper
 INGESTION_SITES_DIR := backend/app/scripts/ingestion/sites
 environment ?= dev
 
-ingestion-provision:
+operations-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "$(RED)Usage: make ingestion-provision SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "$(RED)Usage: make operations-provision SIMBOARD_ROOT=<path>$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_PROVISION_SCRIPT)"
 
-ingestion-init-env:
+operations-init-env:
 	@if [ -z "$(site)" ]; then \
-		echo "$(RED)Usage: make ingestion-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod]$(NC)" >&2; \
+		echo "$(RED)Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod]$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \
@@ -226,9 +226,9 @@ ingestion-init-env:
 	echo "$(GREEN)Created $$env_file.$(NC)"; \
 	echo "$(YELLOW)Keep this file protected; it contains a service-account token.$(NC)"
 
-ingestion-init-cron:
+operations-init-cron:
 	@if [ -z "$(site)" ]; then \
-		echo "$(RED)Usage: make ingestion-init-cron site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "$(RED)Usage: make operations-init-cron site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \

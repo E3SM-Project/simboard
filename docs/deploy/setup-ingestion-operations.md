@@ -1,8 +1,9 @@
-# Set Up an Ingestion Workflow
+# Set Up Ingestion Operations
 
-Use this guide for scheduled performance ingestion, the v3 backfill, and diagnostics discovery. Start every new job with `DRY_RUN=true`.
+Use this guide to provision and operate scheduled performance ingestion, the v3
+backfill, and diagnostics discovery. Start every new job with `DRY_RUN=true`.
 
-## Choose the performance job
+## Choose an operation
 
 | Archive access | Job | Where it runs |
 | --- | --- | --- |
@@ -11,9 +12,9 @@ Use this guide for scheduled performance ingestion, the v3 backfill, and diagnos
 
 Use path ingestion for Perlmutter data mounted in NERSC Spin. Use archive upload for Chrysalis and other remote sites. Create the service account and token first: [HPC API Token Authentication](hpc-api-token-authentication.md).
 
-## Remote HPC site jobs
+## Remote-site operations
 
-### Deployment roots
+### Define the deployment root
 
 `SIMBOARD_ROOT` is the deployment root for the remote scheduler. Provisioning
 clones the current `main` branch of the canonical SimBoard repository beneath
@@ -24,65 +25,62 @@ an approved deployment requires a different source, branch, or tag.
 | --- | --- | --- | --- |
 | Chrysalis | `/lcrc/group/e3sm2/simboard` | `chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 
-### Setup
+### Provision the runtime
 
 1. Add a reviewed `backend/app/scripts/ingestion/sites/<site>.config` with the site machine name, staging and archive roots, runner module, and archive lower bound.
-2. Set `SIMBOARD_ROOT` to an existing deployment root. Provisioning creates
-   `operations` and `repository/simboard`; the launcher uses
+2. Export the deployment root. Provisioning creates the root when absent,
+   then creates `operations` and `repository/simboard`; the launcher uses
    `repository/simboard/backend`. For Chrysalis:
 
    ```bash
-   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+   export SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
    ```
 3. Provision the deployment-local `operations/` workspace and SimBoard checkout:
 
    ```bash
-   make ingestion-provision SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+   make operations-provision
    ```
 
-   This creates the directory with restrictive permissions when absent and
-   clones the latest `main` checkout into `repository/simboard`. It is safe to
-   rerun: it preserves an existing `operations/` directory and updates a clean
-   checkout to the selected remote revision.
+   This creates `operations/` with restrictive permissions when absent, clones
+   the latest `main` checkout into `repository/simboard`, and runs
+   `backend-install` in that checkout. It is safe to rerun: it preserves an
+   existing `operations/` directory and updates a clean checkout to the selected
+   remote revision.
 
-4. Install the backend runtime in the cloned checkout:
+### Configure protected API environments
 
-   ```bash
-   make -C /lcrc/group/e3sm2/simboard/repository/simboard backend-install
-   ```
+Create the protected API files:
 
-   Rerun this after provisioning updates the checkout so the environment matches
-   the selected revision.
+```bash
+make operations-init-env site=chrysalis
+make operations-init-env site=chrysalis environment=prod
+```
 
-5. Create the protected API files:
+Each command prompts for `SIMBOARD_API_BASE_URL` (with the environment
+template's public URL as the default) and the matching `SIMBOARD_API_TOKEN`,
+without echoing the token. These create `operations/env.dev.sh` and
+`operations/env.prod.sh` only after both values are supplied.
 
-   ```bash
-   make ingestion-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
-   make ingestion-init-env site=chrysalis environment=prod SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
-   ```
+### Install scheduler configuration
 
-   Each command prompts for `SIMBOARD_API_BASE_URL` (with the environment
-   template's public URL as the default) and the matching
-   `SIMBOARD_API_TOKEN`, without echoing the token. These create
-   `operations/env.dev.sh` and `operations/env.prod.sh` only after both values
-   are supplied.
-6. Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedule if needed, then install it:
+Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedule if needed, then install it:
 
-   ```bash
-   make ingestion-init-cron site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
-   crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
-   ```
-7. Review the `SBCS-*.log` files. After the dry-run results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use `MAX_CASES_PER_RUN` for a bounded first live run.
+```bash
+make operations-init-cron site=chrysalis
+crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
+```
+
+Review the `SBCS-*.log` files. After the dry-run results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use `MAX_CASES_PER_RUN` for a bounded first live run.
 
 The cron example creates staging and archive jobs for both development and production. Each command selects its own `SIMBOARD_ENV_FILE`; development and production jobs use separate locks and may run at the same time.
 
-### Configuration files and variables
+### Reference: configuration files and variables
 
 | Location | Configure |
 | --- | --- |
 | `sites/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
-| `operations/` | Deployment-local workspace, created with `make ingestion-provision`; stores protected environment files, logs, locks, and copied crontabs |
-| `repository/simboard` | Deployment checkout, cloned and updated by `make ingestion-provision` |
+| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, logs, locks, and copied crontabs |
+| `repository/simboard` | Deployment checkout, cloned, updated, and prepared by `make operations-provision` |
 | `operations/env.dev.sh` | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
 | `operations/env.prod.sh` | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
 | Copied crontab | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END` |
@@ -90,7 +88,7 @@ The cron example creates staging and archive jobs for both development and produ
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
 
-## NERSC Spin ingestion jobs
+## NERSC Spin operations
 
 Configure these in the backend deployment, not with the remote-site launcher. Follow the [NERSC Spin Runbook](nersc-spin-runbook.md) to create the staging and archive CronJobs.
 
@@ -103,7 +101,7 @@ Configure these in the backend deployment, not with the remote-site launcher. Fo
 
 Keep the CronJob command as `python -m app.scripts.ingestion.nersc_archive_ingestor`.
 
-## E3SM v3 metadata backfill
+## E3SM v3 metadata backfill operation
 
 This one-time Chrysalis job scans the fixed v3 case list from the fixed archive lower bound. It does not update general archive checkpoints.
 
@@ -122,7 +120,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
 Optional variables in the same file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`, `REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
 
-## Diagnostics discovery
+## Diagnostics discovery operation
 
 Diagnostics discovery is separate from performance ingestion and links published zppy output to an existing SimBoard case.
 
@@ -142,7 +140,7 @@ Diagnostics discovery is separate from performance ingestion and links published
 | Scheduler environment | `MACHINE_NAME`, `DRY_RUN` |
 | Live-scan scheduler secret | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` |
 
-## Normal operation
+## Operate safely
 
 - Review dry-run logs before enabling a live job.
 - A successful validation is not an ingestion; only a successful request records an execution as processed.

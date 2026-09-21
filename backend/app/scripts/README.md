@@ -18,7 +18,7 @@ package imports and application configuration.
 
 The step-by-step setup, site configuration, cron, environment-variable, targeted
 E3SM v3 backfill, and diagnostics instructions are maintained in
-[Set Up an Ingestion Workflow](../../../docs/deploy/setup-ingestion-workflow.md).
+[Set Up Ingestion Operations](../../../docs/deploy/setup-ingestion-operations.md).
 
 Use the runner selected by archive access:
 
