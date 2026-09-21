@@ -19,7 +19,7 @@ scan_mode=$2
 # Load the selected site's reviewed settings, then derive all repository paths
 # from the scheduler-provided standard deployment root.
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-site_config="${SIMBOARD_SITE_CONFIG:-${script_dir}/${site}.config}"
+site_config="${SIMBOARD_SITE_CONFIG:-${script_dir}/configs/${site}.config}"
 
 if [[ ! -r "${site_config}" ]]; then
   echo "Site configuration not readable: ${site_config}" >&2

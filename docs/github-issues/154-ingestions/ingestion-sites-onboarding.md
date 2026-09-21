@@ -19,7 +19,7 @@ feature/154-ingestion-sites
 The repository uses a config-driven host-side launcher for site collection:
 
 - `backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh` loads a named site config and selects its ingestion runner.
-- `backend/app/scripts/ingestion/sites/chrysalis.config` provides Chrysalis-specific paths, machine name, and runner-module defaults.
+- `backend/app/scripts/ingestion/sites/configs/chrysalis.config` provides Chrysalis-specific paths, machine name, and runner-module defaults.
 - `backend/app/scripts/ingestion/hpc_upload_archive_ingestor.py` is the scheduler-agnostic upload runner for remote HPC sites; `nersc_archive_ingestor.py` handles NERSC path ingestion.
 - `backend/app/scripts/README.md` documents launcher use and site-config responsibilities.
 - `backend/tests/features/ingestion/test_site_collection_launcher.py` covers config-driven offline launcher behavior.

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$(cd -- "${SCRIPT_DIR}/../../../../" && pwd)"
+BACKEND_DIR="$(cd -- "${SCRIPT_DIR}/../../../../../" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-${BACKEND_DIR}/.venv/bin/python}"
 
 [[ -x "${PYTHON_BIN}" ]] || { echo "Missing backend Python environment" >&2; exit 1; }

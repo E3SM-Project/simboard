@@ -180,12 +180,14 @@ copy-env-files:
 		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
 	fi
 
-INGESTION_DEV_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.dev.sh.example
-INGESTION_PROD_ENV_TEMPLATE := backend/app/scripts/ingestion/sites/env.prod.sh.example
-INGESTION_CRONTAB_TEMPLATE := backend/app/scripts/ingestion/sites/crontab.example
-INGESTION_ENV_INITIALIZER := backend/app/scripts/ingestion/sites/initialize_api_environment.sh
-INGESTION_PROVISION_SCRIPT := backend/app/scripts/ingestion/sites/provision_operations.sh
-INGESTION_SITES_DIR := backend/app/scripts/ingestion/sites
+INGESTION_SITE_CONFIGS_DIR := backend/app/scripts/ingestion/sites/configs
+INGESTION_TEMPLATES_DIR := backend/app/scripts/ingestion/sites/templates
+INGESTION_OPERATIONS_DIR := backend/app/scripts/ingestion/sites/operations
+INGESTION_DEV_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.dev.sh.example
+INGESTION_PROD_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.prod.sh.example
+INGESTION_CRONTAB_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/crontab.example
+INGESTION_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_api_environment.sh
+INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
 environment ?= dev
 
 operations-provision:
@@ -200,8 +202,8 @@ operations-init-env:
 		echo "$(RED)Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path> [environment=dev|prod]$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \
-		echo "$(RED)Site configuration not readable: $(INGESTION_SITES_DIR)/$(site).config$(NC)" >&2; \
+	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
+		echo "$(RED)Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	if [ -z "$(SIMBOARD_ROOT)" ]; then \
@@ -231,8 +233,8 @@ operations-init-cron:
 		echo "$(RED)Usage: make operations-init-cron site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
 		exit 1; \
 	fi; \
-	if [ ! -r "$(INGESTION_SITES_DIR)/$(site).config" ]; then \
-		echo "$(RED)Site configuration not readable: $(INGESTION_SITES_DIR)/$(site).config$(NC)" >&2; \
+	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
+		echo "$(RED)Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config$(NC)" >&2; \
 		exit 1; \
 	fi; \
 	if [ -z "$(SIMBOARD_ROOT)" ]; then \

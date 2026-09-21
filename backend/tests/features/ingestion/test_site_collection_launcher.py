@@ -181,7 +181,7 @@ def test_site_configs_define_their_ingestors() -> None:
             "-c",
             'source "$1"; printf "%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME"',
             "bash",
-            str(sites_dir / "chrysalis.config"),
+            str(sites_dir / "configs/chrysalis.config"),
         ],
         capture_output=True,
         check=False,
@@ -305,7 +305,8 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
 
     assert result.returncode == 0, result.stderr
     assert crontab_file.read_text(encoding="utf-8") == (
-        repository_root / "backend/app/scripts/ingestion/sites/crontab.example"
+        repository_root
+        / "backend/app/scripts/ingestion/sites/templates/crontab.example"
     ).read_text(encoding="utf-8")
     assert crontab_file.stat().st_mode & 0o777 == 0o640
 

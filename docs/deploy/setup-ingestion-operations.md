@@ -23,11 +23,11 @@ an approved deployment requires a different source, branch, or tag.
 
 | Machine | `SIMBOARD_ROOT` | Site config | Repository checkout |
 | --- | --- | --- | --- |
-| Chrysalis | `/lcrc/group/e3sm2/simboard` | `chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+| Chrysalis | `/lcrc/group/e3sm2/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 
 ### Provision the runtime
 
-1. Add a reviewed `backend/app/scripts/ingestion/sites/<site>.config` with the site machine name, staging and archive roots, runner module, and archive lower bound.
+1. Add a reviewed `backend/app/scripts/ingestion/sites/configs/<site>.config` with the site machine name, staging and archive roots, runner module, and archive lower bound.
 2. Export the deployment root. Provisioning creates the root when absent,
    then creates `operations` and `repository/simboard`; the launcher uses
    `repository/simboard/backend`. For Chrysalis:
@@ -78,7 +78,7 @@ The cron example creates staging and archive jobs for both development and produ
 
 | Location | Configure |
 | --- | --- |
-| `sites/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
+| `sites/configs/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
 | `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, logs, locks, and copied crontabs |
 | `repository/simboard` | Deployment checkout, cloned, updated, and prepared by `make operations-provision` |
 | `operations/env.dev.sh` | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
