@@ -41,11 +41,14 @@ an approved deployment requires a different source, branch, or tag.
    make operations-provision
    ```
 
-   This creates `operations/` with restrictive permissions when absent, clones
-   the latest `main` checkout into `repository/simboard`, and runs
-   `backend-install` in that checkout. It is safe to rerun: it preserves an
-   existing `operations/` directory and updates a clean checkout to the selected
-   remote revision.
+This creates `operations/` with restrictive permissions when absent, clones
+the latest `main` checkout into `repository/simboard`, and runs
+`backend-install` in that checkout. It is safe to rerun: it preserves an
+existing `operations/` directory and updates a clean checkout to the selected
+remote revision.
+
+To validate this workflow without an HPC system, see
+[Test Operations Locally](local-operations-testing.md).
 
 ### Configure protected API environments
 
@@ -78,6 +81,8 @@ The copied crontab:
   refresh a clean checkout;
 - synchronizes the backend runtime only after a revision change;
 - writes refresh output to `SBCS-provision.log`; review it after each update;
+- uses a process lock when `flock` is available; macOS does not include it by
+  default, so local refreshes proceed without that lock;
 - adds the standard user-level `uv` location to the refresh command's `PATH`;
   adjust it if the scheduler account installs `uv` elsewhere;
 - creates staging and archive jobs for both development and production; and

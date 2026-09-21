@@ -29,3 +29,4 @@ Use this directory as the documentation router by audience.
 - HPC token and service-account auth: [deploy/hpc-api-token-authentication.md](deploy/hpc-api-token-authentication.md)
 - Read-only database access: [deploy/read-only-database-access.md](deploy/read-only-database-access.md)
 - Ingestion operations: [deploy/setup-ingestion-operations.md](deploy/setup-ingestion-operations.md)
+- Local operations testing: [deploy/local-operations-testing.md](deploy/local-operations-testing.md)

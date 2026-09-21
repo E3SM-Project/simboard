@@ -9,8 +9,8 @@ operations_dir="${SIMBOARD_ROOT}/operations"
 checkout_dir="${SIMBOARD_ROOT}/repository/simboard"
 deployed_helper="${checkout_dir}/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh"
 
-if ! command -v git >/dev/null || ! command -v make >/dev/null || ! command -v flock >/dev/null; then
-  echo "git, make, and flock must be available to refresh the SimBoard checkout" >&2
+if ! command -v git >/dev/null || ! command -v make >/dev/null; then
+  echo "git and make must be available to refresh the SimBoard checkout" >&2
   exit 1
 fi
 
@@ -38,10 +38,14 @@ if [[ -n "${SIMBOARD_REFRESH_TEMP_SCRIPT:-}" ]]; then
 fi
 
 refresh_lock_file="${operations_dir}/SBCS-provision.lock"
-exec 201>"${refresh_lock_file}"
-if ! flock -n 201; then
-  echo "SimBoard repository refresh already running: ${checkout_dir}"
-  exit 0
+if command -v flock >/dev/null; then
+  exec 201>"${refresh_lock_file}"
+  if ! flock -n 201; then
+    echo "SimBoard repository refresh already running: ${checkout_dir}"
+    exit 0
+  fi
+else
+  echo "flock is unavailable; refreshing without a process lock" >&2
 fi
 
 if [[ -n "$(git -C "${checkout_dir}" status --porcelain)" ]]; then
