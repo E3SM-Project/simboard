@@ -43,7 +43,7 @@ an approved deployment requires a different source, branch, or tag.
 
 1. Add a reviewed `backend/app/scripts/ingestion/sites/configs/<site>.config` with the site machine name, staging and archive roots, runner module, and archive lower bound.
 2. Export the deployment root. Provisioning creates the root when absent,
-    then creates the standardized `operations` workspace and `repository/simboard`; the launcher uses
+   then creates the standardized `operations` workspace and `repository/simboard`; the launcher uses
    `repository/simboard/backend`. For Chrysalis:
 
    ```bash
