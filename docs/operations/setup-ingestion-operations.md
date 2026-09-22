@@ -66,7 +66,12 @@ remote revision.
 The scheduler account owns the deployment root and its operations artifacts.
 Grant access only to the operational group that needs to run or review the
 jobs; provisioning creates its directories with mode `750`, and generated API
-environment and crontab files use mode `640`.
+environment and crontab files use mode `640`. When the host defines a
+`simboard` group and the provisioning account can assign it, provisioning sets
+that group and the setgid bit on the operations directories so new artifacts
+inherit the shared group. If the account cannot apply the group or permissions,
+provisioning emits a warning and continues; the affected directory retains its
+existing ownership and permissions.
 
 ```text
 ${SIMBOARD_ROOT}/operations/
@@ -81,10 +86,13 @@ ${SIMBOARD_ROOT}/operations/
 
 `raw_logs/` receives files named
 `simboard-ingestion-<scan-mode>-<site>-<environment-file>-<UTC timestamp>.log`.
-Environment locks are named `simboard-ingestion-<site>-<environment-file>.lock`;
-this keeps development and production jobs independent. `quality_assurance/` is
-not for recurring job output. Do not create `summarized_logs/` until an approved
-summary workflow produces and retains summaries.
+Environment locks are named
+`simboard-ingestion-<scan-mode>-<site>-<environment-file>.lock`; this keeps
+development and production jobs independent and allows staging and archive jobs
+to run concurrently. Repeated runs of the same mode use the same lock.
+`quality_assurance/` is not for recurring job output. Do not create
+`summarized_logs/` until an approved summary workflow produces and retains
+summaries.
 
 Review and retain raw logs according to the site's operational policy, then
 remove them with an operator-managed maintenance job. Never log tokens or copy
@@ -133,7 +141,9 @@ The copied crontab:
   adjust it if the scheduler account installs `uv` elsewhere;
 - creates staging and archive jobs for both development and production; and
 - gives each ingestion command its own `SIMBOARD_ENV_FILE`; development and
-  production jobs use separate locks and may run at the same time.
+  production jobs use separate locks and may run at the same time; staging and
+  archive jobs for one environment also use separate locks and may run at the
+  same time.
 
 ### Reference: configuration files and variables
 

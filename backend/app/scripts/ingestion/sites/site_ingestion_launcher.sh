@@ -95,7 +95,7 @@ export PYTHON_BIN="${PYTHON_BIN:-${SIMBOARD_MODULES}/.venv/bin/python}"
 
 if [[ ! -d "${SIMBOARD_MODULES}/.venv" || ! -x "${PYTHON_BIN}" ]]; then
   echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
-  echo "Run 'make install' from the repository root to create it." >&2
+  echo "Run 'make backend-install' from the repository root to create it." >&2
   exit 1
 fi
 
@@ -104,7 +104,7 @@ fi
 # =============================================================================
 # Write one log per invocation. Jobs targeting different API environments may
 # run together, so include the environment name in the log filename. Staging
-# and archive jobs for one environment share a lock.
+# and archive jobs use separate locks, while runs of the same mode share one.
 ts="$(date -u +%Y%m%d_%H%M%S)"
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
@@ -112,11 +112,16 @@ mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
 LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
+printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
+  "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${SIMBOARD_INGESTOR_MODULE}" >> "${LOG_FILE}"
 
-LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${site}-${environment_lock_name}.lock"
+LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] SKIP launch simboard collection, lock already held, pid $$" >> "$LOG_FILE"
+  echo "[$(date -Is)] lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+  if [[ "${scan_mode}" == "archive" ]]; then
+    exit 1
+  fi
   exit 0
 fi
 
@@ -126,7 +131,10 @@ legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 if [[ -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
-    echo "[$(date -Is)] SKIP launch, legacy lock already held, pid $$" >> "$LOG_FILE"
+    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+    if [[ "${scan_mode}" == "archive" ]]; then
+      exit 1
+    fi
     exit 0
   fi
 fi
@@ -142,4 +150,6 @@ trap cleanup EXIT
 # =============================================================================
 # Run the selected ingestor and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
+printf '[%s] invoking ingestor: module=%s\n' \
+  "$(date -Is)" "${SIMBOARD_INGESTOR_MODULE}" >> "${LOG_FILE}"
 "${PYTHON_BIN}" -m "${SIMBOARD_INGESTOR_MODULE}" >> "$LOG_FILE" 2>&1

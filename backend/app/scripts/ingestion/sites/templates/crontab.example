@@ -31,8 +31,10 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # Each cron command selects its protected API environment file. Both variables
 # are exported by that file. Change an individual command to `env.dev.sh` when
 # it must target development; keep production jobs on `env.prod.sh`. The
-# launcher uses a separate lock for each environment file, so matching
-# development and production schedules can run independently.
+# launcher uses a separate lock for each mode and environment file, so matching
+# development and production schedules can run independently and staging and
+# archive jobs can run concurrently. Archive lock contention exits nonzero so
+# cron reports a missed daily archive scan; staging contention exits successfully.
 
 # The launcher defaults to a dry run. Uncomment only after reviewing dry-run
 # logs and enabling live ingestion for this scheduler.

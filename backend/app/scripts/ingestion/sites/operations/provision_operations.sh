@@ -57,6 +57,25 @@ for directory_name in raw_logs quality_assurance; do
   fi
 done
 
+if command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
+  group_access_configured=true
+  for directory_path in "${operations_dir}" "${operations_dir}/raw_logs" "${operations_dir}/quality_assurance"; do
+    if ! chgrp simboard "${directory_path}"; then
+      echo "WARNING: Unable to set simboard group ownership: ${directory_path}" >&2
+      group_access_configured=false
+      continue
+    fi
+    if ! chmod 2750 "${directory_path}"; then
+      echo "WARNING: Unable to set simboard group permissions: ${directory_path}" >&2
+      group_access_configured=false
+      continue
+    fi
+  done
+  if [[ "${group_access_configured}" == true ]]; then
+    echo "Configured simboard group access for operations artifacts"
+  fi
+fi
+
 repository_dir="${SIMBOARD_ROOT}/repository"
 checkout_dir="${repository_dir}/simboard"
 
