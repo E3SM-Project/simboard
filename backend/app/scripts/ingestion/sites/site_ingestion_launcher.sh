@@ -107,8 +107,9 @@ LOG_FILE="${SIMBOARD_WORKDIR}/SBCS-${scan_mode}-${site}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
 
-environment_lock_name="${SIMBOARD_ENV_FILE##*/}"
-LOCK_FILE="$SIMBOARD_WORKDIR/SBCS-${environment_lock_name}.lock"
+environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
+environment_lock_name="${environment_lock_name##*/}"
+LOCK_FILE="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   echo "[$(date -Is)] SKIP launch simboard collection, lock already held, pid $$" >> "$LOG_FILE"

@@ -76,6 +76,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         "test-machine",
         "-m app.scripts.ingestion.nersc_archive_ingestor",
     ]
+    assert (work_dir / "SBCS-test-offline.lock").exists()
 
 
 def test_launcher_requires_scheduler_root(tmp_path: Path) -> None:
