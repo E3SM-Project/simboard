@@ -1,7 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { getExecutionById } from '@/api/catalog';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
@@ -17,7 +17,6 @@ interface CaseCompareRouteProps {
   onClose?: () => void;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
-  setSelectedExecutionIds: (ids: string[]) => void;
 }
 
 const EMPTY_SELECTED_EXECUTION_IDS: string[] = [];
@@ -27,10 +26,7 @@ export const CaseCompareRoute = ({
   onClose,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
-  setSelectedExecutionIds,
 }: CaseCompareRouteProps) => {
-  const navigate = useNavigate();
-
   const { data: caseRecord, error, loading } = useCase(caseId);
 
   const caseExecutionIdSet = useMemo(
@@ -96,21 +92,6 @@ export const CaseCompareRoute = ({
   );
   const missingExecutionCount =
     caseSelectedExecutionIds.length - renderableSelectedExecutionIds.length;
-  const globalCompareCandidateIds = caseSelectedExecutionIds;
-
-  const openGlobalCompare = (ids: string[]) => {
-    const nextIds = normalizeSelectedExecutionIds(ids);
-    setSelectedExecutionIds(nextIds);
-    navigate('/compare', {
-      state: {
-        selectedExecutionIds: nextIds,
-        selectedExecutions: renderableSelectedExecutions.filter((execution) =>
-          nextIds.includes(execution.id),
-        ),
-      },
-    });
-  };
-
   const handleCaseSelectionChange = (ids: string[]) => {
     if (caseId) {
       setSelectedCaseExecutionIdsForCase(caseId, ids);
@@ -157,8 +138,6 @@ export const CaseCompareRoute = ({
           caseName: caseRecord.name,
         })
       : '/cases';
-  const canOpenGlobalCompare = globalCompareCandidateIds.length >= 2;
-
   if (renderableSelectedExecutionIds.length < 2) {
     let message = 'Select at least two executions from this case to compare.';
 
@@ -184,14 +163,9 @@ export const CaseCompareRoute = ({
                 </Button>
               ) : (
                 <Button asChild variant="outline">
-                  <Link to={caseDetailsHref}>Back to Executions</Link>
+                  <Link to={caseDetailsHref}>Back to Case</Link>
                 </Button>
               )}
-              {canOpenGlobalCompare ? (
-                <Button type="button" onClick={() => openGlobalCompare(globalCompareCandidateIds)}>
-                  Open in Cross-Case Compare
-                </Button>
-              ) : null}
             </div>
           </div>
         </div>
@@ -217,15 +191,6 @@ export const CaseCompareRoute = ({
               </p>
             ) : null}
           </div>
-          {excludedExecutionCount > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => openGlobalCompare(globalCompareCandidateIds)}
-            >
-              Open in Cross-Case Compare
-            </Button>
-          ) : null}
         </div>
       </section>
     ) : undefined;

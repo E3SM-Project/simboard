@@ -1,4 +1,4 @@
-import { ArrowRight, FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
+import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -87,21 +87,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       icon: FolderOpen,
     },
     {
-      title: 'Explore Executions',
-      description:
-        'Use the advanced execution browser when you need detailed filters, selection, and compare setup.',
-      to: '/browse',
-      action: 'Open Executions',
-      icon: Search,
-    },
-    {
-      title: 'Compare Executions',
-      description: 'Inspect selected executions side by side to review differences in metadata.',
-      to: '/compare',
-      action: 'Open Compare',
-      icon: GitCompareArrows,
-    },
-    {
       title: 'Upload a Case',
       description: 'Submit new case metadata to share results and preserve provenance.',
       to: '/upload',
@@ -149,36 +134,28 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               Explore E3SM Simulations
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              SimBoard is a public-facing interface for browsing, comparing, and sharing cataloged
-              E3SM simulations. Start with a broad view of the catalog, then drill into cases and
-              executions when you want more detail.
+              SimBoard is a public-facing interface for discovering, comparing, and sharing cataloged
+              E3SM simulations. Start with cases, then drill into their executions when you want more
+              detail.
             </p>
           </div>
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Browse execution collections, open case pages, and inspect the executions connected to
-              them.
+              Find cases, inspect their execution context, and open detailed case pages.
             </li>
             <li>
-              Jump into execution-level views when you need machine, version, user, or date-specific
-              context.
+              Refine cases by machine, version, user, and other execution context.
             </li>
             <li>
-              Compare executions side by side and share specific case or execution pages with
-              collaborators.
+              Compare selected executions within a case and share specific case or execution pages
+              with collaborators.
             </li>
           </ul>
 
           <div className="flex flex-wrap gap-3">
             <Button asChild>
               <Link to="/cases">Browse Cases</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link to="/browse">Open Executions</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link to="/compare">Compare</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link to="/upload">Upload Execution</Link>

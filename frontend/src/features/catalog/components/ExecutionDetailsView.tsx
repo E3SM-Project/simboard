@@ -73,9 +73,6 @@ import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils
 // -------------------- Types --------------------
 interface ExecutionDetailsViewProps {
   execution: ExecutionOut;
-  isCompareSelected?: boolean;
-  compareSelectionCount?: number;
-  maxCompareSelection?: number;
   canEdit?: boolean;
   isAuthenticated?: boolean;
   isSaving?: boolean;
@@ -86,7 +83,6 @@ interface ExecutionDetailsViewProps {
     href: string;
     label: string;
   } | null;
-  onToggleCompare?: () => void;
   onSave?: (payload: ExecutionUpdate) => Promise<boolean> | boolean;
   onClearSaveError?: () => void;
   onLoginToEdit?: () => void;
@@ -590,17 +586,13 @@ const buildUpdatePayload = (
 // -------------------- View Component --------------------
 export const ExecutionDetailsView = ({
   execution,
-  isCompareSelected = false,
-  compareSelectionCount: compareSelectionCountProp = 0,
-  maxCompareSelection: maxCompareSelectionProp = 5,
   canEdit = false,
   isAuthenticated = false,
   isSaving = false,
   saveError = null,
-  backHref = '/browse',
-  backLabel = 'Back to Executions',
+  backHref = '/cases',
+  backLabel = 'Back to Cases',
   paceLink = null,
-  onToggleCompare,
   onSave,
   onClearSaveError,
   onLoginToEdit,
@@ -821,14 +813,6 @@ export const ExecutionDetailsView = ({
 
   const hasUnsavedChanges =
     Object.keys(buildUpdatePayload(execution, formState, artifactRows, linkRows)).length > 0;
-  const compareSelectionCount = compareSelectionCountProp ?? 0;
-  const maxCompareSelection = maxCompareSelectionProp ?? 5;
-  const isCompareActionDisabled =
-    !isCompareSelected && compareSelectionCount >= maxCompareSelection;
-  const compareActionLabel = isCompareSelected ? 'Remove from Comparison' : 'Add to Comparison';
-  const compareActionTooltip = isCompareActionDisabled
-    ? `Compare list is full. Remove one of the ${maxCompareSelection} selected executions first.`
-    : undefined;
   const editAccessMessage = isAuthenticated
     ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
     : 'Log in with GitHub to edit execution metadata.';
@@ -917,28 +901,6 @@ export const ExecutionDetailsView = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {compareActionTooltip ? (
-            <TooltipProvider delayDuration={150}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>
-                    <Button
-                      variant="outline"
-                      onClick={onToggleCompare}
-                      disabled={isCompareActionDisabled}
-                    >
-                      {compareActionLabel}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{compareActionTooltip}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <Button variant="outline" onClick={onToggleCompare}>
-              {compareActionLabel}
-            </Button>
-          )}
           {!isEditing &&
             (canEdit ? (
               <Button onClick={() => setIsEditing(true)}>Edit</Button>
