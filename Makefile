@@ -1,16 +1,6 @@
 # ============================================================
-#  🌍 SimBoard Unified Project Makefile
+#  SimBoard Unified Project Makefile
 # ============================================================
-
-# ------------------------------------------------------------
-# Colors
-# ------------------------------------------------------------
-GREEN  := \033[0;32m
-YELLOW := \033[1;33m
-RED    := \033[0;31m
-BLUE   := \033[0;34m
-CYAN   := \033[0;36m
-NC     := \033[0m
 
 # ------------------------------------------------------------
 # Directories
@@ -22,15 +12,15 @@ COMPOSE_FILE_LOCAL := docker-compose.local.yml
 COMPOSE_FILE_PROD := docker-compose.yml
 
 # ============================================================
-# 🧭 HELP MENU
+# HELP MENU
 # ============================================================
 
 .PHONY: help
 help:
-	@echo "$(YELLOW)SimBoard Monorepo Commands$(NC)"
+	@echo "SimBoard Monorepo Commands"
 	@echo ""
 
-	@echo "$(BLUE)Setup & Installation:$(NC)"
+	@echo "Setup & Installation:"
 	@echo "  make install                               # Install backend, frontend, and pre-commit dependencies"
 	@echo "  make setup-local                           # Bare-metal local environment setup"
 	@echo "  make setup-local-assets                    # Ensure .env files + certs exist"
@@ -38,13 +28,13 @@ help:
 	@echo "  make gen-certs                             # Generate local SSL certs"
 	@echo ""
 
-	@echo "$(BLUE)Cleanup:$(NC)"
+	@echo "Cleanup:"
 	@echo "  make clean                                 # Remove backend and frontend build/cache artifacts"
 	@echo "  make backend-clean                         # Clean Python caches"
 	@echo "  make frontend-clean                        # Remove node_modules + build artifacts"
 	@echo ""
 
-	@echo "$(BLUE)Backend:$(NC)"
+	@echo "Backend:"
 	@echo "  make backend-install                       # Create venv (if missing) + install deps"
 	@echo "  make backend-reset                         # Recreate venv + reinstall deps"
 	@echo "  make backend-run                           # Start FastAPI server with hot reload"
@@ -64,7 +54,7 @@ help:
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo ""
 
-	@echo "$(BLUE)Frontend:$(NC)"
+	@echo "Frontend:"
 	@echo "  make frontend-install                      # Install frontend dependencies"
 	@echo "  make frontend-run                          # Start Vite dev server with hot reload"
 	@echo "  make frontend-build                        # Build frontend"
@@ -73,24 +63,24 @@ help:
 	@echo "  make frontend-fix                          # Run ESLint with --fix"
 	@echo ""
 
-	@echo "$(BLUE)Pre-commit:$(NC)"
+	@echo "Pre-commit:"
 	@echo "  make pre-commit-install                    # Install git pre-commit hooks"
 	@echo "  make pre-commit-run                        # Run all pre-commit hooks"
 	@echo ""
 
-	@echo "$(BLUE)Docs:$(NC)"
+	@echo "Docs:"
 	@echo "  make docs-serve                            # Preview docs locally with MkDocs"
 	@echo "  make docs-build                            # Build docs site locally with MkDocs"
 	@echo ""
 
-	@echo "$(BLUE)Ollama (Local LLM):$(NC)"
+	@echo "Ollama (Local LLM):"
 	@echo "  make ollama-serve                          # Start Ollama server with OLLAMA_KEEP_ALIVE=-1"
 	@echo "  make ollama-pull-fast                      # Pull llama3.1:8b (fast dev model)"
 	@echo "  make ollama-pull-dev                       # Pull gemma4:e4b (stronger dev model)"
 	@echo "  make ollama-pull-quality                   # Pull gemma4:26b (quality model)"
 	@echo ""
 
-	@echo "$(BLUE)Docker Compose:$(NC)"
+	@echo "Docker Compose:"
 	@echo "  make docker-build svc=<svc>                # Build Docker image(s)"
 	@echo "  make docker-rebuild svc=<svc>              # Build Docker image(s) without cache"
 	@echo "  make docker-up svc=<svc>                   # Start service(s)"
@@ -104,7 +94,7 @@ help:
 	@echo ""
 
 # ============================================================
-# ⚙️ CORE SETUP
+# CORE SETUP
 # ============================================================
 
 .PHONY: setup-local setup-local-assets copy-env-files gen-certs install operations-provision operations-refresh operations-init-env operations-init-cron
@@ -114,27 +104,27 @@ help:
 # ------------------------------------------------------------
 # Always use env=local for bare-metal setup.
 setup-local: setup-local-assets db-up install
-	@echo "$(GREEN)⏳ Waiting for Postgres...$(NC)"
+	@echo "Waiting for Postgres..."
 	@until docker compose -f $(COMPOSE_FILE_LOCAL) exec db pg_isready -U simboard -d simboard >/dev/null 2>&1; do printf "."; sleep 1; done
-	@echo "$(GREEN)\n✅ Postgres is ready!$(NC)"
+	@echo "\nPostgres is ready!"
 
-	@echo "$(GREEN)📜 Running migrations + seeding via bare-metal backend...$(NC)"
+	@echo "Running migrations + seeding via bare-metal backend..."
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 	cd $(BACKEND_DIR) && uv run python app/scripts/seed.py || true
 
-	@echo "$(GREEN)✨ Bare-metal local environment is ready!$(NC)"
-	@echo "$(CYAN)Run:  make backend-run"
-	@echo "$(CYAN)Run:  make frontend-run"
+	@echo "Bare-metal local environment is ready!"
+	@echo "Run:  make backend-run"
+	@echo "Run:  make frontend-run"
 
 db-up:
-	@echo "$(GREEN)🚀 Starting Postgres (Docker-only)...$(NC)"
+	@echo "Starting Postgres (Docker-only)..."
 	@docker compose -f $(COMPOSE_FILE_LOCAL) up -d db
 
 # ------------------------------------------------------------
 # Environment Files + Certificates
 # ------------------------------------------------------------
 setup-local-assets:
-	@echo "$(GREEN)✨ Ensuring env + certs exist...$(NC)"
+	@echo "Ensuring env + certs exist..."
 	make copy-env-files env=$(env)
 	make gen-certs
 
@@ -142,43 +132,43 @@ copy-env-files:
 	@envs="local"; \
 	echo ""; \
 	for e in $$envs; do \
-		echo "$(BLUE)🔧 Environment: $$e$(NC)"; \
+		echo "Environment: $$e"; \
 		mkdir -p ".envs/$$e"; \
 		for file in backend frontend db; do \
 			src=".envs/example/$$file.env.example"; \
 			dst=".envs/$$e/$$file.env"; \
 			if [ -f "$$dst" ]; then \
-				echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+				echo "$$dst exists, skipping"; \
 			elif [ -f "$$src" ]; then \
 				cp "$$src" "$$dst"; \
-				echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
+				echo "Copied $$src to $$dst"; \
 			else \
-				echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
+				echo "Missing $$src"; \
 			fi; \
 		done; \
 		\
 		src=".envs/example/backend.production.env.example"; \
 		dst=".envs/$$e/backend.production.env"; \
 		if [ -f "$$dst" ]; then \
-			echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+			echo "$$dst exists, skipping"; \
 		elif [ -f "$$src" ]; then \
 			cp "$$src" "$$dst"; \
-			echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
+			echo "Copied $$src to $$dst"; \
 		else \
-			echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
+			echo "Missing $$src"; \
 		fi; \
 	done; \
 	\
 	src=".envs/example/.env.example"; \
 	dst=".envs/local/.env"; \
 	if [ -f "$$dst" ]; then \
-		echo "$(YELLOW)⚠️  $$dst exists, skipping$(NC)"; \
+		echo "$$dst exists, skipping"; \
 	elif [ -f "$$src" ]; then \
 		mkdir -p ".envs/local"; \
 		cp "$$src" "$$dst"; \
-		echo "$(GREEN)✔ $$src → $$dst$(NC)"; \
+		echo "Copied $$src to $$dst"; \
 	else \
-		echo "$(YELLOW)⚠️ Missing $$src$(NC)"; \
+		echo "Missing $$src"; \
 	fi
 
 INGESTION_SITE_CONFIGS_DIR := backend/app/scripts/ingestion/sites/configs
@@ -193,74 +183,74 @@ INGESTION_REFRESH_SCRIPT := $(INGESTION_OPERATIONS_DIR)/refresh_repository.sh
 
 operations-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "$(RED)Usage: make operations-provision SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "Usage: make operations-provision SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_PROVISION_SCRIPT)"
 
 operations-refresh:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "$(RED)Usage: make operations-refresh SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "Usage: make operations-refresh SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_REFRESH_SCRIPT)"
 
 operations-init-env:
 	@if [ -z "$(site)" ]; then \
-		echo "$(RED)Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
-		echo "$(RED)Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config$(NC)" >&2; \
+		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
 		exit 1; \
 	fi; \
 	if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "$(RED)SIMBOARD_ROOT must be set$(NC)" >&2; \
+		echo "SIMBOARD_ROOT must be set" >&2; \
 		exit 1; \
 	fi; \
 	operations_dir="$(SIMBOARD_ROOT)/operations"; \
 	if [ ! -d "$$operations_dir" ]; then \
-		echo "$(RED)Destination directory does not exist: $$operations_dir$(NC)" >&2; \
+		echo "Destination directory does not exist: $$operations_dir" >&2; \
 		exit 1; \
 	fi; \
 	dev_env_file="$$operations_dir/env.dev.sh"; \
 	prod_env_file="$$operations_dir/env.prod.sh"; \
 	if [ -e "$$dev_env_file" ] || [ -e "$$prod_env_file" ]; then \
-		echo "$(YELLOW)$$dev_env_file or $$prod_env_file already exists; refusing to overwrite either file.$(NC)" >&2; \
+		echo "$$dev_env_file or $$prod_env_file already exists; refusing to overwrite either file." >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_ENV_INITIALIZER)" "$(INGESTION_DEV_ENV_TEMPLATE)" "$(INGESTION_PROD_ENV_TEMPLATE)" "$$dev_env_file" "$$prod_env_file" || exit $$?; \
-	echo "$(GREEN)Created $$dev_env_file and $$prod_env_file.$(NC)"; \
-	echo "$(YELLOW)Keep these files protected; they contain service-account tokens.$(NC)"
+	echo "Created $$dev_env_file and $$prod_env_file."; \
+	echo "Keep these files protected; they contain service-account tokens."
 
 operations-init-cron:
 	@if [ -z "$(site)" ]; then \
-		echo "$(RED)Usage: make operations-init-cron site=<site> SIMBOARD_ROOT=<path>$(NC)" >&2; \
+		echo "Usage: make operations-init-cron site=<site> SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
-		echo "$(RED)Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config$(NC)" >&2; \
+		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
 		exit 1; \
 	fi; \
 	if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "$(RED)SIMBOARD_ROOT must be set$(NC)" >&2; \
+		echo "SIMBOARD_ROOT must be set" >&2; \
 		exit 1; \
 	fi; \
 	cron_file="$(SIMBOARD_ROOT)/operations/$(site).crontab"; \
 	if [ ! -d "$${cron_file%/*}" ]; then \
-		echo "$(RED)Destination directory does not exist: $${cron_file%/*}$(NC)" >&2; \
+		echo "Destination directory does not exist: $${cron_file%/*}" >&2; \
 		exit 1; \
 	fi; \
 	if [ -e "$$cron_file" ]; then \
-		echo "$(YELLOW)$$cron_file already exists; refusing to overwrite it.$(NC)" >&2; \
+		echo "$$cron_file already exists; refusing to overwrite it." >&2; \
 		exit 1; \
 	fi; \
 	install -m 640 "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file"; \
-	echo "$(GREEN)Created $$cron_file.$(NC)"; \
-	echo "$(YELLOW)Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file.$(NC)"
+	echo "Created $$cron_file."; \
+	echo "Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file."
 
 gen-certs:
-	@echo "$(GREEN)🔐 Generating local SSL certificates...$(NC)"
+	@echo "Generating local SSL certificates..."
 	cd certs && ./generate-local-certs.sh
 
 # ------------------------------------------------------------
@@ -277,7 +267,7 @@ pre-commit-run:
 
 
 # ============================================================
-# 🧼 CLEANUP
+# CLEANUP
 # ============================================================
 
 .PHONY: clean install
@@ -289,7 +279,7 @@ clean:
 	make frontend-clean
 
 # ============================================================
-# 📚 DOCS COMMANDS
+# DOCS COMMANDS
 # ============================================================
 
 .PHONY: docs-serve docs-build
@@ -301,7 +291,7 @@ docs-build:
 	cd $(BACKEND_DIR) && uv run --extra docs mkdocs build --config-file ../mkdocs.yml --strict
 
 # ============================================================
-# 🧑‍💻 BACKEND COMMANDS
+# BACKEND COMMANDS
 # ============================================================
 
 .PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply
@@ -366,7 +356,7 @@ v3-ingest-apply:
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 # ============================================================
-# 🧑‍💻 FRONTEND COMMANDS
+# FRONTEND COMMANDS
 # ============================================================
 
 .PHONY: frontend-install frontend-clean frontend-local frontend-build frontend-preview frontend-lint frontend-fix
@@ -394,7 +384,7 @@ frontend-fix:
 
 
 # ============================================================
-# 🐳 DOCKER COMPOSE COMMANDS
+# DOCKER COMPOSE COMMANDS
 # ============================================================
 
 .PHONY: docker-help docker-build docker-rebuild docker-up docker-down docker-restart docker-logs docker-shell docker-ps docker-config
@@ -436,7 +426,7 @@ docker-config:
 	$(COMPOSE) config
 
 # ============================================================
-# 🤖 OLLAMA LOCAL LLM COMMANDS
+# OLLAMA LOCAL LLM COMMANDS
 # ============================================================
 
 .PHONY: \
@@ -448,19 +438,19 @@ docker-config:
 	ollama-pull-26b
 
 ollama-serve:
-	@echo "$(GREEN)🚀 Starting Ollama server with OLLAMA_KEEP_ALIVE=-1...$(NC)"
+	@echo "Starting Ollama server with OLLAMA_KEEP_ALIVE=-1..."
 	OLLAMA_KEEP_ALIVE=-1 ollama serve
 
 ollama-pull-fast:
-	@echo "$(GREEN)📥 Pulling llama3.1:8b (fast dev model)...$(NC)"
+	@echo "Pulling llama3.1:8b (fast dev model)..."
 	ollama pull llama3.1:8b
 
 ollama-pull-dev:
-	@echo "$(GREEN)📥 Pulling gemma4:e4b (stronger dev model)...$(NC)"
+	@echo "Pulling gemma4:e4b (stronger dev model)..."
 	ollama pull gemma4:e4b
 
 ollama-pull-quality:
-	@echo "$(GREEN)📥 Pulling gemma4:26b (quality model)...$(NC)"
+	@echo "Pulling gemma4:26b (quality model)..."
 	ollama pull gemma4:26b
 
 ollama-pull-e4b:
