@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 027
 
 # Refresh an existing clean deployment checkout. Bootstrap directories and a
 # missing checkout with operations-provision instead.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 027
 
 # Provision the deployment-local workspace and SimBoard checkout used by
 # scheduled site ingestion. Credentials and installed crontabs are created
