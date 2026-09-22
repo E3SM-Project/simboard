@@ -2501,6 +2501,39 @@ class TestIngestFromHpcUploadEndpoint:
         db.refresh(case)
         assert case.simulation_type == "production"
 
+    def test_endpoint_skips_classification_without_hpc_username(
+        self, client, db: Session
+    ):
+        machine = db.query(Machine).filter(Machine.name == "chrysalis").one()
+        case = _create_case(db, "v3.LR.piControl", machine=machine)
+
+        with patch(
+            "app.features.ingestion.api.ingest_archive",
+            return_value=IngestArchiveResult(
+                executions=[], created_count=0, duplicate_count=1, errors=[]
+            ),
+        ):
+            res = client.post(
+                f"{API_BASE}/ingestions/from-hpc-upload",
+                data={
+                    "machine_name": machine.name,
+                    "case_path": "/archive/v3.LR.piControl",
+                    "processed_execution_ids": ["100.1-1"],
+                    "simulation_type": "production",
+                },
+                files={
+                    "file": (
+                        "case.tar.gz",
+                        BytesIO(b"case-archive"),
+                        "application/gzip",
+                    )
+                },
+            )
+
+        assert res.status_code == 201
+        db.refresh(case)
+        assert case.simulation_type is None
+
     def test_endpoint_classification_preserves_other_user_and_existing_type(
         self, client, db: Session
     ):
