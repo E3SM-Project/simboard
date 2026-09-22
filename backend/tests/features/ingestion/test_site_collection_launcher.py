@@ -84,7 +84,9 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     lock_file = work_dir / "simboard-ingestion-test-offline.lock"
     assert lock_file.exists()
     assert lock_file.stat().st_mode & 0o777 == 0o640
-    raw_logs = list((work_dir / "raw_logs").glob("simboard-ingestion-*.log"))
+    raw_logs = list(
+        (work_dir / "raw_logs").glob("simboard-ingestion-archive-test-offline-*.log")
+    )
     assert len(raw_logs) == 1
     assert raw_logs[0].stat().st_mode & 0o777 == 0o640
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
@@ -220,6 +222,12 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     )
 
     assert result.returncode == 0, result.stderr
+    raw_logs = list(
+        (work_dir / "raw_logs").glob(
+            "simboard-ingestion-archive-test-environment.sh-*.log"
+        )
+    )
+    assert len(raw_logs) == 1
 
     environment_file.write_text(
         "export SIMBOARD_API_BASE_URL=https://example.test\n", encoding="utf-8"

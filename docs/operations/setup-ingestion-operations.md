@@ -80,10 +80,10 @@ ${SIMBOARD_ROOT}/operations/
 ```
 
 `raw_logs/` receives files named
-`simboard-ingestion-<scan-mode>-<site>-<UTC timestamp>.log`. Environment
-locks are named `simboard-ingestion-<site>-<environment-file>.lock`; this
-keeps development and production jobs independent. `quality_assurance/` is not
-for recurring job output. Do not create `summarized_logs/` until an approved
+`simboard-ingestion-<scan-mode>-<site>-<environment-file>-<UTC timestamp>.log`.
+Environment locks are named `simboard-ingestion-<site>-<environment-file>.lock`;
+this keeps development and production jobs independent. `quality_assurance/` is
+not for recurring job output. Do not create `summarized_logs/` until an approved
 summary workflow produces and retains summaries.
 
 Review and retain raw logs according to the site's operational policy, then

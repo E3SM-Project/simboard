@@ -103,15 +103,16 @@ fi
 # Logging and concurrency
 # =============================================================================
 # Write one log per invocation. Jobs targeting different API environments may
-# run together; staging and archive jobs for one environment share a lock.
+# run together, so include the environment name in the log filename. Staging
+# and archive jobs for one environment share a lock.
 ts="$(date -u +%Y%m%d_%H%M%S)"
+environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
+environment_lock_name="${environment_lock_name##*/}"
 mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
-LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${ts}.log"
+LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
 
-environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
-environment_lock_name="${environment_lock_name##*/}"
 LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
