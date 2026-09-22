@@ -6,7 +6,6 @@ import type {
   CaseUpdate,
   CatalogOverviewOut,
   ExecutionCreate,
-  ExecutionFilterOptionsOut,
   ExecutionOut,
   ExecutionPageOut,
   ExecutionSummaryResponseOut,
@@ -152,11 +151,6 @@ export const getCaseFilterOptions = async (
   const res = await api.get<CaseFilterOptionsOut>(`${CASES_URL}/filter-options`, {
     params: toQueryParams(params),
   });
-  return res.data;
-};
-
-export const getExecutionFilterOptions = async (): Promise<ExecutionFilterOptionsOut> => {
-  const res = await api.get<ExecutionFilterOptionsOut>(`${EXECUTIONS_URL}/filter-options`);
   return res.data;
 };
 
