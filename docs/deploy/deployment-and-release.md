@@ -38,7 +38,7 @@ SimBoard uses **GitHub Actions** to automatically build and publish container im
 - **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
 - **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/home>
 - **GitHub Actions:** <https://github.com/E3SM-Project/simboard/actions>
-- **NERSC Spin Runbook (Rancher UI):** [docs/deploy/nersc-spin-runbook.md](../deploy/nersc-spin-runbook.md)
+- **NERSC Spin Ingestion Operations Runbook (Rancher UI):** [docs/deploy/nersc-spin-runbook.md](../deploy/nersc-spin-runbook.md)
 
 ## Environment Architecture
 

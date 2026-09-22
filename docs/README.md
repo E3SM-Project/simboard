@@ -28,3 +28,5 @@ Use this directory as the documentation router by audience.
 - NERSC Spin runbook: [deploy/nersc-spin-runbook.md](deploy/nersc-spin-runbook.md)
 - HPC token and service-account auth: [deploy/hpc-api-token-authentication.md](deploy/hpc-api-token-authentication.md)
 - Read-only database access: [deploy/read-only-database-access.md](deploy/read-only-database-access.md)
+- Ingestion operations: [deploy/setup-ingestion-operations.md](deploy/setup-ingestion-operations.md)
+- Ingestion operations testing: [deploy/test-ingestion-operations.md](deploy/test-ingestion-operations.md)

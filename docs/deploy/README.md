@@ -1,15 +1,18 @@
-# Deployment Documentation
+# Deployment and Site Jobs
 
-Recommended reading order:
+Follow the section that matches the work you are doing.
 
-1. [Deployment and Release Guide](deployment-and-release.md)
-2. [NERSC Spin Runbook](nersc-spin-runbook.md)
-3. [HPC API Token Authentication](hpc-api-token-authentication.md)
-4. [Read-Only Database Access](read-only-database-access.md)
+## Deploy the SimBoard service
 
-| Document                                                        | Purpose                                                                                                     |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [Deployment and Release Guide](deployment-and-release.md)       | CI/CD, image tagging, release rollout, migrations, rollback, and deployment troubleshooting.                |
-| [NERSC Spin Runbook](nersc-spin-runbook.md)                     | NERSC Spin and Rancher operational setup, workload configuration, secrets, ingress, and service management. |
-| [HPC API Token Authentication](hpc-api-token-authentication.md) | Token-based authentication for automated HPC ingestion jobs.                                                |
-| [Read-Only Database Access](read-only-database-access.md)       | SSH-tunneled PostgreSQL access for the `simboard_readonly` account.                                       |
+1. [Deployment and Release Guide](deployment-and-release.md) — build, release, migrate, and roll back.
+2. [NERSC Spin Ingestion Operations Runbook](nersc-spin-runbook.md) — configure the NERSC Spin service, secrets, mounts, and NERSC ingestion CronJobs.
+
+## Add or operate an HPC site job
+
+1. [HPC API Token Authentication](hpc-api-token-authentication.md) — create the service account and token used by the job.
+2. [Set Up Ingestion Operations](setup-ingestion-operations.md) — provision remote-site operations, configure protected environments and cron jobs, and run v3 backfill or diagnostics discovery.
+3. [Test Ingestion Operations](test-ingestion-operations.md) — validate provisioning, refresh, API environments, and generated cron configuration in an isolated test deployment.
+
+## Database access
+
+- [Read-Only Database Access](read-only-database-access.md) — SSH-tunneled PostgreSQL access for the read-only account.

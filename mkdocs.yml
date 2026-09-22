@@ -29,6 +29,8 @@ nav:
       - CI/CD: cicd/README.md
       - Deployment Docs Index: deploy/README.md
       - Deployment and Release: deploy/deployment-and-release.md
-      - NERSC Spin Runbook: deploy/nersc-spin-runbook.md
+      - NERSC Spin Ingestion Operations Runbook: deploy/nersc-spin-runbook.md
+      - Set Up Ingestion Operations: deploy/setup-ingestion-operations.md
+      - Test Ingestion Operations: deploy/test-ingestion-operations.md
       - HPC API Token Authentication: deploy/hpc-api-token-authentication.md
       - Read-Only Database Access: deploy/read-only-database-access.md
