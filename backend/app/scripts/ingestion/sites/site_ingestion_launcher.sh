@@ -118,7 +118,10 @@ printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s 
 LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] SKIP launch simboard collection, lock already held, pid $$" >> "$LOG_FILE"
+  echo "[$(date -Is)] lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+  if [[ "${scan_mode}" == "archive" ]]; then
+    exit 1
+  fi
   exit 0
 fi
 
@@ -128,7 +131,10 @@ legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 if [[ -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
-    echo "[$(date -Is)] SKIP launch, legacy lock already held, pid $$" >> "$LOG_FILE"
+    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+    if [[ "${scan_mode}" == "archive" ]]; then
+      exit 1
+    fi
     exit 0
   fi
 fi

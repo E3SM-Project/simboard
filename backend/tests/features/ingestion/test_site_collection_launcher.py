@@ -5,6 +5,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def _launcher_path() -> Path:
     return (
@@ -103,20 +105,30 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
 
 
-def test_launcher_holds_existing_legacy_lock_during_migration(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("scan_mode", "expected_returncode"),
+    [("staging", 0), ("archive", 1)],
+)
+def test_launcher_reports_mode_specific_lock_contention(
+    tmp_path: Path, scan_mode: str, expected_returncode: int
+) -> None:
     simboard_root = tmp_path / "simboard-root"
     work_dir = simboard_root / "operations"
     work_dir.mkdir(parents=True)
-    (work_dir / "SBCS-test-offline.lock").touch()
     modules_dir = simboard_root / "repository/simboard/backend"
     modules_dir.parent.mkdir(parents=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    fake_python = _write_executable(
+        bin_dir / "python", "#!/usr/bin/env bash\nexit 99\n"
+    )
     flock_capture_path = tmp_path / "flock-commands.txt"
-    fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
     _write_executable(
         bin_dir / "flock",
-        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\nexit 0\n',
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        '[[ "$*" == "-n 200" ]] && exit 1\n'
+        "exit 0\n",
     )
     backend_dir = Path(__file__).resolve().parents[3]
     modules_dir.symlink_to(backend_dir, target_is_directory=True)
@@ -141,14 +153,90 @@ def test_launcher_holds_existing_legacy_lock_during_migration(tmp_path: Path) ->
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
 
     result = subprocess.run(
-        [_launcher_path(), "test", "archive"],
+        [_launcher_path(), "test", scan_mode],
         capture_output=True,
         check=False,
         env=env,
         text=True,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == expected_returncode
+    assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
+    raw_logs = list(
+        (work_dir / "raw_logs").glob(
+            f"simboard-ingestion-{scan_mode}-test-offline-*.log"
+        )
+    )
+    assert len(raw_logs) == 1
+    assert "lock already held; ingestion was not started" in raw_logs[0].read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize(
+    ("scan_mode", "legacy_lock_contended", "expected_returncode"),
+    [
+        ("archive", False, 0),
+        ("staging", True, 0),
+        ("archive", True, 1),
+    ],
+)
+def test_launcher_holds_existing_legacy_lock_during_migration(
+    tmp_path: Path,
+    scan_mode: str,
+    legacy_lock_contended: bool,
+    expected_returncode: int,
+) -> None:
+    simboard_root = tmp_path / "simboard-root"
+    work_dir = simboard_root / "operations"
+    work_dir.mkdir(parents=True)
+    (work_dir / "SBCS-test-offline.lock").touch()
+    modules_dir = simboard_root / "repository/simboard/backend"
+    modules_dir.parent.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flock_capture_path = tmp_path / "flock-commands.txt"
+    fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        '[[ "${FLOCK_FAIL_FD:-}" == "201" && "$*" == "-n 201" ]] && exit 1\n'
+        "exit 0\n",
+    )
+    backend_dir = Path(__file__).resolve().parents[3]
+    modules_dir.symlink_to(backend_dir, target_is_directory=True)
+    site_config = tmp_path / "test.config"
+    site_config.write_text(
+        "\n".join(
+            [
+                "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
+                "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
+                "export DRY_RUN=true",
+                "export DRY_RUN_USE_REMOTE_STATE=false",
+                f"export PYTHON_BIN={shlex.quote(str(fake_python))}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
+    env["SIMBOARD_ROOT"] = str(simboard_root)
+    env["SIMBOARD_SITE_CONFIG"] = str(site_config)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    if legacy_lock_contended:
+        env["FLOCK_FAIL_FD"] = "201"
+
+    result = subprocess.run(
+        [_launcher_path(), "test", scan_mode],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == expected_returncode, result.stderr
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == [
         "-n 200",
         "-n 201",
@@ -452,7 +540,11 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     chgrp_capture_path = tmp_path / "chgrp-commands.txt"
     _write_executable(
         bin_dir / "chgrp",
-        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${CHGRP_CAPTURE_PATH}"\n',
+        "#!/usr/bin/env bash\n"
+        'if [[ "${CHGRP_FAIL:-false}" == "true" ]]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        'printf "%s\\n" "$*" >> "${CHGRP_CAPTURE_PATH}"\n',
     )
     chmod_capture_path = tmp_path / "chmod-commands.txt"
     _write_executable(
@@ -521,15 +613,28 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
         f"2750 {operations_dir / 'raw_logs'}",
         f"2750 {operations_dir / 'quality_assurance'}",
     ]
+    env["CHGRP_FAIL"] = "true"
+    result = subprocess.run(
+        ["make", "operations-provision"],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "WARNING: Unable to set simboard group ownership" in result.stderr
+    env.pop("CHGRP_FAIL")
     assert not (operations_dir / "summarized_logs").exists()
     assert simboard_root.stat().st_mode & 0o777 == 0o750
     checkout_dir = simboard_root / "repository/simboard"
     assert (checkout_dir / ".git").is_dir()
     assert backend_install_capture_path.exists()
-    assert git_capture_path.read_text(encoding="utf-8").splitlines() == [
+    assert git_capture_path.read_text(encoding="utf-8").splitlines()[0] == (
         "clone --branch main --single-branch --depth 1 "
         f"https://github.com/E3SM-Project/simboard.git {checkout_dir}"
-    ]
+    )
 
     operations_dir.chmod(0o700)
     result = subprocess.run(
