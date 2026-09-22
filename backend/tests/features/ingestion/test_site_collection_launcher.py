@@ -34,7 +34,11 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         'printf "%s\\n" "${SCAN_MODE}" "${ARCHIVE_YEAR_START-unset}" '
         '"${MACHINE_NAME}" "$*" > "${CAPTURE_PATH}"\n',
     )
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    flock_capture_path = tmp_path / "flock-commands.txt"
+    _write_executable(
+        bin_dir / "flock",
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\nexit 0\n',
+    )
     backend_dir = Path(__file__).resolve().parents[3]
     modules_dir.symlink_to(backend_dir, target_is_directory=True)
     site_config = tmp_path / "test.config"
@@ -57,6 +61,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     env.pop("SIMBOARD_API_TOKEN", None)
     env.pop("SIMBOARD_ROOT", None)
     env["CAPTURE_PATH"] = str(capture_path)
+    env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
     env["SIMBOARD_ROOT"] = str(simboard_root)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
@@ -76,7 +81,67 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         "test-machine",
         "-m app.scripts.ingestion.nersc_archive_ingestor",
     ]
-    assert (work_dir / "SBCS-test-offline.lock").exists()
+    lock_file = work_dir / "simboard-ingestion-test-offline.lock"
+    assert lock_file.exists()
+    assert lock_file.stat().st_mode & 0o777 == 0o640
+    raw_logs = list(
+        (work_dir / "raw_logs").glob("simboard-ingestion-archive-test-offline-*.log")
+    )
+    assert len(raw_logs) == 1
+    assert raw_logs[0].stat().st_mode & 0o777 == 0o640
+    assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
+
+
+def test_launcher_holds_existing_legacy_lock_during_migration(tmp_path: Path) -> None:
+    simboard_root = tmp_path / "simboard-root"
+    work_dir = simboard_root / "operations"
+    work_dir.mkdir(parents=True)
+    (work_dir / "SBCS-test-offline.lock").touch()
+    modules_dir = simboard_root / "repository/simboard/backend"
+    modules_dir.parent.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flock_capture_path = tmp_path / "flock-commands.txt"
+    fake_python = _write_executable(bin_dir / "python", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\nexit 0\n',
+    )
+    backend_dir = Path(__file__).resolve().parents[3]
+    modules_dir.symlink_to(backend_dir, target_is_directory=True)
+    site_config = tmp_path / "test.config"
+    site_config.write_text(
+        "\n".join(
+            [
+                "export SIMBOARD_INGESTOR_MODULE=app.scripts.ingestion.nersc_archive_ingestor",
+                "export SIMBOARD_DEFAULT_ARCHIVE_YEAR_START=2024-01",
+                "export DRY_RUN=true",
+                "export DRY_RUN_USE_REMOTE_STATE=false",
+                f"export PYTHON_BIN={shlex.quote(str(fake_python))}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
+    env["SIMBOARD_ROOT"] = str(simboard_root)
+    env["SIMBOARD_SITE_CONFIG"] = str(site_config)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+
+    result = subprocess.run(
+        [_launcher_path(), "test", "archive"],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert flock_capture_path.read_text(encoding="utf-8").splitlines() == [
+        "-n 200",
+        "-n 201",
+    ]
 
 
 def test_launcher_requires_scheduler_root(tmp_path: Path) -> None:
@@ -157,6 +222,12 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     )
 
     assert result.returncode == 0, result.stderr
+    raw_logs = list(
+        (work_dir / "raw_logs").glob(
+            "simboard-ingestion-archive-test-environment.sh-*.log"
+        )
+    )
+    assert len(raw_logs) == 1
 
     environment_file.write_text(
         "export SIMBOARD_API_BASE_URL=https://example.test\n", encoding="utf-8"
@@ -354,7 +425,14 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
         '  printf "%s\\n" "${GIT_STATUS_OUTPUT}"\n'
         "fi\n",
     )
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        "#!/usr/bin/env bash\n"
+        'if [[ -n "${FLOCK_CAPTURE_PATH:-}" ]]; then\n'
+        '  printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        "fi\n"
+        "exit 0\n",
+    )
     env = os.environ.copy()
     backend_install_capture_path = tmp_path / "backend-install.txt"
     env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
@@ -401,6 +479,9 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     assert "Installed SimBoard backend runtime" in result.stdout
     assert operations_dir.is_dir()
     assert operations_dir.stat().st_mode & 0o777 == 0o750
+    assert (operations_dir / "raw_logs").stat().st_mode & 0o777 == 0o750
+    assert (operations_dir / "quality_assurance").stat().st_mode & 0o777 == 0o750
+    assert not (operations_dir / "summarized_logs").exists()
     assert simboard_root.stat().st_mode & 0o777 == 0o750
     checkout_dir = simboard_root / "repository/simboard"
     assert (checkout_dir / ".git").is_dir()
@@ -518,7 +599,14 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
         '  printf "%s\\n" "${GIT_FETCHED_REVISION}"\n'
         "fi\n",
     )
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        "#!/usr/bin/env bash\n"
+        'if [[ -n "${FLOCK_CAPTURE_PATH:-}" ]]; then\n'
+        '  printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        "fi\n"
+        "exit 0\n",
+    )
     (checkout_dir / "Makefile").write_text(
         'backend-install:\n\t@touch "$$BACKEND_INSTALL_CAPTURE_PATH"\n',
         encoding="utf-8",
@@ -542,7 +630,13 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     assert "already current" in result.stdout
     assert not backend_install_capture_path.exists()
+    refresh_lock_file = operations_dir / "simboard-ingestion-provision.lock"
+    assert refresh_lock_file.stat().st_mode & 0o777 == 0o640
 
+    legacy_refresh_lock_file = operations_dir / "SBCS-provision.lock"
+    legacy_refresh_lock_file.touch()
+    flock_capture_path = tmp_path / "flock-commands.txt"
+    env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
     env["GIT_FETCHED_REVISION"] = "updated-revision"
     result = subprocess.run(
         ["make", "operations-refresh"],
@@ -556,6 +650,10 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     assert "Refreshed SimBoard checkout" in result.stdout
     assert backend_install_capture_path.exists()
+    assert flock_capture_path.read_text(encoding="utf-8").splitlines() == [
+        "-n 201",
+        "-n 202",
+    ]
 
     env["GIT_STATUS_OUTPUT"] = " M deployment-change"
     result = subprocess.run(

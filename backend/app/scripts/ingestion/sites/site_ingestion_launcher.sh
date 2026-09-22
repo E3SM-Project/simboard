@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 027
 
 # =============================================================================
 # Command-line input
@@ -34,6 +35,7 @@ source "${site_config}"
 : "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set by the scheduler environment}"
 SIMBOARD_WORKDIR="${SIMBOARD_ROOT}/operations"
 SIMBOARD_MODULES="${SIMBOARD_ROOT}/repository/simboard/backend"
+SIMBOARD_RAW_LOG_DIR="${SIMBOARD_WORKDIR}/raw_logs"
 
 : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
 
@@ -101,19 +103,32 @@ fi
 # Logging and concurrency
 # =============================================================================
 # Write one log per invocation. Jobs targeting different API environments may
-# run together; staging and archive jobs for one environment share a lock.
+# run together, so include the environment name in the log filename. Staging
+# and archive jobs for one environment share a lock.
 ts="$(date -u +%Y%m%d_%H%M%S)"
-LOG_FILE="${SIMBOARD_WORKDIR}/SBCS-${scan_mode}-${site}-${ts}.log"
+environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
+environment_lock_name="${environment_lock_name##*/}"
+mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
+LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
 
-environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
-environment_lock_name="${environment_lock_name##*/}"
-LOCK_FILE="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
+LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   echo "[$(date -Is)] SKIP launch simboard collection, lock already held, pid $$" >> "$LOG_FILE"
   exit 0
+fi
+
+# Existing deployments leave their legacy lock files behind. Hold one when it
+# exists so a newly deployed launcher cannot overlap an in-flight old launcher.
+legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
+if [[ -e "${legacy_lock_file}" ]]; then
+  exec 201>"$legacy_lock_file"
+  if ! flock -n 201; then
+    echo "[$(date -Is)] SKIP launch, legacy lock already held, pid $$" >> "$LOG_FILE"
+    exit 0
+  fi
 fi
 
 cleanup() {

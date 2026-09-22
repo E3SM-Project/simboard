@@ -127,7 +127,7 @@ If you need admin-only local flows such as service-account or token provisioning
 make backend-create-admin
 ```
 
-For token-based ingestion and service-account details, see [docs/hpc_api_token_authentication.md](../deploy/hpc-api-token-authentication.md).
+For token-based ingestion and service-account details, see [HPC API Token Authentication](../operations/hpc-api-token-authentication.md).
 
 ### Assistant LLM Setup
 

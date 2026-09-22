@@ -10,7 +10,7 @@ body:
     attributes:
       label: Doc location
       description: Path, page, or link.
-      placeholder: docs/developer/README.md
+      placeholder: docs/developer/index.md
     validations:
       required: true
 

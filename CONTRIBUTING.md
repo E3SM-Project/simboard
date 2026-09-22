@@ -1,6 +1,6 @@
 # Contributing to SimBoard
 
-Use this file for contribution workflow. For local setup, architecture, and developer onboarding, see [docs/developer/README.md](docs/developer/README.md).
+Use this file for contribution workflow. For local setup, architecture, and developer onboarding, see [docs/developer/index.md](docs/developer/index.md).
 
 ## Start With an Issue
 
@@ -56,7 +56,7 @@ If your change only touches one subsystem, still prefer running the nearest rele
 
 ## Where to Go Next
 
-- developer guide: [docs/developer/README.md](docs/developer/README.md)
+- developer guide: [docs/developer/index.md](docs/developer/index.md)
 - backend details: [backend/README.md](backend/README.md)
 - frontend details: [frontend/README.md](frontend/README.md)
 - operations and deployment docs: [docs/README.md](docs/README.md)

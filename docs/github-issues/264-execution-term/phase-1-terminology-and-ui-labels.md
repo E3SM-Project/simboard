@@ -44,7 +44,7 @@ frontend use **Execution** for the child entity. Preserve **run**, **job**, and
      contexts.
 
 2. Align repository overview prose.
-   - Update `README.md`, `docs/developer/README.md`, `backend/README.md`, and
+   - Update `README.md`, `docs/developer/index.md`, `backend/README.md`, and
      `docs/backend/README.md` only where they use **run** or **simulation** as
      the child entity name.
    - Do not replace verbs, CIME command names, scheduler terminology, or

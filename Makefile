@@ -48,7 +48,7 @@ help:
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
 	@echo "  make v3-ingest-dry-run LCRC_V3_ENV_FILE=<path> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply LCRC_V3_ENV_FILE=<path>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision the checkout, backend runtime, and operations workspace"
+	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision checkout, runtime, and standardized operations workspace"
 	@echo "  make operations-refresh SIMBOARD_ROOT=<path>    # Refresh an existing clean checkout and its backend runtime"
 	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"

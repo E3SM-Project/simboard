@@ -47,4 +47,4 @@ make frontend-lint
 pnpm --dir frontend run type-check
 ```
 
-For repo-wide setup and contributor workflow, see [Developer Guide](../developer/README.md).
+For repo-wide setup and contributor workflow, see [Developer Guide](../developer/index.md).

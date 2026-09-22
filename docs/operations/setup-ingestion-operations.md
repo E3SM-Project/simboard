@@ -43,7 +43,7 @@ an approved deployment requires a different source, branch, or tag.
 
 1. Add a reviewed `backend/app/scripts/ingestion/sites/configs/<site>.config` with the site machine name, staging and archive roots, runner module, and archive lower bound.
 2. Export the deployment root. Provisioning creates the root when absent,
-   then creates `operations` and `repository/simboard`; the launcher uses
+   then creates the standardized `operations` workspace and `repository/simboard`; the launcher uses
    `repository/simboard/backend`. For Chrysalis:
 
    ```bash
@@ -60,6 +60,35 @@ the latest `main` checkout into `repository/simboard`, and runs
 `backend-install` in that checkout. It is safe to rerun: it preserves an
 existing `operations/` directory and updates a clean checkout to the selected
 remote revision.
+
+#### Operations workspace contract
+
+The scheduler account owns the deployment root and its operations artifacts.
+Grant access only to the operational group that needs to run or review the
+jobs; provisioning creates its directories with mode `750`, and generated API
+environment and crontab files use mode `640`.
+
+```text
+${SIMBOARD_ROOT}/operations/
+├── raw_logs/                         # per-launcher-run output
+├── quality_assurance/                # one-off, operator-reviewed artifacts
+├── env.dev.sh
+├── env.prod.sh
+├── simboard-ingestion-provision.lock
+├── simboard-ingestion-provision.log
+└── <site>.crontab
+```
+
+`raw_logs/` receives files named
+`simboard-ingestion-<scan-mode>-<site>-<environment-file>-<UTC timestamp>.log`.
+Environment locks are named `simboard-ingestion-<site>-<environment-file>.lock`;
+this keeps development and production jobs independent. `quality_assurance/` is
+not for recurring job output. Do not create `summarized_logs/` until an approved
+summary workflow produces and retains summaries.
+
+Review and retain raw logs according to the site's operational policy, then
+remove them with an operator-managed maintenance job. Never log tokens or copy
+environment files into `raw_logs/`, `quality_assurance/`, or source control.
 
 The local workflow validation is required before this deployment; see
 [Prerequisites](#prerequisites).
@@ -87,14 +116,17 @@ make operations-init-cron site=chrysalis
 crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
 ```
 
-Review the `SBCS-*.log` files. After the dry-run results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use `MAX_CASES_PER_RUN` for a bounded first live run.
+Review `operations/raw_logs/simboard-ingestion-*.log`. After the dry-run
+results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use
+`MAX_CASES_PER_RUN` for a bounded first live run.
 
 The copied crontab:
 
 - runs `make operations-refresh` (via the deployed refresh helper) weekly to
   refresh a clean checkout;
 - synchronizes the backend runtime only after a revision change;
-- writes refresh output to `SBCS-provision.log`; review it after each update;
+- writes refresh output to `simboard-ingestion-provision.log`; review it after
+  each update;
 - uses a process lock when `flock` is available; macOS does not include it by
   default, so local refreshes proceed without that lock;
 - adds the standard user-level `uv` location to the refresh command's `PATH`;
@@ -108,7 +140,9 @@ The copied crontab:
 | Location | Configure |
 | --- | --- |
 | `sites/configs/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
-| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, logs, locks, and copied crontabs |
+| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
+| `operations/raw_logs/` | Per-launcher-run logs; apply the site's retention policy without recording secrets |
+| `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output |
 | `repository/simboard` | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh` |
 | `operations/env.dev.sh` | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
 | `operations/env.prod.sh` | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
@@ -116,6 +150,21 @@ The copied crontab:
 | Each cron command | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh` |
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
+
+### Migrate an existing deployment
+
+1. Run `make operations-provision` to add `raw_logs/` and
+   `quality_assurance/` without replacing existing deployment-local files.
+2. Update the copied crontab with `make operations-init-cron` only after
+   preserving and manually updating its schedules and `SIMBOARD_ROOT`, or edit
+   the existing copied crontab to use the new provisioning-log path.
+3. Let existing `SBCS-*` lock files remain until no scheduler invocation uses
+   the previous launcher or refresh helper. New helpers acquire an existing
+   legacy lock as a compatibility guard, so they do not overlap a running old
+   helper.
+4. New launcher logs are written only to `raw_logs/`; retain or remove old
+   top-level `SBCS-*.log` files according to the site's retention policy after
+   confirming the updated crontab is active.
 
 ## NERSC Spin operations
 
