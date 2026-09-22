@@ -27,7 +27,6 @@ Feature modules should not import directly from other feature modules. This is e
 
 ```text
 frontend/src/routes/            top-level route composition
-frontend/src/features/browse/   execution browser and filters
 frontend/src/features/catalog/
                                 cases, executions, and detail pages
 frontend/src/features/compare/  side-by-side comparison UI

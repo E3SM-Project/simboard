@@ -1,4 +1,3 @@
-import { useQueries } from '@tanstack/react-query';
 import { ChevronRight, EyeOff, GripVertical, X } from 'lucide-react';
 import {
   type DragEvent,
@@ -9,30 +8,16 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
-import { getExecutionById } from '@/api/catalog';
-import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
 import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
-import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { ExecutionOut } from '@/types/index';
 import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
-
-interface ComparePageProps {
-  selectedCaseExecutionIdsByCase: Record<string, string[]>;
-  selectedExecutionIds: string[];
-  setSelectedExecutionIds: (ids: string[]) => void;
-}
-
-interface CompareLocationState {
-  selectedExecutionIds?: string[];
-  selectedExecutions?: ExecutionOut[];
-}
 
 interface CompareWorkspaceProps {
   selectedExecutionIds: string[];
@@ -80,12 +65,12 @@ const arraysEqual = <T,>(left: T[], right: T[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 export const CompareWorkspace = ({
-  backLabel = 'Back to Browse',
+  backLabel = 'Back to Case',
   contextNotice,
   description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove executions, and expand sections for detailed metrics.',
   embedded = false,
-  emptyStateActionHref = '/browse',
-  emptyStateActionLabel = 'Go to Browse Page',
+  emptyStateActionHref = '/cases',
+  emptyStateActionLabel = 'Go to Cases',
   emptyStateMessage = 'No executions selected for comparison.',
   hiddenStorageKey = 'compare_hidden_cols',
   labelColumnWidth,
@@ -647,7 +632,7 @@ export const CompareWorkspace = ({
           onDiffToggle={setDiffsEnabled}
           onSummaryToggle={() => setSummaryExpanded((prev) => !prev)}
           executionCount={selectedExecutionIds.length}
-          onBackToBrowse={onBack}
+          onBack={onBack}
           summaryExpanded={summaryExpanded}
           summaryHighlightCount={summaryCards.length}
           toolbarDescription={
@@ -1046,70 +1031,5 @@ export const CompareWorkspace = ({
         </div>
       </div>
     </div>
-  );
-};
-
-export const ComparePage = ({
-  selectedCaseExecutionIdsByCase,
-  selectedExecutionIds,
-  setSelectedExecutionIds,
-}: ComparePageProps) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const locationState = location.state as CompareLocationState | null;
-  const routedSelectedExecutionIds = normalizeSelectedExecutionIds(
-    locationState?.selectedExecutionIds,
-  );
-  const routedSelectedExecutions = Array.isArray(locationState?.selectedExecutions)
-    ? locationState.selectedExecutions
-    : [];
-  const shouldUseRoutedSelection =
-    selectedExecutionIds.length < 2 && routedSelectedExecutionIds.length >= 2;
-  const caseSelectionFallbackCandidates = Object.values(selectedCaseExecutionIdsByCase)
-    .map((ids) => normalizeSelectedExecutionIds(ids))
-    .filter((ids) => ids.length >= 2);
-  const caseSelectionFallbackIds =
-    caseSelectionFallbackCandidates.length === 1 ? caseSelectionFallbackCandidates[0] : [];
-  const shouldUseCaseSelectionFallback =
-    !shouldUseRoutedSelection &&
-    selectedExecutionIds.length < 2 &&
-    caseSelectionFallbackIds.length >= 2;
-  const effectiveSelectedExecutionIds = shouldUseRoutedSelection
-    ? routedSelectedExecutionIds
-    : shouldUseCaseSelectionFallback
-      ? caseSelectionFallbackIds
-      : selectedExecutionIds;
-  const detailQueries = useQueries({
-    queries: effectiveSelectedExecutionIds.map((executionId) => ({
-      queryKey: catalogQueryKeys.executions.detail(executionId),
-      queryFn: () => getExecutionById(executionId),
-      initialData: routedSelectedExecutions.find((execution) => execution.id === executionId),
-    })),
-  });
-  const effectiveSelectedExecutions = detailQueries
-    .map((query) => query.data)
-    .filter((execution): execution is ExecutionOut => execution != null);
-
-  useEffect(() => {
-    if (!shouldUseRoutedSelection && !shouldUseCaseSelectionFallback) {
-      return;
-    }
-
-    setSelectedExecutionIds(effectiveSelectedExecutionIds);
-  }, [
-    effectiveSelectedExecutionIds,
-    setSelectedExecutionIds,
-    shouldUseCaseSelectionFallback,
-    shouldUseRoutedSelection,
-  ]);
-
-  return (
-    <CompareWorkspace
-      key="global-compare"
-      selectedExecutionIds={effectiveSelectedExecutionIds}
-      setSelectedExecutionIds={setSelectedExecutionIds}
-      selectedExecutions={effectiveSelectedExecutions}
-      onBack={() => navigate('/browse')}
-    />
   );
 };

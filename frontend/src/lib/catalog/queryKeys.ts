@@ -5,7 +5,6 @@ const executionQueryKeys = {
   casePage: (caseId: string, params: object) => ['executions', 'case', caseId, params] as const,
   caseInfinite: (caseId: string, params: object) =>
     ['executions', 'case', caseId, 'infinite', params] as const,
-  options: ['executions', 'filter-options'] as const,
   detail: (id: string) => ['executions', 'detail', id] as const,
   readableDetail: (
     machineName: string,

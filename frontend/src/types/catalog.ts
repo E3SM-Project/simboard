@@ -343,22 +343,3 @@ export interface ExecutionListItemOut {
 }
 
 export type ExecutionPageOut = PageOut<ExecutionListItemOut>;
-
-export interface ExecutionFilterOptionsOut {
-  caseNames: string[];
-  caseGroups: string[];
-  machineIds: string[];
-  machines: FilterOptionOut[];
-  hpcUsernames: string[];
-  campaigns: string[];
-  experimentTypes: string[];
-  compsets: string[];
-  gridNames: string[];
-  gridResolutions: string[];
-  initializationTypes: string[];
-  compilers: string[];
-  statuses: ExecutionStatusValue[];
-  gitTags: string[];
-  createdByIds: string[];
-  creators: FilterOptionOut[];
-}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { NavBar } from '@/components/layout/NavBar';
@@ -11,17 +11,10 @@ import { AppRoutes } from '@/routes/routes';
 import { Toaster } from './components/ui/toaster';
 
 const App = () => {
-  // -------------------- Constants --------------------
-  const LOCAL_STORAGE_KEY = 'selectedExecutionIds';
-
   // -------------------- Local State --------------------
   const { data: machines = [] } = useMachines();
   const { data: sites = [] } = useSites();
 
-  const [selectedExecutionIds, setSelectedExecutionIds] = useState<string[]>(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return stored ? normalizeSelectedExecutionIds(JSON.parse(stored)) : [];
-  });
   const [selectedCaseExecutionIdsByCase, setSelectedCaseExecutionIdsByCase] = useState<
     Record<string, string[]>
   >({});
@@ -47,11 +40,6 @@ const App = () => {
     });
   };
 
-  // -------------------- Effects --------------------
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectedExecutionIds));
-  }, [selectedExecutionIds]);
-
   // -------------------- Render --------------------
   return (
     <BrowserRouter>
@@ -65,13 +53,10 @@ const App = () => {
             onClose={onClose}
             selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
             setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
-            setSelectedExecutionIds={setSelectedExecutionIds}
           />
         )}
         selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
         setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
-        selectedExecutionIds={selectedExecutionIds}
-        setSelectedExecutionIds={setSelectedExecutionIds}
       />
       <Toaster />
     </BrowserRouter>

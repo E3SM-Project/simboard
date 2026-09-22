@@ -12,7 +12,7 @@ interface CompareToolbarProps {
   onDiffOnlyToggle: (checked: boolean) => void;
   onDiffToggle: (checked: boolean) => void;
   executionCount: number;
-  onBackToBrowse?: () => void;
+  onBack?: () => void;
   onSummaryToggle: () => void;
   summaryExpanded: boolean;
   summaryHighlightCount: number;
@@ -21,12 +21,12 @@ interface CompareToolbarProps {
 }
 
 const CompareToolbar = ({
-  backLabel = 'Back to Browse',
+  backLabel = 'Back to Case',
   canCompareDifferences,
   changedSectionCount,
   diffsEnabled,
   diffsOnlyEnabled,
-  onBackToBrowse,
+  onBack,
   onDiffOnlyToggle,
   onDiffToggle,
   onSummaryToggle,
@@ -61,8 +61,8 @@ const CompareToolbar = ({
 
         <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[24rem]">
           <div className="flex flex-wrap gap-2">
-            {onBackToBrowse ? (
-              <Button variant="outline" onClick={onBackToBrowse}>
+            {onBack ? (
+              <Button variant="outline" onClick={onBack}>
                 {backLabel}
               </Button>
             ) : null}

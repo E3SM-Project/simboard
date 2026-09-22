@@ -11,17 +11,9 @@ import {
 } from '@/features/catalog/components/ExecutionDetailsView';
 import { useExecutionSummary } from '@/features/catalog/hooks/useExecutionSummary';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
-import { toast } from '@/hooks/use-toast';
 import { useReadableExecution } from '@/lib/catalog/hooks/useReadableExecution';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
 import type { ExecutionOut, ExecutionUpdate } from '@/types';
-
-const MAX_COMPARE_SELECTION = 5;
-
-interface ExecutionDetailsPageProps {
-  selectedExecutionIds: string[];
-  setSelectedExecutionIds: (ids: string[]) => void;
-}
 
 const getUpdateError = (error: unknown): ExecutionSaveError => {
   if (axios.isAxiosError(error)) {
@@ -68,10 +60,7 @@ const getUpdateError = (error: unknown): ExecutionSaveError => {
   };
 };
 
-export const ExecutionDetailsPage = ({
-  selectedExecutionIds,
-  setSelectedExecutionIds,
-}: ExecutionDetailsPageProps) => {
+export const ExecutionDetailsPage = () => {
   const queryClient = useQueryClient();
   const { caseName, executionId: routeExecutionId, hpcUsername, machine: machineName } = useParams<{
     caseName: string;
@@ -97,13 +86,13 @@ export const ExecutionDetailsPage = ({
   const [paceResolutionAttempted, setPaceResolutionAttempted] = useState(false);
 
   const state = location.state as { from?: string } | null;
-  const backHref = typeof state?.from === 'string' ? state.from : '/browse';
+  const backHref = typeof state?.from === 'string' ? state.from : '/cases';
   const normalizedBackHref = backHref.split(/[?#]/)[0];
   const backLabel = normalizedBackHref.startsWith('/cases/')
     ? 'Back to Case'
     : normalizedBackHref === '/cases'
       ? 'Back to Cases'
-      : 'Back to Executions';
+      : 'Back to Cases';
   const canEdit = !authLoading && user?.can_edit_managed_content === true;
   const currentExecution = execution?.id === executionUuid ? execution : null;
   const executionId = currentExecution?.executionId?.trim() ?? '';
@@ -183,32 +172,6 @@ export const ExecutionDetailsPage = ({
     }
   };
 
-  const handleToggleCompare = () => {
-    if (!currentExecution) return;
-
-    if (selectedExecutionIds.includes(currentExecution.id)) {
-      setSelectedExecutionIds(
-        selectedExecutionIds.filter((executionId) => executionId !== currentExecution.id),
-      );
-      return;
-    }
-
-    if (selectedExecutionIds.length >= MAX_COMPARE_SELECTION) {
-      toast({
-        title: 'Compare list full',
-        description: `You can compare up to ${MAX_COMPARE_SELECTION} executions at a time.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setSelectedExecutionIds([...selectedExecutionIds, currentExecution.id]);
-    toast({
-      title: 'Added to compare',
-      description: `${currentExecution.executionId} is now in your compare list.`,
-    });
-  };
-
   if (!readableIdentity) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -256,9 +219,6 @@ export const ExecutionDetailsPage = ({
   return (
     <ExecutionDetailsView
       execution={currentExecution}
-      isCompareSelected={selectedExecutionIds.includes(currentExecution.id)}
-      compareSelectionCount={selectedExecutionIds.length}
-      maxCompareSelection={MAX_COMPARE_SELECTION}
       backHref={backHref}
       backLabel={backLabel}
       paceLink={paceLink}
@@ -272,7 +232,6 @@ export const ExecutionDetailsPage = ({
       summaryLastDurationMs={summary.lastDurationMs}
       onGenerateSummary={summary.generate}
       canGenerateSummary
-      onToggleCompare={handleToggleCompare}
       canEdit={canEdit}
       isAuthenticated={isAuthenticated}
       isSaving={isSaving}

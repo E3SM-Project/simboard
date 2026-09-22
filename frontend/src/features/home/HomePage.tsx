@@ -1,4 +1,4 @@
-import { ArrowRight, FolderOpen, GitCompareArrows, Search, Upload } from 'lucide-react';
+import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,50 @@ interface InfrastructureRow {
   siteName: string;
   machine?: Machine;
 }
+
+interface InfrastructureTableProps {
+  emptyMessage: string;
+  machineCaseCounts: Map<Machine['id'], number>;
+  rows: InfrastructureRow[];
+}
+
+const CURRENTLY_SUPPORTED_SITE_NAMES = new Set(['NERSC', 'LCRC']);
+
+const InfrastructureTable = ({ emptyMessage, machineCaseCounts, rows }: InfrastructureTableProps) => (
+  <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+    <Table className="table-fixed">
+      <TableHeader>
+        <TableRow>
+          <TableHead>Site</TableHead>
+          <TableHead>Machine</TableHead>
+          <TableHead>Architecture</TableHead>
+          <TableHead>GPU Support</TableHead>
+          <TableHead>Case Count</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map(({ key, siteName, machine }) => (
+          <TableRow key={key}>
+            <TableCell>{siteName}</TableCell>
+            <TableCell className="capitalize">{machine?.name ?? 'N/A'}</TableCell>
+            <TableCell className="align-top">
+              <TableCellText value={machine?.architecture ?? 'N/A'} lines={2} />
+            </TableCell>
+            <TableCell>{machine ? (machine.gpu ? 'Yes' : 'No') : 'N/A'}</TableCell>
+            <TableCell>{machine ? (machineCaseCounts.get(machine.id) ?? 0) : 'N/A'}</TableCell>
+          </TableRow>
+        ))}
+        {rows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={5} className="text-center text-muted-foreground">
+              {emptyMessage}
+            </TableCell>
+          </TableRow>
+        ) : null}
+      </TableBody>
+    </Table>
+  </div>
+);
 
 export const HomePage = ({ machines, sites }: HomePageProps) => {
   const { data: overview, error, isLoading, refetch } = useCatalogOverview();
@@ -76,6 +120,12 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       machine,
     }));
   const infrastructureRows = [...siteMachineRows, ...unmatchedMachineRows];
+  const currentlySupportedInfrastructureRows = infrastructureRows.filter(({ siteName }) =>
+    CURRENTLY_SUPPORTED_SITE_NAMES.has(siteName),
+  );
+  const upcomingInfrastructureRows = infrastructureRows.filter(
+    ({ siteName }) => !CURRENTLY_SUPPORTED_SITE_NAMES.has(siteName),
+  );
 
   const workflows = [
     {
@@ -87,23 +137,9 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       icon: FolderOpen,
     },
     {
-      title: 'Explore Executions',
-      description:
-        'Use the advanced execution browser when you need detailed filters, selection, and compare setup.',
-      to: '/browse',
-      action: 'Open Executions',
-      icon: Search,
-    },
-    {
-      title: 'Compare Executions',
-      description: 'Inspect selected executions side by side to review differences in metadata.',
-      to: '/compare',
-      action: 'Open Compare',
-      icon: GitCompareArrows,
-    },
-    {
       title: 'Upload a Case',
-      description: 'Submit new case metadata to share results and preserve provenance.',
+      description:
+        'Manually upload a compressed case archive when it is not available through automated HPC ingestion.',
       to: '/upload',
       action: 'Open Upload',
       icon: Upload,
@@ -149,24 +185,22 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               Explore E3SM Simulations
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              SimBoard is a public-facing interface for browsing, comparing, and sharing cataloged
-              E3SM simulations. Start with a broad view of the catalog, then drill into cases and
-              executions when you want more detail.
+              SimBoard is a public-facing interface for discovering, comparing, and sharing cataloged
+              E3SM simulations. Start with cases, then drill into their executions when you want more
+              detail.
             </p>
           </div>
 
           <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
             <li>
-              Browse execution collections, open case pages, and inspect the executions connected to
-              them.
+              Find cases, inspect their execution context, and open detailed case pages.
             </li>
             <li>
-              Jump into execution-level views when you need machine, version, user, or date-specific
-              context.
+              Refine cases by machine, version, user, and other execution context.
             </li>
             <li>
-              Compare executions side by side and share specific case or execution pages with
-              collaborators.
+              Compare selected executions within a case and share specific case or execution pages
+              with collaborators.
             </li>
           </ul>
 
@@ -175,14 +209,23 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               <Link to="/cases">Browse Cases</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/browse">Open Executions</Link>
+              <Link to="/upload">Upload Case</Link>
             </Button>
-            <Button asChild variant="secondary">
-              <Link to="/compare">Compare</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link to="/upload">Upload Execution</Link>
-            </Button>
+          </div>
+          <div className="max-w-2xl rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
+            <p className="font-semibold">How catalog data arrives</p>
+            <p className="mt-1 leading-6 text-blue-900">
+              SimBoard automatically ingests performance archives from supported HPC environments.
+              Current data is collected regularly, and historical archives are scanned daily.
+            </p>
+            <a
+              className="mt-2 inline-flex font-medium text-blue-700 hover:underline"
+              href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Learn about ingestion coverage →
+            </a>
           </div>
 
           <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
@@ -273,50 +316,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       </section>
 
       <section className="mx-auto mt-10 w-full max-w-7xl">
-        <div className="mb-4 space-y-1">
-          <h2 className="text-2xl font-bold">Sites and Machines</h2>
-          <p className="text-muted-foreground">
-            Computing facilities and systems represented in the SimBoard catalog.
-          </p>
-        </div>
-        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Site</TableHead>
-                <TableHead>Machine</TableHead>
-                <TableHead>Architecture</TableHead>
-                <TableHead>GPU Support</TableHead>
-                <TableHead>Case Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {infrastructureRows.map(({ key, siteName, machine }) => (
-                <TableRow key={key}>
-                  <TableCell>{siteName}</TableCell>
-                  <TableCell className="capitalize">{machine?.name ?? 'N/A'}</TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={machine?.architecture ?? 'N/A'} lines={2} />
-                  </TableCell>
-                  <TableCell>{machine ? (machine.gpu ? 'Yes' : 'No') : 'N/A'}</TableCell>
-                  <TableCell>
-                    {machine ? (machineCaseCounts.get(machine.id) ?? 0) : 'N/A'}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {infrastructureRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No sites or machines available.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recent Cases</h2>
@@ -375,6 +374,40 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               ))}
             </TableBody>
           </Table>
+        </div>
+      </section>
+      <section className="mx-auto mt-10 w-full max-w-7xl space-y-8">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold">Sites and Machines</h2>
+          <p className="text-muted-foreground">
+            Computing facilities and systems represented in the SimBoard catalog.
+          </p>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">Currently Supported</h3>
+            <p className="text-sm text-muted-foreground">
+              NERSC and LCRC sites and machines with active SimBoard support.
+            </p>
+          </div>
+          <InfrastructureTable
+            emptyMessage="No currently supported sites or machines are available."
+            machineCaseCounts={machineCaseCounts}
+            rows={currentlySupportedInfrastructureRows}
+          />
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">Upcoming Support</h3>
+            <p className="text-sm text-muted-foreground">
+              Additional sites and machines planned for future SimBoard support.
+            </p>
+          </div>
+          <InfrastructureTable
+            emptyMessage="No upcoming sites or machines are listed."
+            machineCaseCounts={machineCaseCounts}
+            rows={upcomingInfrastructureRows}
+          />
         </div>
       </section>
       <footer className="mx-auto mt-12 w-full max-w-7xl border-t border-muted pt-6">

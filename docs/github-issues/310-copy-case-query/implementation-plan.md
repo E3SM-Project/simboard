@@ -62,11 +62,6 @@ when linking to case and execution details. Detail pages already use that
 state for their Back controls. Once `/cases` owns its query string, this flow
 will return users to the same query without changes to detail-page routes.
 
-`frontend/src/features/browse/BrowsePage.tsx` is a local precedent for
-`useSearchParams` hydration and synchronization. Reuse its behavioral ideas,
-not imports, because frontend feature boundaries prohibit direct cross-feature
-dependencies.
-
 ## URL Contract
 
 Use the existing frontend names for query parameters:
