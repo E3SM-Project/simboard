@@ -70,7 +70,8 @@ environment and crontab files use mode `640`. When the host defines a
 `simboard` group and the provisioning account can assign it, provisioning sets
 that group and the setgid bit on the operations directories so new artifacts
 inherit the shared group. If the account cannot apply the group or permissions,
-provisioning emits a warning and continues without shared-group access.
+provisioning emits a warning and continues; the affected directory retains its
+existing ownership and permissions.
 
 ```text
 ${SIMBOARD_ROOT}/operations/
