@@ -81,7 +81,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         "test-machine",
         "-m app.scripts.ingestion.nersc_archive_ingestor",
     ]
-    lock_file = work_dir / "simboard-ingestion-test-offline.lock"
+    lock_file = work_dir / "simboard-ingestion-archive-test-offline.lock"
     assert lock_file.exists()
     assert lock_file.stat().st_mode & 0o777 == 0o640
     raw_logs = list(
@@ -89,6 +89,17 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     )
     assert len(raw_logs) == 1
     assert raw_logs[0].stat().st_mode & 0o777 == 0o640
+    raw_log_contents = raw_logs[0].read_text(encoding="utf-8")
+    assert f"site_config={site_config}" in raw_log_contents
+    assert "scan_mode=archive" in raw_log_contents
+    assert "dry_run=true" in raw_log_contents
+    assert "dry_run_use_remote_state=false" in raw_log_contents
+    assert "ingestor_module=app.scripts.ingestion.nersc_archive_ingestor" in (
+        raw_log_contents
+    )
+    assert "invoking ingestor: module=app.scripts.ingestion.nersc_archive_ingestor" in (
+        raw_log_contents
+    )
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
 
 
