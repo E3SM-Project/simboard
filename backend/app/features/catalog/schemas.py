@@ -603,6 +603,7 @@ class CaseListItemOut(CamelOutBaseModel):
     id: UUID
     name: str
     case_group: str | None = None
+    simulation_type: CaseSimulationType | None = None
     machine_id: UUID
     machine_name: str
     hpc_username: str

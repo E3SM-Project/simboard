@@ -22,6 +22,7 @@ from app.features.catalog.api import (
 )
 from app.features.catalog.enums import (
     ArtifactKind,
+    CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
 )
@@ -438,6 +439,50 @@ class TestListCases:
         assert "executions" not in case_data
         assert "links" not in case_data
 
+    def test_simulation_type_filter_returns_only_matching_cases(
+        self, client, db: Session
+    ):
+        production_case = _create_case(db, "production-filter-case")
+        development_case = _create_case(db, "development-filter-case")
+        unclassified_case = _create_case(db, "unclassified-filter-case")
+        production_case.simulation_type = CaseSimulationType.PRODUCTION
+        development_case.simulation_type = CaseSimulationType.DEVELOPMENT
+        db.commit()
+
+        unfiltered = client.get(f"{API_BASE}/cases").json()
+        assert unfiltered["total"] == 3
+
+        response = client.get(
+            f"{API_BASE}/cases",
+            params={
+                "simulation_type": "production",
+                "sort_by": "name",
+                "sort_order": "asc",
+            },
+        )
+
+        assert response.status_code == 200
+        page = response.json()
+        assert page["total"] == 1
+        assert [item["name"] for item in page["items"]] == [production_case.name]
+        assert page["items"][0]["simulationType"] == "production"
+        assert development_case.name not in [item["name"] for item in page["items"]]
+        assert unclassified_case.name not in [item["name"] for item in page["items"]]
+
+        paged = client.get(
+            f"{API_BASE}/cases",
+            params={
+                "simulation_type": "production",
+                "machine_id": str(production_case.machine_id),
+                "search": "production-filter",
+                "page": 1,
+                "page_size": 1,
+            },
+        ).json()
+        assert paged["total"] == 1
+        assert paged["pageSize"] == 1
+        assert [item["name"] for item in paged["items"]] == [production_case.name]
+
     def test_pagination_defaults_limits_totals_and_empty_pages(
         self, client, db: Session
     ):
@@ -470,6 +515,7 @@ class TestListCases:
             db, "matching-filter-case", hpc_username="matching-user"
         )
         matching_case.case_group = "matching-group"
+        matching_case.simulation_type = CaseSimulationType.PRODUCTION
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
         for case, execution_id, campaign, compiler in (
             (split_case, "split-campaign", "campaign-a", "intel"),
@@ -499,6 +545,7 @@ class TestListCases:
                 "status": ExecutionStatus.CREATED.value,
                 "campaign": "campaign-a",
                 "compiler": "gcc",
+                "simulation_type": "production",
             },
         ).json()
 
