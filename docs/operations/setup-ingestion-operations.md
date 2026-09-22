@@ -187,20 +187,47 @@ configure its staging and archive CronJobs, secrets, and dry-run controls.
 
 This one-time Chrysalis job scans the fixed v3 case list from the fixed archive lower bound. It does not update general archive checkpoints.
 
-1. Copy `backend/app/scripts/ingestion/v3_data/lcrc-v3.env.example` to a protected location and set `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`.
+1. Create the protected v3 configuration in the deployment operations workspace:
+
+   ```bash
+   make operations-init-v3-env \
+     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     environment=prod
+   ```
+
+   The command prompts for the API endpoint and token, then creates
+   `${SIMBOARD_ROOT}/operations/lcrc-v3.prod.env` with protected permissions.
+   The committed `lcrc-v3.env.example` supplies the diagnostics-source default
+   and documents optional archive-root overrides.
+
 2. Run and review the dry run:
 
    ```bash
-   make v3-ingest-dry-run LCRC_V3_ENV_FILE=/secure/path/lcrc-v3.env
+   make v3-ingest-dry-run \
+     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     environment=prod
    ```
 
 3. Resolve any `v3_case_missing` or transient errors, then run:
 
    ```bash
-   make v3-ingest-apply LCRC_V3_ENV_FILE=/secure/path/lcrc-v3.env
+   make v3-ingest-apply \
+     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     environment=prod
    ```
 
-Optional variables in the same file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`, `REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
+The same configuration supports v3 diagnostics backfill:
+
+```bash
+make v3-diagnostics-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
+```
+
+For a nonstandard secure location, pass `V3_ENV_FILE=/path/to/v3.env` in
+addition to `SIMBOARD_ROOT` and `environment`. Optional variables in the v3
+file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,
+`REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
 
 ## Diagnostics discovery operation
 

@@ -99,25 +99,20 @@ and `/api/v1/ingestions/from-hpc-upload` request logic.
 Each case ingested by this workflow is classified as `production`; diagnostics
 backfill workflows do not set case classifications.
 
-For this one-time backfill, copy the committed template outside the repository,
-secure it, replace its placeholders, then run a dry run:
+For this one-time backfill, create a protected configuration in the deployment
+operations workspace. The initializer uses the committed template for defaults
+and prompts for the API credentials without echoing the token:
 
 ```bash
-mkdir -p ~/.config/simboard
-cp app/scripts/ingestion/v3_data/lcrc-v3.env.example \
-  ~/.config/simboard/lcrc-v3.env
-chmod 600 ~/.config/simboard/lcrc-v3.env
-
-# Edit ~/.config/simboard/lcrc-v3.env and replace its placeholders.
+make operations-init-v3-env \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
 ```
 
-The environment file must define:
-
-- `SIMBOARD_API_BASE_URL`
-- `SIMBOARD_API_TOKEN`
-
-The diagnostics backfill derives its source root from the configured Chrysalis
-diagnostics archive location.
+This creates `${SIMBOARD_ROOT}/operations/lcrc-v3.prod.env`. It includes
+`SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN`, and
+`V3_DIAGNOSTICS_SOURCE_ROOT`; override the latter only when the Chrysalis
+diagnostic-output directory is mounted elsewhere.
 
 Set `OLD_PERF_ARCHIVE_ROOT` only when the Chrysalis archive is mounted somewhere
 other than its documented default.
@@ -127,7 +122,9 @@ other than its documented default.
 Start with the Make dry run:
 
 ```bash
-make v3-ingest-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+make v3-ingest-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
 ```
 
 Review these events:
@@ -147,7 +144,9 @@ After every expected simulation maps to the intended archive case directory,
 run the explicit apply target:
 
 ```bash
-make v3-ingest-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+make v3-ingest-apply \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
 ```
 
 The Make targets override `DRY_RUN`; keep the external environment file focused
@@ -156,21 +155,28 @@ unbuffered output so emitted structured events appear in the console immediately
 
 #### Backfill v3 Diagnostics
 
-Use the same `lcrc-v3.env` file for diagnostics. Start with reconciliation-only
+Use the same v3 configuration for diagnostics. Start with reconciliation-only
 mode, which does not copy diagnostics, generate settings, or run the scanner:
 
 ```bash
-make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+make v3-diagnostics-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
 
 # Include per-source and aggregate selected-source sizes (may take longer).
-make v3-diagnostics-dry-run LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env V3_DIAGNOSTICS_INCLUDE_SIZES=true
+make v3-diagnostics-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod \
+  V3_DIAGNOSTICS_INCLUDE_SIZES=true
 ```
 
 After reviewing the reconciliation event, run the explicit write-enabled
 backfill and scanner linkage:
 
 ```bash
-make v3-diagnostics-apply LCRC_V3_ENV_FILE=~/.config/simboard/lcrc-v3.env
+make v3-diagnostics-apply \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  environment=prod
 ```
 
 #### Fixed and Supported Settings
