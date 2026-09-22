@@ -95,7 +95,7 @@ export PYTHON_BIN="${PYTHON_BIN:-${SIMBOARD_MODULES}/.venv/bin/python}"
 
 if [[ ! -d "${SIMBOARD_MODULES}/.venv" || ! -x "${PYTHON_BIN}" ]]; then
   echo "Expected Python interpreter at ${PYTHON_BIN}" >&2
-  echo "Run 'make install' from the repository root to create it." >&2
+  echo "Run 'make backend-install' from the repository root to create it." >&2
   exit 1
 fi
 
