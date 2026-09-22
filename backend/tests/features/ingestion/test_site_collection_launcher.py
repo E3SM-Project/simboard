@@ -444,11 +444,29 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
         "fi\n"
         "exit 0\n",
     )
+    _write_executable(
+        bin_dir / "getent",
+        "#!/usr/bin/env bash\n"
+        '[[ "$*" == "group simboard" && "${SIMBOARD_GROUP_EXISTS:-false}" == "true" ]]\n',
+    )
+    chgrp_capture_path = tmp_path / "chgrp-commands.txt"
+    _write_executable(
+        bin_dir / "chgrp",
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${CHGRP_CAPTURE_PATH}"\n',
+    )
+    chmod_capture_path = tmp_path / "chmod-commands.txt"
+    _write_executable(
+        bin_dir / "chmod",
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "${CHMOD_CAPTURE_PATH}"\n',
+    )
     env = os.environ.copy()
     backend_install_capture_path = tmp_path / "backend-install.txt"
     env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
+    env["CHGRP_CAPTURE_PATH"] = str(chgrp_capture_path)
+    env["CHMOD_CAPTURE_PATH"] = str(chmod_capture_path)
     env["GIT_CAPTURE_PATH"] = str(git_capture_path)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["SIMBOARD_GROUP_EXISTS"] = "true"
     invalid_root = tmp_path / "invalid-root"
     invalid_root.write_text("not a directory", encoding="utf-8")
 
@@ -492,6 +510,17 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     assert operations_dir.stat().st_mode & 0o777 == 0o750
     assert (operations_dir / "raw_logs").stat().st_mode & 0o777 == 0o750
     assert (operations_dir / "quality_assurance").stat().st_mode & 0o777 == 0o750
+    assert "Configured simboard group access for operations artifacts" in result.stdout
+    assert chgrp_capture_path.read_text(encoding="utf-8").splitlines() == [
+        f"simboard {operations_dir}",
+        f"simboard {operations_dir / 'raw_logs'}",
+        f"simboard {operations_dir / 'quality_assurance'}",
+    ]
+    assert chmod_capture_path.read_text(encoding="utf-8").splitlines() == [
+        f"2750 {operations_dir}",
+        f"2750 {operations_dir / 'raw_logs'}",
+        f"2750 {operations_dir / 'quality_assurance'}",
+    ]
     assert not (operations_dir / "summarized_logs").exists()
     assert simboard_root.stat().st_mode & 0o777 == 0o750
     checkout_dir = simboard_root / "repository/simboard"
