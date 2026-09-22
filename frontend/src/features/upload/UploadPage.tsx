@@ -327,10 +327,15 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold">Upload a Case or Execution</h1>
+          <h1 className="text-2xl font-bold">Upload a Case</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Upload either a full E3SM performance case archive or a single execution directory
-            packaged as
+            Cases are normally ingested automatically from supported HPC environments. Use this form
+            to manually upload a compressed E3SM performance case archive when it is not yet
+            available in the catalog.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A case archive contains one or more execution directories. A single execution directory
+            may also be uploaded when packaged as
             <code className="ml-1 rounded bg-gray-100 px-1 py-0.5 text-xs">
               &lt;execution_id&gt;/...
             </code>
@@ -343,6 +348,23 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-2">
+                <p>
+                  <span className="font-medium">Automatic HPC ingestion:</span> current performance
+                  archives are scanned regularly, and historical archives are scanned daily. Schedules
+                  and date coverage vary by site. Targeted E3SM v3 historical data is ingested from
+                  Chrysalis archives.
+                </p>
+                <p>
+                  <a
+                    className="font-medium underline underline-offset-2 hover:text-blue-700"
+                    href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View ingestion coverage and schedules
+                  </a>
+                  .
+                </p>
                 <p>
                   Supported archive types:{' '}
                   <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">.tar.gz</code>,{' '}

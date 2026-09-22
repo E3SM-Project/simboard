@@ -23,7 +23,11 @@ const navItems = [
     href: '/cases',
     description: 'Primary case-centric discovery and detail pages',
   },
-  { label: 'Upload', href: '/upload', description: 'Add a new execution to the catalog' },
+  {
+    label: 'Upload',
+    href: '/upload',
+    description: 'Manually upload a compressed case archive',
+  },
   { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
 ];
 

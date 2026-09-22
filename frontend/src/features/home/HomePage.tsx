@@ -88,7 +88,8 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
     },
     {
       title: 'Upload a Case',
-      description: 'Submit new case metadata to share results and preserve provenance.',
+      description:
+        'Manually upload a compressed case archive when it is not available through automated HPC ingestion.',
       to: '/upload',
       action: 'Open Upload',
       icon: Upload,
@@ -158,8 +159,23 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               <Link to="/cases">Browse Cases</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/upload">Upload Execution</Link>
+              <Link to="/upload">Upload Case</Link>
             </Button>
+          </div>
+          <div className="max-w-2xl rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
+            <p className="font-semibold">How catalog data arrives</p>
+            <p className="mt-1 leading-6 text-blue-900">
+              SimBoard automatically ingests performance archives from supported HPC environments.
+              Current data is collected regularly, and historical archives are scanned daily.
+            </p>
+            <a
+              className="mt-2 inline-flex font-medium text-blue-700 hover:underline"
+              href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Learn about ingestion coverage →
+            </a>
           </div>
 
           <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
