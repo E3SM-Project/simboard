@@ -51,18 +51,26 @@ def test_run_requires_machine_name_before_archive_resolution(
         run()
 
 
-def _case(root: Path, path: str, *, timestamp: str = "20260811_120000_000000") -> Path:
+def _case(
+    root: Path,
+    path: str,
+    *,
+    timestamp: str = "20260811_120000_000000",
+    hpc_username: str = "user",
+) -> Path:
     directory = root / path
     directory.mkdir(parents=True)
     cfg = directory / f"provenance.{timestamp}.cfg"
     cfg.write_text("cfg", encoding="utf-8")
-    case_group = (
-        f"case_group = {directory.parent.name}\n"
-        if len(directory.relative_to(root).parts) == 3
-        else ""
-    )
+    parts = directory.relative_to(root).parts
+    case_group = ""
+    if (parts[0] == "production" and len(parts) == 3) or (
+        parts[0] == "development" and len(parts) == 4
+    ):
+        case_group = f"case_group = {parts[1]}\n"
     cfg.with_suffix(".settings").write_text(
-        f"case_name = {directory.name}\nmachine = perlmutter\nhpc_username = user\n"
+        f"case_name = {directory.name}\nmachine = perlmutter\n"
+        f"hpc_username = {hpc_username}\n"
         f"{case_group}"
         "diagnostics_url = https://diagnostics.example.org/archive/case\n",
         encoding="utf-8",
@@ -79,7 +87,12 @@ def test_newest_missing_settings_defers_without_stale_fallback(tmp_path: Path) -
 
 @pytest.mark.parametrize(
     ("path", "expected_group"),
-    [("development/case", None), ("development/group/case", "group")],
+    [
+        ("production/case", None),
+        ("production/group/case", "group"),
+        ("development/user/case", None),
+        ("development/group/user/case", "group"),
+    ],
 )
 def test_discovery_accepts_supported_archive_layouts(
     tmp_path: Path, path: str, expected_group: str | None
@@ -91,8 +104,23 @@ def test_discovery_accepts_supported_archive_layouts(
     assert candidates[0].values.get("case_group") == expected_group
 
 
+def test_development_path_username_does_not_override_provenance_identity(
+    tmp_path: Path,
+) -> None:
+    directory = _case(
+        tmp_path,
+        "development/path-user/case",
+        hpc_username="provenance-user",
+    )
+
+    candidates = _discover(tmp_path, BASE_URL, "perlmutter")
+
+    assert [candidate.path.parent for candidate in candidates] == [directory]
+    assert candidates[0].values["hpc_username"] == "provenance-user"
+
+
 def test_discovery_requires_machine_matching_configured_archive(tmp_path: Path) -> None:
-    directory = _case(tmp_path, "development/case")
+    directory = _case(tmp_path, "development/user/case")
 
     matching = _discover(tmp_path, BASE_URL, "perlmutter")
     mismatching = _discover(tmp_path, BASE_URL, "chrysalis")
@@ -101,7 +129,15 @@ def test_discovery_requires_machine_matching_configured_archive(tmp_path: Path) 
     assert mismatching == []
 
 
-@pytest.mark.parametrize("path", ["development", "development/group/extra/case"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "development",
+        "development/case",
+        "development/group/user/extra/case",
+        "production/group/user/case",
+    ],
+)
 def test_discovery_rejects_unsupported_archive_layouts(
     tmp_path: Path, path: str
 ) -> None:
@@ -110,7 +146,7 @@ def test_discovery_rejects_unsupported_archive_layouts(
 
 
 def test_discovery_rejects_case_name_mismatch(tmp_path: Path) -> None:
-    directory = _case(tmp_path, "development/group/case")
+    directory = _case(tmp_path, "development/user/case")
     settings = next(directory.glob("*.settings"))
     settings.write_text(
         settings.read_text().replace("case_name = case", "case_name = wrong")
@@ -118,11 +154,17 @@ def test_discovery_rejects_case_name_mismatch(tmp_path: Path) -> None:
     assert _discover(tmp_path, BASE_URL, "perlmutter") == []
 
 
-@pytest.mark.parametrize("replacement", ["case_group = wrong", ""])
+@pytest.mark.parametrize(
+    ("path", "replacement"),
+    [
+        ("production/group/case", "case_group = wrong"),
+        ("development/group/user/case", ""),
+    ],
+)
 def test_discovery_rejects_case_group_mismatch(
-    tmp_path: Path, replacement: str
+    tmp_path: Path, path: str, replacement: str
 ) -> None:
-    directory = _case(tmp_path, "development/group/case")
+    directory = _case(tmp_path, path)
     settings = next(directory.glob("*.settings"))
     settings.write_text(settings.read_text().replace("case_group = group", replacement))
     assert _discover(tmp_path, BASE_URL, "perlmutter") == []
