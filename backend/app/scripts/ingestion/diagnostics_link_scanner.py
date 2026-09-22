@@ -384,13 +384,31 @@ def _published_output(case_dir: Path, root: Path) -> bool:
 def _validate_layout(case_dir: Path, root: Path, values: dict[str, str]) -> None:
     parts = case_dir.relative_to(root).parts
 
-    if len(parts) not in {2, 3} or parts[0] not in {"production", "development"}:
+    if not parts or parts[0] not in {"production", "development"}:
+        raise ValueError("Invalid diagnostics archive case layout")
+
+    tier = parts[0]
+    expected_group: str | None
+
+    if tier == "production":
+        if len(parts) == 2:
+            expected_group = None
+        elif len(parts) == 3:
+            expected_group = parts[1]
+        else:
+            raise ValueError("Invalid diagnostics archive case layout")
+    elif len(parts) == 3:
+        # zppy namespaces inferred development output by MachineInfo.username.
+        # That path segment is not case identity: provenance hpc_username comes
+        # from env_case.xml REALUSER and remains authoritative for resolution.
+        expected_group = None
+    elif len(parts) == 4:
+        expected_group = parts[1]
+    else:
         raise ValueError("Invalid diagnostics archive case layout")
 
     if values["case_name"] != parts[-1]:
         raise ValueError("Provenance case_name does not match archive layout")
-
-    expected_group = parts[1] if len(parts) == 3 else None
 
     if values.get("case_group") != expected_group:
         raise ValueError("Provenance case_group does not match archive layout")

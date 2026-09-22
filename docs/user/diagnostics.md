@@ -13,8 +13,19 @@ To promote diagnostics from `development` to `production`, follow zppy's manual 
 1. Confirm that the intended case is already visible in SimBoard.
 2. Check that provenance `case_name`, `machine`, and `hpc_username` match that case.
 3. Apply the **SimBoard archive layout rule**:
-   - ungrouped output must be at `simulation_type/case`;
-   - grouped output must be at `simulation_type/case_group/case`, using the `CASE_GROUP` parameter in E3SM run script configurations. This is not a zppy configuration option. The layout and its values must agree with the provenance, or discovery will not find the output.
+   - production output must be at `production/case` or
+     `production/case_group/case`;
+   - development output must be at `development/username/case` or
+     `development/case_group/username/case`.
+
+   The optional `case_group` comes from the `CASE_GROUP` parameter in E3SM run
+   script configurations, not a SimBoard setting. zppy namespaces inferred
+   development output by the publishing username so several users can publish
+   diagnostics for the same case. Production intentionally has no username
+   level: each case has one authoritative diagnostics path. SimBoard resolves
+   the target case using provenance identity; the development path username is
+   only a directory namespace. The layout and case-group value must agree with
+   provenance or discovery will not find the output.
 
 If the case is not available in SimBoard, contact the SimBoard administrator: [Tom Vo](mailto:vo13@llnl.gov).
 
@@ -36,7 +47,7 @@ If output is deleted or moved, restore it at the original URL to keep the link w
 
 ## Troubleshooting
 
-**The case does not receive a diagnostics link.** Check the configured `simulation_type`, the matching grouped or ungrouped archive layout, the latest provenance and paired settings, the required case identity, and that the completed output is publicly accessible. If it is still missing, contact [Tom Vo](mailto:vo13@llnl.gov).
+**The case does not receive a diagnostics link.** Check the configured `simulation_type`, the matching production or development archive layout, the latest provenance and paired settings, the required case identity, and that the completed output is publicly accessible. If it is still missing, contact [Tom Vo](mailto:vo13@llnl.gov).
 
 **The link opens the wrong output.** Check `simulation_type`, `case_group`, and the published path. SimBoard does not semantically validate whether the selected `simulation_type` is appropriate for the output.
 
