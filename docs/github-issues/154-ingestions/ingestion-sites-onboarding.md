@@ -49,8 +49,9 @@ Committed site configs should set only site-specific defaults such as:
 - `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`
 
 Set `SIMBOARD_ROOT` in the scheduler environment. `make operations-provision`
-creates `repository/simboard/backend` and `operations`; the launcher derives
-its module and working paths from that root. Each scheduled command sets
+creates `repository/simboard/backend` and the standardized `operations`
+workspace; the launcher derives its module and working paths from that root.
+Each scheduled command sets
 `SIMBOARD_ENV_FILE` to its `env.dev.sh` or `env.prod.sh` API environment file.
 
 For normal execution and default dry runs, the launcher loads API configuration
@@ -70,6 +71,12 @@ The development and production templates supply their respective public API
 URLs; the target prompts for both matching service-account tokens and writes
 `env.dev.sh` and `env.prod.sh` below `SIMBOARD_ROOT/operations`. Set
 `SIMBOARD_ENV_FILE` for each job.
+
+Launcher output is written to `operations/raw_logs/` using explicit
+`simboard-ingestion-*` filenames. Follow the current
+[`Set Up Ingestion Operations`](../../deploy/setup-ingestion-operations.md)
+guide for the complete workspace, permissions, retention, and migration
+contract.
 
 See `docs/deploy/hpc-api-token-authentication.md` for service account and API
 token setup.

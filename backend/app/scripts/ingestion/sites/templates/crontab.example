@@ -21,9 +21,9 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # =============================================================================
 # Refresh the clean deployment checkout weekly before scheduled scans begin.
 # The refresh installs backend dependencies only when the revision changed and
-# uses `flock` for a process lock when it is available; review SBCS-provision.log
-# after each update.
-0 0 * * 0 PATH="$HOME/.local/bin:$PATH" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/SBCS-provision.log" 2>&1
+# uses `flock` for a process lock when it is available; review
+# simboard-ingestion-provision.log after each update.
+0 0 * * 0 PATH="$HOME/.local/bin:$PATH" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
 
 # =============================================================================
 # API environment and run mode

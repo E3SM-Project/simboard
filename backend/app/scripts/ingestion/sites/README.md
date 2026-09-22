@@ -11,6 +11,8 @@ remote-site ingestion jobs.
 | `operations/` | Helpers used by the `make operations-*` targets to provision or refresh a checkout and create protected environment files. |
 | `diagnostics/` | Wrappers for diagnostics operations that are separate from performance ingestion. |
 
-`SIMBOARD_ROOT`, API tokens, and installed crontabs are deployment-local. See
-the repository's `docs/deploy/setup-ingestion-operations.md` guide for
-provisioning and scheduler instructions.
+`SIMBOARD_ROOT`, API tokens, and installed crontabs are deployment-local. The
+standard operations workspace separates `raw_logs/` from
+`quality_assurance/`; see the repository's
+`docs/deploy/setup-ingestion-operations.md` guide for provisioning, migration,
+retention, and scheduler instructions.

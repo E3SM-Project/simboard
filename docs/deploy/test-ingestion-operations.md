@@ -37,19 +37,22 @@ rm -rf "${TEST_ROOT}"
 make operations-provision
 ```
 
-This creates `${SIMBOARD_ROOT}`, creates `${SIMBOARD_ROOT}/operations`, clones
-the checkout into `${SIMBOARD_ROOT}/repository/simboard`, and synchronizes the
-backend runtime.
+This creates `${SIMBOARD_ROOT}`, creates `${SIMBOARD_ROOT}/operations` with
+`raw_logs/` and `quality_assurance/`, clones the checkout into
+`${SIMBOARD_ROOT}/repository/simboard`, and synchronizes the backend runtime.
 
 Inspect the resulting deployment:
 
 ```bash
 ls -la "${SIMBOARD_ROOT}"
 ls -la "${SIMBOARD_ROOT}/operations"
+ls -ld "${SIMBOARD_ROOT}/operations/raw_logs" \
+  "${SIMBOARD_ROOT}/operations/quality_assurance"
 git -C "${SIMBOARD_ROOT}/repository/simboard" status --short
 ```
 
-The checkout status should be clean.
+The checkout status should be clean. `summarized_logs/` should not exist until
+a summary workflow is introduced.
 
 ## 3. Initialize dummy API environments
 
