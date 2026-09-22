@@ -36,7 +36,7 @@ fi
 if [[ -d "${operations_dir}" ]]; then
   echo "Verified existing operations directory: ${operations_dir}"
 else
-  mkdir -m 750 "${operations_dir}"
+  mkdir -p -m 750 "${operations_dir}"
   echo "Created operations directory: ${operations_dir}"
 fi
 
@@ -52,7 +52,7 @@ for directory_name in raw_logs quality_assurance; do
   if [[ -d "${directory_path}" ]]; then
     echo "Verified existing operations ${directory_name} directory: ${directory_path}"
   else
-    mkdir -m 750 "${directory_path}"
+    mkdir -p -m 750 "${directory_path}"
     echo "Created operations ${directory_name} directory: ${directory_path}"
   fi
 done

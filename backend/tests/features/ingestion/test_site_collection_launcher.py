@@ -417,7 +417,14 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
         '  printf "%s\\n" "${GIT_STATUS_OUTPUT}"\n'
         "fi\n",
     )
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        "#!/usr/bin/env bash\n"
+        'if [[ -n "${FLOCK_CAPTURE_PATH:-}" ]]; then\n'
+        '  printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        "fi\n"
+        "exit 0\n",
+    )
     env = os.environ.copy()
     backend_install_capture_path = tmp_path / "backend-install.txt"
     env["BACKEND_INSTALL_CAPTURE_PATH"] = str(backend_install_capture_path)
@@ -584,7 +591,14 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
         '  printf "%s\\n" "${GIT_FETCHED_REVISION}"\n'
         "fi\n",
     )
-    _write_executable(bin_dir / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "flock",
+        "#!/usr/bin/env bash\n"
+        'if [[ -n "${FLOCK_CAPTURE_PATH:-}" ]]; then\n'
+        '  printf "%s\\n" "$*" >> "${FLOCK_CAPTURE_PATH}"\n'
+        "fi\n"
+        "exit 0\n",
+    )
     (checkout_dir / "Makefile").write_text(
         'backend-install:\n\t@touch "$$BACKEND_INSTALL_CAPTURE_PATH"\n',
         encoding="utf-8",
@@ -611,6 +625,10 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     refresh_lock_file = operations_dir / "simboard-ingestion-provision.lock"
     assert refresh_lock_file.stat().st_mode & 0o777 == 0o640
 
+    legacy_refresh_lock_file = operations_dir / "SBCS-provision.lock"
+    legacy_refresh_lock_file.touch()
+    flock_capture_path = tmp_path / "flock-commands.txt"
+    env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
     env["GIT_FETCHED_REVISION"] = "updated-revision"
     result = subprocess.run(
         ["make", "operations-refresh"],
@@ -624,6 +642,10 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     assert "Refreshed SimBoard checkout" in result.stdout
     assert backend_install_capture_path.exists()
+    assert flock_capture_path.read_text(encoding="utf-8").splitlines() == [
+        "-n 201",
+        "-n 202",
+    ]
 
     env["GIT_STATUS_OUTPUT"] = " M deployment-change"
     result = subprocess.run(

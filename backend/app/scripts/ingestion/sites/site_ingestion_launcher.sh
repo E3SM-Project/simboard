@@ -105,9 +105,7 @@ fi
 # Write one log per invocation. Jobs targeting different API environments may
 # run together; staging and archive jobs for one environment share a lock.
 ts="$(date -u +%Y%m%d_%H%M%S)"
-if [[ ! -d "${SIMBOARD_RAW_LOG_DIR}" ]]; then
-  mkdir -m 750 "${SIMBOARD_RAW_LOG_DIR}"
-fi
+mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
 LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"

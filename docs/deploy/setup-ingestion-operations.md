@@ -140,7 +140,7 @@ The copied crontab:
 | Location | Configure |
 | --- | --- |
 | `sites/configs/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
-| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the provisioning log, and copied crontabs |
+| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
 | `operations/raw_logs/` | Per-launcher-run logs; apply the site's retention policy without recording secrets |
 | `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output |
 | `repository/simboard` | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh` |
