@@ -3,6 +3,20 @@
 Use this guide to provision and operate scheduled performance ingestion, the v3
 backfill, and diagnostics discovery. Start every new job with `DRY_RUN=true`.
 
+## Prerequisites
+
+Before provisioning remote-site operations, complete these validations in order:
+
+1. Follow [Test Ingestion Operations](test-ingestion-operations.md) to verify
+   the provisioning, protected-environment, cron-generation, and refresh
+   workflows in an isolated test deployment.
+2. On the target HPC site, verify the reviewed site configuration, scheduler
+   account, required modules, archive paths, and API connectivity with a dry
+   run before installing or enabling a scheduled live job.
+
+The isolated test validates the shared operations workflow but does not validate
+site-specific filesystem, scheduler, module, or network configuration.
+
 ## Choose an operation
 
 | Archive access | Job | Where it runs |
@@ -47,8 +61,8 @@ the latest `main` checkout into `repository/simboard`, and runs
 existing `operations/` directory and updates a clean checkout to the selected
 remote revision.
 
-To validate this workflow without an HPC system, see
-[Test Operations Locally](local-operations-testing.md).
+The local workflow validation is required before this deployment; see
+[Prerequisites](#prerequisites).
 
 ### Configure protected API environments
 
@@ -105,16 +119,10 @@ Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false
 
 ## NERSC Spin operations
 
-Configure these in the backend deployment, not with the remote-site launcher. Follow the [NERSC Spin Runbook](nersc-spin-runbook.md) to create the staging and archive CronJobs.
-
-| Job configuration | Variables |
-| --- | --- |
-| Secret | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` |
-| Staging job | `MACHINE_NAME`, `SCAN_MODE=staging`, `PERF_ARCHIVE_ROOT`, `DRY_RUN` |
-| Archive job | `MACHINE_NAME`, `SCAN_MODE=archive`, `OLD_PERF_ARCHIVE_ROOT`, `DRY_RUN`, `ARCHIVE_YEAR_START`, `ARCHIVE_YEAR_END` |
-| Optional controls | `DRY_RUN_USE_REMOTE_STATE`, `MAX_CASES_PER_RUN`, `MAX_ATTEMPTS`, `REQUEST_TIMEOUT_SECONDS` |
-
-Keep the CronJob command as `python -m app.scripts.ingestion.nersc_archive_ingestor`.
+Use NERSC Spin path ingestion when the performance archive is mounted in the
+backend deployment. It does not use the remote-site launcher or scheduler
+configuration above. Follow the [NERSC Spin Ingestion Operations Runbook](nersc-spin-runbook.md) to
+configure its staging and archive CronJobs, secrets, and dry-run controls.
 
 ## E3SM v3 metadata backfill operation
 

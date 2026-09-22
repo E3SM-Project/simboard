@@ -110,6 +110,6 @@ See [Deployment and Release Guide](../deploy/deployment-and-release.md).
 ## Related Documentation
 
 - [Deployment and Release Guide](../deploy/deployment-and-release.md)
-- [NERSC Spin Runbook](../deploy/nersc-spin-runbook.md)
+- [NERSC Spin Ingestion Operations Runbook](../deploy/nersc-spin-runbook.md)
 - [GitHub Actions](https://github.com/E3SM-Project/simboard/actions)
 - [NERSC Registry](https://registry.nersc.gov/harbor/projects)

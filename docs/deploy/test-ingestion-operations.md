@@ -1,10 +1,15 @@
-# Test Operations Locally
+# Test Ingestion Operations
 
-Use this procedure to exercise site-ingestion operations locally without an HPC
-system, production credentials, or an installed crontab. It creates an isolated
-deployment root below `/tmp` and clones the current local branch.
+Use this procedure to exercise site-ingestion operations in an isolated test
+deployment before using production credentials or installing a crontab. Run it
+from a local checkout or an HPC-site checkout; it creates an isolated deployment
+root below `/tmp` and clones the current branch.
 
 Do not install the generated crontab during this test.
+
+This is the first required validation before remote-site deployment. After it
+succeeds, follow [Set Up Ingestion Operations](setup-ingestion-operations.md)
+to validate the target HPC site with a dry run before enabling scheduled work.
 
 ## 1. Define an isolated deployment
 
@@ -17,7 +22,7 @@ export SIMBOARD_REPOSITORY_URL="file://$(pwd)"
 export SIMBOARD_REPOSITORY_REF="$(git branch --show-current)"
 ```
 
-The repository URL and ref direct provisioning to clone the current local branch
+The repository URL and ref direct provisioning to clone the current branch
 rather than the public repository default.
 
 Remove a previous test deployment, if present:
@@ -90,7 +95,7 @@ grep -n "SIMBOARD_ROOT\|refresh_repository\|site_ingestion_launcher" \
 ```
 
 Do **not** run `crontab "${SIMBOARD_ROOT}/operations/chrysalis.crontab"` during
-this local test.
+this test.
 
 ## 5. Test a no-op refresh
 
@@ -103,7 +108,7 @@ refresh path does not reinstall backend dependencies when the revision is
 unchanged.
 
 On macOS, the system may not provide `flock`; the refresh reports that it is
-proceeding without a process lock. This is expected for a single local test.
+proceeding without a process lock. This is expected for a single test run.
 
 ## 6. Test the deployed refresh helper
 
