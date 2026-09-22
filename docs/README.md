@@ -8,7 +8,7 @@ Use this directory as the documentation router by audience.
 
 ## For Contributors
 
-- Developer guide: [developer/README.md](developer/README.md)
+- Developer guide: [developer/index.md](developer/index.md)
 - Contribution workflow: [CONTRIBUTING.md on GitHub](https://github.com/E3SM-Project/simboard/blob/main/CONTRIBUTING.md)
 - Metadata ingestion architecture: [architecture/metadata-ingestion.md](architecture/metadata-ingestion.md)
 
@@ -24,9 +24,10 @@ Use this directory as the documentation router by audience.
 
 - Metadata ingestion architecture: [architecture/metadata-ingestion.md](architecture/metadata-ingestion.md)
 - CI/CD overview: [cicd/README.md](cicd/README.md)
-- Deployment reference: [deploy/deployment-and-release.md](deploy/deployment-and-release.md)
-- NERSC Spin runbook: [deploy/nersc-spin-runbook.md](deploy/nersc-spin-runbook.md)
-- HPC token and service-account auth: [deploy/hpc-api-token-authentication.md](deploy/hpc-api-token-authentication.md)
-- Read-only database access: [deploy/read-only-database-access.md](deploy/read-only-database-access.md)
-- Ingestion operations: [deploy/setup-ingestion-operations.md](deploy/setup-ingestion-operations.md)
-- Ingestion operations testing: [deploy/test-ingestion-operations.md](deploy/test-ingestion-operations.md)
+- Operations overview: [operations/index.md](operations/index.md)
+- Deployment reference: [operations/deployment-and-release.md](operations/deployment-and-release.md)
+- NERSC Spin runbook: [operations/nersc-spin-runbook.md](operations/nersc-spin-runbook.md)
+- HPC token and service-account auth: [operations/hpc-api-token-authentication.md](operations/hpc-api-token-authentication.md)
+- Read-only database access: [operations/read-only-database-access.md](operations/read-only-database-access.md)
+- Ingestion operations: [operations/setup-ingestion-operations.md](operations/setup-ingestion-operations.md)
+- Ingestion operations testing: [operations/test-ingestion-operations.md](operations/test-ingestion-operations.md)

@@ -14,5 +14,5 @@ remote-site ingestion jobs.
 `SIMBOARD_ROOT`, API tokens, and installed crontabs are deployment-local. The
 standard operations workspace separates `raw_logs/` from
 `quality_assurance/`; see the repository's
-`docs/deploy/setup-ingestion-operations.md` guide for provisioning, migration,
+`docs/operations/setup-ingestion-operations.md` guide for provisioning, migration,
 retention, and scheduler instructions.

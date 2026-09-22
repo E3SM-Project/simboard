@@ -32,7 +32,7 @@ SimBoard exists so researchers and maintainers do not have to reconstruct simula
 
 SimBoard is organized as a React frontend, a FastAPI backend, and PostgreSQL-backed persistence. Together they handle metadata ingestion, normalization, browsing, comparison, provenance, and authenticated upload workflows.
 
-For architecture diagrams, API/data-flow detail, and contributor-oriented system context, see [docs/developer/README.md](docs/developer/README.md).
+For architecture diagrams, API/data-flow detail, and contributor-oriented system context, see [docs/developer/index.md](docs/developer/index.md).
 
 ## API
 
@@ -66,7 +66,7 @@ Requests to `https://simboard-dev.e3sm.org/api/...` (the frontend origin) return
 - Hosted docs: <https://simboard.readthedocs.io/>
 - API base URLs and OpenAPI/Swagger endpoints: [API](#api)
 - Local docs preview: `make docs-serve`
-- Contributor guide: [docs/developer/README.md](docs/developer/README.md)
+- Contributor guide: [docs/developer/index.md](docs/developer/index.md)
 - Contribution workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Backend details: [backend/README.md](backend/README.md)
 - Frontend details: [frontend/README.md](frontend/README.md)
@@ -75,7 +75,7 @@ Requests to `https://simboard-dev.e3sm.org/api/...` (the frontend origin) return
 
 ## How to Contribute
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) for issue, branch, commit, PR, and validation expectations. If you are new to the repo, use the contributor guide at [docs/developer/README.md](docs/developer/README.md) for local setup, architecture, and development workflow.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for issue, branch, commit, PR, and validation expectations. If you are new to the repo, use the contributor guide at [docs/developer/index.md](docs/developer/index.md) for local setup, architecture, and development workflow.
 
 ## License
 

@@ -18,7 +18,7 @@ package imports and application configuration.
 
 The step-by-step setup, site configuration, cron, environment-variable, targeted
 E3SM v3 backfill, and diagnostics instructions are maintained in
-[Set Up Ingestion Operations](../../../docs/deploy/setup-ingestion-operations.md).
+[Set Up Ingestion Operations](../../../docs/operations/setup-ingestion-operations.md).
 
 Use the runner selected by archive access:
 
@@ -28,4 +28,4 @@ Use the runner selected by archive access:
 | Available only at a remote HPC site | `hpc_upload_archive_ingestor.py` via `sites/site_ingestion_launcher.sh` |
 
 For service-account and API-token provisioning, see
-[HPC API Token Authentication](../../../docs/deploy/hpc-api-token-authentication.md).
+[HPC API Token Authentication](../../../docs/operations/hpc-api-token-authentication.md).

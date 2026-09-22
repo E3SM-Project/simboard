@@ -74,11 +74,11 @@ URLs; the target prompts for both matching service-account tokens and writes
 
 Launcher output is written to `operations/raw_logs/` using explicit
 `simboard-ingestion-*` filenames. Follow the current
-[`Set Up Ingestion Operations`](../../deploy/setup-ingestion-operations.md)
+[`Set Up Ingestion Operations`](../../operations/setup-ingestion-operations.md)
 guide for the complete workspace, permissions, retention, and migration
 contract.
 
-See `docs/deploy/hpc-api-token-authentication.md` for service account and API
+See `docs/operations/hpc-api-token-authentication.md` for service account and API
 token setup.
 
 ## Chrysalis Handoff
@@ -151,4 +151,4 @@ Confirm these runner assumptions before implementing wrappers for non-Chrysalis 
 - Existing site script wrappers: https://github.com/E3SM-Project/E3SM_test_scripts/tree/master/jenkins
 - Existing PACE archive script: https://github.com/E3SM-Project/E3SM_test_scripts/blob/master/util/pace_archive.sh
 - SimBoard script docs: `backend/app/scripts/README.md`
-- API token docs: `docs/deploy/hpc-api-token-authentication.md`
+- API token docs: `docs/operations/hpc-api-token-authentication.md`

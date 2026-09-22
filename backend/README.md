@@ -41,7 +41,7 @@ Backend env templates live in `.envs/example/backend.env.example`. Local develop
 
 Restart the backend after changing local env values.
 
-For repo-wide setup, assistant LLM configuration, and contributor workflow, see [docs/developer/README.md](../docs/developer/README.md).
+For repo-wide setup, assistant LLM configuration, and contributor workflow, see [docs/developer/index.md](../docs/developer/index.md).
 
 ## Authorization Notes
 
