@@ -76,7 +76,9 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         "test-machine",
         "-m app.scripts.ingestion.nersc_archive_ingestor",
     ]
-    assert (work_dir / "SBCS-test-offline.lock").exists()
+    assert (work_dir / "simboard-ingestion-test-offline.lock").exists()
+    raw_logs = list((work_dir / "raw_logs").glob("simboard-ingestion-*.log"))
+    assert len(raw_logs) == 1
 
 
 def test_launcher_requires_scheduler_root(tmp_path: Path) -> None:
@@ -401,6 +403,9 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     assert "Installed SimBoard backend runtime" in result.stdout
     assert operations_dir.is_dir()
     assert operations_dir.stat().st_mode & 0o777 == 0o750
+    assert (operations_dir / "raw_logs").stat().st_mode & 0o777 == 0o750
+    assert (operations_dir / "quality_assurance").stat().st_mode & 0o777 == 0o750
+    assert not (operations_dir / "summarized_logs").exists()
     assert simboard_root.stat().st_mode & 0o777 == 0o750
     checkout_dir = simboard_root / "repository/simboard"
     assert (checkout_dir / ".git").is_dir()

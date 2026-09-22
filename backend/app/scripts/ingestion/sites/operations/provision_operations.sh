@@ -39,6 +39,23 @@ else
   echo "Created operations directory: ${operations_dir}"
 fi
 
+# Runtime logs and operator-reviewed validation artifacts are deliberately kept
+# separate. Do not create summarized_logs until a summary-producing workflow is
+# introduced.
+for directory_name in raw_logs quality_assurance; do
+  directory_path="${operations_dir}/${directory_name}"
+  if [[ ( -e "${directory_path}" || -L "${directory_path}" ) && ! -d "${directory_path}" ]]; then
+    echo "Operations ${directory_name} path exists but is not a directory: ${directory_path}" >&2
+    exit 1
+  fi
+  if [[ -d "${directory_path}" ]]; then
+    echo "Verified existing operations ${directory_name} directory: ${directory_path}"
+  else
+    mkdir -m 750 "${directory_path}"
+    echo "Created operations ${directory_name} directory: ${directory_path}"
+  fi
+done
+
 repository_dir="${SIMBOARD_ROOT}/repository"
 checkout_dir="${repository_dir}/simboard"
 

@@ -37,12 +37,23 @@ if [[ -n "${SIMBOARD_REFRESH_TEMP_SCRIPT:-}" ]]; then
   trap 'rm -f "${SIMBOARD_REFRESH_TEMP_SCRIPT}"' EXIT
 fi
 
-refresh_lock_file="${operations_dir}/SBCS-provision.lock"
+refresh_lock_file="${operations_dir}/simboard-ingestion-provision.lock"
 if command -v flock >/dev/null; then
   exec 201>"${refresh_lock_file}"
   if ! flock -n 201; then
     echo "SimBoard repository refresh already running: ${checkout_dir}"
     exit 0
+  fi
+
+  # An existing legacy lock indicates a deployment that may still run the
+  # previous helper. Hold it during migration to prevent overlapping refreshes.
+  legacy_refresh_lock_file="${operations_dir}/SBCS-provision.lock"
+  if [[ -e "${legacy_refresh_lock_file}" ]]; then
+    exec 202>"${legacy_refresh_lock_file}"
+    if ! flock -n 202; then
+      echo "SimBoard repository refresh already running with the legacy lock: ${checkout_dir}"
+      exit 0
+    fi
   fi
 else
   echo "flock is unavailable; refreshing without a process lock" >&2
