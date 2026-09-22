@@ -2,6 +2,7 @@ import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Table,
   TableBody,
@@ -14,6 +15,8 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
 import { caseDetailsPath } from '@/lib/catalog/urls';
 import type { Machine, Site } from '@/types/index';
+
+import { ProductionCasesTable } from './components/ProductionCasesTable';
 
 interface HomePageProps {
   machines: Machine[];
@@ -34,7 +37,11 @@ interface InfrastructureTableProps {
 
 const CURRENTLY_SUPPORTED_SITE_NAMES = new Set(['NERSC', 'LCRC']);
 
-const InfrastructureTable = ({ emptyMessage, machineCaseCounts, rows }: InfrastructureTableProps) => (
+const InfrastructureTable = ({
+  emptyMessage,
+  machineCaseCounts,
+  rows,
+}: InfrastructureTableProps) => (
   <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
     <Table className="table-fixed">
       <TableHeader>
@@ -147,11 +154,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
   ];
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-slate-500">
-        Loading catalog overview…
-      </div>
-    );
+    return <LoadingState kind="page" label="Loading catalog overview" />;
   }
 
   if (error && !overview) {
@@ -185,24 +188,9 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               Explore E3SM Simulations
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              SimBoard is a public-facing interface for discovering, comparing, and sharing cataloged
-              E3SM simulations. Start with cases, then drill into their executions when you want more
-              detail.
+              Discover and explore cataloged E3SM simulations.
             </p>
           </div>
-
-          <ul className="space-y-2 text-sm leading-6 text-muted-foreground md:text-base">
-            <li>
-              Find cases, inspect their execution context, and open detailed case pages.
-            </li>
-            <li>
-              Refine cases by machine, version, user, and other execution context.
-            </li>
-            <li>
-              Compare selected executions within a case and share specific case or execution pages
-              with collaborators.
-            </li>
-          </ul>
 
           <div className="flex flex-wrap gap-3">
             <Button asChild>
@@ -211,21 +199,9 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <Button asChild variant="secondary">
               <Link to="/upload">Upload Case</Link>
             </Button>
-          </div>
-          <div className="max-w-2xl rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
-            <p className="font-semibold">How catalog data arrives</p>
-            <p className="mt-1 leading-6 text-blue-900">
-              SimBoard automatically ingests performance archives from supported HPC environments.
-              Current data is collected regularly, and historical archives are scanned daily.
-            </p>
-            <a
-              className="mt-2 inline-flex font-medium text-blue-700 hover:underline"
-              href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Learn about ingestion coverage →
-            </a>
+            <Button asChild variant="outline">
+              <Link to="/about">About SimBoard</Link>
+            </Button>
           </div>
 
           <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
@@ -318,6 +294,21 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
+            <h2 className="text-2xl font-bold">Production Cases</h2>
+            <p className="text-muted-foreground">
+              Production-classified simulations across all machines.
+            </p>
+          </div>
+          <Button asChild variant="secondary">
+            <Link to="/cases?simulationType=production">Browse Production Cases</Link>
+          </Button>
+        </div>
+        <ProductionCasesTable />
+      </section>
+
+      <section className="mx-auto mt-10 w-full max-w-7xl">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
             <h2 className="text-2xl font-bold">Recent Cases</h2>
             <p className="text-muted-foreground">
               Open recently active case pages and move from grouped execution context into execution
@@ -325,7 +316,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             </p>
           </div>
           <Button asChild variant="secondary">
-            <Link to="/cases">Browse Cases</Link>
+            <Link to="/cases">Browse Recent Cases</Link>
           </Button>
         </div>
         <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">

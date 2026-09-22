@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { getExecutionById } from '@/api/catalog';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
 import { useCase } from '@/lib/catalog/hooks/useCase';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
@@ -38,8 +39,7 @@ export const CaseCompareRoute = ({
     ? normalizeSelectedExecutionIds(selectedCaseExecutionIdsByCase[caseId] ?? [])
     : EMPTY_SELECTED_EXECUTION_IDS;
   const caseSelectedExecutionIds = useMemo(
-    () =>
-      rawCaseSelectedExecutionIds.filter((executionId) => caseExecutionIdSet.has(executionId)),
+    () => rawCaseSelectedExecutionIds.filter((executionId) => caseExecutionIdSet.has(executionId)),
     [caseExecutionIdSet, rawCaseSelectedExecutionIds],
   );
   const detailQueries = useQueries({
@@ -107,11 +107,7 @@ export const CaseCompareRoute = ({
   }
 
   if (loading) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
-        Loading case compare…
-      </div>
-    );
+    return <LoadingState label="Loading case compare" />;
   }
 
   if (error) {

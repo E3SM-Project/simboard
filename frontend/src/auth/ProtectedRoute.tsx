@@ -2,16 +2,13 @@ import { Outlet } from 'react-router-dom';
 
 import { LoginCard } from '@/auth/components/LoginCard';
 import { useAuth } from '@/auth/hooks/useAuth';
+import { LoadingState } from '@/components/ui/loading-state';
 
 export const ProtectedRoute = () => {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-500" aria-live="polite">
-        Checking authentication…
-      </div>
-    );
+    return <LoadingState className="min-h-64" label="Checking authentication" />;
   }
 
   if (!isAuthenticated) {

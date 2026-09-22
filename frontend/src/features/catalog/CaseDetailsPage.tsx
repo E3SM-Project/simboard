@@ -22,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Select,
   SelectContent,
@@ -383,15 +384,17 @@ export const CaseDetailsPage = ({
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
   const queryClient = useQueryClient();
-  const { caseName, hpcUsername, machine: machineName } = useParams<{
+  const {
+    caseName,
+    hpcUsername,
+    machine: machineName,
+  } = useParams<{
     caseName: string;
     hpcUsername: string;
     machine: string;
   }>();
   const readableIdentity =
-    machineName && hpcUsername && caseName
-      ? { machineName, hpcUsername, caseName }
-      : null;
+    machineName && hpcUsername && caseName ? { machineName, hpcUsername, caseName } : null;
   const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
   const caseId = fetchedCaseRecord?.id;
   const {
@@ -774,11 +777,7 @@ export const CaseDetailsPage = ({
   }
 
   if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== caseId)) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Loading case details…</div>
-      </div>
-    );
+    return <LoadingState kind="page" label="Loading case details" />;
   }
 
   if (error) {
@@ -1136,11 +1135,13 @@ export const CaseDetailsPage = ({
                   )}
                   {hasAmbiguousDiagnosticsTiers ? (
                     <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers; SimBoard cannot determine one observed tier.
+                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
+                      SimBoard cannot determine one observed tier.
                     </div>
                   ) : hasDiagnosticsMismatch ? (
                     <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      Case classification is {caseRecord.simulationType}, but diagnostics provenance is {diagnosticsTierLabel}.
+                      Case classification is {caseRecord.simulationType}, but diagnostics provenance
+                      is {diagnosticsTierLabel}.
                     </div>
                   ) : null}
                 </div>
