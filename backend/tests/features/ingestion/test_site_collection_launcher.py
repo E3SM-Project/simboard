@@ -848,3 +848,78 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
         "Operations directory does not exist; run operations-provision first"
         in result.stderr
     )
+
+
+def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    simboard_root = tmp_path / "simboard"
+    operations_dir = simboard_root / "operations"
+    operations_dir.mkdir(parents=True)
+
+    result = subprocess.run(
+        [
+            "make",
+            "operations-init-v3-env",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "environment=prod",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        input="\nservice-token\n\n",
+        text=True,
+    )
+
+    destination = operations_dir / "lcrc-v3.prod.env"
+    assert result.returncode == 0, result.stderr
+    assert destination.stat().st_mode & 0o777 == 0o640
+    assert destination.read_text(encoding="utf-8") == (
+        "# prod E3SM v3 Chrysalis backfill configuration. Keep outside the repository.\n"
+        "SIMBOARD_API_BASE_URL=https://simboard-api.e3sm.org\n"
+        "SIMBOARD_API_TOKEN=service-token\n"
+        "V3_DIAGNOSTICS_SOURCE_ROOT=/lcrc/group/e3sm/public_html/diagnostic_output\n"
+        "\n# Optional: override the default historical archive mount.\n"
+        "# OLD_PERF_ARCHIVE_ROOT=/path/to/OLD_PERF\n"
+    )
+
+    result = subprocess.run(
+        [
+            "make",
+            "operations-init-v3-env",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "environment=prod",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite it" in result.stderr
+
+
+def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    simboard_root = tmp_path / "simboard"
+
+    result = subprocess.run(
+        [
+            "make",
+            "v3-diagnostics-dry-run",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "environment=dev",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    expected_path = simboard_root / "operations/lcrc-v3.dev.env"
+    assert result.returncode != 0
+    assert f"Missing v3 environment file: {expected_path}" in result.stderr
+    assert (
+        f"make operations-init-v3-env SIMBOARD_ROOT={simboard_root} environment=dev"
+        in result.stderr
+    )
