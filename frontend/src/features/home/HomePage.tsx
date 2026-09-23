@@ -238,7 +238,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           </div>
         </div>
 
-        <div className="hidden md:flex md:max-w-sm md:flex-col md:items-center md:justify-center md:gap-4 md:self-center">
+        <div className="hidden md:flex md:max-w-sm md:flex-col md:items-center md:justify-center md:self-center">
           <div className="flex w-full items-center justify-center rounded-2xl border border-muted bg-muted/15 px-8 py-10">
             <img
               src="/logos/e3sm-logo.jpg"
@@ -246,9 +246,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               className="max-h-28 w-full object-contain"
             />
           </div>
-          <p className="text-center text-sm leading-6 text-muted-foreground">
-            SimBoard surfaces curated executions and catalog activity from the E3SM project.
-          </p>
         </div>
       </section>
 
