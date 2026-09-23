@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Table,
   TableBody,
@@ -40,7 +41,8 @@ type ActiveFilterKey =
   | 'initializationType'
   | 'compiler'
   | 'gitTag'
-  | 'caseGroup';
+  | 'caseGroup'
+  | 'simulationType';
 
 interface CaseExecutionFilters {
   hpcUsername: string;
@@ -93,6 +95,7 @@ const CASE_SEARCH_PARAM_KEYS = [
   'initializationType',
   'compiler',
   'gitTag',
+  'simulationType',
   'sortBy',
   'sortOrder',
   'page',
@@ -102,6 +105,7 @@ const CASE_SEARCH_PARAM_KEYS = [
 interface CaseSearchState {
   caseNameFilter: string;
   caseGroupFilter: string;
+  simulationType: 'production' | 'development' | '';
   executionFilters: CaseExecutionFilters;
   legacyMachineId: string;
   sorting: SortingState;
@@ -124,6 +128,12 @@ const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
   return {
     caseNameFilter: getTextParam(params, 'search'),
     caseGroupFilter: getTextParam(params, 'caseGroup'),
+    simulationType:
+      params.get('simulationType') === 'production'
+        ? 'production'
+        : params.get('simulationType') === 'development'
+          ? 'development'
+          : '',
     executionFilters: {
       hpcUsername: getTextParam(params, 'hpcUsername'),
       machineName: getTextParam(params, 'machine'),
@@ -149,6 +159,7 @@ const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
 const serializeCaseSearchState = ({
   caseNameFilter,
   caseGroupFilter,
+  simulationType,
   executionFilters,
   legacyMachineId,
   sorting,
@@ -159,6 +170,7 @@ const serializeCaseSearchState = ({
 
   if (search) params.set('search', search);
   if (caseGroupFilter) params.set('caseGroup', caseGroupFilter);
+  if (simulationType) params.set('simulationType', simulationType);
 
   if (executionFilters.machineName) params.set('machine', executionFilters.machineName);
   else if (legacyMachineId) params.set('machineId', legacyMachineId);
@@ -211,6 +223,7 @@ export const CasesPage = () => {
   const [caseNameFilter, setCaseNameFilter] = useState(initialSearchState.caseNameFilter);
   const [debouncedCaseName, setDebouncedCaseName] = useState(initialSearchState.caseNameFilter);
   const [caseGroupFilter, setCaseGroupFilter] = useState(initialSearchState.caseGroupFilter);
+  const [simulationType, setSimulationType] = useState(initialSearchState.simulationType);
   const [executionFilters, setExecutionFilters] = useState<CaseExecutionFilters>(
     initialSearchState.executionFilters,
   );
@@ -242,8 +255,9 @@ export const CasesPage = () => {
       initializationType: executionFilters.initializationType || undefined,
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
+      simulationType: simulationType || undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId],
+    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId, simulationType],
   );
   const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
@@ -273,12 +287,21 @@ export const CasesPage = () => {
       serializeCaseSearchState({
         caseNameFilter: debouncedCaseName,
         caseGroupFilter,
+        simulationType,
         executionFilters,
         legacyMachineId,
         sorting,
         pagination,
       }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, legacyMachineId, pagination, sorting],
+    [
+      caseGroupFilter,
+      debouncedCaseName,
+      executionFilters,
+      legacyMachineId,
+      pagination,
+      simulationType,
+      sorting,
+    ],
   );
 
   useEffect(() => {
@@ -292,6 +315,7 @@ export const CasesPage = () => {
     setCaseNameFilter(next.caseNameFilter);
     setDebouncedCaseName(next.caseNameFilter);
     setCaseGroupFilter(next.caseGroupFilter);
+    setSimulationType(next.simulationType);
     setExecutionFilters(next.executionFilters);
     setLegacyMachineId(next.legacyMachineId);
     setSorting(next.sorting);
@@ -347,7 +371,9 @@ export const CasesPage = () => {
     data: cases,
     page: casePage,
     loading,
+    isFetching,
     error,
+    refetch: refetchCases,
   } = useCases({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
@@ -359,6 +385,7 @@ export const CasesPage = () => {
     initializationType: executionFilters.initializationType || undefined,
     compiler: executionFilters.compiler || undefined,
     gitTag: executionFilters.gitTag || undefined,
+    simulationType: simulationType || undefined,
     sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'latest_run_activity',
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
@@ -429,7 +456,10 @@ export const CasesPage = () => {
     [executionFilters],
   );
   const hasActiveFilters =
-    caseNameFilter.trim().length > 0 || caseGroupFilter.length > 0 || hasActiveExecutionFilters;
+    caseNameFilter.trim().length > 0 ||
+    caseGroupFilter.length > 0 ||
+    simulationType !== '' ||
+    hasActiveExecutionFilters;
   const advancedFilterCount = useMemo(
     () =>
       [
@@ -481,9 +511,11 @@ export const CasesPage = () => {
     }
 
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
+    if (simulationType)
+      filters.push({ key: 'simulationType', label: 'Type', value: simulationType });
 
     return filters;
-  }, [caseGroupFilter, caseNameFilter, executionFilters]);
+  }, [caseGroupFilter, caseNameFilter, executionFilters, simulationType]);
 
   const setExecutionFilter = (key: keyof CaseExecutionFilters, value: string) => {
     setExecutionFilters((current) => ({
@@ -497,6 +529,7 @@ export const CasesPage = () => {
   const clearAllFilters = () => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
+    setSimulationType('');
     setExecutionFilters(createEmptyExecutionFilters());
     setLegacyMachineId('');
     setShowAdvancedFilters(false);
@@ -510,6 +543,9 @@ export const CasesPage = () => {
         break;
       case 'caseGroup':
         setCaseGroupFilter('');
+        break;
+      case 'simulationType':
+        setSimulationType('');
         break;
       default:
         setExecutionFilters((current) => ({
@@ -808,14 +844,10 @@ export const CasesPage = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Loading cases…</div>
-      </div>
-    );
+    return <LoadingState kind="page" label="Loading cases" />;
   }
 
-  if (error) {
+  if (error && cases.length === 0) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-red-600">Error: {error}</div>
@@ -825,6 +857,14 @@ export const CasesPage = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1480px] space-y-6 px-6 py-8">
+      {error ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <span>Could not refresh cases. Showing previously loaded results.</span>
+          <Button size="sm" type="button" variant="outline" onClick={() => void refetchCases()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
       <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/70 to-slate-100/80 shadow-sm">
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -854,7 +894,7 @@ export const CasesPage = () => {
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.35fr)_220px_220px]">
+                <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_220px_220px_220px]">
                   <div className="space-y-2">
                     <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                       Search
@@ -887,6 +927,20 @@ export const CasesPage = () => {
                     placeholder: 'All HPC usernames',
                     options: hpcUsernameOptions,
                     onValueChange: (value) => setExecutionFilter('hpcUsername', value),
+                  })}
+
+                  {renderSelectField({
+                    label: 'Simulation type',
+                    value: simulationType,
+                    placeholder: 'All simulation types',
+                    options: [
+                      { value: 'production', label: 'Production' },
+                      { value: 'development', label: 'Development' },
+                    ],
+                    onValueChange: (value) => {
+                      setSimulationType(value as 'production' | 'development' | '');
+                      table.setPageIndex(0);
+                    },
                   })}
                 </div>
 
@@ -1027,6 +1081,11 @@ export const CasesPage = () => {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {isFetching ? (
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+            <LoadingState kind="inline" label="Refreshing cases" />
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>

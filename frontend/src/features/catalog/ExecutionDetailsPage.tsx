@@ -5,6 +5,7 @@ import { useLocation, useParams } from 'react-router-dom';
 
 import { resolvePaceExecution, updateExecution } from '@/api/catalog';
 import { useAuth } from '@/auth/hooks/useAuth';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   ExecutionDetailsView,
   type ExecutionSaveError,
@@ -62,7 +63,12 @@ const getUpdateError = (error: unknown): ExecutionSaveError => {
 
 export const ExecutionDetailsPage = () => {
   const queryClient = useQueryClient();
-  const { caseName, executionId: routeExecutionId, hpcUsername, machine: machineName } = useParams<{
+  const {
+    caseName,
+    executionId: routeExecutionId,
+    hpcUsername,
+    machine: machineName,
+  } = useParams<{
     caseName: string;
     executionId: string;
     hpcUsername: string;
@@ -181,11 +187,7 @@ export const ExecutionDetailsPage = () => {
   }
 
   if (loading || (execution !== null && currentExecution === null)) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Loading execution details…</div>
-      </div>
-    );
+    return <LoadingState kind="page" label="Loading execution details" />;
   }
 
   if (error) {

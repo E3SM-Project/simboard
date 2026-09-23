@@ -3,8 +3,8 @@ import { useRoutes } from 'react-router-dom';
 
 import { AuthCallback } from '@/auth/AuthCallback';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
+import { aboutRoutes } from '@/features/about/routes';
 import { catalogRoutes } from '@/features/catalog/routes';
-import { docsRoutes } from '@/features/docs/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
@@ -21,8 +21,8 @@ interface RoutesProps {
 export const AppRoutes = (props: RoutesProps) => {
   const routes = [
     ...homeRoutes(props),
+    ...aboutRoutes(),
     ...catalogRoutes(props),
-    ...docsRoutes(),
 
     {
       element: <ProtectedRoute />,

@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +29,13 @@ const navItems = [
     href: '/upload',
     description: 'Manually upload a compressed case archive',
   },
-  { label: 'Docs', href: '/docs', description: 'Guides and references for using the viewer' },
+  { label: 'About', href: '/about', description: 'Learn about SimBoard and catalog ingestion' },
+  {
+    label: 'Docs',
+    href: 'https://simboard.readthedocs.io/en/latest/user/',
+    description: 'Guides and references for using SimBoard',
+    external: true,
+  },
 ];
 
 export const NavBar = () => {
@@ -65,23 +72,35 @@ export const NavBar = () => {
         <nav className="hidden md:flex gap-3 ml-6">
           {navItems.map((item) => {
             const isActive =
-              item.href === '/'
+              !item.external &&
+              (item.href === '/'
                 ? location.pathname === item.href
-                : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
+                : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
 
             return (
               <TooltipProvider delayDuration={150} key={item.href}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
-                      to={item.href}
-                      className={cn(
-                        'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
-                        isActive && 'text-foreground border-foreground font-semibold',
-                      )}
-                    >
-                      {item.label}
-                    </Link>
+                    {item.external ? (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1"
+                      >
+                        {item.label}
+                      </a>
+                    ) : (
+                      <Link
+                        to={item.href}
+                        className={cn(
+                          'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
+                          isActive && 'text-foreground border-foreground font-semibold',
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    )}
                   </TooltipTrigger>
                   <TooltipContent className="bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-xs">
                     {item.description}
@@ -102,7 +121,11 @@ export const NavBar = () => {
           />
 
           {loading ? (
-            <span className="hidden md:block text-sm text-muted-foreground">Loading…</span>
+            <LoadingState
+              className="hidden md:flex"
+              kind="inline"
+              label="Checking authentication"
+            />
           ) : !isAuthenticated ? (
             <Button
               onClick={loginWithGithub}

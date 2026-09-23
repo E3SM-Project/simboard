@@ -9,6 +9,7 @@ import type { User } from '@/types/user';
 interface NavItem {
   label: string;
   href: string;
+  external?: boolean;
 }
 
 interface MobileMenuProps {
@@ -155,16 +156,29 @@ export const MobileMenu = ({
             )}
 
             <nav className="mt-4 flex flex-col gap-2">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className="px-2 py-1.5 text-sm rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
-                  onClick={() => setOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {navItems.map((item) =>
+                item.external ? (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2 py-1.5 text-sm rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                    onClick={() => setOpen(false)}
+                  >
+                    {item.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className="px-2 py-1.5 text-sm rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                    onClick={() => setOpen(false)}
+                  >
+                    {item.label}
+                  </Link>
+                ),
+              )}
             </nav>
           </div>
         </div>

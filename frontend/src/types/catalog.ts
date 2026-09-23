@@ -99,6 +99,7 @@ export interface CaseListItemOut {
   id: string;
   name: string;
   caseGroup: string | null;
+  simulationType: CaseSimulationTypeValue;
   machineId: string;
   machineName: string;
   hpcUsername: string;

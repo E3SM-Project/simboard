@@ -86,6 +86,7 @@ def list_cases(
     compiler: str | None = Query(None),
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
+    simulation_type: CaseSimulationType | None = Query(None),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -110,6 +111,7 @@ def list_cases(
         compiler=compiler,
         git_tag=git_tag,
         created_by=created_by,
+        simulation_type=simulation_type,
     )
     total = query.order_by(None).count()
     latest_execution = _completed_execution_summary_subquery(db)
@@ -147,6 +149,7 @@ def _filtered_case_list_query(
     compiler: str | None,
     git_tag: str | None,
     created_by: UUID | None,
+    simulation_type: CaseSimulationType | None,
 ):
     """Apply the Case list's scalar and same-execution filters."""
     query = db.query(Case)
@@ -160,6 +163,8 @@ def _filtered_case_list_query(
     ):
         if value:
             query = query.filter(column == value)
+    if simulation_type is not None:
+        query = query.filter(Case.simulation_type == simulation_type)
 
     predicates: list[ColumnElement[bool]] = []
     if execution_id:
@@ -235,6 +240,7 @@ def _case_list_projection(query, execution_count, latest_execution):
             Case.id,
             Case.name,
             Case.case_group,
+            Case.simulation_type,
             Case.machine_id,
             Machine.name.label("machine_name"),
             Case.hpc_username,
@@ -363,6 +369,7 @@ def get_case_filter_options(
     compiler: str | None = Query(None),
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
+    simulation_type: CaseSimulationType | None = Query(None),
 ) -> CaseFilterOptionsOut:
     """Return scalar case facets constrained by all other active filters."""
     filters = {
@@ -378,6 +385,7 @@ def get_case_filter_options(
         "compiler": compiler,
         "git_tag": git_tag,
         "created_by": created_by,
+        "simulation_type": simulation_type,
     }
 
     def case_query(exclude: str):
@@ -1601,6 +1609,7 @@ def _filtered_cases_for_facets(db: Session, filters: dict, *, exclude: str):
         ("case_group", Case.case_group),
         ("machine_id", Case.machine_id),
         ("hpc_username", Case.hpc_username),
+        ("simulation_type", Case.simulation_type),
     ):
         if filters[key] is not None and exclude != key:
             query = query.filter(column == filters[key])
@@ -1621,6 +1630,7 @@ def _filtered_executions_for_facets(db: Session, filters: dict, *, exclude: str)
         ("case_group", Case.case_group),
         ("machine_id", Case.machine_id),
         ("hpc_username", Case.hpc_username),
+        ("simulation_type", Case.simulation_type),
     ):
         if filters[key] is not None and exclude != key:
             query = query.filter(column == filters[key])
