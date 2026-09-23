@@ -369,6 +369,7 @@ def get_case_filter_options(
     compiler: str | None = Query(None),
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
+    simulation_type: CaseSimulationType | None = Query(None),
 ) -> CaseFilterOptionsOut:
     """Return scalar case facets constrained by all other active filters."""
     filters = {
@@ -384,6 +385,7 @@ def get_case_filter_options(
         "compiler": compiler,
         "git_tag": git_tag,
         "created_by": created_by,
+        "simulation_type": simulation_type,
     }
 
     def case_query(exclude: str):
@@ -1607,6 +1609,7 @@ def _filtered_cases_for_facets(db: Session, filters: dict, *, exclude: str):
         ("case_group", Case.case_group),
         ("machine_id", Case.machine_id),
         ("hpc_username", Case.hpc_username),
+        ("simulation_type", Case.simulation_type),
     ):
         if filters[key] is not None and exclude != key:
             query = query.filter(column == filters[key])
@@ -1627,6 +1630,7 @@ def _filtered_executions_for_facets(db: Session, filters: dict, *, exclude: str)
         ("case_group", Case.case_group),
         ("machine_id", Case.machine_id),
         ("hpc_username", Case.hpc_username),
+        ("simulation_type", Case.simulation_type),
     ):
         if filters[key] is not None and exclude != key:
             query = query.filter(column == filters[key])

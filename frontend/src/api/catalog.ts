@@ -34,6 +34,7 @@ export interface CaseFilterOptionsParams extends PageParams {
   compiler?: string;
   gitTag?: string;
   createdBy?: string;
+  simulationType?: 'production' | 'development';
 }
 
 export interface CaseIdentityParams {

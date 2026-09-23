@@ -800,6 +800,7 @@ class TestListCases:
         first_case = _create_case(
             db, "cascade-first", machine_id=first_machine.id, hpc_username="alpha"
         )
+        first_case.simulation_type = CaseSimulationType.PRODUCTION
         second_case = _create_case(
             db, "cascade-second", machine_id=first_machine.id, hpc_username="beta"
         )
@@ -840,6 +841,13 @@ class TestListCases:
             str(second_machine.id),
         }
 
+        simulation_type_facets = client.get(
+            f"{API_BASE}/cases/filter-options",
+            params={"simulation_type": CaseSimulationType.PRODUCTION.value},
+        ).json()
+        assert simulation_type_facets["hpcUsernames"] == ["alpha"]
+        assert simulation_type_facets["campaigns"] == ["campaign-a"]
+
         execution_facets = client.get(
             f"{API_BASE}/cases/filter-options",
             params={
@@ -847,6 +855,7 @@ class TestListCases:
                 "search": "cascade-first",
                 "execution_id": "cascade-first-execution",
                 "campaign": "campaign-a",
+                "simulation_type": CaseSimulationType.PRODUCTION.value,
             },
         ).json()
         assert execution_facets["hpcUsernames"] == ["alpha"]

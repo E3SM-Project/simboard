@@ -255,8 +255,9 @@ export const CasesPage = () => {
       initializationType: executionFilters.initializationType || undefined,
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
+      simulationType: simulationType || undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId],
+    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId, simulationType],
   );
   const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
@@ -370,6 +371,7 @@ export const CasesPage = () => {
     data: cases,
     page: casePage,
     loading,
+    isFetching,
     error,
     refetch: refetchCases,
   } = useCases({
@@ -1079,6 +1081,11 @@ export const CasesPage = () => {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {isFetching ? (
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+            <LoadingState kind="inline" label="Refreshing cases" />
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
