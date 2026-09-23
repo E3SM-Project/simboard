@@ -17,6 +17,7 @@ nav:
   - Home: README.md
   - User Guide:
       - Publish Diagnostics Links: user/diagnostics.md
+      - Ingestion Coverage: user/ingestion-coverage.md
   - Developer:
       - Developer Guide: developer/index.md
       - Assistant LLM Setup: developer/assistant-llm-setup.md
