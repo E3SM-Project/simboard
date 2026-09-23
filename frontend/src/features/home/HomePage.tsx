@@ -243,7 +243,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <img
               src="/logos/e3sm-logo.jpg"
               alt="E3SM logo"
-              className="max-h-28 w-full object-contain"
+              className="max-h-48 w-full object-contain"
             />
           </div>
         </div>
