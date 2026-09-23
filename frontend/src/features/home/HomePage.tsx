@@ -204,47 +204,37 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             </Button>
           </div>
 
-          <div className="grid overflow-hidden rounded-xl border border-muted sm:grid-cols-2 xl:grid-cols-5">
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Total Cases
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {totalCases}
-              </p>
-            </div>
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Total Executions
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {overview?.totalExecutions ?? 0}
-              </p>
-            </div>
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Machines
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {machines.length}
-              </p>
-            </div>
-            <div className="flex min-h-28 flex-col gap-4 border-b border-muted px-4 py-4 sm:border-r xl:border-b-0 xl:border-r">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Sites
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
-                {sites.length}
-              </p>
-            </div>
-            <div className="flex min-h-28 flex-col gap-4 px-4 py-4">
-              <p className="min-h-[2.75rem] text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Latest Submission
-              </p>
-              <p className="mt-auto text-xl font-semibold leading-none text-foreground sm:text-2xl">
+          <div className="border-t border-muted pt-5">
+            <p className="text-sm font-medium text-foreground">Catalog at a glance</p>
+            <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
+              <div>
+                <dt className="text-sm text-muted-foreground">Cases</dt>
+                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  {totalCases}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Executions</dt>
+                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  {overview?.totalExecutions ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Compute systems</dt>
+                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  {machines.length}{' '}
+                  <span className="text-base font-normal text-muted-foreground">
+                    across {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-5 text-sm text-muted-foreground">
+              Last submission:{' '}
+              <span className="font-medium text-foreground">
                 {latestSubmission ? new Date(latestSubmission).toLocaleDateString() : 'N/A'}
-              </p>
-            </div>
+              </span>
+            </p>
           </div>
         </div>
 
