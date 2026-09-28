@@ -180,9 +180,11 @@ make v3-diagnostics-apply \
 ```
 
 An existing destination is checked against the source (excluding source
-`provenance.*.settings` files). Missing files are reported as
+`provenance.*.settings` files) by relative path and file size. This is a
+copy-completeness check, not a byte-for-byte integrity check: different
+contents with the same size cannot be detected. Missing files are reported as
 `ready_to_repair` in the dry run and installed without replacing archive files
-during apply (`repaired`). Differences in existing files are reported as
+during apply (`repaired`). Size or file-type differences are reported as
 `failed` for manual review; archive-only files are retained. If a recovered
 destination has no paired `.cfg` and `.settings`, it is reported as
 `provenance_missing` and the command exits nonzero rather than claiming the

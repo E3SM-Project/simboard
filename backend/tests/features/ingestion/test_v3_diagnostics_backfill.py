@@ -501,7 +501,7 @@ def test_partial_copy_with_paired_provenance_is_linkable(
     assert (destination / "missing.html").is_file()
 
 
-def test_existing_conflict_is_not_overwritten(tmp_path: Path, monkeypatch) -> None:
+def test_existing_size_conflict_is_not_overwritten(tmp_path: Path, monkeypatch) -> None:
     source_root = tmp_path / "source-root"
     source = source_root / "ac.wlin/E3SMv3/case"
     source.mkdir(parents=True)
@@ -535,6 +535,43 @@ def test_existing_conflict_is_not_overwritten(tmp_path: Path, monkeypatch) -> No
     )
     assert (destination / "index.html").read_text() == "different"
     assert not (destination / "missing.html").exists()
+
+
+def test_inventory_compares_paths_and_sizes_without_reading_contents(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    (source / "same-size.html").write_text("first")
+    (destination / "same-size.html").write_text("other")
+    (source / "missing.html").write_text("missing")
+    (source / "truncated.html").write_text("long content")
+    (destination / "truncated.html").write_text("short")
+    (source / "wrong-type.html").write_text("file")
+    (destination / "wrong-type.html").mkdir()
+    (source / "provenance.20260811_120000_000000.settings").write_text("source")
+    (destination / "archive-only.html").write_text("retained")
+    monkeypatch.setattr(
+        Path,
+        "open",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("comparison must not open files")
+        ),
+    )
+
+    missing, conflicts = backfill._compare_copy(source, destination)
+
+    assert missing == [Path("missing.html")]
+    assert conflicts == [Path("truncated.html"), Path("wrong-type.html")]
+    # A same-size content change is intentionally not detected by the fast check.
+    assert (
+        backfill._compare_file(
+            source / "same-size.html", destination / "same-size.html"
+        )
+        is None
+    )
 
 
 def test_complete_existing_copy_without_provenance_is_not_skipped(

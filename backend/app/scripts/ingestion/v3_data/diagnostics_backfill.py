@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
 import os
 import shutil
 import stat
@@ -618,10 +617,11 @@ def _copy_diagnostics(source: Path, destination: Path) -> None:
 
 
 def _compare_copy(source: Path, destination: Path) -> tuple[list[Path], list[Path]]:
-    """Find missing and conflicting source entries, ignoring backfill settings.
+    """Compare relative paths and file sizes, ignoring backfill settings.
 
     Archive-only files are allowed; existing data is never overwritten. A
     directory symlink is a conflict rather than a traversal into another tree.
+    Equal file sizes do not guarantee identical content.
     """
     missing: list[Path] = []
     conflicts: list[Path] = []
@@ -659,7 +659,7 @@ def _compare_file(source: Path, archive: Path) -> str | None:
         return "conflict"
     if not archive.exists():
         return "missing"
-    if not archive.is_file() or not filecmp.cmp(source, archive, shallow=False):
+    if not archive.is_file() or source.stat().st_size != archive.stat().st_size:
         return "conflict"
     return None
 
