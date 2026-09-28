@@ -37,8 +37,10 @@ def test_api_base_url_accepts_host_or_versioned_api_url() -> None:
 def test_reconciliation_fields_include_counts_and_case_lists() -> None:
     report = {
         "copied": ["copied"],
+        "repaired": ["repaired"],
         "linked": [],
         "skipped_existing": [],
+        "provenance_missing": [],
         "missing": [],
         "unmapped": ["unmapped"],
         "zero_matches": [],
@@ -52,6 +54,7 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
 
     assert fields["selected_target_count"] == 4
     assert fields["ready_to_copy_count"] == "1/4"
+    assert fields["ready_to_repair_count"] == "1/4"
     assert "copied_count" not in fields
     assert fields["ambiguous_count"] == "2/4"
     assert fields["ambiguous_cases"] == ["duplicate-a", "duplicate-b"]
@@ -374,8 +377,13 @@ def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> Non
     source = source_root / "ac.wlin/E3SMv3/case"
     source.mkdir(parents=True)
     (source / "index.html").write_text("output")
+    (source / "provenance.20260811_120000_000000.settings").write_text("source")
     destination = tmp_path / "archive/production/case"
     destination.mkdir(parents=True)
+    (destination / "index.html").write_text("output")
+    cfg = destination / "provenance.20260811_120000_000000.cfg"
+    cfg.touch()
+    cfg.with_suffix(".settings").write_text("existing settings")
     target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
     source_sizes: dict[str, int] = {}
     monkeypatch.setattr(
@@ -403,12 +411,218 @@ def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> Non
         )
         == "skipped_existing"
     )
-    assert source_sizes == {"case": 6}
+    assert source_sizes == {"case": 12}
+
+
+def test_partial_copy_is_repaired_without_synthetic_provenance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("original")
+    (source / "nested").mkdir()
+    (source / "nested/missing.html").write_text("missing content")
+    (source / "provenance.20260811_120000_000000.settings").write_text("source")
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    (destination / "index.html").write_text("original")
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    def run(dry_run: bool) -> str:
+        return backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=dry_run,
+        )
+
+    assert run(dry_run=True) == "repaired"
+    assert not (destination / "nested").exists()
+    assert run(dry_run=False) == "provenance_missing"
+    assert (destination / "nested/missing.html").read_text() == "missing content"
+    assert (destination / "index.html").read_text() == "original"
+    assert not list(destination.glob("provenance.*"))
+    assert run(dry_run=False) == "provenance_missing"
+
+
+def test_partial_copy_with_paired_provenance_is_linkable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "missing.html").write_text("diagnostics")
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    cfg = destination / "provenance.20260811_120000_000000.cfg"
+    cfg.touch()
+    cfg.with_suffix(".settings").write_text("archive metadata")
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+    paths: set[Path] = set()
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+            scanner_case_paths=paths,
+        )
+        == "repaired"
+    )
+    assert paths == {Path("production/case")}
+    assert (destination / "missing.html").is_file()
+
+
+def test_existing_conflict_is_not_overwritten(tmp_path: Path, monkeypatch) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("source")
+    (source / "missing.html").write_text("not copied")
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    (destination / "index.html").write_text("different")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis"),
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+        )
+        == "failed"
+    )
+    assert (destination / "index.html").read_text() == "different"
+    assert not (destination / "missing.html").exists()
+
+
+def test_complete_existing_copy_without_provenance_is_not_skipped(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("output")
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    (destination / "index.html").write_text("output")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+    scanner_paths: set[Path] = set()
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis"),
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+            scanner_case_paths=scanner_paths,
+        )
+        == "provenance_missing"
+    )
+    assert not scanner_paths
+
+
+def test_directory_symlink_in_partial_archive_is_a_conflict(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    (source / "nested").mkdir(parents=True)
+    (source / "nested/output.html").write_text("output")
+    destination.mkdir()
+    (destination / "nested").symlink_to(source / "nested", target_is_directory=True)
+
+    missing, conflicts = backfill._compare_copy(source, destination)
+
+    assert not missing
+    assert conflicts == [Path("nested")]
+
+
+def test_missing_source_cannot_validate_existing_archive(
+    tmp_path: Path, monkeypatch
+) -> None:
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=tmp_path / "source-root",
+            target=backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis"),
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=False,
+        )
+        == "missing"
+    )
 
 
 def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
     report = backfill._new_report("chrysalis")
     report["skipped_existing"].append("case")
+    report["repaired"].append("repaired-case")
+    report["provenance_missing"].append("unlinked-case")
     scanner_paths: list[set[Path]] = []
     monkeypatch.setattr(
         backfill,
@@ -420,10 +634,13 @@ def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
         report,
         "chrysalis",
         dry_run=False,
-        scanner_case_paths={Path("production/case")},
+        scanner_case_paths={Path("production/case"), Path("production/repaired-case")},
     )
 
-    assert scanner_paths == [{Path("production/case")}]
+    assert scanner_paths == [
+        {Path("production/case"), Path("production/repaired-case")}
+    ]
+    assert report["linked"] == ["repaired-case"]
 
 
 def test_backfill_uses_explicit_bonus_source_directory(

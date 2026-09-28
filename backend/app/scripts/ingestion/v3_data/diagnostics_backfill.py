@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import filecmp
 import os
 import shutil
 import stat
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,8 +28,10 @@ from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import V3_CASE_NAMES
 SUPPORTED_MACHINES = frozenset({"chrysalis", "perlmutter"})
 RECONCILIATION_STATUSES = (
     "copied",
+    "repaired",
     "linked",
     "skipped_existing",
+    "provenance_missing",
     "missing",
     "unmapped",
     "zero_matches",
@@ -196,6 +200,7 @@ def main() -> int:
             "owner_mismatch",
             "ambiguous",
             "failed",
+            "provenance_missing",
         )
     ):
         return 1
@@ -347,11 +352,17 @@ def _backfill_target(
     destination /= target.case_name
 
     source_exists = source.is_dir()
-    if destination.is_dir():
-        _record_scanner_case_path(scanner_case_paths, archive_root, destination)
-        if source_exists:
-            _record_dry_run_source_size(include_sizes, source, target, source_sizes)
-        return "skipped_existing"
+    if destination.is_dir() and not destination.is_symlink():
+        return _reconcile_existing_copy(
+            source=source,
+            destination=destination,
+            archive_root=archive_root,
+            target=target,
+            dry_run=dry_run,
+            include_sizes=include_sizes,
+            scanner_case_paths=scanner_case_paths,
+            source_sizes=source_sizes,
+        )
     if destination.exists():
         return "failed"
 
@@ -377,6 +388,67 @@ def _backfill_target(
     _record_scanner_case_path(scanner_case_paths, archive_root, destination)
 
     return "copied"
+
+
+def _reconcile_existing_copy(
+    *,
+    source: Path,
+    destination: Path,
+    archive_root: Path,
+    target: Target,
+    dry_run: bool,
+    include_sizes: bool,
+    scanner_case_paths: set[Path] | None,
+    source_sizes: dict[str, int] | None,
+) -> str:
+    if not source.is_dir():
+        return "missing"
+
+    try:
+        missing, conflicts = _compare_copy(source, destination)
+        _log_event(
+            "v3_diagnostics_backfill_existing_copy_check",
+            {
+                "case_name": target.case_name,
+                "missing_count": len(missing),
+                "conflict_count": len(conflicts),
+                "missing_sample": [str(path) for path in missing[:10]],
+                "conflict_sample": [str(path) for path in conflicts[:10]],
+            },
+        )
+        if conflicts:
+            return "failed"
+        if missing:
+            if dry_run:
+                if _latest_cfg(source) is None and _latest_cfg(destination) is None:
+                    _log_event(
+                        "v3_diagnostics_backfill_source_provenance_missing",
+                        {"case_name": target.case_name, "source": str(source)},
+                    )
+                return "repaired"
+            _repair_copy(source, destination, missing)
+            remaining, conflicts = _compare_copy(source, destination)
+            if remaining or conflicts:
+                return "failed"
+            _make_publicly_readable(destination)
+        else:
+            _record_dry_run_source_size(include_sizes, source, target, source_sizes)
+
+        if not _has_paired_provenance(destination):
+            _log_event(
+                "v3_diagnostics_backfill_provenance_missing",
+                {"case_name": target.case_name, "destination": str(destination)},
+            )
+            return "provenance_missing"
+    except (OSError, shutil.Error) as exc:
+        _log_event(
+            "v3_diagnostics_backfill_target_failed",
+            {"case_name": target.case_name, "error": str(exc)},
+        )
+        return "failed"
+
+    _record_scanner_case_path(scanner_case_paths, archive_root, destination)
+    return "repaired" if missing else "skipped_existing"
 
 
 def _resolve_owner_case(
@@ -545,6 +617,87 @@ def _copy_diagnostics(source: Path, destination: Path) -> None:
     )
 
 
+def _compare_copy(source: Path, destination: Path) -> tuple[list[Path], list[Path]]:
+    """Find missing and conflicting source entries, ignoring backfill settings.
+
+    Archive-only files are allowed; existing data is never overwritten. A
+    directory symlink is a conflict rather than a traversal into another tree.
+    """
+    missing: list[Path] = []
+    conflicts: list[Path] = []
+    for root, directories, filenames in os.walk(
+        source, followlinks=False, onerror=_raise_walk_error
+    ):
+        relative_root = Path(root).relative_to(source)
+        for name in directories[:]:
+            relative = relative_root / name
+            source_dir = source / relative
+            archive_dir = destination / relative
+            if source_dir.is_symlink():
+                conflicts.append(relative)
+                directories.remove(name)
+            elif _conflicting_directory(archive_dir):
+                conflicts.append(relative)
+                directories.remove(name)
+            elif not archive_dir.is_dir():
+                missing.append(relative)
+
+        for name in filenames:
+            if name.startswith("provenance.") and name.endswith(".settings"):
+                continue
+            relative = relative_root / name
+            result = _compare_file(source / relative, destination / relative)
+            if result == "conflict":
+                conflicts.append(relative)
+            elif result == "missing":
+                missing.append(relative)
+    return missing, conflicts
+
+
+def _compare_file(source: Path, archive: Path) -> str | None:
+    if not source.is_file() or archive.is_symlink():
+        return "conflict"
+    if not archive.exists():
+        return "missing"
+    if not archive.is_file() or not filecmp.cmp(source, archive, shallow=False):
+        return "conflict"
+    return None
+
+
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
+def _conflicting_directory(path: Path) -> bool:
+    return path.is_symlink() or (path.exists() and not path.is_dir())
+
+
+def _repair_copy(source: Path, destination: Path, missing: list[Path]) -> None:
+    """Install missing files atomically without replacing any archive file."""
+    for relative in missing:
+        archive_path = destination / relative
+        source_path = source / relative
+        if source_path.is_dir():
+            archive_path.mkdir(parents=True, exist_ok=True)
+            continue
+
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=".backfill-", dir=archive_path.parent)
+        staged = Path(temporary)
+        try:
+            with os.fdopen(fd, "wb") as output, source_path.open("rb") as input_file:
+                shutil.copyfileobj(input_file, output)
+            shutil.copymode(source_path, staged)
+            os.link(staged, archive_path)  # Exclusive: never replace existing data.
+        finally:
+            staged.unlink(missing_ok=True)
+
+
+def _has_paired_provenance(directory: Path) -> bool:
+    cfg = _latest_cfg(directory)
+    return cfg is not None and cfg.with_suffix(".settings").is_file()
+
+
 def _create_provenance_cfg(directory: Path) -> Path:
     """Create provenance for historic diagnostics that predate zppy provenance."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
@@ -660,9 +813,11 @@ def _run_scanner_if_reconciled(
     os.environ["DRY_RUN"] = "false"
 
     if run_scanner(included_case_paths=scanner_case_paths) != 0:
-        report["failed"].extend(report["copied"] + report["skipped_existing"])
+        report["failed"].extend(
+            report["copied"] + report["repaired"] + report["skipped_existing"]
+        )
     else:
-        report["linked"] = report["copied"].copy()
+        report["linked"] = report["copied"] + report["repaired"]
 
 
 def _reconciliation_fields(
@@ -676,7 +831,13 @@ def _reconciliation_fields(
     }
 
     for status in RECONCILIATION_STATUSES:
-        label = "ready_to_copy" if dry_run and status == "copied" else status
+        label = (
+            {"copied": "ready_to_copy", "repaired": "ready_to_repair"}.get(
+                status, status
+            )
+            if dry_run
+            else status
+        )
         fields[f"{label}_count"] = f"{len(report[status])}/{selected_target_count}"
         fields[f"{label}_cases"] = report[status]
 
