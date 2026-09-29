@@ -129,6 +129,7 @@ if {target.case_name for target in V3_DIAGNOSTIC_TARGETS} != (
 def main() -> int:
     """Backfill diagnostics for one supported machine."""
     args = _parse_args()
+    selected = _select_targets(args.machine, args.case_name)
     dry_run = _dry_run_requested(args.dry_run)
     include_sizes = args.include_sizes
     trust_existing = args.trust_existing
@@ -146,8 +147,7 @@ def main() -> int:
     if not dry_run and not os.environ.get("SIMBOARD_API_TOKEN", "").strip():
         raise ValueError("SIMBOARD_API_TOKEN is required when --dry-run is not set")
 
-    selected = [target for target in V3_DIAGNOSTIC_TARGETS if target.machine == machine]
-    report = _new_report(machine)
+    report = _new_report(machine, selected)
     scanner_case_paths: set[Path] = set()
     source_sizes: dict[str, int] = {}
 
@@ -163,6 +163,7 @@ def main() -> int:
         machine=machine,
         public_base_url=archive.public_base_url,
         selected_target_count=len(selected),
+        case_name=args.case_name,
         source_root=source_root,
     )
 
@@ -215,6 +216,10 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--machine", required=True, choices=sorted(SUPPORTED_MACHINES))
     parser.add_argument(
+        "--case-name",
+        help="Backfill only this exact reviewed case name for the selected machine.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Report actions without writing or scanning, overriding DRY_RUN.",
@@ -233,7 +238,32 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    try:
+        _select_targets(args.machine, args.case_name)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
+
+
+def _select_targets(machine: str, case_name: str | None = None) -> list[Target]:
+    """Select reviewed targets, rejecting unknown cases and machine mismatches."""
+    if case_name is None:
+        return [target for target in V3_DIAGNOSTIC_TARGETS if target.machine == machine]
+
+    matches = [
+        target for target in V3_DIAGNOSTIC_TARGETS if target.case_name == case_name
+    ]
+    if not matches:
+        raise ValueError(f"Unknown v3 diagnostic case name: {case_name}")
+    selected = [target for target in matches if target.machine == machine]
+    if not selected:
+        machines = ", ".join(sorted({target.machine for target in matches}))
+        raise ValueError(
+            f"Case {case_name} is mapped to {machines}, not {machine}; "
+            "use the mapped --machine."
+        )
+    return selected
 
 
 def _dry_run_requested(command_line_dry_run: bool) -> bool:
@@ -266,7 +296,9 @@ def _api_base_url(value: str) -> str:
     return value.strip().rstrip("/").removesuffix("/api/v1")
 
 
-def _new_report(machine: str) -> dict[str, list[str]]:
+def _new_report(
+    machine: str, selected: list[Target] | None = None
+) -> dict[str, list[str]]:
     """Initialize reconciliation categories for the selected machine."""
     report: dict[str, list[str]] = {
         status: [] for status in (*RECONCILIATION_STATUSES, "machine_skipped")
@@ -278,8 +310,8 @@ def _new_report(machine: str) -> dict[str, list[str]]:
     ]
     report["unmapped"] = [
         target.case_name
-        for target in V3_DIAGNOSTIC_TARGETS
-        if target.machine == machine and target.source is None
+        for target in (selected if selected is not None else _select_targets(machine))
+        if target.source is None
     ]
     return report
 
@@ -295,6 +327,7 @@ def _log_startup_configuration(
     public_base_url: str,
     selected_target_count: int,
     source_root: Path,
+    case_name: str | None = None,
 ) -> None:
     """Log effective configuration without exposing the API token."""
     _log_multiline_event(
@@ -310,6 +343,7 @@ def _log_startup_configuration(
             "diagnostics_archive_root": archive_root,
             "diagnostics_public_base_url": public_base_url,
             "selected_target_count": selected_target_count,
+            "selected_case_name": case_name,
         },
     )
 

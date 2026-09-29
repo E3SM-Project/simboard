@@ -1,9 +1,142 @@
+import sys
 from pathlib import Path
 
 import httpx
+import pytest
 
 from app.scripts.ingestion import archive_ingestor_core
+from app.scripts.ingestion.diagnostics_archives import DiagnosticsArchive
 from app.scripts.ingestion.v3_data import diagnostics_backfill as backfill
+
+
+def test_select_targets_defaults_to_all_cases_for_machine() -> None:
+    for machine in backfill.SUPPORTED_MACHINES:
+        assert backfill._select_targets(machine) == [
+            target
+            for target in backfill.V3_DIAGNOSTIC_TARGETS
+            if target.machine == machine
+        ]
+
+
+@pytest.mark.parametrize(
+    ("case_name", "message"),
+    [
+        ("unknown", "Unknown v3 diagnostic case name"),
+        ("v3.LR.amip_bonus_0101", "mapped to perlmutter, not chrysalis"),
+    ],
+)
+def test_invalid_case_selection_fails_before_external_work(
+    monkeypatch, capsys, case_name: str, message: str
+) -> None:
+    monkeypatch.setattr(
+        sys, "argv", ["backfill", "--machine", "chrysalis", "--case-name", case_name]
+    )
+    monkeypatch.delenv("SIMBOARD_API_BASE_URL", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        backfill.main()
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_single_case_run_copies_and_scans_only_selected_case(
+    tmp_path: Path, monkeypatch, dry_run: bool
+) -> None:
+    case_name = "v3.LR.historical_0201"
+    target = backfill._select_targets("chrysalis", case_name)[0]
+    assert target.case_name == case_name
+    source = tmp_path / target.source / case_name
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("diagnostics")
+    archive = tmp_path / "archive"
+    monkeypatch.setitem(
+        backfill.DIAGNOSTICS_ARCHIVES_BY_MACHINE,
+        "chrysalis",
+        DiagnosticsArchive(str(archive), "https://example.org/archive"),
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["backfill", "--machine", "chrysalis", "--case-name", case_name]
+    )
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "test-token")
+    monkeypatch.setenv("DRY_RUN", str(dry_run).lower())
+    monkeypatch.setattr(backfill, "_resolve_machine_id", lambda *args: "machine-id")
+    resolved: list[str] = []
+
+    def resolve_owner_case(client, api_base, selected, machine_id, source):
+        resolved.append(selected.case_name)
+        return {"name": case_name, "hpcUsername": "ac.wlin"}, None
+
+    monkeypatch.setattr(backfill, "_resolve_owner_case", resolve_owner_case)
+    scans: list[set[Path]] = []
+
+    def scan(*, included_case_paths):
+        scans.append(included_case_paths)
+        return 0
+
+    monkeypatch.setattr(backfill, "run_scanner", scan)
+    events: dict[str, dict] = {}
+    monkeypatch.setattr(
+        backfill,
+        "_log_multiline_event",
+        lambda name, fields: events.update({name: fields}),
+    )
+
+    assert backfill.main() == 0
+    assert resolved == [case_name]
+    report = events["v3_diagnostics_backfill_reconciliation"]
+    assert report["selected_target_count"] == 1
+    assert report["ready_to_copy_count" if dry_run else "copied_count"] == "1/1"
+    assert report["missing_cases"] == []
+    assert report["unmapped_cases"] == []
+    assert (
+        events["v3_diagnostics_backfill_startup_configuration"]["selected_case_name"]
+        == case_name
+    )
+    if dry_run:
+        assert not archive.exists()
+        assert scans == []
+    else:
+        destination = archive / "production" / case_name
+        assert (destination / "index.html").read_text() == "diagnostics"
+        assert len(list(destination.glob("provenance.*.settings"))) == 1
+        assert list((archive / "production").iterdir()) == [destination]
+        assert scans == [{Path("production") / case_name}]
+
+
+@pytest.mark.parametrize("status", ["missing", "owner_mismatch", "failed"])
+def test_single_case_failure_exits_nonzero_without_scanning(
+    tmp_path: Path, monkeypatch, status: str
+) -> None:
+    case_name = "v3.LR.historical_0201"
+    monkeypatch.setattr(
+        sys, "argv", ["backfill", "--machine", "chrysalis", "--case-name", case_name]
+    )
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "test-token")
+    monkeypatch.setenv("DRY_RUN", "false")
+    monkeypatch.setitem(
+        backfill.DIAGNOSTICS_ARCHIVES_BY_MACHINE,
+        "chrysalis",
+        DiagnosticsArchive(str(tmp_path / "archive"), "https://example.org/archive"),
+    )
+    monkeypatch.setattr(backfill, "_resolve_machine_id", lambda *args: "machine-id")
+    monkeypatch.setattr(backfill, "_backfill_target", lambda **kwargs: status)
+
+    def unexpected_scan(**kwargs):
+        pytest.fail("Failed reconciliation must not invoke the scanner")
+
+    monkeypatch.setattr(backfill, "run_scanner", unexpected_scan)
+    reports: list[dict] = []
+    monkeypatch.setattr(
+        backfill,
+        "_log_reconciliation",
+        lambda report, *args: reports.append(report),
+    )
+    assert backfill.main() == 1
+    assert reports[0][status] == [case_name]
+    assert reports[0]["linked"] == []
+    assert not (tmp_path / "archive").exists()
 
 
 def test_dry_run_defaults_to_true_and_matches_scanner_values(monkeypatch) -> None:
@@ -681,7 +814,8 @@ def test_inventory_compares_paths_and_sizes_without_reading_contents(
     missing, conflicts = backfill._compare_copy(source, destination)
 
     assert missing == [Path("missing.html")]
-    assert conflicts == [Path("truncated.html"), Path("wrong-type.html")]
+    # Filesystem traversal order is not guaranteed.
+    assert sorted(conflicts) == [Path("truncated.html"), Path("wrong-type.html")]
     # A same-size content change is intentionally not detected by the fast check.
     assert (
         backfill._compare_file(

@@ -55,3 +55,13 @@ ensures the copied archive is publicly readable, and then invokes the normal
 scanner. Its reconciliation event reports copied, linked, skipped-existing,
 missing, unmapped, zero-match, owner-mismatch, ambiguous, failed, and
 other-machine-skipped targets.
+
+To retry only one reviewed target, pass `--case-name v3.LR.historical_0201`
+to the Python runner, or `case_name=v3.LR.historical_0201` to either
+`make v3-diagnostics-dry-run` or `make v3-diagnostics-apply`. The name must
+match exactly and belong to the selected machine. Without a filter, all
+targets for that machine are selected. A filtered run reconciles and scans
+only that case and reports selected-target outcomes against a total of one;
+machine-skipped counts remain a separate, manifest-wide summary.
+The filter does not bypass source verification, partial-copy repair, or
+conflict protection. Review the single-case dry run before applying.

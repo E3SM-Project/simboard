@@ -224,6 +224,22 @@ make v3-diagnostics-dry-run \
   env=prod
 ```
 
+To retry one case without comparing or scanning the other cases, specify
+its exact reviewed name. First review the dry-run reconciliation, then apply:
+
+```bash
+make v3-diagnostics-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  env=prod case_name=v3.LR.historical_0201
+
+make v3-diagnostics-apply \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  env=prod case_name=v3.LR.historical_0201
+```
+
+Omit `case_name` to process every mapped case for the machine. The filter
+does not bypass existing-copy verification or overwrite conflicting files.
+
 For a nonstandard secure location, pass `env_file=/path/to/v3.env` in
 addition to `SIMBOARD_ROOT` and `env`. Optional variables in the v3
 file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,

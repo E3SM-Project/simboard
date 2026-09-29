@@ -55,6 +55,7 @@ help:
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
 	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
 	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
+	@echo "    Optional: case_name=<exact-case-name> to retry one v3 diagnostics case"
 	@echo ""
 
 	@echo "Frontend:"
@@ -383,12 +384,12 @@ v3-ingest-apply:
 v3-diagnostics-dry-run:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-dry-run
 	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true INCLUDE_SIZES="$(include_sizes)" TRUST_EXISTING="$(trust_existing)" \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
 
 v3-diagnostics-apply:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-apply
 	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false TRUST_EXISTING="$(trust_existing)" \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
 
 ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
 

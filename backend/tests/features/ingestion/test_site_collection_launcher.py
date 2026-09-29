@@ -934,8 +934,11 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
         ("v3-diagnostics-apply", "false"),
     ],
 )
+@pytest.mark.parametrize(
+    "case_name", [None, "v3.LR.historical_0201", "invalid'case\"`name`"]
+)
 def test_v3_make_arguments_translate_to_runner_environment(
-    tmp_path: Path, target: str, dry_run: str
+    tmp_path: Path, target: str, dry_run: str, case_name: str | None
 ) -> None:
     repository_root = Path(__file__).resolve().parents[4]
     env_file = tmp_path / "custom-v3.env"
@@ -951,6 +954,7 @@ def test_v3_make_arguments_translate_to_runner_environment(
             f"env_file={env_file}",
             "include_sizes=true",
             "trust_existing=true",
+            *([f"case_name={case_name}"] if case_name is not None else []),
         ],
         capture_output=True,
         check=False,
@@ -965,6 +969,11 @@ def test_v3_make_arguments_translate_to_runner_environment(
         assert 'INCLUDE_SIZES="true" TRUST_EXISTING="true"' in result.stdout
     elif target == "v3-diagnostics-apply":
         assert 'TRUST_EXISTING="true"' in result.stdout
+    if target.startswith("v3-diagnostics-") and case_name is not None:
+        quoted_case_name = "'" + case_name.replace("'", "'\"'\"'") + "'"
+        assert f"--case-name {quoted_case_name}" in result.stdout
+    else:
+        assert "--case-name" not in result.stdout
     assert "V3_DIAGNOSTICS_" not in result.stdout
     assert "LCRC_V3_" not in result.stdout
 
@@ -992,7 +1001,15 @@ def test_v3_wrappers_honor_make_dry_run_over_sourced_file(
         '#!/bin/sh\nprintf "mode=%s args=%s\\n" "$DRY_RUN" "$*"\n',
     )
     result = subprocess.run(
-        ["bash", str(backend_dir / "app/scripts/ingestion/v3_data" / runner)],
+        [
+            "bash",
+            str(backend_dir / "app/scripts/ingestion/v3_data" / runner),
+            *(
+                ["--case-name", "v3.LR.historical_0201"]
+                if runner == "lcrc_v3_diagnostics_backfill.sh"
+                else []
+            ),
+        ],
         env={
             **os.environ,
             "ENV_FILE": str(env_file),
@@ -1009,3 +1026,5 @@ def test_v3_wrappers_honor_make_dry_run_over_sourced_file(
     assert result.returncode == 0, result.stderr
     assert "mode=true args=-m app.scripts.ingestion.v3_data." in result.stdout
     assert extra_args in result.stdout
+    if runner == "lcrc_v3_diagnostics_backfill.sh":
+        assert "--case-name v3.LR.historical_0201" in result.stdout
