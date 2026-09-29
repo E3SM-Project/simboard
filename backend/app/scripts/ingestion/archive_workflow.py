@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 import tarfile
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Callable
+
+from tqdm import tqdm
 
 from app.scripts.ingestion.archive_client import (
     _ingest_case_with_retries,
@@ -259,7 +262,9 @@ def _handle_ingest_run(
     success_count = 0
     failure_count = 0
 
-    for candidate in candidates:
+    for candidate in tqdm(
+        candidates, desc="Ingesting cases", unit="case", disable=not sys.stderr.isatty()
+    ):
         try:
             if candidate_preparer is None:
                 result = _ingest_case_with_retries(
