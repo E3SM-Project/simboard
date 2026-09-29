@@ -925,7 +925,18 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
     )
 
 
-def test_v3_make_arguments_translate_to_runner_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("target", "dry_run"),
+    [
+        ("v3-ingest-dry-run", "true"),
+        ("v3-ingest-apply", "false"),
+        ("v3-diagnostics-dry-run", "true"),
+        ("v3-diagnostics-apply", "false"),
+    ],
+)
+def test_v3_make_arguments_translate_to_runner_environment(
+    tmp_path: Path, target: str, dry_run: str
+) -> None:
     repository_root = Path(__file__).resolve().parents[4]
     env_file = tmp_path / "custom-v3.env"
     env_file.write_text("SIMBOARD_API_BASE_URL=https://example.org\n")
@@ -934,7 +945,7 @@ def test_v3_make_arguments_translate_to_runner_environment(tmp_path: Path) -> No
         [
             "make",
             "-n",
-            "v3-diagnostics-dry-run",
+            target,
             f"SIMBOARD_ROOT={tmp_path}",
             "env=dev",
             f"env_file={env_file}",
@@ -948,6 +959,53 @@ def test_v3_make_arguments_translate_to_runner_environment(tmp_path: Path) -> No
     )
 
     assert result.returncode == 0, result.stderr
-    assert f'V3_ENV_FILE="{env_file}"' in result.stdout
-    assert 'V3_DIAGNOSTICS_INCLUDE_SIZES="true"' in result.stdout
-    assert 'V3_DIAGNOSTICS_TRUST_EXISTING="true"' in result.stdout
+    assert f'ENV_FILE="{env_file}"' in result.stdout
+    assert f"DRY_RUN={dry_run}" in result.stdout
+    if target == "v3-diagnostics-dry-run":
+        assert 'INCLUDE_SIZES="true" TRUST_EXISTING="true"' in result.stdout
+    elif target == "v3-diagnostics-apply":
+        assert 'TRUST_EXISTING="true"' in result.stdout
+    assert "V3_DIAGNOSTICS_" not in result.stdout
+    assert "LCRC_V3_" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("runner", "extra_args"),
+    [
+        ("lcrc_v3.sh", ""),
+        ("lcrc_v3_diagnostics_backfill.sh", "--include-sizes --trust-existing"),
+    ],
+)
+def test_v3_wrappers_honor_make_dry_run_over_sourced_file(
+    tmp_path: Path, runner: str, extra_args: str
+) -> None:
+    backend_dir = Path(__file__).resolve().parents[3]
+    env_file = tmp_path / "backfill.env"
+    env_file.write_text(
+        "SIMBOARD_API_BASE_URL=https://example.org\n"
+        "SIMBOARD_API_TOKEN=test-token\n"
+        "DRY_RUN=false\n",
+        encoding="utf-8",
+    )
+    fake_python = _write_executable(
+        tmp_path / "python",
+        '#!/bin/sh\nprintf "mode=%s args=%s\\n" "$DRY_RUN" "$*"\n',
+    )
+    result = subprocess.run(
+        ["bash", str(backend_dir / "app/scripts/ingestion/v3_data" / runner)],
+        env={
+            **os.environ,
+            "ENV_FILE": str(env_file),
+            "PYTHON_BIN": str(fake_python),
+            "DRY_RUN": "true",
+            "INCLUDE_SIZES": "true",
+            "TRUST_EXISTING": "true",
+        },
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "mode=true args=-m app.scripts.ingestion.v3_data." in result.stdout
+    assert extra_args in result.stdout

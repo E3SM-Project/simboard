@@ -372,25 +372,25 @@ backend-provision-service:
 
 v3-ingest-dry-run:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-dry-run
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=true \
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 v3-ingest-apply:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-apply
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=false \
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
 
 v3-diagnostics-dry-run:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-dry-run
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=true V3_DIAGNOSTICS_INCLUDE_SIZES="$(include_sizes)" V3_DIAGNOSTICS_TRUST_EXISTING="$(trust_existing)" \
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true INCLUDE_SIZES="$(include_sizes)" TRUST_EXISTING="$(trust_existing)" \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
 v3-diagnostics-apply:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-apply
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=false V3_DIAGNOSTICS_TRUST_EXISTING="$(trust_existing)" \
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false TRUST_EXISTING="$(trust_existing)" \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
-V3_ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
+ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
 
 .PHONY: validate-v3-env
 validate-v3-env:
@@ -402,8 +402,8 @@ validate-v3-env:
 		echo "env must be dev or prod" >&2; \
 		exit 1; \
 	fi; \
-	if [ ! -r "$(V3_ENV_PATH)" ]; then \
-		echo "Missing v3 environment file: $(V3_ENV_PATH)" >&2; \
+	if [ ! -r "$(ENV_PATH)" ]; then \
+		echo "Missing v3 environment file: $(ENV_PATH)" >&2; \
 		echo "Create it with:" >&2; \
 		echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)" >&2; \
 		exit 1; \

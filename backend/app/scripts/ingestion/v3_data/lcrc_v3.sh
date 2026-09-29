@@ -13,21 +13,22 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   exit 1
 fi
 
-: "${V3_ENV_FILE:?V3_ENV_FILE must identify a readable environment file.}"
-if [[ ! -f "${V3_ENV_FILE}" || ! -r "${V3_ENV_FILE}" ]]; then
-  echo "V3_ENV_FILE must identify a readable file: ${V3_ENV_FILE}" >&2
+: "${ENV_FILE:?ENV_FILE must identify a readable environment file.}"
+if [[ ! -f "${ENV_FILE}" || ! -r "${ENV_FILE}" ]]; then
+  echo "ENV_FILE must identify a readable file: ${ENV_FILE}" >&2
   exit 1
 fi
 
+requested_dry_run="${DRY_RUN:-}"
 set -a
 # shellcheck source=/dev/null
-source "${V3_ENV_FILE}"
+source "${ENV_FILE}"
 set +a
 
-: "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in V3_ENV_FILE.}"
-: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in V3_ENV_FILE.}"
+: "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in ENV_FILE.}"
+: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in ENV_FILE.}"
 
-export DRY_RUN="${LCRC_V3_DRY_RUN:-${DRY_RUN:-true}}"
+export DRY_RUN="${requested_dry_run:-${DRY_RUN:-true}}"
 export OLD_PERF_ARCHIVE_ROOT="${OLD_PERF_ARCHIVE_ROOT:-/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF}"
 
 cd "${BACKEND_DIR}"

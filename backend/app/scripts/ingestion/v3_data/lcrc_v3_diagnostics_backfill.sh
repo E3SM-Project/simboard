@@ -13,33 +13,34 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   exit 1
 fi
 
-: "${V3_ENV_FILE:?V3_ENV_FILE must identify a readable environment file.}"
-if [[ ! -f "${V3_ENV_FILE}" || ! -r "${V3_ENV_FILE}" ]]; then
-  echo "V3_ENV_FILE must identify a readable file: ${V3_ENV_FILE}" >&2
+: "${ENV_FILE:?ENV_FILE must identify a readable environment file.}"
+if [[ ! -f "${ENV_FILE}" || ! -r "${ENV_FILE}" ]]; then
+  echo "ENV_FILE must identify a readable file: ${ENV_FILE}" >&2
   exit 1
 fi
 
+requested_dry_run="${DRY_RUN:-}"
 set -a
 # shellcheck source=/dev/null
-source "${V3_ENV_FILE}"
+source "${ENV_FILE}"
 set +a
 
-: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in V3_ENV_FILE.}"
-export DRY_RUN="${LCRC_V3_DRY_RUN:-${DRY_RUN:-true}}"
+: "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set in ENV_FILE.}"
+export DRY_RUN="${requested_dry_run:-${DRY_RUN:-true}}"
 
 SIZE_ARGS=()
-if [[ "${V3_DIAGNOSTICS_INCLUDE_SIZES:-false}" == "true" ]]; then
+if [[ "${INCLUDE_SIZES:-false}" == "true" ]]; then
   SIZE_ARGS+=(--include-sizes)
 fi
 
 TRUST_ARGS=()
-if [[ "${V3_DIAGNOSTICS_TRUST_EXISTING:-false}" == "true" ]]; then
+if [[ "${TRUST_EXISTING:-false}" == "true" ]]; then
   TRUST_ARGS+=(--trust-existing)
 fi
 
 DRY_RUN_NORMALIZED="${DRY_RUN,,}"
 if [[ "${DRY_RUN_NORMALIZED}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN_NORMALIZED}" != "yes" ]]; then
-  : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in V3_ENV_FILE when DRY_RUN is false.}"
+  : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in ENV_FILE when DRY_RUN is false.}"
 fi
 
 cd "${BACKEND_DIR}"
