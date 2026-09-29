@@ -11,7 +11,7 @@ as override, and seeks just those to produce a summary manually.
 
 Background:  Each day, 96 15-minute "staging runs" are conducted, allowing
 simboard users rapid update ability for ongoing operations.  As well, after
-PACE sweeps up new case/exec "staging" materials on a daily basis for 
+PACE sweeps up new case/exec "staging" materials on a daily basis for
 archiving, any case/execs that may have been missed by the 15-minute simboard
 staging ingestion can be picked up by a daily simboard "archive" run that
 targets the PACE archive directories.
@@ -52,7 +52,7 @@ LOG_REDUCTION:
 
     Log files successfully archived are generally deleted, unless "dry_run"
     is set in the script, in which case they are moved to a "deleted" folder
-    [operations]/history_logs/deleted/.    
+    [operations]/history_logs/deleted/.
 
 ENHANCEMENT:
 
@@ -61,4 +61,3 @@ ENHANCEMENT:
     will result in the log being added again.  This can be avoided by taking
     a "tar -tvf" isting of any existing archive to which files may be added,
     and skipping any that are already present.
-

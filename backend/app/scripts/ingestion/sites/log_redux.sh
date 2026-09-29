@@ -92,4 +92,3 @@ while [[ -s "$LIST_FILE" ]]; do
 done
 
 exit 0
-

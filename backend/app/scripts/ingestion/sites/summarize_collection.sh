@@ -50,5 +50,3 @@ if getent group simboard >/dev/null 2>&1; then
         printf '%s\n' "WARNING: Unable to change group of $target to simboard" >&2
     }
 fi
-
-
