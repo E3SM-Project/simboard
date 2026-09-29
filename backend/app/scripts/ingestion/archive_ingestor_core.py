@@ -138,6 +138,50 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "request_timeout_seconds",
     ),
     "startup_configuration_auth": ("has_api_token",),
+    "v3_diagnostics_backfill_startup_configuration": (
+        "machine",
+        "dry_run",
+        "simboard_api_base_url",
+        "has_api_token",
+        "diagnostics_source_root",
+        "diagnostics_archive_root",
+        "diagnostics_public_base_url",
+        "selected_target_count",
+    ),
+    "v3_diagnostics_backfill_reconciliation": (
+        "machine",
+        "dry_run",
+        "selected_target_count",
+        "ready_to_copy_count",
+        "ready_to_copy_cases",
+        "copied_count",
+        "copied_cases",
+        "linked_count",
+        "linked_cases",
+        "skipped_existing_count",
+        "skipped_existing_cases",
+        "missing_count",
+        "missing_cases",
+        "unmapped_count",
+        "unmapped_cases",
+        "zero_matches_count",
+        "zero_matches_cases",
+        "owner_mismatch_count",
+        "owner_mismatch_cases",
+        "ambiguous_count",
+        "ambiguous_cases",
+        "failed_count",
+        "failed_cases",
+        "machine_skipped_count",
+        "machine_skipped_cases",
+    ),
+    "v3_diagnostics_backfill_multiple_case_matches": (
+        "case_name",
+        "diagnostics_publisher",
+        "diagnostics_source_path",
+        "selected_case",
+        "ignored_matching_cases",
+    ),
     "dry_run_summary_counts": (
         "mode",
         "discovered_cases",
@@ -891,6 +935,26 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         parts.append(f"{key}={_render_log_value(value)}")
 
     logger.info(" ".join(parts))
+
+
+def _log_multiline_event(event: str, fields: dict[str, Any] | None = None) -> None:
+    """Emit a structured event with one field or list entry per line."""
+    fields = {} if fields is None else fields
+    lines = [f"event={event}"]
+
+    for key, value in _ordered_event_fields(event, fields):
+        if isinstance(value, list):
+            if not value:
+                lines.append(f"  {key}=[]")
+                continue
+
+            lines.append(f"  {key}:")
+            lines.extend(f"    - {_render_log_value(item)}" for item in value)
+            continue
+
+        lines.append(f"  {key}={_render_log_value(value)}")
+
+    logger.info("\n".join(lines))
 
 
 def _utc_now_iso() -> str:

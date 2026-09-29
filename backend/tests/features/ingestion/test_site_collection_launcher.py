@@ -848,3 +848,183 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
         "Operations directory does not exist; run operations-provision first"
         in result.stderr
     )
+
+
+def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    simboard_root = tmp_path / "simboard"
+    operations_dir = simboard_root / "operations"
+    operations_dir.mkdir(parents=True)
+
+    result = subprocess.run(
+        [
+            "make",
+            "operations-init-v3-env",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "env=prod",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        input="\nservice-token\n\n",
+        text=True,
+    )
+
+    destination = operations_dir / "lcrc-v3.prod.env"
+    assert result.returncode == 0, result.stderr
+    assert destination.stat().st_mode & 0o777 == 0o640
+    assert destination.read_text(encoding="utf-8") == (
+        "# prod E3SM v3 Chrysalis backfill configuration. Keep outside the repository.\n"
+        "SIMBOARD_API_BASE_URL=https://simboard-api.e3sm.org\n"
+        "SIMBOARD_API_TOKEN=service-token\n"
+        "V3_DIAGNOSTICS_SOURCE_ROOT=/lcrc/group/e3sm/public_html/diagnostic_output\n"
+        "\n# Optional: override the default historical archive mount.\n"
+        "# OLD_PERF_ARCHIVE_ROOT=/path/to/OLD_PERF\n"
+    )
+
+    result = subprocess.run(
+        [
+            "make",
+            "operations-init-v3-env",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "env=prod",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "refusing to overwrite it" in result.stderr
+
+
+def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    simboard_root = tmp_path / "simboard"
+
+    result = subprocess.run(
+        [
+            "make",
+            "v3-diagnostics-dry-run",
+            f"SIMBOARD_ROOT={simboard_root}",
+            "env=dev",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    expected_path = simboard_root / "operations/lcrc-v3.dev.env"
+    assert result.returncode != 0
+    assert f"Missing v3 environment file: {expected_path}" in result.stderr
+    assert (
+        f"make operations-init-v3-env SIMBOARD_ROOT={simboard_root} env=dev"
+        in result.stderr
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "dry_run"),
+    [
+        ("v3-ingest-dry-run", "true"),
+        ("v3-ingest-apply", "false"),
+        ("v3-diagnostics-dry-run", "true"),
+        ("v3-diagnostics-apply", "false"),
+    ],
+)
+@pytest.mark.parametrize(
+    "case_name", [None, "v3.LR.historical_0201", "invalid'case\"`name`"]
+)
+def test_v3_make_arguments_translate_to_runner_environment(
+    tmp_path: Path, target: str, dry_run: str, case_name: str | None
+) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    env_file = tmp_path / "custom-v3.env"
+    env_file.write_text("SIMBOARD_API_BASE_URL=https://example.org\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-n",
+            target,
+            f"SIMBOARD_ROOT={tmp_path}",
+            "env=dev",
+            f"env_file={env_file}",
+            "include_sizes=true",
+            "trust_existing=true",
+            *([f"case_name={case_name}"] if case_name is not None else []),
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f'ENV_FILE="{env_file}"' in result.stdout
+    assert f"DRY_RUN={dry_run}" in result.stdout
+    if target == "v3-diagnostics-dry-run":
+        assert 'INCLUDE_SIZES="true" TRUST_EXISTING="true"' in result.stdout
+    elif target == "v3-diagnostics-apply":
+        assert 'TRUST_EXISTING="true"' in result.stdout
+    if target.startswith("v3-diagnostics-") and case_name is not None:
+        quoted_case_name = "'" + case_name.replace("'", "'\"'\"'") + "'"
+        assert f"--case-name {quoted_case_name}" in result.stdout
+    else:
+        assert "--case-name" not in result.stdout
+    assert "V3_DIAGNOSTICS_" not in result.stdout
+    assert "LCRC_V3_" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("runner", "extra_args"),
+    [
+        ("lcrc_v3.sh", ""),
+        ("lcrc_v3_diagnostics_backfill.sh", "--include-sizes --trust-existing"),
+    ],
+)
+def test_v3_wrappers_honor_make_dry_run_over_sourced_file(
+    tmp_path: Path, runner: str, extra_args: str
+) -> None:
+    backend_dir = Path(__file__).resolve().parents[3]
+    env_file = tmp_path / "backfill.env"
+    env_file.write_text(
+        "SIMBOARD_API_BASE_URL=https://example.org\n"
+        "SIMBOARD_API_TOKEN=test-token\n"
+        "DRY_RUN=false\n",
+        encoding="utf-8",
+    )
+    fake_python = _write_executable(
+        tmp_path / "python",
+        '#!/bin/sh\nprintf "mode=%s args=%s\\n" "$DRY_RUN" "$*"\n',
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            str(backend_dir / "app/scripts/ingestion/v3_data" / runner),
+            *(
+                ["--case-name", "v3.LR.historical_0201"]
+                if runner == "lcrc_v3_diagnostics_backfill.sh"
+                else []
+            ),
+        ],
+        env={
+            **os.environ,
+            "ENV_FILE": str(env_file),
+            "PYTHON_BIN": str(fake_python),
+            "DRY_RUN": "true",
+            "INCLUDE_SIZES": "true",
+            "TRUST_EXISTING": "true",
+        },
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "mode=true args=-m app.scripts.ingestion.v3_data." in result.stdout
+    assert extra_args in result.stdout
+    if runner == "lcrc_v3_diagnostics_backfill.sh":
+        assert "--case-name v3.LR.historical_0201" in result.stdout

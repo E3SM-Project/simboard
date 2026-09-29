@@ -77,6 +77,11 @@ that canonical term instead of repeating the full concept definition.
 | `case_ingestion_attempt_completed`  | Request timing event with stable fields `case_path`, `attempt`, and `duration_seconds`. |
 | `case_ingestion_retry_completed`    | Full retry-sequence timing event with stable fields `case_path`, `attempts`, and `duration_seconds`. |
 
+After discovery, interactive ingestion runs show a case-level progress bar for
+selected submissions. It advances when a case finishes (including retries),
+whether successful or failed. Non-interactive runs keep the existing structured
+case and summary logs without a terminal progress bar.
+
 ## Performance Directories
 
 There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_DIR`) and archive (`OLD_PERF_ARCHIVE_DIR`).

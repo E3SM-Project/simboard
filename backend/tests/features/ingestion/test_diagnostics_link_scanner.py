@@ -119,6 +119,20 @@ def test_development_path_username_does_not_override_provenance_identity(
     assert candidates[0].values["hpc_username"] == "provenance-user"
 
 
+def test_discovery_limits_candidates_to_included_case_paths(tmp_path: Path) -> None:
+    included = _case(tmp_path, "production/group/included")
+    _case(tmp_path, "production/group/excluded")
+
+    candidates = _discover(
+        tmp_path,
+        BASE_URL,
+        "perlmutter",
+        {Path("production/group/included")},
+    )
+
+    assert [candidate.path.parent for candidate in candidates] == [included]
+
+
 def test_discovery_requires_machine_matching_configured_archive(tmp_path: Path) -> None:
     directory = _case(tmp_path, "development/user/case")
 
@@ -459,7 +473,7 @@ def test_run_defers_after_exhausted_state_lookup(
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
-    run()
+    assert run() == 1
     assert client.post_calls == []
     assert (
         "diagnostics_scanner_request_retry_exhausted",

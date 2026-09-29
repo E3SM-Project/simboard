@@ -37,12 +37,13 @@ V3_SIMULATIONS = (
     "v3.LR.piClim-histaer_0101",
     "v3.LR.piClim-histaer_0151",
     "v3.LR.piClim-histaer_0201",
-    "LR_ensemble",
     "v3.NARRM.amip_0101",
     "v3.NARRM_r0125.amip_0101",
-    "RRM_ensemble",
     "v3.AMZRRM.amip_0101",
     "v3.EARRM.amip_0101",
+    # These are listed in e3sm_data_docs but not found as case names.
+    "RRM_ensemble",
+    "LR_ensemble",
 )
 V3_CASE_NAMES = frozenset(V3_SIMULATIONS)
 V3_PRODUCTION_SIMULATION_TYPE = CaseSimulationType.PRODUCTION

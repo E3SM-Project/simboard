@@ -1,8 +1,11 @@
 """Tests for shared archive ingestion workflow phases."""
 
 from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from app.scripts.ingestion.archive_discovery import _new_discovery_stats
 from app.scripts.ingestion.archive_ingestor_core import (
@@ -250,6 +253,45 @@ def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
 
     assert exit_code == 1
     assert any(event == "case_ingestion_failed" for event, _ in logged_events)
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+def test_ingest_case_progress_only_on_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interactive: bool
+) -> None:
+    class ProgressStream(StringIO):
+        def isatty(self) -> bool:
+            return interactive
+
+    stream = ProgressStream()
+    monkeypatch.setattr("sys.stderr", stream)
+    cases = [_candidate(tmp_path / "case_a"), _candidate(tmp_path / "case_b")]
+    logged_events: list[str] = []
+
+    def post_request(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        if args[2] == cases[1].case_path:
+            raise IngestionRequestError("failed", status_code=400, transient=False)
+        return {"status_code": 201, "body": {"created_count": 1}}
+
+    exit_code = _handle_ingest_run(
+        cases,
+        [],
+        _config(tmp_path),
+        "http://backend:8000/api/v1/ingestions/from-path",
+        _fresh_state(),
+        2,
+        _new_discovery_stats(),
+        sleep_fn=lambda *_: None,
+        post_request_fn=post_request,
+        log_event_fn=lambda event, fields=None: logged_events.append(event),
+    )
+
+    assert exit_code == 1
+    assert "case_ingested" in logged_events
+    assert "case_ingestion_failed" in logged_events
+    assert ("2/2" in stream.getvalue()) is interactive
+    if not interactive:
+        assert stream.getvalue() == ""
 
 
 def test_completion_events_include_summary_counters(tmp_path: Path) -> None:
