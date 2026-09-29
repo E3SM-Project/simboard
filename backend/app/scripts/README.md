@@ -22,10 +22,10 @@ E3SM v3 backfill, and diagnostics instructions are maintained in
 
 Use the runner selected by archive access:
 
-| Archive location | Runner |
-| --- | --- |
-| Mounted in the SimBoard backend environment | `nersc_archive_ingestor.py` |
-| Available only at a remote HPC site | `hpc_upload_archive_ingestor.py` via `sites/site_ingestion_launcher.sh` |
+| Archive location                            | Runner                                                                  |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| Mounted in the SimBoard backend environment | `nersc_archive_ingestor.py`                                             |
+| Available only at a remote HPC site         | `hpc_upload_archive_ingestor.py` via `sites/site_ingestion_launcher.sh` |
 
 For service-account and API-token provisioning, see
 [HPC API Token Authentication](../../../docs/operations/hpc-api-token-authentication.md).
@@ -61,13 +61,13 @@ sourced. Keep token values out of the repository and crontab.
 
 ## NERSC Diagnostics Link Scanner
 
-#### When to Use It
+### When to Use It
 
 Use the diagnostics scanner to find the newest paired zppy provenance from the
 reviewed static registry and create case-scoped diagnostic links. The scanner
 does not read Mache configuration at runtime.
 
-#### Run It at NERSC
+### Run It at NERSC
 
 Start with a dry run:
 
@@ -87,7 +87,12 @@ After reviewing the logs, run or schedule it with `DRY_RUN=false` and provide:
 set it explicitly for non-development runs. The scanner reads the reviewed
 static registry rather than archive scan-mode or archive-root settings.
 
-## One-Time Chrysalis E3SM v3 Archive Backfill
+## One-Time E3SM Production v3 Case Archive and Diagnostic Backfill
+
+These operations are intended to be run once to backfill existing E3SM v3 production
+case archives and diagnostics from Chrysalis.
+
+### 1. v3 Case Archive Backfill
 
 `v3_data/lcrc_v3_archive_ingestor.py` is a targeted remote-upload backfill for
 simulations stored on LCRC Chrysalis and listed in
@@ -106,7 +111,7 @@ and prompts for the API credentials without echoing the token:
 ```bash
 make operations-init-v3-env \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 ```
 
 This creates `${SIMBOARD_ROOT}/operations/lcrc-v3.prod.env`. It includes
@@ -124,7 +129,7 @@ Start with the Make dry run:
 ```bash
 make v3-ingest-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 ```
 
 Review these events:
@@ -146,14 +151,14 @@ run the explicit apply target:
 ```bash
 make v3-ingest-apply \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 ```
 
 The Make targets override `DRY_RUN`; keep the external environment file focused
 on the API credentials and optional archive-root override. They run Python with
 unbuffered output so emitted structured events appear in the console immediately.
 
-#### Backfill v3 Diagnostics
+### 2. v3 Diagnostics Backfill
 
 Use the same v3 configuration for diagnostics. Start with reconciliation-only
 mode, which does not copy diagnostics, generate settings, or run the scanner:
@@ -161,23 +166,79 @@ mode, which does not copy diagnostics, generate settings, or run the scanner:
 ```bash
 make v3-diagnostics-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 
 # Include per-source and aggregate selected-source sizes (may take longer).
 make v3-diagnostics-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod \
-  V3_DIAGNOSTICS_INCLUDE_SIZES=true
+  env=prod \
+  include_sizes=true
 ```
 
-After reviewing the reconciliation event, run the explicit write-enabled
-backfill and scanner linkage:
+The normal dry run walks **every existing source directory** to compare files.
+Large cases can take a long time with no log output between the case-match and
+existing-copy-check events. Leaving `include_sizes` unset does not avoid this
+comparison.
+
+For a quicker inventory of previously copied cases, opt in to trusting paired
+provenance:
+
+```bash
+make v3-diagnostics-dry-run \
+  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  env=dev \
+  trust_existing=true
+```
+
+This checks the expected destination for the newest valid `provenance.*.cfg`
+and its paired `.settings` (both regular, non-symlink files). It reports
+`trusted_existing` **without comparing source files**. It still checks that
+the source directory exists, and uses the
+normal comparison for destinations without paired provenance. An incomplete
+copy or new source files can be missed; use the normal dry run when you need to
+verify completeness. The fast mode does not check permissions or links either.
+
+Review `v3_diagnostics_backfill_reconciliation` before applying:
+
+- `skipped_existing`: source paths and file sizes match; the destination has
+  paired `.cfg` and `.settings` files.
+- `trusted_existing`: paired provenance found in fast mode; contents **not
+  compared**.
+- `ready_to_repair`: source files are missing from the destination. In this
+  case, the dry run has **not yet checked** the provenance pair.
+- `provenance_missing`: matching files, but no paired `.cfg` and `.settings`.
+- `failed`: inspect conflicts or errors before retrying.
+
+For a one-time rerun of already copied diagnostics, use this checklist:
+
+1. Choose the normal dry run to check existing copies, or the opt-in fast mode
+   to inventory them without validating copy completeness.
+2. Investigate `ready_to_repair`, `provenance_missing`, `failed`, and other
+   unresolved cases. A `.settings` file alone is **not** proof of a complete
+   copy. The backfill creates `.settings` after copying, but before updating
+   public-read permissions; it can also create a `.cfg` for historic output.
+3. Spot-check public-read permissions on archived directories and files.
+4. Verify the expected diagnostic links separately (for example, in SimBoard).
+   The backfill dry run does **not** run the linkage scanner.
+
+The dry run checks relative paths, file types, and file sizes, **not file
+contents or permissions**. It also cannot prove that the source has not changed
+since a previous copy. For this one-time job, review exceptions and spot-check
+rather than adding a new completion marker.
+
+When you are ready to install missing files and run scanner linkage, use the
+explicit write-enabled backfill:
 
 ```bash
 make v3-diagnostics-apply \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 ```
+
+The apply target also accepts `trust_existing=true` if you want
+to skip source comparisons for paired existing copies **during apply**. It still
+includes those cases in the scanner pass. Leave the option unset if you need
+the script to detect and repair missing source files.
 
 An existing destination is checked against the source (excluding source
 `provenance.*.settings` files) by relative path and file size. This is a
@@ -191,7 +252,7 @@ destination has no paired `.cfg` and `.settings`, it is reported as
 case was linked. Provenance recovery is a separate operation; do not fabricate
 a zppy `.cfg` to clear this status.
 
-#### Fixed and Supported Settings
+### Fixed and Supported Settings
 
 The source site and scan scope are fixed. The runner ignores:
 
@@ -206,14 +267,14 @@ The following controls remain supported:
 - `REQUEST_TIMEOUT_SECONDS`
 - `ARCHIVE_YEAR_END`
 
-#### State Behavior
+### State Behavior
 
 This targeted runner does not read or write database-backed archive snapshot
 checkpoints. A filtered backfill cannot safely mark a mixed snapshot as complete
 for the general archive runner. Processed-execution state and immutable
 discovery results still make repeated runs idempotent.
 
-### E3SM v3 HPSS Linker
+### 3. v3 HPSS Linker
 
 #### Purpose
 
@@ -228,7 +289,7 @@ Run it inside the deployed SimBoard backend container or administrative job with
 
 It does not require `SIMBOARD_API_BASE_URL` or `SIMBOARD_API_TOKEN`.
 
-#### Matching and Safety Rules
+### Matching and Safety Rules
 
 Before changing links, the linker loads the complete set of existing
 `chrysalis` and `perlmutter` cases and reports:
@@ -245,7 +306,7 @@ changes if a documented case is missing from the loaded Chrysalis case set. The
 targeted v3 archive backfill includes all documented v3 case entries, including
 the ensemble and symlinked NARRM rows, so run that backfill before linking.
 
-#### Dry Run and Apply
+### Dry Run and Apply
 
 The deployment image does not include the repository Makefile, so run the
 module directly from `/app`. Review the dry-run reconciliation counts before

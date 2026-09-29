@@ -32,6 +32,11 @@ if [[ "${V3_DIAGNOSTICS_INCLUDE_SIZES:-false}" == "true" ]]; then
   SIZE_ARGS+=(--include-sizes)
 fi
 
+TRUST_ARGS=()
+if [[ "${V3_DIAGNOSTICS_TRUST_EXISTING:-false}" == "true" ]]; then
+  TRUST_ARGS+=(--trust-existing)
+fi
+
 DRY_RUN_NORMALIZED="${DRY_RUN,,}"
 if [[ "${DRY_RUN_NORMALIZED}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN_NORMALIZED}" != "yes" ]]; then
   : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in V3_ENV_FILE when DRY_RUN is false.}"
@@ -39,4 +44,4 @@ fi
 
 cd "${BACKEND_DIR}"
 exec "${PYTHON_BIN}" -m app.scripts.ingestion.v3_data.diagnostics_backfill \
-  --machine chrysalis "${SIZE_ARGS[@]}" "$@"
+  --machine chrysalis "${SIZE_ARGS[@]}" "${TRUST_ARGS[@]}" "$@"

@@ -30,6 +30,7 @@ RECONCILIATION_STATUSES = (
     "repaired",
     "linked",
     "skipped_existing",
+    "trusted_existing",
     "provenance_missing",
     "missing",
     "unmapped",
@@ -130,6 +131,7 @@ def main() -> int:
     args = _parse_args()
     dry_run = _dry_run_requested(args.dry_run)
     include_sizes = args.include_sizes
+    trust_existing = args.trust_existing
     machine = args.machine
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE[machine]
     source_root = _diagnostics_source_root(archive.root)
@@ -157,6 +159,7 @@ def main() -> int:
         api_base=api_base,
         dry_run=dry_run,
         include_sizes=include_sizes,
+        trust_existing=trust_existing,
         machine=machine,
         public_base_url=archive.public_base_url,
         selected_target_count=len(selected),
@@ -181,6 +184,7 @@ def main() -> int:
                 machine_id=machine_id,
                 dry_run=dry_run,
                 include_sizes=include_sizes,
+                trust_existing=trust_existing,
                 scanner_case_paths=scanner_case_paths,
                 source_sizes=source_sizes,
             )
@@ -219,6 +223,14 @@ def _parse_args() -> argparse.Namespace:
         "--include-sizes",
         action="store_true",
         help="Log source-directory sizes during a dry run.",
+    )
+    parser.add_argument(
+        "--trust-existing",
+        action="store_true",
+        help=(
+            "Trust existing archive directories with paired provenance without "
+            "comparing them to the source; incomplete copies may be missed."
+        ),
     )
 
     return parser.parse_args()
@@ -278,6 +290,7 @@ def _log_startup_configuration(
     api_base: str,
     dry_run: bool,
     include_sizes: bool,
+    trust_existing: bool,
     machine: str,
     public_base_url: str,
     selected_target_count: int,
@@ -290,6 +303,7 @@ def _log_startup_configuration(
             "machine": machine,
             "dry_run": dry_run,
             "include_source_sizes": include_sizes,
+            "trust_existing": trust_existing,
             "simboard_api_base_url": api_base,
             "has_api_token": bool(os.environ.get("SIMBOARD_API_TOKEN", "").strip()),
             "diagnostics_source_root": str(source_root),
@@ -324,6 +338,7 @@ def _backfill_target(
     machine_id: str,
     dry_run: bool,
     include_sizes: bool = False,
+    trust_existing: bool = False,
     scanner_case_paths: set[Path] | None = None,
     source_sizes: dict[str, int] | None = None,
 ) -> str:
@@ -359,6 +374,7 @@ def _backfill_target(
             target=target,
             dry_run=dry_run,
             include_sizes=include_sizes,
+            trust_existing=trust_existing,
             scanner_case_paths=scanner_case_paths,
             source_sizes=source_sizes,
         )
@@ -397,6 +413,7 @@ def _reconcile_existing_copy(
     target: Target,
     dry_run: bool,
     include_sizes: bool,
+    trust_existing: bool,
     scanner_case_paths: set[Path] | None,
     source_sizes: dict[str, int] | None,
 ) -> str:
@@ -404,6 +421,14 @@ def _reconcile_existing_copy(
         return "missing"
 
     try:
+        if trust_existing and _has_regular_paired_provenance(destination):
+            _record_scanner_case_path(scanner_case_paths, archive_root, destination)
+            _log_event(
+                "v3_diagnostics_backfill_trusted_existing",
+                {"case_name": target.case_name, "destination": str(destination)},
+            )
+            return "trusted_existing"
+
         missing, conflicts = _compare_copy(source, destination)
         _log_event(
             "v3_diagnostics_backfill_existing_copy_check",
@@ -698,6 +723,15 @@ def _has_paired_provenance(directory: Path) -> bool:
     return cfg is not None and cfg.with_suffix(".settings").is_file()
 
 
+def _has_regular_paired_provenance(directory: Path) -> bool:
+    """Only trust provenance stored as regular files, not symlinked inputs."""
+    cfg = _latest_cfg(directory)
+    if cfg is None or cfg.is_symlink():
+        return False
+    settings = cfg.with_suffix(".settings")
+    return settings.is_file() and not settings.is_symlink()
+
+
 def _create_provenance_cfg(directory: Path) -> Path:
     """Create provenance for historic diagnostics that predate zppy provenance."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
@@ -814,7 +848,10 @@ def _run_scanner_if_reconciled(
 
     if run_scanner(included_case_paths=scanner_case_paths) != 0:
         report["failed"].extend(
-            report["copied"] + report["repaired"] + report["skipped_existing"]
+            report["copied"]
+            + report["repaired"]
+            + report["skipped_existing"]
+            + report["trusted_existing"]
         )
     else:
         report["linked"] = report["copied"] + report["repaired"]

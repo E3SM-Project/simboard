@@ -192,7 +192,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
    ```bash
    make operations-init-v3-env \
      SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-     environment=prod
+     env=prod
    ```
 
    The command prompts for the API endpoint and token, then creates
@@ -205,7 +205,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
    ```bash
    make v3-ingest-dry-run \
      SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-     environment=prod
+     env=prod
    ```
 
 3. Resolve any `v3_case_missing` or transient errors, then run:
@@ -213,7 +213,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
    ```bash
    make v3-ingest-apply \
      SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-     environment=prod
+     env=prod
    ```
 
 The same configuration supports v3 diagnostics backfill:
@@ -221,11 +221,11 @@ The same configuration supports v3 diagnostics backfill:
 ```bash
 make v3-diagnostics-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
-  environment=prod
+  env=prod
 ```
 
-For a nonstandard secure location, pass `V3_ENV_FILE=/path/to/v3.env` in
-addition to `SIMBOARD_ROOT` and `environment`. Optional variables in the v3
+For a nonstandard secure location, pass `env_file=/path/to/v3.env` in
+addition to `SIMBOARD_ROOT` and `env`. Optional variables in the v3
 file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,
 `REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
 

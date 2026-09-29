@@ -861,7 +861,7 @@ def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) ->
             "make",
             "operations-init-v3-env",
             f"SIMBOARD_ROOT={simboard_root}",
-            "environment=prod",
+            "env=prod",
         ],
         capture_output=True,
         check=False,
@@ -887,7 +887,7 @@ def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) ->
             "make",
             "operations-init-v3-env",
             f"SIMBOARD_ROOT={simboard_root}",
-            "environment=prod",
+            "env=prod",
         ],
         capture_output=True,
         check=False,
@@ -908,7 +908,7 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
             "make",
             "v3-diagnostics-dry-run",
             f"SIMBOARD_ROOT={simboard_root}",
-            "environment=dev",
+            "env=dev",
         ],
         capture_output=True,
         check=False,
@@ -920,6 +920,34 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert f"Missing v3 environment file: {expected_path}" in result.stderr
     assert (
-        f"make operations-init-v3-env SIMBOARD_ROOT={simboard_root} environment=dev"
+        f"make operations-init-v3-env SIMBOARD_ROOT={simboard_root} env=dev"
         in result.stderr
     )
+
+
+def test_v3_make_arguments_translate_to_runner_environment(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    env_file = tmp_path / "custom-v3.env"
+    env_file.write_text("SIMBOARD_API_BASE_URL=https://example.org\n")
+
+    result = subprocess.run(
+        [
+            "make",
+            "-n",
+            "v3-diagnostics-dry-run",
+            f"SIMBOARD_ROOT={tmp_path}",
+            "env=dev",
+            f"env_file={env_file}",
+            "include_sizes=true",
+            "trust_existing=true",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f'V3_ENV_FILE="{env_file}"' in result.stdout
+    assert 'V3_DIAGNOSTICS_INCLUDE_SIZES="true"' in result.stdout
+    assert 'V3_DIAGNOSTICS_TRUST_EXISTING="true"' in result.stdout

@@ -40,6 +40,7 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
         "repaired": ["repaired"],
         "linked": [],
         "skipped_existing": [],
+        "trusted_existing": ["trusted"],
         "provenance_missing": [],
         "missing": [],
         "unmapped": ["unmapped"],
@@ -58,6 +59,7 @@ def test_reconciliation_fields_include_counts_and_case_lists() -> None:
     assert "copied_count" not in fields
     assert fields["ambiguous_count"] == "2/4"
     assert fields["ambiguous_cases"] == ["duplicate-a", "duplicate-b"]
+    assert fields["trusted_existing_cases"] == ["trusted"]
     assert fields["machine_skipped_count"] == f"1/{len(backfill.V3_DIAGNOSTIC_TARGETS)}"
 
 
@@ -104,6 +106,21 @@ def test_latest_cfg_selects_newest_valid_timestamp(tmp_path: Path) -> None:
     (tmp_path / "provenance.20261311_120000_000000.cfg").write_text("invalid")
 
     assert backfill._latest_cfg(tmp_path) == newer
+
+
+def test_trust_requires_regular_pair_for_latest_cfg(tmp_path: Path) -> None:
+    older = tmp_path / "provenance.20260810_120000_000000.cfg"
+    older.touch()
+    older.with_suffix(".settings").write_text("old settings")
+    newer = tmp_path / "provenance.20260811_120000_000000.cfg"
+    newer.touch()
+
+    assert not backfill._has_regular_paired_provenance(tmp_path)
+    newer.with_suffix(".settings").symlink_to(older.with_suffix(".settings"))
+    assert not backfill._has_regular_paired_provenance(tmp_path)
+    newer.with_suffix(".settings").unlink()
+    newer.with_suffix(".settings").write_text("new settings")
+    assert backfill._has_regular_paired_provenance(tmp_path)
 
 
 def test_copy_omits_source_settings_and_write_settings_preserves_cfg(
@@ -414,6 +431,106 @@ def test_backfill_skips_existing_destination(tmp_path: Path, monkeypatch) -> Non
     assert source_sizes == {"case": 12}
 
 
+def test_trust_existing_skips_source_walk_but_keeps_scanner_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "missing.html").write_text("new source file")
+    destination = tmp_path / "archive/production/group/case"
+    destination.mkdir(parents=True)
+    cfg = destination / "provenance.20260811_120000_000000.cfg"
+    cfg.touch()
+    cfg.with_suffix(".settings").write_text("existing settings")
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": "group"},
+            None,
+        ),
+    )
+    scanner_paths: set[Path] = set()
+    target = backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis")
+
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=True,
+            trust_existing=True,
+            scanner_case_paths=scanner_paths,
+        )
+        == "trusted_existing"
+    )
+    assert scanner_paths == {Path("production/group/case")}
+    assert not (destination / "missing.html").exists()
+
+    # The default dry run still identifies the missing file.
+    assert (
+        backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=target,
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=True,
+        )
+        == "repaired"
+    )
+
+
+def test_trust_existing_falls_back_for_unpaired_or_missing_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = tmp_path / "source-root"
+    source = source_root / "ac.wlin/E3SMv3/case"
+    source.mkdir(parents=True)
+    (source / "index.html").write_text("source")
+    destination = tmp_path / "archive/production/case"
+    destination.mkdir(parents=True)
+    (destination / "index.html").write_text("source")
+    cfg = destination / "provenance.20260811_120000_000000.cfg"
+    cfg.touch()
+    monkeypatch.setattr(
+        backfill,
+        "_resolve_owner_case",
+        lambda *_args: (
+            {"name": "case", "hpcUsername": "ac.wlin", "caseGroup": None},
+            None,
+        ),
+    )
+
+    def run() -> str:
+        return backfill._backfill_target(
+            client=None,  # type: ignore[arg-type]
+            api_base="https://api.example",
+            archive_root=tmp_path / "archive",
+            public_base_url="https://archive.example",
+            source_root=source_root,
+            target=backfill.Target("case", "ac.wlin/E3SMv3", "chrysalis"),
+            machine="chrysalis",
+            machine_id="machine-id",
+            dry_run=True,
+            trust_existing=True,
+        )
+
+    assert run() == "provenance_missing"
+    cfg.with_suffix(".settings").write_text("settings")
+    source.rename(source_root / "gone")
+    assert run() == "missing"
+
+
 def test_partial_copy_is_repaired_without_synthetic_provenance(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -658,6 +775,7 @@ def test_missing_source_cannot_validate_existing_archive(
 def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
     report = backfill._new_report("chrysalis")
     report["skipped_existing"].append("case")
+    report["trusted_existing"].append("trusted-case")
     report["repaired"].append("repaired-case")
     report["provenance_missing"].append("unlinked-case")
     scanner_paths: list[set[Path]] = []
@@ -671,11 +789,19 @@ def test_scanner_runs_for_skipped_existing_destination(monkeypatch) -> None:
         report,
         "chrysalis",
         dry_run=False,
-        scanner_case_paths={Path("production/case"), Path("production/repaired-case")},
+        scanner_case_paths={
+            Path("production/case"),
+            Path("production/trusted-case"),
+            Path("production/repaired-case"),
+        },
     )
 
     assert scanner_paths == [
-        {Path("production/case"), Path("production/repaired-case")}
+        {
+            Path("production/case"),
+            Path("production/trusted-case"),
+            Path("production/repaired-case"),
+        }
     ]
     assert report["linked"] == ["repaired-case"]
 

@@ -46,15 +46,15 @@ help:
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
-	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> environment=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
-	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> environment=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
+	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
+	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision checkout, runtime, and standardized operations workspace"
 	@echo "  make operations-refresh SIMBOARD_ROOT=<path>    # Refresh an existing clean checkout and its backend runtime"
 	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
-	@echo "  make operations-init-v3-env SIMBOARD_ROOT=<path> environment=<dev|prod> # Create protected v3 backfill configuration"
+	@echo "  make operations-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod> # Create protected v3 backfill configuration"
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
-	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> environment=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
-	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> environment=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
+	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
+	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
 	@echo ""
 
 	@echo "Frontend:"
@@ -193,7 +193,7 @@ operations-provision:
 	fi; \
 	bash "$(INGESTION_PROVISION_SCRIPT)" && \
 	echo "For v3 archive or diagnostics backfill, create a protected environment with:" && \
-	echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) environment=<dev|prod>"
+	echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=<dev|prod>"
 
 operations-refresh:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
@@ -232,11 +232,11 @@ operations-init-env:
 
 operations-init-v3-env:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make operations-init-v3-env SIMBOARD_ROOT=<path> environment=<dev|prod>" >&2; \
+		echo "Usage: make operations-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
 		exit 1; \
 	fi; \
-	if [ "$(environment)" != "dev" ] && [ "$(environment)" != "prod" ]; then \
-		echo "environment must be dev or prod" >&2; \
+	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
+		echo "env must be dev or prod" >&2; \
 		exit 1; \
 	fi; \
 	operations_dir="$(SIMBOARD_ROOT)/operations"; \
@@ -245,14 +245,14 @@ operations-init-v3-env:
 		echo "Run: make operations-provision SIMBOARD_ROOT=$(SIMBOARD_ROOT)" >&2; \
 		exit 1; \
 	fi; \
-	destination="$$operations_dir/lcrc-v3.$(environment).env"; \
+	destination="$$operations_dir/lcrc-v3.$(env).env"; \
 	if [ -e "$$destination" ]; then \
 		echo "$$destination already exists; refusing to overwrite it." >&2; \
 		exit 1; \
 	fi; \
-	bash "$(V3_ENV_INITIALIZER)" "$(INGESTION_TEMPLATES_DIR)/env.$(environment).sh.example" "$(V3_ENV_TEMPLATE)" "$$destination" "$(environment)"; \
+	bash "$(V3_ENV_INITIALIZER)" "$(INGESTION_TEMPLATES_DIR)/env.$(env).sh.example" "$(V3_ENV_TEMPLATE)" "$$destination" "$(env)"; \
 	echo "Created $$destination."; \
-	echo "Start with: make v3-diagnostics-dry-run SIMBOARD_ROOT=$(SIMBOARD_ROOT) environment=$(environment)"
+	echo "Start with: make v3-diagnostics-dry-run SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)"
 
 operations-init-cron:
 	@if [ -z "$(site)" ]; then \
@@ -382,30 +382,30 @@ v3-ingest-apply:
 
 v3-diagnostics-dry-run:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-dry-run
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=true V3_DIAGNOSTICS_INCLUDE_SIZES="$(V3_DIAGNOSTICS_INCLUDE_SIZES)" \
+	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=true V3_DIAGNOSTICS_INCLUDE_SIZES="$(include_sizes)" V3_DIAGNOSTICS_TRUST_EXISTING="$(trust_existing)" \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
 v3-diagnostics-apply:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-apply
-	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=false \
+	PYTHONUNBUFFERED=1 V3_ENV_FILE="$(V3_ENV_PATH)" LCRC_V3_DRY_RUN=false V3_DIAGNOSTICS_TRUST_EXISTING="$(trust_existing)" \
 		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh
 
-V3_ENV_PATH = $(if $(V3_ENV_FILE),$(V3_ENV_FILE),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(environment).env)
+V3_ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
 
 .PHONY: validate-v3-env
 validate-v3-env:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make $(target) SIMBOARD_ROOT=<path> environment=<dev|prod>" >&2; \
+		echo "Usage: make $(target) SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
 		exit 1; \
 	fi; \
-	if [ "$(environment)" != "dev" ] && [ "$(environment)" != "prod" ]; then \
-		echo "environment must be dev or prod" >&2; \
+	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
+		echo "env must be dev or prod" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(V3_ENV_PATH)" ]; then \
 		echo "Missing v3 environment file: $(V3_ENV_PATH)" >&2; \
 		echo "Create it with:" >&2; \
-		echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) environment=$(environment)" >&2; \
+		echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)" >&2; \
 		exit 1; \
 	fi
 
