@@ -19,6 +19,7 @@ from app.scripts.ingestion.archive_logging import (
     observe,
     prefix,
     presentation,
+    render_startup_event,
     sanitize,
 )
 
@@ -864,7 +865,7 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
     except Exception:
         pass
     try:
-        if event == "run_completed":
+        if event == "run_completed" or render_startup_event(logger, event, fields):
             return
         try:
             category, public_event, level, fields = presentation(event, fields)
