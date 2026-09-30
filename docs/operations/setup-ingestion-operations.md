@@ -1,5 +1,16 @@
 # Set Up Ingestion Operations
 
+## Logging
+
+Ingestion defaults to INFO. Set `SIMBOARD_INGESTION_LOG_LEVEL=DEBUG` in the
+scheduler environment or invocation for per-execution decisions and progress.
+Use INFO or DEBUG when collecting aggregate run metrics; higher severity
+thresholds suppress those records. The launcher captures early failures in
+`operations/raw_logs` when writable; retain scheduler stderr capture when the
+deployment root or log directory is unavailable. See the
+[logging contract](../architecture/ingestion-logging.md) for categories,
+count definitions, and the canonical JSON record.
+
 Use this guide to provision and operate scheduled performance ingestion, the v3
 backfill, and diagnostics discovery. Start every new job with `DRY_RUN=true`.
 

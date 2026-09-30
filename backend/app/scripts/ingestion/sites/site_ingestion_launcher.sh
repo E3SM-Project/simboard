@@ -2,6 +2,29 @@
 set -euo pipefail
 umask 027
 
+# Capture failures before configuration is sourced or Python is checked. If the
+# deployment root/log directory is unavailable, stderr remains scheduler-owned.
+if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
+  early_log_dir="${SIMBOARD_ROOT}/operations/raw_logs"
+  if mkdir -p -m 750 "${early_log_dir}"; then
+    early_environment="${SIMBOARD_ENV_FILE:-offline}"
+    early_environment="${early_environment##*/}"
+    early_site="${1:-unknown}"
+    early_mode="${2:-unknown}"
+    [[ "${early_site}" =~ ^[a-z0-9_-]+$ ]] || early_site=unknown
+    [[ "${early_mode}" == staging || "${early_mode}" == archive ]] || early_mode=unknown
+    early_environment="${early_environment//[^a-zA-Z0-9._-]/_}"
+    LOG_FILE="${early_log_dir}/simboard-ingestion-${early_mode}-${early_site}-${early_environment}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
+    if touch "${LOG_FILE}"; then
+      exec >> "${LOG_FILE}" 2>&1
+      trap 'exit_code=$?; printf "[%s] event=launcher_finished exit_code=%s\n" "$(date -u -Is)" "$exit_code" >> "${LOG_FILE}"' EXIT
+      printf '[%s] event=launcher_started\n' "$(date -u -Is)"
+    else
+      unset LOG_FILE
+    fi
+  fi
+fi
+
 # =============================================================================
 # Command-line input
 # =============================================================================
@@ -68,7 +91,13 @@ remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*
 
 load_api_configuration() {
     : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
-    source "${SIMBOARD_ENV_FILE}"
+    # Malformed assignments can echo tokens in shell diagnostics. Preserve
+    # source/errexit semantics, but retain only the phase and final exit status.
+    printf '[%s] event=launcher_loading_api_environment\n' "$(date -u -Is)"
+    if [[ ! -r "${SIMBOARD_ENV_FILE}" ]]; then
+      printf '[%s] event=launcher_api_environment_unreadable\n' "$(date -u -Is)" >&2
+    fi
+    source "${SIMBOARD_ENV_FILE}" > /dev/null 2>&1
     : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
     : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
 }
@@ -105,11 +134,14 @@ fi
 # Write one log per invocation. Jobs targeting different API environments may
 # run together, so include the environment name in the log filename. Staging
 # and archive jobs use separate locks, while runs of the same mode share one.
-ts="$(date -u +%Y%m%d_%H%M%S)"
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
 mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
-LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-${ts}.log"
+if [[ -z "${LOG_FILE:-}" ]]; then
+  LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
+  exec >> "${LOG_FILE}" 2>&1
+  trap 'exit_code=$?; printf "[%s] event=launcher_finished exit_code=%s\n" "$(date -u -Is)" "$exit_code" >> "${LOG_FILE}"' EXIT
+fi
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
 printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
@@ -138,12 +170,6 @@ if [[ -e "${legacy_lock_file}" ]]; then
     exit 0
   fi
 fi
-
-cleanup() {
-  local exit_code=$?
-  echo "[$(date -Is)] simboard collection launcher exiting, pid $$, exit_code ${exit_code}" >> "$LOG_FILE"
-}
-trap cleanup EXIT
 
 # =============================================================================
 # Ingestion execution

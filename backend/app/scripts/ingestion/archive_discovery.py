@@ -43,6 +43,7 @@ from app.scripts.ingestion.archive_layout import (
     _enumerate_archive_snapshot_keys,
     _record_archive_snapshot_reference,
 )
+from app.scripts.ingestion.archive_logging import scan_finished
 
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
 
@@ -190,6 +191,7 @@ def _scan_archive(
         staging_root_basename=staging_root_basename,
     )
 
+    scan_finished(snapshot_scan.traversal_complete)
     if run_report is not None:
         run_report.scan_completed = True
         run_report.traversal_complete = snapshot_scan.traversal_complete
@@ -271,6 +273,7 @@ def _handle_archive_walk_error(
             "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
             "error": f"{exc.__class__.__name__}: {exc}",
+            "recoverable": True,
         },
     )
 
