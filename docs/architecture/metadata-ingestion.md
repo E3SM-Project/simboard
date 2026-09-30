@@ -50,32 +50,15 @@ Case-level state is derived from execution-level state.
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
 | Discovery result          | Immutable validation outcome keyed by machine, normalized case identity, and execution ID. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`.                                                                                                                                                                                                           |
 
-### Runner counter and log field terms
+### Logging reference
 
-These exact field names appear in runner completion logs, summary tables, and
-related execution-decision reporting. Where a field is just the emitted count
-form of a human term defined below, this section maps the exact field name to
-that canonical term instead of repeating the full concept definition.
-
-| Term                                | Definition                                                                                                                                  |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `submission_qualified_cases`        | Count form of “Submission-qualified case.”                                                                                                  |
-| `selected_submission_cases`         | Count form of “Selected submission case.”                                                                                                   |
-| `execution_dirs_scanned`            | Count of execution directories whose names matched the execution pattern and were checked during discovery validation.                      |
-| `execution_dirs_accepted`           | Count of scanned execution directories that passed discovery validation and were retained as valid discovered executions.                   |
-| `skipped_incomplete`                | Count of execution directories rejected during discovery because required metadata files or fields were missing or incomplete.              |
-| `skipped_invalid`                   | Count of execution directories rejected during discovery with typed `ArchiveValidationError`.                                               |
-| `skipped_transient`                 | Count of execution directories skipped because filesystem access raised a transient `OSError`.                                              |
-| `accepted_execution_ids`            | Count of newly discovered valid execution IDs selected for the current run.                                                                 |
-| `rejected_existing_execution_ids`   | Count of valid discovered execution IDs already present in stored `processed_execution_ids` state.                                          |
-| `rejected_incomplete_execution_ids` | Count of execution IDs rejected during discovery because required metadata files or fields were missing or incomplete.                      |
-| `rejected_invalid_execution_ids`    | Count of execution IDs rejected during discovery because metadata content was invalid.                                                      |
-| `transient_execution_ids`           | Count of execution IDs skipped for transient filesystem access failures; these outcomes are never persisted.                                |
-| `deferred_execution_ids`            | Count of newly discovered valid execution IDs not selected for the current run because per-run case capping stopped earlier case selection. |
-| `archive_created`                   | Remote-upload event emitted once after a selected-execution archive is staged. Its stable fields are `case_path`, `selected_execution_count`, `archive_bytes`, and `duration_seconds`. |
-| `case_upload_attempt`               | Remote-upload event emitted for every request attempt using the staged multipart payload. Its stable fields are `case_path`, `attempt`, `archive_bytes`, and `duration_seconds`. |
-| `case_ingestion_attempt_completed`  | Request timing event with stable fields `case_path`, `attempt`, and `duration_seconds`. |
-| `case_ingestion_retry_completed`    | Full retry-sequence timing event with stable fields `case_path`, `attempts`, and `duration_seconds`. |
+[Ingestion Logging](ingestion-logging.md) is the single maintained reference for
+logging categories, public event fields, outcome terms, and metric definitions.
+See its [internal counter mappings](ingestion-logging.md#internal-counter-mappings)
+for the distinction between validation/cache statistics and final reporting
+outcomes. Domain and stored-state terms above describe ingestion behavior, not
+the public logging contract; in particular, a stored `accepted` discovery result
+does not establish selection or submission success in the current invocation.
 
 ## Performance Directories
 
@@ -347,7 +330,8 @@ Set it when operators need to limit one invocation's submission volume, such as:
 
 Before enabling or expanding remote archive uploads, benchmark a representative
 production-like archive at the target site. Record the observed archive creation,
-upload, and retry timings from the events above before rollout; this document does
+upload, and request-attempt timings from the
+[DEBUG diagnostics](ingestion-logging.md#debug-diagnostics) before rollout; this document does
 not supply synthetic benchmark measurements.
 
 ### Operational Validation

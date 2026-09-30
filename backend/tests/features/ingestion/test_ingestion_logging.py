@@ -244,6 +244,19 @@ def test_real_discovery_partitions_and_submission_results(
     assert len(calls) == (0 if dry_run else 1)
     assert record["duration_seconds"] >= 0
     assert record["started_at"].endswith("+00:00")
+    assert len(records(output)) == 1
+    for removed in (
+        "run_summary_counts",
+        "run_summary_outcomes",
+        "dry_run_summary_counts",
+        "dry_run_summary_candidates",
+        "case_collection_begin",
+        "dry_run_candidate",
+        "dry_run_completed",
+        "run_finished",
+        "case_ingestion_retry_completed",
+    ):
+        assert f"event={removed}" not in output.getvalue()
     # The rendered case summaries are the exact contributors to run totals.
     lines = [
         line
@@ -392,8 +405,8 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
             state,
             metadata_locator=lambda path: pytest.fail("cached result revalidated"),
         )
-        scans, candidates, eligible, stats, _ = result
-        _log_scan_completed(config, scans, candidates, eligible, stats)
+        _, candidates, eligible, stats, _ = result
+        _log_scan_completed(candidates, eligible, stats)
         return 0
 
     assert main() == 0
@@ -436,9 +449,103 @@ def test_observation_failure_still_emits_raw_event(output):
     assert len(records(output)) == 1
 
 
+@pytest.mark.parametrize("level", ["INFO", "DEBUG"])
+def test_successful_submission_is_compact_with_debug_response_details(
+    tmp_path, monkeypatch, output, level
+):
+    from app.scripts.ingestion.archive_ingestor_core import IngestionCandidate
+    from app.scripts.ingestion.archive_workflow import _handle_ingest_run
+
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", level)
+    config = IngestorConfig(
+        "https://example.test", "token", tmp_path, "pm", False, None, 1, 30
+    )
+    candidate = IngestionCandidate(str(tmp_path / "a"), ["100.1-1"], ["100.1-1"], "fp")
+
+    @logs.logged_main
+    def main():
+        logs.record_config(config)
+        _log_event("case_collection_summary", case_fields("a", selected=1))
+        _log_event(
+            "scan_completed",
+            {"submission_qualified_cases": 1, "selected_submission_cases": 1},
+        )
+        logs.scan_finished(True)
+        return _handle_ingest_run(
+            [candidate],
+            config,
+            "https://example.test/ingest",
+            {"cases": {}},
+            sleep_fn=lambda _: None,
+            post_request_fn=lambda *args, **kwargs: {
+                "status_code": 201,
+                "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+            },
+        )
+
+    assert main() == 0
+    lines = output.getvalue().splitlines()
+    submission = next(line for line in lines if "event=case_submission " in line)
+    assert submission.endswith("event=case_submission case=a outcome=succeeded")
+    details = [line for line in lines if "event=case_submission_details " in line]
+    assert bool(details) == (level == "DEBUG")
+    if details:
+        assert (
+            "attempts=1 created_count=1 duplicate_count=0 error_count=0" in details[0]
+        )
+    record = records(output)[0]
+    assert len(records(output)) == 1
+    assert record["cases"]["succeeded"] == 1
+    assert record["cases"]["not_attempted"] == 0
+    assert record["submission_complete"] is True
+
+
+def test_public_execution_decision_order(output, monkeypatch):
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", "DEBUG")
+
+    @logs.logged_main
+    def main():
+        _log_event(
+            "execution_collection_decision",
+            {
+                "reason": "already_processed",
+                "decision": "rejected",
+                "execution_id": "e1",
+                "case": "a",
+            },
+        )
+        return 0
+
+    assert main() == 0
+    line = next(
+        line
+        for line in output.getvalue().splitlines()
+        if "event=execution_decision" in line
+    )
+    assert line.endswith(
+        "case=a execution_id=e1 outcome=skipped reason=already_processed"
+    )
+
+
+def test_unregistered_event_is_not_classified_by_substring():
+    assert logs.presentation("example_attempt_progress", {}) == (
+        "CONFIG",
+        "example_attempt_progress",
+        logging.INFO,
+        {},
+    )
+
+
 @pytest.mark.parametrize(
     "event,fields,severity",
     [
+        ("configuration_error", {}, "ERROR"),
+        ("archive_root_missing", {}, "ERROR"),
+        ("state_fetch_failed", {}, "ERROR"),
+        ("archive_checkpoint_fetch_failed", {}, "ERROR"),
+        ("archive_checkpoint_persistence_failed", {}, "ERROR"),
+        ("discovery_results_persistence_failed", {}, "ERROR"),
+        ("case_ingestion_request_failed", {"retrying": False}, "ERROR"),
         ("archive_scan_failed", {"recoverable": True}, "WARNING"),
         ("archive_scan_failed", {}, "ERROR"),
         ("v3_case_missing", {}, "ERROR"),
