@@ -21,6 +21,76 @@ def _write_executable(path: Path, contents: str) -> Path:
     return path
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "site",
+        "environment",
+        "unreadable_environment",
+        "credentials",
+        "python",
+        "log",
+        "malformed_environment",
+    ],
+)
+def test_launcher_captures_early_failures(tmp_path: Path, failure: str) -> None:
+    root = tmp_path / "deployment"
+    logs_dir = root / "operations/raw_logs"
+    logs_dir.mkdir(parents=True)
+    config = tmp_path / "site.config"
+    config.write_text("export SIMBOARD_INGESTOR_MODULE=example\n")
+    environment = tmp_path / "env.dev.sh"
+    environment.write_text("export SIMBOARD_API_BASE_URL=https://example.test\n")
+    if failure == "python":
+        environment.write_text(
+            environment.read_text() + "export SIMBOARD_API_TOKEN=hidden-token\n"
+        )
+    if failure == "malformed_environment":
+        environment.write_text("SIMBOARD_API_TOKEN= hidden-token\n")
+    env = os.environ.copy()
+    env.pop("SIMBOARD_API_TOKEN", None)
+    env.pop("SIMBOARD_API_BASE_URL", None)
+    env.update(
+        SIMBOARD_ROOT=str(root),
+        SIMBOARD_SITE_CONFIG=str(config),
+        SIMBOARD_ENV_FILE=str(environment),
+        DRY_RUN="false",
+        PYTHON_BIN=str(tmp_path / "missing-python"),
+    )
+    if failure in {"site", "log"}:
+        config.unlink()
+    if failure == "environment":
+        environment.unlink()
+    if failure == "unreadable_environment":
+        environment.chmod(0)
+    if failure == "log":
+        logs_dir.chmod(0o500)
+    try:
+        result = subprocess.run(
+            [_launcher_path(), "test", "staging"],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    finally:
+        logs_dir.chmod(0o700)
+        if environment.exists():
+            environment.chmod(0o600)
+    assert result.returncode != 0
+    if failure == "log":
+        assert "Site configuration not readable" in result.stderr
+        assert not list(logs_dir.glob("*.log"))
+    else:
+        paths = list(logs_dir.glob("*.log"))
+        assert len(paths) == 1
+        text = paths[0].read_text()
+        assert "event=launcher_started" in text
+        assert "event=launcher_finished exit_code=" in text
+        assert "hidden-token" not in text
+        assert "event=run_metrics" not in text
+
+
 def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     simboard_root = tmp_path / "simboard-root"
     work_dir = simboard_root / "operations"
@@ -452,7 +522,14 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     )
 
     assert result.returncode == 1
-    assert "SIMBOARD_API_TOKEN failed to be set" in result.stderr
+    failed_logs = list((work_dir / "raw_logs").glob("*.log"))
+    assert len(failed_logs) == 2
+    assert any(
+        "SIMBOARD_API_TOKEN failed to be set" in log.read_text() for log in failed_logs
+    )
+    assert any(
+        "event=launcher_finished exit_code=1" in log.read_text() for log in failed_logs
+    )
 
 
 def test_site_configs_define_their_ingestors() -> None:

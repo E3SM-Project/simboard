@@ -16,3 +16,8 @@ standard operations workspace separates `raw_logs/` from
 `quality_assurance/`; see the repository's
 `docs/operations/setup-ingestion-operations.md` guide for provisioning, migration,
 retention, and scheduler instructions.
+
+Set `SIMBOARD_INGESTION_LOG_LEVEL=DEBUG` for execution detail (INFO is the
+default). INFO/DEBUG jobs emit canonical run metrics for future aggregation.
+See `docs/architecture/ingestion-logging.md` for the logging contract and
+early launcher failure capture.

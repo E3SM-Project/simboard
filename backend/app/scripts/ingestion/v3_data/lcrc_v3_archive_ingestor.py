@@ -33,6 +33,7 @@ from app.scripts.ingestion.archive_layout import (
     _archive_dir_bucket,
     _is_archive_snapshot_dir,
 )
+from app.scripts.ingestion.archive_logging import logged_main, record_config
 from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _run_ingestor as _run_upload_ingestor,
 )
@@ -170,6 +171,7 @@ def _log_v3_summary(report: IngestorRunReport, *, dry_run: bool) -> list[str]:
     return missing_simulations
 
 
+@logged_main
 def main() -> int:
     """Run targeted v3 archive discovery and remote upload."""
     try:
@@ -178,6 +180,7 @@ def main() -> int:
         _log_event("configuration_error", {"error": str(exc)})
         return 1
 
+    record_config(config)
     started_at = time.monotonic()
     _log_event(
         "v3_run_started",
