@@ -68,6 +68,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _fresh_state,
     _log_event,
 )
+from app.scripts.ingestion.archive_logging import logged_main, record_config
 from app.scripts.ingestion.archive_workflow import (
     _finalize_archive_checkpoints,
     _handle_dry_run,
@@ -79,6 +80,7 @@ from app.scripts.ingestion.archive_workflow import (
 )
 
 
+@logged_main
 def main() -> int:
     """Build runtime configuration and execute upload ingestor."""
     try:
@@ -87,6 +89,7 @@ def main() -> int:
         _log_event("configuration_error", {"error": str(exc)})
         return 1
 
+    record_config(config)
     start_time = time.monotonic()
     _log_event(
         "run_started",

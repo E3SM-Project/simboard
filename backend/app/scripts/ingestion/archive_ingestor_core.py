@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, TypedDict, cast
 
 from app.core.logger import _setup_custom_logger
+from app.scripts.ingestion.archive_logging import (
+    has_run_context,
+    observe,
+    prefix,
+    presentation,
+    sanitize,
+)
 
 logger = _setup_custom_logger(__name__)
 logger.setLevel(logging.INFO)
@@ -41,6 +48,26 @@ ARCHIVE_FILTER_VALUE_PATTERN = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})
 
 # Preserve stable field ordering in structured logs.
 EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
+    "case_discovered": (
+        "case",
+        "executions.total",
+        "executions.selected",
+        "executions.skipped",
+        "executions.incomplete",
+        "executions.invalid",
+        "executions.unreadable",
+        "executions.deferred",
+    ),
+    "case_submission": (
+        "case",
+        "outcome",
+        "attempts",
+        "status_code",
+        "error",
+        "created_count",
+        "duplicate_count",
+        "error_count",
+    ),
     "run_started": ("mode", "scan_mode", "archive_root"),
     "run_finished": ("mode", "scan_mode", "exit_code", "duration_seconds"),
     "archive_scan_started": ("scan_mode", "archive_root"),
@@ -929,12 +956,42 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         Additional event fields serialized into key-value pairs.
     """
     fields = {} if fields is None else fields
-    parts = [f"event={event}"]
-
-    for key, value in _ordered_event_fields(event, fields):
-        parts.append(f"{key}={_render_log_value(value)}")
-
-    logger.info(" ".join(parts))
+    if not has_run_context():
+        # Diagnostics tools and library callers keep their existing INFO output.
+        parts = [f"event={event}"]
+        for key, value in _ordered_event_fields(event, sanitize(fields)):
+            parts.append(f"{key}={_render_log_value(value)}")
+        try:
+            logger.info(" ".join(parts))
+        except Exception:
+            pass
+        return
+    try:
+        observe(event, fields)
+    except Exception:
+        pass
+    try:
+        if event in {
+            "run_completed",
+            "dry_run_completed",
+            "run_summary_counts",
+            "run_summary_outcomes",
+            "dry_run_summary_counts",
+            "dry_run_summary_candidates",
+        }:
+            return
+        try:
+            category, public_event, level, fields = presentation(event, fields)
+        except Exception:
+            category, public_event, level = "CONFIG", event, logging.ERROR
+        parts = [prefix(category), f"event={public_event}"]
+        order_event = public_event if public_event in EVENT_FIELD_ORDER else event
+        for key, value in _ordered_event_fields(order_event, sanitize(fields)):
+            parts.append(f"{key}={_render_log_value(value)}")
+        logger.log(level, " ".join(parts))
+    except Exception:
+        # Logging is observational and cannot fail ingestion.
+        pass
 
 
 def _log_multiline_event(event: str, fields: dict[str, Any] | None = None) -> None:
