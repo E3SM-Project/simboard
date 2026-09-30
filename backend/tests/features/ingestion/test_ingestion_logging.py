@@ -49,6 +49,39 @@ def records(stream):
     ]
 
 
+def assert_case_first_summary(stream):
+    """Verify the rendered hierarchy, including serialized JSON key order."""
+    lines = [
+        line.split("RUN_SUMMARY ", 1)[1]
+        for line in stream.getvalue().splitlines()
+        if "RUN_SUMMARY " in line
+    ]
+    labels = [line.split(":", 1)[0] for line in lines[:-2]]
+    assert labels == [
+        "Cases found",
+        "Cases eligible",
+        "  Selected",
+        "  Deferred",
+        "Selected case outcomes",
+        "  Succeeded",
+        "  Failed",
+        "  Not attempted",
+        "Executions found",
+        "  Selected",
+        "  Skipped",
+        "  Incomplete",
+        "  Invalid",
+        "  Unreadable",
+        "  Deferred",
+    ]
+    assert lines[-2].startswith("status=")
+    assert lines[-1].startswith("event=run_metrics payload=")
+    assert len(records(stream)) == 1
+    record = records(stream)[0]
+    assert list(record).index("cases") < list(record).index("executions")
+    assert lines[-1].index('"cases":') < lines[-1].index('"executions":')
+
+
 def case_fields(case, **counts):
     return {
         "case": case,
@@ -338,6 +371,7 @@ def test_real_discovery_partitions_and_submission_results(
         ),
     )
     assert runner.main() == (0 if dry_run else 1)
+    assert_case_first_summary(output)
     record = records(output)[0]
     assert record["executions"] == {
         "total": 7,
@@ -418,6 +452,7 @@ def test_completeness_and_missing_counts(output, kind):
         return 0 if kind == "empty" else 1
 
     main()
+    assert_case_first_summary(output)
     record = records(output)[0]
     if kind == "before_scan":
         assert record["cases"]["selected"] is None

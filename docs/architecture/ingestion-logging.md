@@ -57,14 +57,23 @@ INFO CONFIG Request timeout: 60 seconds
 DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=100.1-1 outcome=selected reason=new_execution
 DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=101.1-1 outcome=skipped reason=already_processed
 INFO CASE_SUMMARY event=case_discovered case=a executions.total=2 executions.selected=1 executions.skipped=1 executions.incomplete=0 executions.invalid=0 executions.unreadable=0 executions.deferred=0
+INFO RUN_SUMMARY Cases found: 1
+INFO RUN_SUMMARY Cases eligible: 1
+INFO RUN_SUMMARY   Selected: 1
+INFO RUN_SUMMARY   Deferred: 0
+INFO RUN_SUMMARY Selected case outcomes: 1
+INFO RUN_SUMMARY   Succeeded: 0
+INFO RUN_SUMMARY   Failed: 0
+INFO RUN_SUMMARY   Not attempted: 1
 INFO RUN_SUMMARY Executions found: 2
 INFO RUN_SUMMARY   Selected: 1
 INFO RUN_SUMMARY   Skipped: 1
 ```
 
-The full readable summary includes all execution counts, case selection counts,
-case submission outcomes, status, exit code, and elapsed seconds. Selection is
-not successful ingestion. Failed submission does not change discovery counts.
+The full readable summary lists case discovery/selection counts and case
+submission outcomes first, then execution counts, followed by status, exit code,
+and elapsed seconds. Selection is not successful ingestion. Failed submission
+does not change discovery counts.
 
 The configuration block is emitted once after validation and before API access
 or discovery. Archive scans show their configured year range; absent bounds are
@@ -137,6 +146,30 @@ than repeated there. Stored discovery `accepted` means validation succeeded and
 can later result in selection, deferral, or skipping; it is not the same as a
 final reporting outcome.
 
+### Case counts
+
+| Field | Meaning |
+| --- | --- |
+| `found` | Case paths with at least one execution observation |
+| `eligible` | Cases eligible before applying the limit |
+| `selected` | Cases selected after applying the limit |
+| `deferred` | Eligible cases excluded by the limit |
+| `succeeded` | Successful case-submission operations |
+| `failed` | Failed case-submission operations |
+| `not_attempted` | Selected cases not submitted |
+
+When counts are available:
+
+```text
+eligible = selected + deferred
+selected = succeeded + failed + not_attempted
+```
+
+`found`, `eligible`, and `selected` are nested populations, not additive
+siblings. A case can contain several execution outcomes. Submission success
+does not mean executions were newly created; backend creation/duplicate/parser
+totals are not part of this contract.
+
 ### Execution counts
 
 An observation is an execution ID at one case path visited within the scan
@@ -162,30 +195,6 @@ Counts come from final case decisions, not a mixture of fresh-validation and
 cached-result counters. The same logical execution appearing at different
 archive paths, or in successive runs, contributes separate observations.
 
-### Case counts
-
-| Field | Meaning |
-| --- | --- |
-| `found` | Case paths with at least one execution observation |
-| `eligible` | Cases eligible before applying the limit |
-| `selected` | Cases selected after applying the limit |
-| `deferred` | Eligible cases excluded by the limit |
-| `succeeded` | Successful case-submission operations |
-| `failed` | Failed case-submission operations |
-| `not_attempted` | Selected cases not submitted |
-
-When counts are available:
-
-```text
-eligible = selected + deferred
-selected = succeeded + failed + not_attempted
-```
-
-`found`, `eligible`, and `selected` are nested populations, not additive
-siblings. A case can contain several execution outcomes. Submission success
-does not mean executions were newly created; backend creation/duplicate/parser
-totals are not part of this contract.
-
 ## Canonical metrics
 
 Each successful or handled-failure invocation emits one INFO record:
@@ -196,8 +205,10 @@ Each successful or handled-failure invocation emits one INFO record:
 
 Parse the JSON occupying the rest of the physical line after
 `event=run_metrics payload=`. Do not aggregate readable summaries or other
-events. The following example is expanded only for documentation; actual JSON
-is a single line:
+events. The payload presents `cases` before `executions`, matching the readable
+summary. This is presentation order only; consumers should access fields by name.
+The following example is expanded only for documentation; actual JSON is a
+single line:
 
 ```json
 {
@@ -215,13 +226,13 @@ is a single line:
   "exit_code": 0,
   "discovery_complete": true,
   "submission_complete": true,
-  "executions": {
-    "total": 2, "selected": 1, "skipped": 1, "incomplete": 0,
-    "invalid": 0, "unreadable": 0, "deferred": 0
-  },
   "cases": {
     "found": 1, "eligible": 1, "selected": 1, "deferred": 0,
     "succeeded": 1, "failed": 0, "not_attempted": 0
+  },
+  "executions": {
+    "total": 2, "selected": 1, "skipped": 1, "incomplete": 0,
+    "invalid": 0, "unreadable": 0, "deferred": 0
   }
 }
 ```

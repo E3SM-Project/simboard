@@ -314,7 +314,6 @@ def metrics(run: RunLog, exit_code: int) -> dict[str, Any]:
         and run.submission_finished
         and not run.dimensions.get("dry_run", True)
         and run.succeeded + run.failed == run.selected,
-        "executions": executions,
         "cases": {
             "found": len(run.cases) if known else None,
             "eligible": run.eligible,
@@ -328,16 +327,13 @@ def metrics(run: RunLog, exit_code: int) -> dict[str, Any]:
             if known
             else None,
         },
+        "executions": executions,
     }
 
 
 def _finish(logger: logging.Logger, run: RunLog, exit_code: int) -> None:
     record = sanitize(metrics(run, exit_code))
-    lines = [("Executions found", record["executions"]["total"])]
-    lines.extend(
-        (f"  {key.capitalize()}", record["executions"][key]) for key in OUTCOMES
-    )
-    lines.extend(
+    lines = [
         (label, record["cases"][key])
         for label, key in (
             ("Cases found", "found"),
@@ -349,6 +345,10 @@ def _finish(logger: logging.Logger, run: RunLog, exit_code: int) -> None:
             ("  Failed", "failed"),
             ("  Not attempted", "not_attempted"),
         )
+    ]
+    lines.append(("Executions found", record["executions"]["total"]))
+    lines.extend(
+        (f"  {key.capitalize()}", record["executions"][key]) for key in OUTCOMES
     )
     for label, value in lines:
         logger.info(
