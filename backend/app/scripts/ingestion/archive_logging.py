@@ -24,6 +24,29 @@ OUTCOME_FIELDS = (
     "transient",
     "deferred",
 )
+# Only CLI diagnostics belong here; unrelated shared callers retain their policy.
+DEBUG_EVENTS = {
+    "archive_scan_started",
+    "archive_scan_progress",
+    "archive_scan_completed",
+    "scan_completed",
+    "archive_created",
+    "case_upload_attempt",
+    "case_ingestion_attempt_completed",
+    "case_submission_details",
+    "v3_ingestion_summary",
+}
+ERROR_EVENTS = {
+    "configuration_error",
+    "archive_root_missing",
+    "archive_scan_failed",
+    "state_fetch_failed",
+    "archive_checkpoint_fetch_failed",
+    "archive_checkpoint_persistence_failed",
+    "discovery_results_persistence_failed",
+    "case_ingestion_request_failed",
+    "v3_case_missing",
+}
 _context: ContextVar[RunLog | None] = ContextVar("ingestion_log", default=None)
 _handler: logging.Handler | None = None
 
@@ -186,35 +209,19 @@ def presentation(
         fields = {
             **{key: value for key, value in fields.items() if key != "case_path"},
             "case": case,
-            "outcome": "failed" if event.endswith("failed") else "succeeded",
+            "outcome": "failed" if event == "case_ingestion_failed" else "succeeded",
         }
-        level = logging.ERROR if event.endswith("failed") else logging.INFO
+        if event == "case_ingestion_failed":
+            level = logging.ERROR
+        else:
+            fields = {key: fields[key] for key in ("case", "outcome")}
         event = "case_submission"
     elif fields.get("retrying") or fields.get("recoverable"):
         level = logging.WARNING
-    elif event.endswith("failed") or event in {
-        "configuration_error",
-        "archive_root_missing",
-        "v3_case_missing",
-    }:
+    elif event in ERROR_EVENTS:
         level = logging.ERROR
-    elif any(
-        word in event
-        for word in (
-            "progress",
-            "attempt",
-            "archive_created",
-            "case_collection_begin",
-            "dry_run_candidate",
-            "retry_completed",
-            "scan_completed",
-            "archive_scan_started",
-            "v3_ingestion_summary",
-        )
-    ):
+    elif event in DEBUG_EVENTS:
         category, level = "EXECUTION_DETAIL", logging.DEBUG
-    elif event in {"run_finished", "v3_run_finished"}:
-        category = "RUN_SUMMARY"
     return category, event, level, fields
 
 

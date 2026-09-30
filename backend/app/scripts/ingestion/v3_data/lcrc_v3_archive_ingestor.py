@@ -10,7 +10,6 @@ snapshot may also contain non-v3 cases needed by the general archive runner.
 from __future__ import annotations
 
 import os
-import time
 from collections import defaultdict
 from dataclasses import replace
 from functools import partial
@@ -181,7 +180,6 @@ def main() -> int:
         return 1
 
     record_config(config)
-    started_at = time.monotonic()
     _log_event(
         "v3_run_started",
         {
@@ -215,14 +213,6 @@ def main() -> int:
         if missing_simulations or transient_count or not report.traversal_complete:
             exit_code = 1
 
-    _log_event(
-        "v3_run_finished",
-        {
-            "mode": "dry-run" if config.dry_run else "ingest",
-            "exit_code": exit_code,
-            "duration_seconds": round(time.monotonic() - started_at, 3),
-        },
-    )
     return exit_code
 
 
