@@ -161,7 +161,7 @@ def scan_finished(traversal_complete: bool) -> None:
 
 
 def record_config(config: Any) -> None:
-    """Capture validated configuration even if a later precondition fails."""
+    """Capture and present validated configuration before operational work."""
     run = _context.get()
     if run is not None:
         run.dimensions.update(
@@ -170,6 +170,60 @@ def record_config(config: Any) -> None:
             dry_run=config.dry_run,
             archive_root=str(config.archive_root),
         )
+        try:
+            logger = logging.getLogger("app.scripts.ingestion.archive_ingestor_core")
+            archive_range = (
+                "not applicable (staging)"
+                if config.scan_mode == "staging"
+                else f"{config.archive_year_start or 'unbounded'} to "
+                f"{config.archive_year_end or 'unbounded'}"
+            )
+            lines = (
+                ("Machine", config.machine_name),
+                ("Mode", "dry run" if config.dry_run else "ingest"),
+                ("Scan", config.scan_mode),
+                ("API", config.api_base_url),
+                (
+                    "Remote state",
+                    "disabled (offline)"
+                    if config.dry_run and not config.dry_run_use_remote_state
+                    else "enabled (read-only)"
+                    if config.dry_run
+                    else "enabled",
+                ),
+                ("API token", "configured" if config.api_token else "not configured"),
+                ("Archive root", str(config.archive_root)),
+                ("Archive range", archive_range),
+                (
+                    "Maximum cases",
+                    config.max_cases_per_run
+                    if config.max_cases_per_run is not None
+                    else "unlimited",
+                ),
+                ("Maximum attempts", config.max_attempts),
+                ("Request timeout", f"{config.request_timeout_seconds} seconds"),
+            )
+            for label, value in lines:
+                logger.info("CONFIG %s: %s", label, sanitize(value))
+        except Exception:
+            # Presentation must not replace the operational outcome.
+            pass
+
+
+def render_startup_event(
+    logger: logging.Logger, event: str, fields: dict[str, Any]
+) -> bool:
+    """Consume legacy startup events within a CLI run, retaining v3 scope."""
+    if event in {"run_started", "v3_run_started"}:
+        if "source_url" in fields:
+            logger.info("CONFIG Source URL: %s", sanitize(fields["source_url"]))
+        return True
+    return event in {
+        "startup_configuration_api",
+        "startup_configuration_paths",
+        "startup_configuration_runtime",
+        "startup_configuration_auth",
+    }
 
 
 def presentation(
@@ -226,8 +280,8 @@ def presentation(
 
 
 def prefix(category: str) -> str:
-    run = _context.get()
-    return f"{category} run_id={run.run_id}" if run else category
+    """Keep per-line categories concise; invocation identity lives in the header."""
+    return category
 
 
 def has_run_context() -> bool:
@@ -353,7 +407,7 @@ def logged_main(function: Callable[[], int]) -> Callable[[], int]:
             except Exception:
                 pass
             try:
-                logger.info("%s event=invocation_started", prefix("CONFIG"))
+                logger.info("CONFIG event=invocation_started Run ID: %s", run.run_id)
             except Exception:
                 pass
             result = function()

@@ -88,7 +88,9 @@ def test_levels_categories_and_metrics_delivery(output, monkeypatch, level):
     assert ("ERROR CONFIG" in text) == (level != "CRITICAL")
     if records(output):
         record = records(output)[0]
-        assert all(f"run_id={record['run_id']}" in line for line in text.splitlines())
+        assert f"Run ID: {record['run_id']}" in text
+        assert "run_id=" not in text
+        assert text.count(record["run_id"]) == 2
         assert record["executions"]["total"] is None
 
 
@@ -104,6 +106,122 @@ def test_invalid_level_stops_before_ingestion_and_has_failure_metrics(
     assert main() == 1
     assert "SIMBOARD_INGESTION_LOG_LEVEL must be" in output.getvalue()
     assert records(output)[0]["status"] == "failure"
+
+
+@pytest.mark.parametrize("level", ["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"])
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+@pytest.mark.parametrize("remote_state", [True, False])
+def test_readable_configuration(
+    output, monkeypatch, tmp_path, level, scan_mode, remote_state
+):
+    from app.scripts.ingestion.archive_workflow import _log_startup_configuration
+
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", level)
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "secret-token")
+    config = IngestorConfig(
+        "https://user:pass@example.test/api?token=secret-token",
+        "secret-token",
+        tmp_path,
+        "chrysalis",
+        True,
+        None,
+        3,
+        60,
+        scan_mode=scan_mode,
+        archive_year_start="2025-01" if scan_mode == "archive" else None,
+        dry_run_use_remote_state=remote_state,
+    )
+
+    @logs.logged_main
+    def main():
+        logs.record_config(config)
+        _log_event("run_started", {"mode": "dry-run", "scan_mode": scan_mode})
+        _log_startup_configuration(config)
+        _log_event("case_collection_summary", case_fields("a", incomplete=1))
+        return 0
+
+    assert main() == 0
+    text = output.getvalue()
+    if level not in {"INFO", "DEBUG"}:
+        assert text == ""
+        return
+    assert text.count("Run ID:") == 1
+    assert text.count("CONFIG Machine: chrysalis") == 1
+    assert "CONFIG Mode: dry run" in text
+    assert f"CONFIG Scan: {scan_mode}" in text
+    assert "CONFIG Maximum cases: unlimited" in text
+    assert "CONFIG Maximum attempts: 3" in text
+    assert "CONFIG Request timeout: 60 seconds" in text
+    assert "CONFIG API token: configured" in text
+    assert (
+        "CONFIG Archive range: "
+        + (
+            "2025-01 to unbounded"
+            if scan_mode == "archive"
+            else "not applicable (staging)"
+        )
+        in text
+    )
+    assert (
+        "CONFIG Remote state: "
+        + ("enabled (read-only)" if remote_state else "disabled (offline)")
+        in text
+    )
+    assert text.index("CONFIG Machine:") < text.index("event=case_discovered")
+    assert "event=run_started" not in text
+    assert "startup_configuration_" not in text
+    assert "secret-token" not in text and "user:pass" not in text
+    assert text.count(records(output)[0]["run_id"]) == 2
+
+
+@pytest.mark.parametrize("kind", ["hpc", "nersc", "v3"])
+def test_runner_configuration_precedes_work(output, monkeypatch, tmp_path, kind):
+    from app.scripts.ingestion import hpc_upload_archive_ingestor as hpc
+    from app.scripts.ingestion.v3_data import lcrc_v3_archive_ingestor as v3
+
+    module = {"hpc": hpc, "nersc": runner, "v3": v3}[kind]
+    config = IngestorConfig(
+        "https://example.test",
+        "token",
+        tmp_path,
+        "chrysalis",
+        True,
+        2,
+        3,
+        60,
+        scan_mode="archive" if kind == "v3" else "staging",
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_v3_config_from_env" if kind == "v3" else "_build_config_from_env",
+        lambda: config,
+    )
+
+    def work(config, **kwargs):
+        text = output.getvalue()
+        assert text.count("CONFIG Machine: chrysalis") == 1
+        assert "CONFIG Maximum cases: 2" in text
+        if kind == "v3":
+            assert f"CONFIG Source URL: {v3.V3_SIMULATION_TABLE_URL}" in text
+        return 0
+
+    monkeypatch.setattr(
+        module, "_run_upload_ingestor" if kind == "v3" else "_run_ingestor", work
+    )
+    assert module.main() == 0
+    assert len(records(output)) == 1
+
+
+def test_invalid_configuration_has_identity_without_config_block(output, monkeypatch):
+    def invalid():
+        raise ValueError("invalid configuration")
+
+    monkeypatch.setattr(runner, "_build_config_from_env", invalid)
+    assert runner.main() == 1
+    text = output.getvalue()
+    assert f"Run ID: {records(output)[0]['run_id']}" in text
+    assert "event=configuration_error" in text
+    assert "CONFIG Machine:" not in text
 
 
 def test_logging_failures_do_not_change_result_or_exception(output, monkeypatch):

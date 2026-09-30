@@ -36,31 +36,51 @@ redacted before rendering.
 
 ## Case and execution structure
 
-Every runner line has a UTC timestamp, severity, category, and invocation
-`run_id`. For example (timestamps omitted here):
+Every runner line has a UTC timestamp, severity, and category. Each ingestion
+job has its own log, so its invocation ID appears once in the startup header
+and inside the final `run_metrics` payload, not in every line's prefix.
+For example (timestamps omitted here):
 
 ```text
-INFO CONFIG run_id=r1 event=run_started scan_mode=staging
-DEBUG EXECUTION_DETAIL run_id=r1 event=execution_decision case=a execution_id=100.1-1 outcome=selected reason=new_execution
-DEBUG EXECUTION_DETAIL run_id=r1 event=execution_decision case=a execution_id=101.1-1 outcome=skipped reason=already_processed
-INFO CASE_SUMMARY run_id=r1 event=case_discovered case=a executions.total=2 executions.selected=1 executions.skipped=1 executions.incomplete=0 executions.invalid=0 executions.unreadable=0 executions.deferred=0
-INFO CASE_SUMMARY run_id=r1 event=case_submission case=a outcome=succeeded
-INFO RUN_SUMMARY run_id=r1 Executions found: 2
-INFO RUN_SUMMARY run_id=r1   Selected: 1
-INFO RUN_SUMMARY run_id=r1   Skipped: 1
+INFO CONFIG event=invocation_started Run ID: r1
+INFO CONFIG Machine: chrysalis
+INFO CONFIG Mode: dry run
+INFO CONFIG Scan: staging
+INFO CONFIG API: https://simboard-dev-api.e3sm.org
+INFO CONFIG Remote state: enabled (read-only)
+INFO CONFIG API token: configured
+INFO CONFIG Archive root: /lcrc/group/e3sm/PERF_Chrysalis/performance_archive
+INFO CONFIG Archive range: not applicable (staging)
+INFO CONFIG Maximum cases: unlimited
+INFO CONFIG Maximum attempts: 3
+INFO CONFIG Request timeout: 60 seconds
+DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=100.1-1 outcome=selected reason=new_execution
+DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=101.1-1 outcome=skipped reason=already_processed
+INFO CASE_SUMMARY event=case_discovered case=a executions.total=2 executions.selected=1 executions.skipped=1 executions.incomplete=0 executions.invalid=0 executions.unreadable=0 executions.deferred=0
+INFO RUN_SUMMARY Executions found: 2
+INFO RUN_SUMMARY   Selected: 1
+INFO RUN_SUMMARY   Skipped: 1
 ```
 
 The full readable summary includes all execution counts, case selection counts,
 case submission outcomes, status, exit code, and elapsed seconds. Selection is
 not successful ingestion. Failed submission does not change discovery counts.
 
+The configuration block is emitted once after validation and before API access
+or discovery. Archive scans show their configured year range; absent bounds are
+displayed as `unbounded`. Offline dry runs show `Remote state: disabled (offline)`.
+Targeted v3 scans also display their source URL. Only token presence is shown,
+never the token itself. Configuration failures retain the invocation header but
+do not print an unvalidated configuration block. Invalid logging levels include
+the invocation ID in their error record. Normal level filtering still applies:
+startup and final metrics are INFO and are suppressed at higher thresholds.
+
 ### Public events
 
 | Event | Fields and purpose |
 | --- | --- |
 | `invocation_started` | Identifies an invocation before configuration validation. |
-| `run_started` / `v3_run_started` | Identifies the configured scan; runner-specific scope is recorded once. |
-| `startup_configuration_*` | API base URL, archive scope, runtime options, and token presence; never the credential itself. No begin/end markers or derived endpoint URLs. |
+| Readable `CONFIG` block | Validated API base URL, archive scope, runtime options, and token presence; never the credential itself. Replaces CLI rendering of internal `run_started` / `v3_run_started` and `startup_configuration_*` events. |
 | `case_discovered` | `case`, `executions.total`, and all six execution outcomes defined below. |
 | `case_submission` | Successful INFO records contain only `case` and `outcome=succeeded`. Failed ERROR records add `attempts`, `status_code`, and `error` with `outcome=failed`. |
 | `execution_decision` | DEBUG: `case`, `execution_id`, `outcome`, and `reason`; relevant validation codes, missing-file specifications, or error detail may follow. |
@@ -171,7 +191,7 @@ totals are not part of this contract.
 Each successful or handled-failure invocation emits one INFO record:
 
 ```text
-<UTC prefix> INFO RUN_SUMMARY run_id=r1 event=run_metrics payload=<compact JSON>
+<UTC prefix> INFO RUN_SUMMARY event=run_metrics payload=<compact JSON>
 ```
 
 Parse the JSON occupying the rest of the physical line after
