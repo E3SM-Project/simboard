@@ -404,7 +404,7 @@ def test_ingest_case_retry_timing_events_have_stable_fields(monkeypatch) -> None
         fingerprint="fp-1",
     )
     events: list[tuple[str, dict[str, object]]] = []
-    monotonic_values = iter([10.0, 11.0, 12.25, 13.0, 14.5, 15.75])
+    monotonic_values = iter([11.0, 12.25, 13.0, 14.5])
     monkeypatch.setattr(client_module.time, "monotonic", lambda: next(monotonic_values))
     monkeypatch.setattr(
         client_module,
@@ -440,10 +440,7 @@ def test_ingest_case_retry_timing_events_have_stable_fields(monkeypatch) -> None
         "case_ingestion_attempt_completed",
         {"case_path": candidate.case_path, "attempt": 2, "duration_seconds": 1.5},
     )
-    assert events[3] == (
-        "case_ingestion_retry_completed",
-        {"case_path": candidate.case_path, "attempts": 2, "duration_seconds": 5.75},
-    )
+    assert len(events) == 3
 
 
 def test_archive_checkpoint_persistence_skips_empty_set() -> None:
@@ -620,12 +617,10 @@ def test_ingest_case_with_retries_retries_transient_errors(monkeypatch) -> None:
     assert [event for event, _ in logged_events[1:]] == [
         "case_ingestion_attempt_completed",
         "case_ingestion_attempt_completed",
-        "case_ingestion_retry_completed",
     ]
     assert [list(fields) for _, fields in logged_events[1:]] == [
         ["case_path", "attempt", "duration_seconds"],
         ["case_path", "attempt", "duration_seconds"],
-        ["case_path", "attempts", "duration_seconds"],
     ]
 
 

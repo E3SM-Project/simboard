@@ -1,5 +1,82 @@
 # Issue #321: Ingestion logging refactor plan (branch: `devops/321-refactor-log-output`)
 
+> The original implementation plan below is a historical design record. The
+> maintained logging terminology and contract live only in
+> [Ingestion Logging](../../architecture/ingestion-logging.md).
+
+## Follow-up: simplify logging and its implementation
+
+### Problem
+
+The initial implementation filters routine CLI noise but still constructs legacy
+summaries, repeats context and counts, and retains compatibility-oriented code.
+
+### Scope
+
+Implement in logical phases:
+
+1. **Logging and code cleanup:** remove legacy run/dry-run summary emitters,
+   case-begin events, dry-run candidate suppression bookkeeping, duplicate finish
+   records, and overlapping retry timing. Narrow scan diagnostics and public
+   submission fields. Reduce field ordering to public events, use explicit
+   severity groups, and remove unused helpers and parameters. Preserve reporting
+   observations separately from redundant output and keep finalization centralized.
+2. **Tests and documentation:** update ingestion logging, workflow, discovery,
+   client, and runner tests. Make `docs/architecture/ingestion-logging.md` the sole
+   maintained definition of logging categories, events, outcomes, metrics, and
+   internal-counter mappings. Replace the logging glossary in
+   `docs/architecture/metadata-ingestion.md` with links; audit operations guides
+   and README examples for conflicting definitions and obsolete events.
+3. **Validation and review:** run backend tests and repository checks, independently
+   review the completed changes, fix valid findings, and rerun affected checks.
+
+Affected code: `archive_ingestor_core.py`, `archive_logging.py`,
+`archive_workflow.py`, `archive_discovery.py`, `archive_client.py`, the NERSC and
+HPC-upload runners, and the targeted LCRC v3 runner under
+`backend/app/scripts/ingestion/`. Simplify code directly affected by this cleanup;
+prefer explicit small functions over a new logging framework.
+
+### Constraints and non-goals
+
+No changes to ingestion decisions, operational counters, retries, persistence,
+checkpoints, exception propagation, or exit semantics. Preserve the canonical
+metrics schema, null-versus-zero semantics, reporting failure isolation, and
+useful diagnostics outside CLI context. No dependencies or launcher changes.
+
+Non-blocking assumptions: legacy diagnostic events are not a compatibility API;
+the metadata architecture remains authoritative for domain behavior, not logging.
+Risks: deleting observer events can lose metrics inputs; shared callers can lose
+diagnostics; similar-looking counters are not interchangeable. Mitigate with
+reporting-equivalence tests and retained operational assertions.
+
+### Acceptance criteria
+
+- Redundant events and supporting code are removed at source, not just filtered.
+- INFO has configuration, compact case discovery/submission outcomes, and final
+  readable summaries plus one authoritative metrics record. DEBUG retains useful
+  decisions and diagnostics without legacy summary duplication.
+- Public event ordering and explicit severity rules match the rendered vocabulary;
+  no unused logging helpers, parameters, constants, or compatibility branches remain.
+- Canonical counts, completeness, candidates, persistence, retries, and outcomes
+  remain unchanged across live, dry, cached, limited, empty, and partial runs.
+- The logging architecture document is the sole maintained logging glossary;
+  metadata architecture and operations documentation link to it. Active examples
+  match the implementation; historical plans are identified as historical.
+
+### Validation
+
+Extend logging tests for retained fields, removed events at INFO/DEBUG, ordering,
+redaction, severity, failure isolation, and exactly-once metrics. Update workflow,
+discovery, client, and runner tests while retaining behavioral assertions. Verify
+count partitions, missing data, shared callers, and INFO/DEBUG equivalence. Audit
+documentation terms and relative links. From the repository root run
+`make backend-test`, `git diff --check`, and `make pre-commit-run`; report blockers
+honestly. Review the diff for unnecessary abstraction and unrelated changes.
+
+---
+
+## Original implementation plan (historical)
+
 ## Problem
 
 Ingestion logs are too verbose. Reduce routine noise, make summaries readable, and provide a stable record that a future summarization module can use to calculate totals without double-counting.

@@ -14,6 +14,7 @@ from typing import Any, Literal, Protocol, TypedDict, cast
 
 from app.core.logger import _setup_custom_logger
 from app.scripts.ingestion.archive_logging import (
+    OUTCOMES,
     has_run_context,
     observe,
     prefix,
@@ -41,7 +42,6 @@ DISCOVERY_OUTCOME_PRECEDENCE = {
     "rejected_invalid": 1,
     "accepted": 2,
 }
-MAX_DRY_RUN_CANDIDATE_LOGS = 20
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 ARCHIVE_SCAN_MODES = {"staging", "archive"}
 ARCHIVE_FILTER_VALUE_PATTERN = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2}))?$")
@@ -51,12 +51,7 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "case_discovered": (
         "case",
         "executions.total",
-        "executions.selected",
-        "executions.skipped",
-        "executions.incomplete",
-        "executions.invalid",
-        "executions.unreadable",
-        "executions.deferred",
+        *(f"executions.{key}" for key in OUTCOMES),
     ),
     "case_submission": (
         "case",
@@ -64,72 +59,30 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "attempts",
         "status_code",
         "error",
-        "created_count",
-        "duplicate_count",
-        "error_count",
     ),
     "run_started": ("mode", "scan_mode", "archive_root"),
-    "run_finished": ("mode", "scan_mode", "exit_code", "duration_seconds"),
     "archive_scan_started": ("scan_mode", "archive_root"),
     "archive_scan_progress": (
-        "scan_mode",
-        "archive_root",
         "current_dir",
         "directories_visited",
-        "discovered_cases",
-        "execution_dirs_scanned",
-        "execution_dirs_accepted",
-        "skipped_transient",
-        "rejected_existing_execution_ids",
         "duration_seconds",
     ),
     "archive_scan_completed": (
-        "scan_mode",
-        "archive_root",
         "current_dir",
         "directories_visited",
-        "discovered_cases",
-        "execution_dirs_scanned",
-        "execution_dirs_accepted",
-        "skipped_transient",
-        "rejected_existing_execution_ids",
         "duration_seconds",
     ),
-    "case_collection_begin": (
-        "case",
-        "execution_count_total",
-        "execution_count_valid",
-        "execution_count_existing",
-        "execution_count_new",
-        "execution_count_selected_new",
-        "execution_count_deferred",
-        "execution_count_rejected_incomplete",
-        "execution_count_rejected_invalid",
-        "execution_count_transient",
-    ),
-    "execution_collection_decision": (
+    "execution_decision": (
         "case",
         "execution_id",
-        "decision",
+        "outcome",
         "reason",
         "error_codes",
         "error_count",
         "missing_file_specs",
         "detail",
     ),
-    "case_collection_summary": (
-        "case",
-        "accepted",
-        "rejected_existing",
-        "rejected_incomplete",
-        "rejected_invalid",
-        "transient",
-        "deferred",
-    ),
     "scan_completed": (
-        "scan_mode",
-        "archive_root",
-        "discovered_cases",
         "submission_qualified_cases",
         "selected_submission_cases",
         "execution_dirs_scanned",
@@ -137,19 +90,8 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "skipped_incomplete",
         "skipped_invalid",
         "skipped_transient",
-        "accepted_execution_ids",
-        "rejected_existing_execution_ids",
-        "rejected_incomplete_execution_ids",
-        "rejected_invalid_execution_ids",
-        "transient_execution_ids",
-        "deferred_execution_ids",
     ),
-    "dry_run_candidate": ("case", "execution_count", "new_execution_count"),
-    "startup_configuration_api": (
-        "api_base_url",
-        "endpoint_url",
-        "state_endpoint_url",
-    ),
+    "startup_configuration_api": ("api_base_url",),
     "startup_configuration_paths": (
         "scan_mode",
         "archive_root",
@@ -209,56 +151,13 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "selected_case",
         "ignored_matching_cases",
     ),
-    "dry_run_summary_counts": (
-        "mode",
-        "discovered_cases",
-        "submission_qualified_cases",
-        "selected_submission_cases",
-        "execution_dirs_scanned",
-        "execution_dirs_accepted",
-        "skipped_incomplete",
-        "skipped_invalid",
-        "skipped_transient",
-    ),
-    "dry_run_summary_candidates": (
-        "accepted_execution_ids",
-        "rejected_existing_execution_ids",
-        "rejected_incomplete_execution_ids",
-        "rejected_invalid_execution_ids",
-        "transient_execution_ids",
-        "deferred_execution_ids",
-        "candidate_logs_emitted",
-        "candidate_logs_suppressed",
-    ),
-    "run_summary_counts": (
-        "mode",
-        "scanned_cases",
-        "submission_qualified_cases",
-        "selected_submission_cases",
-        "execution_dirs_scanned",
-        "execution_dirs_accepted",
-        "skipped_incomplete",
-        "skipped_invalid",
-        "skipped_transient",
-    ),
-    "run_summary_outcomes": (
-        "success_count",
-        "failure_count",
-        "accepted_execution_ids",
-        "rejected_existing_execution_ids",
-        "rejected_incomplete_execution_ids",
-        "rejected_invalid_execution_ids",
-        "transient_execution_ids",
-        "deferred_execution_ids",
-    ),
-    "case_ingested": (
+    "case_submission_details": (
         "case_path",
         "attempts",
         "created_count",
         "duplicate_count",
         "error_count",
     ),
-    "case_ingestion_failed": ("case_path", "attempts", "status_code", "error"),
     "archive_created": (
         "case_path",
         "selected_execution_count",
@@ -274,11 +173,6 @@ EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "case_ingestion_attempt_completed": (
         "case_path",
         "attempt",
-        "duration_seconds",
-    ),
-    "case_ingestion_retry_completed": (
-        "case_path",
-        "attempts",
         "duration_seconds",
     ),
 }
@@ -435,7 +329,6 @@ class CaseCollectionLogData:
     """Discovery and decision inputs needed to log one case block."""
 
     case_path: str
-    execution_count_total: int = 0
     valid_execution_ids: set[str] = field(default_factory=set)
     rejected_decisions: list[ExecutionCollectionDecision] = field(default_factory=list)
 
@@ -971,22 +864,14 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
     except Exception:
         pass
     try:
-        if event in {
-            "run_completed",
-            "dry_run_completed",
-            "run_summary_counts",
-            "run_summary_outcomes",
-            "dry_run_summary_counts",
-            "dry_run_summary_candidates",
-        }:
+        if event == "run_completed":
             return
         try:
             category, public_event, level, fields = presentation(event, fields)
         except Exception:
             category, public_event, level = "CONFIG", event, logging.ERROR
         parts = [prefix(category), f"event={public_event}"]
-        order_event = public_event if public_event in EVENT_FIELD_ORDER else event
-        for key, value in _ordered_event_fields(order_event, sanitize(fields)):
+        for key, value in _ordered_event_fields(public_event, sanitize(fields)):
             parts.append(f"{key}={_render_log_value(value)}")
         logger.log(level, " ".join(parts))
     except Exception:

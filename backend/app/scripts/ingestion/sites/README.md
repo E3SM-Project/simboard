@@ -19,5 +19,6 @@ retention, and scheduler instructions.
 
 Set `SIMBOARD_INGESTION_LOG_LEVEL=DEBUG` for execution detail (INFO is the
 default). INFO/DEBUG jobs emit canonical run metrics for future aggregation.
-See `docs/architecture/ingestion-logging.md` for the logging contract and
+See [Ingestion Logging](../../../../../docs/architecture/ingestion-logging.md)
+for the authoritative terminology, logging contract, and
 early launcher failure capture.
