@@ -117,6 +117,8 @@ def configure(logger: logging.Logger, level_name: str | None = None) -> None:
     if _handler not in logger.handlers:
         logger.addHandler(_handler)
     logger.propagate = False
+    # Migration logging setup can disable loggers created before fileConfig.
+    logger.disabled = False
     logger.setLevel(levels[name])
     _handler.setLevel(levels[name])
 
@@ -378,6 +380,7 @@ def logged_main(function: Callable[[], int]) -> Callable[[], int]:
     def wrapped() -> int:
         logger = logging.getLogger("app.scripts.ingestion.archive_ingestor_core")
         previous_level, previous_propagate = logger.level, logger.propagate
+        previous_disabled = logger.disabled
         previous_handlers = logger.handlers[:]
         # ``python -m`` executes as __main__; retain the actual module identity
         # so metrics from different transports do not collapse into one group.
@@ -422,5 +425,6 @@ def logged_main(function: Callable[[], int]) -> Callable[[], int]:
             logger.handlers[:] = previous_handlers
             logger.setLevel(previous_level)
             logger.propagate = previous_propagate
+            logger.disabled = previous_disabled
 
     return wrapped
