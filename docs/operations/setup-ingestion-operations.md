@@ -192,14 +192,15 @@ Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false
 
 Run commands from the repository root. This is useful for quicker testing and debugging.
 Review the dry-run results before running `ingest-apply`.
+Both targets require `scan_mode=archive` or `scan_mode=staging`; there is no default.
 
 #### Chrysalis
 
 After provisioning Chrysalis:
 
 ```bash
-make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev
-make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev MAX_CASES_PER_RUN=5
+make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive
+make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
 ```
 
 - **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
@@ -210,8 +211,8 @@ make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env
 For NERSC path ingestion:
 
 ```bash
-make ingest-dry-run machine=perlmutter env=dev env_file=/path/to/protected.env
-make ingest-apply machine=perlmutter env=dev env_file=/path/to/protected.env MAX_CASES_PER_RUN=5
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env
+make ingest-apply machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env MAX_CASES_PER_RUN=5
 ```
 
 - **Environment:** Loads API settings from `env_file`, or uses exported settings if omitted. **`env` alone does not switch credentials.**

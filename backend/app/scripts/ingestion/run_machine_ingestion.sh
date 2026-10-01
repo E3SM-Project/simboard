@@ -10,8 +10,8 @@ case "${machine:-}" in
   *) fail 'machine must be chrysalis or perlmutter' ;;
 esac
 [[ ${env:-} == dev || ${env:-} == prod ]] || fail 'env must be dev or prod'
-selected_scan_mode=${scan_mode:-archive}
-[[ $selected_scan_mode == archive || $selected_scan_mode == staging ]] || fail 'scan_mode must be archive or staging'
+selected_scan_mode=${scan_mode:-}
+[[ $selected_scan_mode == archive || $selected_scan_mode == staging ]] || fail 'scan_mode must be archive or staging (required)'
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 config="$script_dir/sites/configs/$selected_machine.config"
