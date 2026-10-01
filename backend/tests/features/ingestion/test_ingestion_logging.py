@@ -92,6 +92,29 @@ def case_fields(case, **counts):
     }
 
 
+def test_invocation_reenables_disabled_logger_and_restores_state(output, monkeypatch):
+    logger = logging.getLogger("app.scripts.ingestion.archive_ingestor_core")
+    # Alembic's fileConfig disables existing loggers during full-suite setup.
+    monkeypatch.setattr(logger, "disabled", True)
+    previous_handlers = logger.handlers[:]
+    previous_level = logger.level
+    previous_propagate = logger.propagate
+
+    @logs.logged_main
+    def main():
+        assert not logger.disabled
+        _log_event("state_fetch_failed", {"error": "unavailable"})
+        return 1
+
+    assert main() == 1
+    assert "ERROR CONFIG" in output.getvalue()
+    assert records(output)[0]["status"] == "failure"
+    assert logger.disabled
+    assert logger.handlers == previous_handlers
+    assert logger.level == previous_level
+    assert logger.propagate == previous_propagate
+
+
 @pytest.mark.parametrize("level", ["INFO", "DEBUG", "WARNING", "ERROR", "CRITICAL"])
 def test_levels_categories_and_metrics_delivery(output, monkeypatch, level):
     monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", level.lower())
