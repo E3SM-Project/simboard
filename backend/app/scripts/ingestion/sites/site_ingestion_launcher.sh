@@ -40,6 +40,7 @@ fi
 
 site=$1
 scan_mode=$2
+requested_dry_run="${DRY_RUN:-true}"
 
 # =============================================================================
 # Site configuration and standard layout
@@ -56,6 +57,9 @@ fi
 
 # Site config provides the machine identity and ingestion settings.
 source "${site_config}"
+if [[ ${SIMBOARD_ENFORCE_RUN_CONTROLS:-false} == true ]]; then
+  export DRY_RUN="${requested_dry_run}"
+fi
 
 # Every site uses the standard deployment layout. The scheduler supplies its
 # root; site configuration does not supply alternate repository or work paths.
@@ -140,6 +144,9 @@ else
   esac
 fi
 shopt -u nocasematch
+if [[ ${SIMBOARD_ENFORCE_RUN_CONTROLS:-false} == true ]]; then
+  export DRY_RUN="${requested_dry_run}" SCAN_MODE="${scan_mode}"
+fi
 
 # =============================================================================
 # Python runtime
