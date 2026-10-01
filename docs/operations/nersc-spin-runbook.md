@@ -18,11 +18,11 @@ No workload manifests are versioned under `deploy/spin/`.
 From the repository root, run a dry run and review the results before applying:
 
 ```bash
-make ingest-dry-run machine=perlmutter env=dev env_file=/path/to/protected.env
-make ingest-apply machine=perlmutter env=dev env_file=/path/to/protected.env
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env
+make ingest-apply machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env
 ```
 
-These targets load `sites/configs/perlmutter.config` and run `app.scripts.ingestion.nersc_archive_ingestor` directly. They default to archive mode and use NERSC filesystem paths:
+These targets load `sites/configs/perlmutter.config` and run `app.scripts.ingestion.nersc_archive_ingestor` directly. They require `scan_mode=archive` or `scan_mode=staging` and use NERSC filesystem paths:
 
 - `/global/cfs/cdirs/e3sm/performance_archive`
 - `/global/cfs/cdirs/e3sm/OLD_PERF`

@@ -101,9 +101,23 @@ def test_machine_dispatch(
         (["machine=nersc", "env=dev"], "machine must"),
         (["machine=perlmutter", "env=invalid"], "env must"),
         (["machine=perlmutter", "env=dev", "scan_mode=invalid"], "scan_mode must"),
-        (["machine=chrysalis", "env=dev", "SIMBOARD_ROOT="], "SIMBOARD_ROOT must"),
-        (["machine=perlmutter", "env=dev", "env_file=/nonexistent"], "not readable"),
-        (["machine=perlmutter", "env=dev"], "SIMBOARD_API_BASE_URL must"),
+        (
+            ["machine=chrysalis", "env=dev", "scan_mode=archive", "SIMBOARD_ROOT="],
+            "SIMBOARD_ROOT must",
+        ),
+        (
+            [
+                "machine=perlmutter",
+                "env=dev",
+                "scan_mode=archive",
+                "env_file=/nonexistent",
+            ],
+            "not readable",
+        ),
+        (
+            ["machine=perlmutter", "env=dev", "scan_mode=archive"],
+            "SIMBOARD_API_BASE_URL must",
+        ),
     ],
 )
 def test_invalid_machine_inputs(args: list[str], message: str) -> None:
@@ -116,6 +130,18 @@ def test_invalid_machine_inputs(args: list[str], message: str) -> None:
     result = run_make(["ingest-dry-run", *args], env)
     assert result.returncode != 0
     assert message in result.stderr
+
+
+@pytest.mark.parametrize("target", ["ingest-dry-run", "ingest-apply"])
+@pytest.mark.parametrize("machine", ["chrysalis", "perlmutter"])
+@pytest.mark.parametrize("mode_args", [[], ["scan_mode="], ["scan_mode=invalid"]])
+def test_scan_mode_required(target: str, machine: str, mode_args: list[str]) -> None:
+    env = os.environ.copy()
+    env.pop("scan_mode", None)
+    env["SCAN_MODE"] = "archive"
+    result = run_make([target, f"machine={machine}", "env=dev", *mode_args], env)
+    assert result.returncode != 0
+    assert "scan_mode must be archive or staging (required)" in result.stderr
 
 
 def test_perlmutter_offline_defaults_and_exit_status(tmp_path: Path) -> None:
@@ -133,7 +159,9 @@ def test_perlmutter_offline_defaults_and_exit_status(tmp_path: Path) -> None:
     for key in ("PERF_ARCHIVE_ROOT", "OLD_PERF_ARCHIVE_ROOT", "ARCHIVE_YEAR_START"):
         env.pop(key, None)
     env.update(PYTHON_BIN=str(python), DRY_RUN_USE_REMOTE_STATE=" false ")
-    result = run_make(["ingest-dry-run", "machine=perlmutter", "env=dev"], env)
+    result = run_make(
+        ["ingest-dry-run", "machine=perlmutter", "env=dev", "scan_mode=archive"], env
+    )
     assert result.returncode != 0
     assert (
         "perlmutter\n/global/cfs/cdirs/e3sm/performance_archive\n"
@@ -146,7 +174,13 @@ def test_malformed_environment_does_not_leak_token(tmp_path: Path) -> None:
     environment = tmp_path / "broken.env"
     environment.write_text("SIMBOARD_API_TOKEN= hidden-token\n")
     result = run_make(
-        ["ingest-dry-run", "machine=perlmutter", "env=dev", f"env_file={environment}"],
+        [
+            "ingest-dry-run",
+            "machine=perlmutter",
+            "env=dev",
+            "scan_mode=archive",
+            f"env_file={environment}",
+        ],
         os.environ.copy(),
     )
     assert result.returncode != 0
