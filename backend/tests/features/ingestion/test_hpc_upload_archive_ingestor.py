@@ -149,16 +149,11 @@ def test_run_ingestor_offline_dry_run_logs_startup_configuration(
         for event, fields in logged_events
         if event.startswith("startup_configuration_")
     ]
-    assert startup_events[0] == ("startup_configuration_begin", {})
-    assert startup_events[1] == (
-        "startup_configuration_api",
-        {
-            "api_base_url": "",
-            "endpoint_url": "",
-            "state_endpoint_url": "",
-        },
+    assert startup_events[0] == ("startup_configuration_api", {"api_base_url": ""})
+    assert startup_events[-1] == (
+        "startup_configuration_auth",
+        {"has_api_token": False},
     )
-    assert startup_events[-1] == ("startup_configuration_end", {})
 
 
 def test_create_case_archive_packages_single_case_dir(tmp_path: Path) -> None:
@@ -749,12 +744,11 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
     ][0]
 
     assert exit_code == 0
-    assert scan_completed["accepted_execution_ids"] == 1
-    assert scan_completed["rejected_existing_execution_ids"] == 0
-    assert scan_completed["rejected_incomplete_execution_ids"] == 0
-    assert scan_completed["rejected_invalid_execution_ids"] == 0
-    assert scan_completed["deferred_execution_ids"] == 0
-    assert scan_completed["scan_mode"] == "staging"
+    assert scan_completed["submission_qualified_cases"] == 1
+    assert scan_completed["selected_submission_cases"] == 1
+    assert scan_completed["execution_dirs_scanned"] == 1
+    assert scan_completed["execution_dirs_accepted"] == 1
+    assert "accepted_execution_ids" not in scan_completed
 
 
 def test_run_ingestor_missing_archive_root_returns_failure(
@@ -1097,7 +1091,7 @@ def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -
     assert logged_events == [("configuration_error", {"error": "bad config"})]
 
 
-def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None:
+def test_main_leaves_final_reporting_to_wrapper(monkeypatch, tmp_path: Path) -> None:
     config = IngestorConfig(
         api_base_url="http://backend:8000",
         api_token="token",
@@ -1130,7 +1124,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
 
     assert exit_code == 0
     assert logged_events[0][0] == "run_started"
-    assert logged_events[-1][0] == "run_finished"
+    assert [event for event, _ in logged_events] == ["run_started"]
     assert logged_events[0][1]["scan_mode"] == "staging"
     assert logged_events[-1][1]["scan_mode"] == "staging"
 
@@ -1270,7 +1264,7 @@ def test_hpc_rejected_only_case_persists_typed_result_but_not_transient_error(
         fields for event, fields in logged_events if event == "scan_completed"
     )
     assert scan_fields["skipped_transient"] == 1
-    assert scan_fields["transient_execution_ids"] == 1
+    assert "transient_execution_ids" not in scan_fields
 
 
 def test_hpc_discovery_persistence_failure_prevents_upload(

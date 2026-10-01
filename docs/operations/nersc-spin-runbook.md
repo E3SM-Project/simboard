@@ -1,5 +1,6 @@
 # NERSC Spin Ingestion Operations Runbook
 
+1
 Audience: operators deploying SimBoard on NERSC Spin.
 
 This runbook defines the NERSC Spin workload baseline and backend rollout flow using an initContainer for automatic Alembic migrations.
@@ -13,6 +14,25 @@ security context, networking, storage, secrets, or image pull behavior.
 No workload manifests are versioned under `deploy/spin/`.
 
 ## Prerequisites (Create First)
+
+From the repository root, run a dry run and review the results before applying:
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env
+make ingest-apply machine=perlmutter env=dev scan_mode=archive env_file=/path/to/protected.env
+```
+
+These targets load `sites/configs/perlmutter.config` and run `app.scripts.ingestion.nersc_archive_ingestor` directly. They require `scan_mode=archive` or `scan_mode=staging` and use NERSC filesystem paths:
+
+- `/global/cfs/cdirs/e3sm/performance_archive`
+- `/global/cfs/cdirs/e3sm/OLD_PERF`
+
+For runs inside Spin, set:
+
+```bash
+export PERF_ARCHIVE_ROOT=/performance_archive
+export OLD_PERF_ARCHIVE_ROOT=/OLD_PERF
+```
 
 Create these resources before configuring workloads in Rancher.
 Create `nersc-staging-ingestor-env` and `nersc-archive-ingestor-env` later in **Workload 3 setup**, after generating the ingestion service-account token.
@@ -643,8 +663,8 @@ Add the following annotation to allow remote archive-ingestion uploads to reach
 the backend. Without it, the NGINX Ingress default request-body limit can reject
 uploads before the API processes them.
 
-| Annotation key | Value |
-| -------------- | ----- |
+| Annotation key                                | Value  |
+| --------------------------------------------- | ------ |
 | `nginx.ingress.kubernetes.io/proxy-body-size` | `325m` |
 
 Keep this value slightly above the backend upload limit in

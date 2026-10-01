@@ -105,9 +105,6 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         for event, fields in logged_events
         if event == "execution_collection_decision"
     ]
-    case_begins = [
-        fields for event, fields in logged_events if event == "case_collection_begin"
-    ]
     case_summaries = [
         fields for event, fields in logged_events if event == "case_collection_summary"
     ]
@@ -116,7 +113,6 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         for event, fields in logged_events
         if event
         in {
-            "case_collection_begin",
             "execution_collection_decision",
             "case_collection_summary",
         }
@@ -124,21 +120,6 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
 
     assert exit_code == 0
     assert case_block_events == [
-        (
-            "case_collection_begin",
-            {
-                "case": "case_a",
-                "execution_count_total": 2,
-                "execution_count_valid": 1,
-                "execution_count_rejected_incomplete": 0,
-                "execution_count_rejected_invalid": 0,
-                "execution_count_transient": 0,
-                "execution_count_existing": 1,
-                "execution_count_new": 1,
-                "execution_count_selected_new": 1,
-                "execution_count_deferred": 0,
-            },
-        ),
         (
             "execution_collection_decision",
             {
@@ -167,21 +148,6 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
                 "rejected_invalid": 0,
                 "transient": 0,
                 "deferred": 0,
-            },
-        ),
-        (
-            "case_collection_begin",
-            {
-                "case": "case_b",
-                "execution_count_total": 1,
-                "execution_count_valid": 1,
-                "execution_count_rejected_incomplete": 0,
-                "execution_count_rejected_invalid": 0,
-                "execution_count_transient": 0,
-                "execution_count_existing": 0,
-                "execution_count_new": 1,
-                "execution_count_selected_new": 0,
-                "execution_count_deferred": 1,
             },
         ),
         (
@@ -226,20 +192,14 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
             "reason": "max_cases_per_run",
         },
     ]
-    assert len(case_begins) == 2
+    assert not any(event == "case_collection_begin" for event, _ in logged_events)
     assert len(case_summaries) == 2
     scan_completed = [
         fields for event, fields in logged_events if event == "scan_completed"
     ][0]
-    dry_run_completed = [
-        fields for event, fields in logged_events if event == "dry_run_completed"
-    ][0]
-
-    for payload in (scan_completed, dry_run_completed):
-        assert payload["submission_qualified_cases"] == 2
-        assert payload["selected_submission_cases"] == 1
-    assert scan_completed["rejected_existing_execution_ids"] == 1
-    assert scan_completed["scan_mode"] == "staging"
+    assert scan_completed["submission_qualified_cases"] == 2
+    assert scan_completed["selected_submission_cases"] == 1
+    assert case_summaries[0]["rejected_existing"] == 1
 
 
 def test_run_ingestor_uses_remote_state_and_builds_expected_payload(
@@ -507,22 +467,17 @@ def test_run_ingestor_dry_run_without_api_configuration_scans_offline(
     )
 
     assert exit_code == 0
-    assert any(event == "dry_run_completed" for event, _ in logged_events)
+    assert any(event == "scan_completed" for event, _ in logged_events)
     startup_events = [
         (event, fields)
         for event, fields in logged_events
         if event.startswith("startup_configuration_")
     ]
-    assert startup_events[0] == ("startup_configuration_begin", {})
-    assert startup_events[1] == (
-        "startup_configuration_api",
-        {
-            "api_base_url": "",
-            "endpoint_url": "",
-            "state_endpoint_url": "",
-        },
+    assert startup_events[0] == ("startup_configuration_api", {"api_base_url": ""})
+    assert startup_events[-1] == (
+        "startup_configuration_auth",
+        {"has_api_token": False},
     )
-    assert startup_events[-1] == ("startup_configuration_end", {})
 
 
 def test_run_ingestor_without_token_returns_config_error(
@@ -1003,7 +958,7 @@ def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -
     assert logged_events == [("configuration_error", {"error": "bad config"})]
 
 
-def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None:
+def test_main_leaves_final_reporting_to_wrapper(monkeypatch, tmp_path: Path) -> None:
     config = IngestorConfig(
         api_base_url="http://backend:8000",
         api_token="token",
@@ -1031,7 +986,7 @@ def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None
 
     assert exit_code == 0
     assert logged_events[0][0] == "run_started"
-    assert logged_events[-1][0] == "run_finished"
+    assert [event for event, _ in logged_events] == ["run_started"]
     assert logged_events[0][1]["scan_mode"] == "staging"
     assert logged_events[-1][1]["scan_mode"] == "staging"
 
@@ -1431,21 +1386,6 @@ def test_run_ingestor_logs_rejected_only_case_block(
     assert exit_code == 0
     assert case_block_events == [
         (
-            "case_collection_begin",
-            {
-                "case": "case_a",
-                "execution_count_total": 2,
-                "execution_count_valid": 0,
-                "execution_count_rejected_incomplete": 1,
-                "execution_count_rejected_invalid": 1,
-                "execution_count_transient": 0,
-                "execution_count_existing": 0,
-                "execution_count_new": 0,
-                "execution_count_selected_new": 0,
-                "execution_count_deferred": 0,
-            },
-        ),
-        (
             "execution_collection_decision",
             {
                 "case": "case_a",
@@ -1475,21 +1415,6 @@ def test_run_ingestor_logs_rejected_only_case_block(
                 "rejected_invalid": 1,
                 "transient": 0,
                 "deferred": 0,
-            },
-        ),
-        (
-            "case_collection_begin",
-            {
-                "case": "case_b",
-                "execution_count_total": 1,
-                "execution_count_valid": 1,
-                "execution_count_rejected_incomplete": 0,
-                "execution_count_rejected_invalid": 0,
-                "execution_count_transient": 0,
-                "execution_count_existing": 0,
-                "execution_count_new": 1,
-                "execution_count_selected_new": 1,
-                "execution_count_deferred": 0,
             },
         ),
         (
@@ -1556,19 +1481,17 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
     case_block_markers = [
         (event, fields["case"])
         for event, fields in logged_events
-        if event in {"case_collection_begin", "case_collection_summary"}
+        if event == "case_collection_summary"
     ]
 
     assert exit_code == 0
     assert case_block_markers == [
-        ("case_collection_begin", "case_a"),
         ("case_collection_summary", "case_a"),
-        ("case_collection_begin", "case_b"),
         ("case_collection_summary", "case_b"),
     ]
 
 
-def test_log_event_uses_event_specific_field_order(monkeypatch) -> None:
+def test_shared_log_event_uses_sorted_fields_without_public_order(monkeypatch) -> None:
     logged_messages: list[str] = []
 
     monkeypatch.setattr(
@@ -1592,8 +1515,8 @@ def test_log_event_uses_event_specific_field_order(monkeypatch) -> None:
 
     assert logged_messages == [
         "event=execution_collection_decision "
-        "case=case_a execution_id=100.1-1 decision=rejected "
-        "reason=incomplete error_count=2 detail=missing zzz=tail"
+        "case=case_a decision=rejected detail=missing error_count=2 "
+        "execution_id=100.1-1 reason=incomplete zzz=tail"
     ]
 
 

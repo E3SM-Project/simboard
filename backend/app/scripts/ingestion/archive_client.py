@@ -409,7 +409,6 @@ def _ingest_case_with_retries(
     if post_request_fn is None:
         post_request_fn = _post_ingestion_request
 
-    retry_started_at = time.monotonic()
     for attempt in range(1, max_attempts + 1):
         attempt_started_at = time.monotonic()
         try:
@@ -434,9 +433,6 @@ def _ingest_case_with_retries(
                 "error": None,
             }
             _log_case_ingestion_timing(candidate.case_path, attempt, attempt_started_at)
-            _log_case_ingestion_retry_timing(
-                candidate.case_path, attempt, retry_started_at
-            )
             return result
         except IngestionRequestError as exc:
             should_retry, failure_fields = _retry_failure_event_fields(
@@ -466,9 +462,6 @@ def _ingest_case_with_retries(
                 "body": None,
                 "error": str(exc),
             }
-            _log_case_ingestion_retry_timing(
-                candidate.case_path, attempt, retry_started_at
-            )
             return result
 
     return {
@@ -490,20 +483,6 @@ def _log_case_ingestion_timing(
             "case_path": case_path,
             "attempt": attempt,
             "duration_seconds": round(time.monotonic() - attempt_started_at, 3),
-        },
-    )
-
-
-def _log_case_ingestion_retry_timing(
-    case_path: str, attempts: int, retry_started_at: float
-) -> None:
-    """Log the elapsed time for a complete ingestion retry sequence."""
-    _log_event(
-        "case_ingestion_retry_completed",
-        {
-            "case_path": case_path,
-            "attempts": attempts,
-            "duration_seconds": round(time.monotonic() - retry_started_at, 3),
         },
     )
 

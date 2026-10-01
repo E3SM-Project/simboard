@@ -162,7 +162,6 @@ def test_collect_case_execution_records_each_decision_source(
         expected_results
     )
     log_data = logs[str(case_dir.resolve())]
-    assert log_data.execution_count_total == 1
     assert log_data.valid_execution_ids == expected_grouped
     expected_rejection_reason = {
         "100.1-1": "already_processed",
@@ -186,12 +185,10 @@ def test_collection_outcomes_preserve_order_fields_and_limit_counters(
     collection_data = {
         case_b: CaseCollectionLogData(
             case_path=case_b,
-            execution_count_total=1,
             valid_execution_ids={"200.1-1"},
         ),
         case_a: CaseCollectionLogData(
             case_path=case_a,
-            execution_count_total=3,
             valid_execution_ids={"100.1-1", "101.1-1"},
             rejected_decisions=[
                 ExecutionCollectionDecision(
@@ -229,38 +226,24 @@ def test_collection_outcomes_preserve_order_fields_and_limit_counters(
     )
 
     assert [event for event, _ in events] == [
-        "case_collection_begin",
         "execution_collection_decision",
         "execution_collection_decision",
         "execution_collection_decision",
         "case_collection_summary",
-        "case_collection_begin",
         "execution_collection_decision",
         "case_collection_summary",
     ]
     assert list(events[0][1]) == [
         "case",
-        "execution_count_total",
-        "execution_count_valid",
-        "execution_count_rejected_incomplete",
-        "execution_count_rejected_invalid",
-        "execution_count_transient",
-        "execution_count_existing",
-        "execution_count_new",
-        "execution_count_selected_new",
-        "execution_count_deferred",
+        "execution_id",
+        "decision",
+        "reason",
     ]
     assert events[0][1] == {
         "case": "case-a",
-        "execution_count_total": 3,
-        "execution_count_valid": 2,
-        "execution_count_rejected_incomplete": 0,
-        "execution_count_rejected_invalid": 1,
-        "execution_count_transient": 0,
-        "execution_count_existing": 1,
-        "execution_count_new": 1,
-        "execution_count_selected_new": 1,
-        "execution_count_deferred": 0,
+        "execution_id": "099.1-1",
+        "decision": "rejected",
+        "reason": "invalid",
     }
     assert events[-1] == (
         "case_collection_summary",
@@ -476,10 +459,9 @@ def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
         {"scan_mode": "staging", "archive_root": str(archive_root)},
     )
     assert logged_events[1][0] == "archive_scan_completed"
-    assert logged_events[1][1]["archive_root"] == str(archive_root)
-    assert logged_events[1][1]["discovered_cases"] == 0
+    assert logged_events[1][1]["current_dir"] == str(archive_root / "case_a")
+    assert "discovered_cases" not in logged_events[1][1]
     case_log = case_collection_data[str((archive_root / "case_a").resolve())]
-    assert case_log.execution_count_total == total_skips
     assert case_log.valid_execution_ids == set()
     assert sorted(
         decision.execution_id for decision in case_log.rejected_decisions
@@ -520,32 +502,17 @@ def test_discover_case_executions_logs_scan_progress(
 
     assert start_events == [{"scan_mode": "staging", "archive_root": archive_root_path}]
     assert len(progress_events) == 2
-    assert progress_events[0]["scan_mode"] == "staging"
-    assert progress_events[0]["archive_root"] == archive_root_path
     assert progress_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[0]["directories_visited"] == 2
-    assert progress_events[0]["discovered_cases"] == 1
-    assert progress_events[0]["execution_dirs_scanned"] == 1
-    assert progress_events[0]["execution_dirs_accepted"] == 1
-    assert progress_events[0]["rejected_existing_execution_ids"] == 0
-    assert progress_events[1]["scan_mode"] == "staging"
-    assert progress_events[1]["archive_root"] == archive_root_path
     assert progress_events[1]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert progress_events[1]["directories_visited"] == 4
-    assert progress_events[1]["discovered_cases"] == 3
-    assert progress_events[1]["execution_dirs_scanned"] == 3
-    assert progress_events[1]["execution_dirs_accepted"] == 3
-    assert progress_events[1]["rejected_existing_execution_ids"] == 0
 
     assert len(completed_events) == 1
-    assert completed_events[0]["scan_mode"] == "staging"
-    assert completed_events[0]["archive_root"] == archive_root_path
     assert completed_events[0]["current_dir"].startswith(f"{archive_root_path}/case_")
     assert completed_events[0]["directories_visited"] == 4
-    assert completed_events[0]["discovered_cases"] == 3
-    assert completed_events[0]["execution_dirs_scanned"] == 3
-    assert completed_events[0]["execution_dirs_accepted"] == 3
-    assert completed_events[0]["rejected_existing_execution_ids"] == 0
+    for fields in [*progress_events, *completed_events]:
+        assert set(fields) == {"current_dir", "directories_visited", "duration_seconds"}
+        assert fields["duration_seconds"] >= 0
 
 
 def test_discover_case_executions_skips_previously_processed_archive_ids(
