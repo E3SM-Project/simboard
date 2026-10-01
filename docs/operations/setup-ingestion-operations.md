@@ -39,35 +39,6 @@ Use path ingestion for Perlmutter data mounted in NERSC Spin. Use archive upload
 
 ## Remote-site operations
 
-### Manual machine-based ingestion
-
-Run commands from the repository root. Review the dry-run results before running `ingest-apply`.
-
-#### Chrysalis
-
-After provisioning Chrysalis:
-
-```bash
-make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev
-make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev MAX_CASES_PER_RUN=5
-```
-
-- **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
-- **Execution:** Uses `chrysalis.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
-
-#### Perlmutter / NERSC
-
-For NERSC path ingestion:
-
-```bash
-make ingest-dry-run machine=perlmutter env=dev env_file=/path/to/protected.env
-make ingest-apply machine=perlmutter env=dev env_file=/path/to/protected.env MAX_CASES_PER_RUN=5
-```
-
-- **Environment:** Loads API settings from `env_file`, or uses exported settings if omitted. **`env` alone does not switch credentials.**
-- **Execution:** Uses `perlmutter.config` and the NERSC archive ingestor with the current checkout’s backend Python. Override Python with `PYTHON_BIN`; `SIMBOARD_ROOT` is not required.
-- **Output and locking:** Output goes to the terminal or scheduler. This path adds no launcher file logs or locks. **Avoid overlap with scheduled NERSC jobs.**
-
 ### Define the deployment root
 
 `SIMBOARD_ROOT` is the deployment root for the remote scheduler. Provisioning
@@ -216,6 +187,36 @@ Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false
 4. New launcher logs are written only to `raw_logs/`; retain or remove old
    top-level `SBCS-*.log` files according to the site's retention policy after
    confirming the updated crontab is active.
+
+### Manual machine-based ingestion
+
+Run commands from the repository root. This is useful for quicker testing and debugging.
+Review the dry-run results before running `ingest-apply`.
+
+#### Chrysalis
+
+After provisioning Chrysalis:
+
+```bash
+make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev
+make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev MAX_CASES_PER_RUN=5
+```
+
+- **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
+- **Execution:** Uses `chrysalis.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
+
+#### Perlmutter / NERSC
+
+For NERSC path ingestion:
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev env_file=/path/to/protected.env
+make ingest-apply machine=perlmutter env=dev env_file=/path/to/protected.env MAX_CASES_PER_RUN=5
+```
+
+- **Environment:** Loads API settings from `env_file`, or uses exported settings if omitted. **`env` alone does not switch credentials.**
+- **Execution:** Uses `perlmutter.config` and the NERSC archive ingestor with the current checkout’s backend Python. Override Python with `PYTHON_BIN`; `SIMBOARD_ROOT` is not required.
+- **Output and locking:** Output goes to the terminal or scheduler. This path adds no launcher file logs or locks. **Avoid overlap with scheduled NERSC jobs.**
 
 ## NERSC Spin operations
 
