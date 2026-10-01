@@ -46,6 +46,10 @@ help:
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
+	@echo "  make ingest-dry-run machine=<chrysalis|perlmutter> env=<dev|prod> # General ingestion without writes"
+	@echo "  make ingest-apply machine=<chrysalis|perlmutter> env=<dev|prod>   # General live ingestion"
+	@echo "    Chrysalis: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
+	@echo "    Optional: scan_mode=<archive|staging> (default archive), env_file=<path>, archive bounds and case limits"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
 	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision checkout, runtime, and standardized operations workspace"
@@ -370,6 +374,15 @@ backend-provision-service:
 	cd $(BACKEND_DIR) && \
 	uv run python -m app.scripts.users.provision_service_account \
 		--service-name "$(service_name)"
+
+.PHONY: ingest-dry-run ingest-apply
+ingest-dry-run ingest-apply: export machine := $(machine)
+ingest-dry-run ingest-apply: export env := $(env)
+ingest-dry-run ingest-apply: export env_file := $(env_file)
+ingest-dry-run ingest-apply: export scan_mode := $(if $(scan_mode),$(scan_mode),archive)
+ingest-dry-run ingest-apply: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
+ingest-dry-run ingest-apply:
+	@bash $(BACKEND_DIR)/app/scripts/ingestion/run_machine_ingestion.sh $(if $(filter ingest-apply,$@),false,true)
 
 v3-ingest-dry-run:
 	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-dry-run

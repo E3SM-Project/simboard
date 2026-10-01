@@ -30,14 +30,43 @@ site-specific filesystem, scheduler, module, or network configuration.
 
 ## Choose an operation
 
-| Archive access | Job | Where it runs |
-| --- | --- | --- |
-| Archive is mounted in the SimBoard backend | Path ingestion | NERSC Spin CronJob |
-| Archive is available only at an HPC site | Archive upload | Site scheduler or cron |
+| Archive access                             | Job            | Where it runs          |
+| ------------------------------------------ | -------------- | ---------------------- |
+| Archive is mounted in the SimBoard backend | Path ingestion | NERSC Spin CronJob     |
+| Archive is available only at an HPC site   | Archive upload | Site scheduler or cron |
 
 Use path ingestion for Perlmutter data mounted in NERSC Spin. Use archive upload for Chrysalis and other remote sites. Create the service account and token first: [HPC API Token Authentication](hpc-api-token-authentication.md).
 
 ## Remote-site operations
+
+### Manual machine-based ingestion
+
+Run commands from the repository root. Review the dry-run results before running `ingest-apply`.
+
+#### Chrysalis
+
+After provisioning Chrysalis:
+
+```bash
+make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev
+make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev MAX_CASES_PER_RUN=5
+```
+
+- **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
+- **Execution:** Uses `chrysalis.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
+
+#### Perlmutter / NERSC
+
+For NERSC path ingestion:
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev env_file=/path/to/protected.env
+make ingest-apply machine=perlmutter env=dev env_file=/path/to/protected.env MAX_CASES_PER_RUN=5
+```
+
+- **Environment:** Loads API settings from `env_file`, or uses exported settings if omitted. **`env` alone does not switch credentials.**
+- **Execution:** Uses `perlmutter.config` and the NERSC archive ingestor with the current checkout’s backend Python. Override Python with `PYTHON_BIN`; `SIMBOARD_ROOT` is not required.
+- **Output and locking:** Output goes to the terminal or scheduler. This path adds no launcher file logs or locks. **Avoid overlap with scheduled NERSC jobs.**
 
 ### Define the deployment root
 
@@ -46,8 +75,8 @@ clones the current `main` branch of the canonical SimBoard repository beneath
 this root; use `SIMBOARD_REPOSITORY_URL` or `SIMBOARD_REPOSITORY_REF` only when
 an approved deployment requires a different source, branch, or tag.
 
-| Machine | `SIMBOARD_ROOT` | Site config | Repository checkout |
-| --- | --- | --- | --- |
+| Machine   | `SIMBOARD_ROOT`              | Site config                      | Repository checkout                    |
+| --------- | ---------------------------- | -------------------------------- | -------------------------------------- |
 | Chrysalis | `/lcrc/group/e3sm2/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 
 ### Provision the runtime
@@ -60,6 +89,7 @@ an approved deployment requires a different source, branch, or tag.
    ```bash
    export SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
    ```
+
 3. Provision the deployment-local `operations/` workspace and SimBoard checkout:
 
    ```bash
@@ -158,17 +188,17 @@ The copied crontab:
 
 ### Reference: configuration files and variables
 
-| Location | Configure |
-| --- | --- |
-| `sites/configs/<site>.config` | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME` |
-| `operations/` | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
-| `operations/raw_logs/` | Per-launcher-run logs; apply the site's retention policy without recording secrets |
-| `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output |
-| `repository/simboard` | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh` |
-| `operations/env.dev.sh` | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
-| `operations/env.prod.sh` | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` |
-| Copied crontab | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END` |
-| Each cron command | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh` |
+| Location                        | Configure                                                                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sites/configs/<site>.config`   | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME`                                      |
+| `operations/`                   | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
+| `operations/raw_logs/`          | Per-launcher-run logs; apply the site's retention policy without recording secrets                                                                                   |
+| `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output                                                                                       |
+| `repository/simboard`           | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh`                                                   |
+| `operations/env.dev.sh`         | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                         |
+| `operations/env.prod.sh`        | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                          |
+| Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
+| Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`                                                                                                        |
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
 
@@ -271,9 +301,9 @@ Diagnostics discovery is separate from performance ingestion and links published
 
 4. For a live scan, set `DRY_RUN=false` and provide `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` in the scheduler environment.
 
-| Configure in | Variables |
-| --- | --- |
-| Scheduler environment | `MACHINE_NAME`, `DRY_RUN` |
+| Configure in               | Variables                                     |
+| -------------------------- | --------------------------------------------- |
+| Scheduler environment      | `MACHINE_NAME`, `DRY_RUN`                     |
 | Live-scan scheduler secret | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` |
 
 ## Operate safely
