@@ -47,8 +47,7 @@ def test_run_requires_machine_name_before_archive_resolution(
     else:
         monkeypatch.setenv("MACHINE_NAME", machine_name)
 
-    with pytest.raises(ValueError, match="MACHINE_NAME is required"):
-        run()
+    assert run() == 1
 
 
 def _case(
@@ -403,10 +402,13 @@ def test_run_submits_exact_payload_and_bearer_auth(
     ) in events
 
 
+@pytest.mark.parametrize("filtered", [False, True])
 def test_dry_run_requires_no_api_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filtered: bool
 ) -> None:
     _case(tmp_path, "production/type/case")
+    if filtered:
+        _case(tmp_path, "production/type/excluded")
     monkeypatch.setattr(
         "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
         lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
@@ -420,7 +422,8 @@ def test_dry_run_requires_no_api_configuration(
         "app.scripts.ingestion.diagnostics_link_scanner._log_event",
         lambda event, fields=None: events.append((event, fields)),
     )
-    assert run() == 0
+    included_case_paths = {Path("production/type/case")} if filtered else None
+    assert run(included_case_paths=included_case_paths) == 0
     candidate_events = [
         fields
         for event, fields in events
@@ -444,6 +447,7 @@ def test_dry_run_requires_no_api_configuration(
             "deferred_state_lookups": 0,
             "submitted_links": 0,
             "failed_link_submissions": 0,
+            "outcome": "completed",
         },
     )
 
@@ -483,3 +487,185 @@ def test_run_defers_after_exhausted_state_lookup(
         "diagnostics_scanner_state_lookup_deferred",
         {"archive_relative_case_path": "production/type/case", "status_code": 503},
     ) in events
+    assert events[-1][0] == "diagnostics_scanner_completed"
+    assert events[-1][1]["outcome"] == "failed"
+
+
+@pytest.mark.parametrize("dry_run", [" TRUE ", "Yes", "ON", "1"])
+def test_dry_run_boolean_variants_never_open_api_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: str
+) -> None:
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("DRY_RUN", dry_run)
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
+        lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.httpx.Client",
+        lambda **_kwargs: pytest.fail("dry run must not open an API client"),
+    )
+    assert run() == 0
+
+
+@pytest.mark.parametrize(
+    "failure_phase", ["configuration", "discovery", "state_lookup", "link_submission"]
+)
+def test_fatal_failure_reports_safe_context_and_partial_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_phase: str
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    _case(tmp_path, "production/type/first")
+    _case(tmp_path, "production/type/second")
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        scanner, "_log_event", lambda event, fields: events.append((event, fields))
+    )
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("DRY_RUN", "false")
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "secret-token")
+    monkeypatch.setattr(
+        scanner,
+        "_resolve_archive",
+        lambda _: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("sensitive-response secret-token")
+
+    if failure_phase == "configuration":
+        monkeypatch.setattr(scanner, "_resolve_archive", fail)
+    elif failure_phase == "discovery":
+        monkeypatch.setattr(scanner, "_discover", fail)
+    else:
+        client = _Client(httpx.Response(200, json=None))
+
+        def get(*_args, **_kwargs):
+            if client.post_calls and failure_phase == "state_lookup":
+                fail()
+            return httpx.Response(200, json=None)
+
+        monkeypatch.setattr(client, "get", get)
+        if failure_phase == "link_submission":
+            monkeypatch.setattr(client, "post", fail)
+        monkeypatch.setattr(scanner.httpx, "Client", lambda **_kwargs: client)
+
+    assert run() == 1
+    failures = [
+        fields for event, fields in events if event == "diagnostics_scanner_failed"
+    ]
+    assert len(failures) == 1
+    assert failures[0]["phase"] == failure_phase
+    assert failures[0]["error_type"] == "RuntimeError"
+    assert failures[0]["traceback_frames"]
+    assert "secret-token" not in str(events)
+    assert "sensitive-response" not in str(events)
+    summaries = [
+        fields for event, fields in events if event == "diagnostics_scanner_completed"
+    ]
+    assert len(summaries) == 1
+    assert summaries[0]["outcome"] == "failed"
+    assert summaries[0]["submitted_links"] == (
+        1 if failure_phase == "state_lookup" else 0
+    )
+    assert summaries[0]["discovered_candidates"] == (
+        2 if failure_phase in {"state_lookup", "link_submission"} else 0
+    )
+    if failure_phase in {"state_lookup", "link_submission"}:
+        assert failures[0]["archive_relative_case_path"].startswith("production/type/")
+
+
+@pytest.mark.parametrize(
+    ("dry_run", "api_base", "token", "error_type"),
+    [
+        pytest.param(
+            "typo",
+            "https://api.example.org",
+            "secret-token",
+            "ValueError",
+            id="invalid-dry-run",
+        ),
+        pytest.param(
+            "false", "https://api.example.org", None, "KeyError", id="missing-token"
+        ),
+        pytest.param(
+            "false", "https://api.example.org", "", "ValueError", id="empty-token"
+        ),
+        pytest.param("false", None, "secret-token", "KeyError", id="missing-api-url"),
+        pytest.param("false", "", "secret-token", "ValueError", id="empty-api-url"),
+    ],
+)
+def test_invalid_configuration_fails_before_discovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    dry_run: str,
+    api_base: str | None,
+    token: str | None,
+    error_type: str,
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("DRY_RUN", dry_run)
+    for name, value in (
+        ("SIMBOARD_API_BASE_URL", api_base),
+        ("SIMBOARD_API_TOKEN", token),
+    ):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    monkeypatch.setattr(
+        scanner, "_log_event", lambda event, fields: events.append((event, fields))
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_resolve_archive",
+        lambda _: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(
+        scanner, "_discover", lambda *_args: pytest.fail("must validate first")
+    )
+    assert run() == 1
+    failure = next(
+        fields for event, fields in events if event == "diagnostics_scanner_failed"
+    )
+    assert failure["phase"] == "configuration"
+    assert failure["error_type"] == error_type
+    assert events[-1][1]["outcome"] == "failed"
+    assert "secret-token" not in str(events)
+
+
+@pytest.mark.parametrize("body", [b"not-json", b'["invalid-state"]'])
+def test_invalid_state_response_emits_failed_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: bytes
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    _case(tmp_path, "production/type/case")
+    client = _Client(httpx.Response(200, content=body))
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        scanner, "_log_event", lambda event, fields: events.append((event, fields))
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_resolve_archive",
+        lambda _: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(scanner.httpx, "Client", lambda **_kwargs: client)
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("DRY_RUN", "false")
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    assert run() == 1
+    failure = next(
+        fields for event, fields in events if event == "diagnostics_scanner_failed"
+    )
+    assert failure["phase"] == "state_lookup"
+    assert failure["archive_relative_case_path"] == "production/type/case"
+    assert events[-1][1]["outcome"] == "failed"
+    assert client.post_calls == []
