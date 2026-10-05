@@ -21,6 +21,36 @@ def _write_executable(path: Path, contents: str) -> Path:
     return path
 
 
+@pytest.mark.parametrize("target", ["ingest-dry-run", "ingest-apply"])
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+def test_machine_make_targets_show_early_errors(
+    tmp_path: Path, target: str, scan_mode: str
+) -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    environment = tmp_path / "missing.env"
+    result = subprocess.run(
+        [
+            "make",
+            target,
+            "machine=chrysalis",
+            f"SIMBOARD_ROOT={tmp_path}",
+            "env=dev",
+            f"env_file={environment}",
+            f"scan_mode={scan_mode}",
+        ],
+        cwd=repository_root,
+        env={**os.environ, "DRY_RUN_USE_REMOTE_STATE": "true"},
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode != 0
+    assert "Ingestion log:" in result.stdout
+    assert "event=launcher_api_environment_unreadable" in result.stdout
+    assert "event=launcher_finished exit_code=1" in result.stdout
+
+
 @pytest.mark.parametrize(
     "failure",
     [
@@ -33,7 +63,10 @@ def _write_executable(path: Path, contents: str) -> Path:
         "malformed_environment",
     ],
 )
-def test_launcher_captures_early_failures(tmp_path: Path, failure: str) -> None:
+@pytest.mark.parametrize("console_log", [False, True])
+def test_launcher_captures_early_failures(
+    tmp_path: Path, failure: str, console_log: bool
+) -> None:
     root = tmp_path / "deployment"
     logs_dir = root / "operations/raw_logs"
     logs_dir.mkdir(parents=True)
@@ -56,6 +89,7 @@ def test_launcher_captures_early_failures(tmp_path: Path, failure: str) -> None:
         SIMBOARD_ENV_FILE=str(environment),
         DRY_RUN="false",
         PYTHON_BIN=str(tmp_path / "missing-python"),
+        SIMBOARD_CONSOLE_LOG=str(console_log).lower(),
     )
     if failure in {"site", "log"}:
         config.unlink()
@@ -89,9 +123,19 @@ def test_launcher_captures_early_failures(tmp_path: Path, failure: str) -> None:
         assert "event=launcher_finished exit_code=" in text
         assert "hidden-token" not in text
         assert "event=run_metrics" not in text
+        if console_log:
+            assert f"Ingestion log: {paths[0]}" in result.stdout
+            assert "event=launcher_finished exit_code=" in result.stdout
+            assert "hidden-token" not in result.stdout + result.stderr
+        else:
+            assert not result.stdout + result.stderr
 
 
-def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
+@pytest.mark.parametrize("console_log", [False, True])
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_launcher_runs_configured_ingestor_offline(
+    tmp_path: Path, console_log: bool, exit_code: int
+) -> None:
     simboard_root = tmp_path / "simboard-root"
     work_dir = simboard_root / "operations"
     work_dir.mkdir(parents=True)
@@ -104,7 +148,10 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         bin_dir / "python",
         "#!/usr/bin/env bash\n"
         'printf "%s\\n" "${SCAN_MODE}" "${ARCHIVE_YEAR_START-unset}" '
-        '"${MACHINE_NAME}" "$*" > "${CAPTURE_PATH}"\n',
+        '"${MACHINE_NAME}" "$*" > "${CAPTURE_PATH}"\n'
+        'printf "ingestor stdout\\n"\n'
+        'printf "ingestor stderr\\n" >&2\n'
+        f"exit {exit_code}\n",
     )
     flock_capture_path = tmp_path / "flock-commands.txt"
     _write_executable(
@@ -137,6 +184,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     env["SIMBOARD_ROOT"] = str(simboard_root)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["SIMBOARD_CONSOLE_LOG"] = str(console_log).lower()
 
     result = subprocess.run(
         [_launcher_path(), "test", "archive"],
@@ -146,7 +194,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
         text=True,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == exit_code, result.stderr
     assert capture_path.read_text(encoding="utf-8").splitlines() == [
         "archive",
         "2024-01",
@@ -162,6 +210,14 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     assert len(raw_logs) == 1
     assert raw_logs[0].stat().st_mode & 0o777 == 0o640
     raw_log_contents = raw_logs[0].read_text(encoding="utf-8")
+    assert "ingestor stdout" in raw_log_contents
+    assert "ingestor stderr" in raw_log_contents
+    assert f"event=launcher_finished exit_code={exit_code}" in raw_log_contents
+    if console_log:
+        assert f"Ingestion log: {raw_logs[0]}" in result.stdout
+        assert raw_log_contents in result.stdout
+    else:
+        assert not result.stdout + result.stderr
     assert f"site_config={site_config}" in raw_log_contents
     assert "scan_mode=archive" in raw_log_contents
     assert "dry_run=true" in raw_log_contents
@@ -179,8 +235,9 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
     ("scan_mode", "expected_returncode"),
     [("staging", 0), ("archive", 1), ("diagnostics", 1)],
 )
+@pytest.mark.parametrize("console_log", [False, True])
 def test_launcher_reports_mode_specific_lock_contention(
-    tmp_path: Path, scan_mode: str, expected_returncode: int
+    tmp_path: Path, scan_mode: str, expected_returncode: int, console_log: bool
 ) -> None:
     simboard_root = tmp_path / "simboard-root"
     work_dir = simboard_root / "operations"
@@ -221,6 +278,7 @@ def test_launcher_reports_mode_specific_lock_contention(
     env["SIMBOARD_ROOT"] = str(simboard_root)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["SIMBOARD_CONSOLE_LOG"] = str(console_log).lower()
 
     result = subprocess.run(
         [_launcher_path(), "test", scan_mode],
@@ -231,6 +289,10 @@ def test_launcher_reports_mode_specific_lock_contention(
     )
 
     assert result.returncode == expected_returncode
+    if console_log:
+        assert "lock already held; ingestion was not started" in result.stdout
+    else:
+        assert not result.stdout + result.stderr
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
     prefix = (
         "simboard-diagnostics"

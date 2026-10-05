@@ -2,6 +2,27 @@
 set -euo pipefail
 umask 027
 
+finish_logging() {
+  local exit_code=$?
+  printf '[%s] event=launcher_finished exit_code=%s\n' "$(date -u -Is)" "$exit_code" >&"$log_output_fd" || true
+  # Do not wait for tee here: a failing source command may still hold saved
+  # output descriptors until the shell exits, preventing tee from seeing EOF.
+  exit "$exit_code"
+}
+
+start_logging() {
+  if [[ ${SIMBOARD_CONSOLE_LOG:-false} == true ]]; then
+    printf 'Ingestion log: %s\n' "$LOG_FILE"
+    # Keep writing the file if a console pipe closes (GNU tee's pipe mode).
+    exec > >(tee -p -a "$LOG_FILE") 2>&1
+  else
+    exec >> "$LOG_FILE" 2>&1
+  fi
+  # Keep the completion event visible even when source diagnostics are muted.
+  exec {log_output_fd}>&1
+  trap finish_logging EXIT
+}
+
 # Capture failures before configuration is sourced or Python is checked. If the
 # deployment root/log directory is unavailable, stderr remains scheduler-owned.
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
@@ -20,8 +41,7 @@ if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
     early_environment="${early_environment//[^a-zA-Z0-9._-]/_}"
     LOG_FILE="${early_log_dir}/${early_log_prefix}-${early_site}-${early_environment}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
     if touch "${LOG_FILE}"; then
-      exec >> "${LOG_FILE}" 2>&1
-      trap 'exit_code=$?; printf "[%s] event=launcher_finished exit_code=%s\n" "$(date -u -Is)" "$exit_code" >> "${LOG_FILE}"' EXIT
+      start_logging
       printf '[%s] event=launcher_started\n' "$(date -u -Is)"
     else
       unset LOG_FILE
@@ -171,23 +191,22 @@ environment_lock_name="${environment_lock_name##*/}"
 mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
 if [[ -z "${LOG_FILE:-}" ]]; then
   LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
-  exec >> "${LOG_FILE}" 2>&1
-  trap 'exit_code=$?; printf "[%s] event=launcher_finished exit_code=%s\n" "$(date -u -Is)" "$exit_code" >> "${LOG_FILE}"' EXIT
+  start_logging
 fi
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
-  "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
+  "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}"
 if [[ $scan_mode == "diagnostics" ]]; then
   printf '[%s] launcher configuration: site_config=%s scanner_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${module}" >> "${LOG_FILE}"
+    "$(date -Is)" "${site_config}" "${module}"
 else
   printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}" >> "${LOG_FILE}"
+    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}"
 fi
 
 LOCK_FILE="$SIMBOARD_WORKDIR/${log_prefix}-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$" >> "$LOG_FILE"
+  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$"
   if [[ "${scan_mode}" != "staging" ]]; then
     exit 1
   fi
@@ -200,7 +219,7 @@ legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 if [[ $scan_mode != "diagnostics" && -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
-    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$"
     if [[ "${scan_mode}" == "archive" ]]; then
       exit 1
     fi
@@ -214,5 +233,5 @@ fi
 # Run the selected module and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
 printf '[%s] invoking %s: module=%s\n' \
-  "$(date -Is)" "${module_label}" "${module}" >> "${LOG_FILE}"
-"${PYTHON_BIN}" -m "${module}" >> "$LOG_FILE" 2>&1
+  "$(date -Is)" "${module_label}" "${module}"
+"${PYTHON_BIN}" -m "${module}" {log_output_fd}>&-

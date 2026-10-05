@@ -24,6 +24,7 @@ if [[ $selected_machine == chrysalis ]]; then
   export SIMBOARD_ENV_FILE=${env_file:-${SIMBOARD_ROOT}/operations/env.${env}.sh}
   export SIMBOARD_SITE_CONFIG=$config
   export SIMBOARD_ENFORCE_RUN_CONTROLS=true
+  export SIMBOARD_CONSOLE_LOG=true
   exec bash "$script_dir/sites/site_ingestion_launcher.sh" "$selected_machine" "$selected_scan_mode"
 fi
 

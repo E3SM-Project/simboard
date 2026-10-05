@@ -212,6 +212,7 @@ make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env
 
 - **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
 - **Execution:** Uses `chrysalis.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
+- **Output:** Both Make targets print the log path and stream launcher and ingestor output to the terminal while retaining the per-run log in `$SIMBOARD_ROOT/operations/raw_logs/`. Scheduled launcher invocations remain file-only by default; set `SIMBOARD_CONSOLE_LOG=true` to also stream their output. Lock contention is reported even when a staging run exits successfully without starting ingestion.
 
 #### Perlmutter / NERSC
 
