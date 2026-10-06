@@ -5,9 +5,9 @@ umask 027
 # =============================================================================
 # Command-line input
 # =============================================================================
-# Accept one configured site and one supported archive scan mode.
-if (( $# != 2 )) || [[ ! $1 =~ ^[a-z0-9_-]+$ ]] || [[ $2 != "archive" && $2 != "staging" ]]; then
-    echo "Usage: $0 <site> <staging|archive>" >&2
+# Accept one configured site and one supported operation.
+if (( $# != 2 )) || [[ ! $1 =~ ^[a-z0-9_-]+$ ]] || [[ $2 != "archive" && $2 != "staging" && $2 != "diagnostics" ]]; then
+    echo "Usage: $0 <site> <staging|archive|diagnostics>" >&2
     exit 1
 fi
 
@@ -27,7 +27,7 @@ if [[ ! -r "${site_config}" ]]; then
   exit 1
 fi
 
-# Site config provides site-specific ingestion settings.
+# Site config provides the machine identity and ingestion settings.
 source "${site_config}"
 
 # Every site uses the standard deployment layout. The scheduler supplies its
@@ -37,28 +37,31 @@ SIMBOARD_WORKDIR="${SIMBOARD_ROOT}/operations"
 SIMBOARD_MODULES="${SIMBOARD_ROOT}/repository/simboard/backend"
 SIMBOARD_RAW_LOG_DIR="${SIMBOARD_WORKDIR}/raw_logs"
 
-: "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
-
 # =============================================================================
-# Run controls
+# Operation configuration
 # =============================================================================
-# The command selects the scan mode. Site configuration supplies the archive
-# lower bound; scheduler settings may narrow the archive scan or cap submissions.
-export SCAN_MODE="${scan_mode}"
-
-if [[ $scan_mode == "archive" ]]; then
-  export ARCHIVE_YEAR_START="${ARCHIVE_YEAR_START:-${SIMBOARD_DEFAULT_ARCHIVE_YEAR_START:?SIMBOARD_DEFAULT_ARCHIVE_YEAR_START must be set by the site configuration}}"
+if [[ $scan_mode == "diagnostics" ]]; then
+  module="app.scripts.ingestion.diagnostics_link_scanner"
+  log_prefix="simboard-diagnostics"
+  task_label="diagnostics"
+  module_label="scanner"
+else
+  : "${SIMBOARD_INGESTOR_MODULE:?SIMBOARD_INGESTOR_MODULE must be set by the site configuration}"
+  module="${SIMBOARD_INGESTOR_MODULE}"
+  log_prefix="simboard-ingestion-${scan_mode}"
+  task_label="ingestion"
+  module_label="ingestor"
+  export SCAN_MODE="${scan_mode}"
+  export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-}"
+  if [[ $scan_mode == "archive" ]]; then
+    export ARCHIVE_YEAR_START="${ARCHIVE_YEAR_START:-${SIMBOARD_DEFAULT_ARCHIVE_YEAR_START:?SIMBOARD_DEFAULT_ARCHIVE_YEAR_START must be set by the site configuration}}"
+  fi
 fi
-
-export MAX_CASES_PER_RUN="${MAX_CASES_PER_RUN:-}"
 
 # =============================================================================
 # API configuration
 # =============================================================================
-# Dry runs default to read-only remote-state validation. Set
-# DRY_RUN_USE_REMOTE_STATE=false for credential-free offline scanning.
-# Read both controls with safe defaults, then trim leading and trailing
-# whitespace so scheduler values such as " false " are handled correctly below.
+# Trim scheduler values before deciding whether API access is needed.
 dry_run_normalized="${DRY_RUN:-true}"
 dry_run_normalized="${dry_run_normalized#"${dry_run_normalized%%[![:space:]]*}"}"
 dry_run_normalized="${dry_run_normalized%"${dry_run_normalized##*[![:space:]]}"}"
@@ -74,17 +77,35 @@ load_api_configuration() {
 }
 
 shopt -s nocasematch
-case "${dry_run_normalized}" in
-  0|false|no|off)
-    load_api_configuration
-    ;;
-  *)
-    case "${remote_state_normalized}" in
-      0|false|no|off) ;;
-      *) load_api_configuration ;;
-    esac
-    ;;
-esac
+if [[ $scan_mode == "diagnostics" ]]; then
+  # Diagnostics dry runs are offline; export a canonical boolean for Python.
+  case "${dry_run_normalized}" in
+    0|false|no|off)
+      load_api_configuration
+      export DRY_RUN=false
+      ;;
+    1|true|yes|on)
+      export DRY_RUN=true
+      ;;
+    *)
+      echo "DRY_RUN must be a boolean" >&2
+      exit 1
+      ;;
+  esac
+else
+  # Ingestion dry runs read remote state unless explicitly configured offline.
+  case "${dry_run_normalized}" in
+    0|false|no|off)
+      load_api_configuration
+      ;;
+    *)
+      case "${remote_state_normalized}" in
+        0|false|no|off) ;;
+        *) load_api_configuration ;;
+      esac
+      ;;
+  esac
+fi
 shopt -u nocasematch
 
 # =============================================================================
@@ -109,17 +130,22 @@ ts="$(date -u +%Y%m%d_%H%M%S)"
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
 mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
-LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}-${ts}.log"
+LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-${ts}.log"
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
   "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
-printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
-  "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${SIMBOARD_INGESTOR_MODULE}" >> "${LOG_FILE}"
+if [[ $scan_mode == "diagnostics" ]]; then
+  printf '[%s] launcher configuration: site_config=%s scanner_module=%s\n' \
+    "$(date -Is)" "${site_config}" "${module}" >> "${LOG_FILE}"
+else
+  printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
+    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}" >> "${LOG_FILE}"
+fi
 
-LOCK_FILE="$SIMBOARD_WORKDIR/simboard-ingestion-${scan_mode}-${site}-${environment_lock_name}.lock"
+LOCK_FILE="$SIMBOARD_WORKDIR/${log_prefix}-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
-  if [[ "${scan_mode}" == "archive" ]]; then
+  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$" >> "$LOG_FILE"
+  if [[ "${scan_mode}" != "staging" ]]; then
     exit 1
   fi
   exit 0
@@ -128,7 +154,7 @@ fi
 # Existing deployments leave their legacy lock files behind. Hold one when it
 # exists so a newly deployed launcher cannot overlap an in-flight old launcher.
 legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
-if [[ -e "${legacy_lock_file}" ]]; then
+if [[ $scan_mode != "diagnostics" && -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
     echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
@@ -146,10 +172,10 @@ cleanup() {
 trap cleanup EXIT
 
 # =============================================================================
-# Ingestion execution
+# Module execution
 # =============================================================================
-# Run the selected ingestor and append its structured events to this invocation's log.
+# Run the selected module and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
-printf '[%s] invoking ingestor: module=%s\n' \
-  "$(date -Is)" "${SIMBOARD_INGESTOR_MODULE}" >> "${LOG_FILE}"
-"${PYTHON_BIN}" -m "${SIMBOARD_INGESTOR_MODULE}" >> "$LOG_FILE" 2>&1
+printf '[%s] invoking %s: module=%s\n' \
+  "$(date -Is)" "${module_label}" "${module}" >> "${LOG_FILE}"
+"${PYTHON_BIN}" -m "${module}" >> "$LOG_FILE" 2>&1

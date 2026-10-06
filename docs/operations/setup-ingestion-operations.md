@@ -1,7 +1,8 @@
 # Set Up Ingestion Operations
 
 Use this guide to provision and operate scheduled performance ingestion, the v3
-backfill, and diagnostics discovery. Start every new job with `DRY_RUN=true`.
+backfill, and diagnostics discovery. Start new ingestion jobs with `DRY_RUN=true`;
+scheduled diagnostics jobs are configured for live linking.
 
 ## Prerequisites
 
@@ -139,11 +140,15 @@ The copied crontab:
   default, so local refreshes proceed without that lock;
 - adds the standard user-level `uv` location to the refresh command's `PATH`;
   adjust it if the scheduler account installs `uv` elsewhere;
-- creates staging and archive jobs for both development and production; and
+- creates staging, archive, and independent diagnostics jobs for both development and production;
 - gives each ingestion command its own `SIMBOARD_ENV_FILE`; development and
   production jobs use separate locks and may run at the same time; staging and
   archive jobs for one environment also use separate locks and may run at the
-  same time.
+  same time; and
+- runs diagnostics daily at 14:00 UTC with separate locks and live linking.
+
+Diagnostics entries use `DRY_RUN=false` independently of ingestion. Supply valid
+API credentials before installing them; use `DRY_RUN=true` for an optional dry scan.
 
 ### Reference: configuration files and variables
 
@@ -166,8 +171,10 @@ Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false
 1. Run `make operations-provision` to add `raw_logs/` and
    `quality_assurance/` without replacing existing deployment-local files.
 2. Update the copied crontab with `make operations-init-cron` only after
-   preserving and manually updating its schedules and `SIMBOARD_ROOT`, or edit
-   the existing copied crontab to use the new provisioning-log path.
+   backing up the existing file; the initializer refuses to overwrite it.
+   Alternatively, merge the template's diagnostics entries and provisioning-log
+   path manually, preserving local schedules and `SIMBOARD_ROOT`. Diagnostics
+   entries enable live linking, so confirm API credentials before installation.
 3. Let existing `SBCS-*` lock files remain until no scheduler invocation uses
    the previous launcher or refresh helper. New helpers acquire an existing
    legacy lock as a compatibility guard, so they do not overlap a running old
@@ -245,29 +252,57 @@ addition to `SIMBOARD_ROOT` and `env`. Optional variables in the v3
 file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,
 `REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
 
-## Diagnostics discovery operation
+## Diagnostics linking
 
-Diagnostics discovery is separate from performance ingestion and links published zppy output to an existing SimBoard case.
+The scanner links published zppy diagnostics to existing SimBoard cases. Publish
+output using [Configure zppy Diagnostics for SimBoard](../user/diagnostics.md)
+and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_archives.py`.
 
-1. Configure and publish zppy output as described in [Configure zppy Diagnostics for SimBoard](../user/diagnostics.md).
-2. Add the machine's filesystem root and public URL to the reviewed registry in `backend/app/scripts/ingestion/diagnostics_archives.py`.
-3. Run a dry scan from the backend directory:
+### Scheduled scans on Chrysalis
+
+1. Confirm the scheduler account can read the diagnostics archive and the
+   protected API files contain authorized service-account credentials.
+2. Merge the template's dev/prod diagnostics entries into the installed crontab.
+   They run daily at 14:00 UTC with `DRY_RUN=false` and separate locks.
+3. To run a scan manually, run Make from the deployed repository root
+   (`${SIMBOARD_ROOT}/repository/simboard`) and select the API environment explicitly:
 
    ```bash
-   MACHINE_NAME=perlmutter DRY_RUN=true \
-     uv run python -m app.scripts.ingestion.diagnostics_link_scanner
+   make diagnostics-dry-run SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
+   make diagnostics-apply SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
    ```
 
-4. For a live scan, set `DRY_RUN=false` and provide `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN` in the scheduler environment.
+   Use `env=dev` for development. The dry-run target scans offline without loading
+   API credentials; `env` selects log and lock naming. The apply target loads the
+   protected `operations/env.<env>.sh` file and enables live linking. Both targets
+   use the existing launcher for locks, logs, and exit status. These targets only
+   link already-published output; use `v3-diagnostics-*` for historical backfill.
+   Dry-run and apply share the selected environment's diagnostics lock with
+   scheduled scans. A concurrent run fails without starting the scanner; check
+   the indicated log location for lock contention or scanner failures.
+4. Review `operations/raw_logs/simboard-diagnostics-chrysalis-*.log` and verify
+   links in SimBoard. Each scan walks the full archive; ingestion year/case limits
+   do not apply.
 
-| Configure in | Variables |
-| --- | --- |
-| Scheduler environment | `MACHINE_NAME`, `DRY_RUN` |
-| Live-scan scheduler secret | `SIMBOARD_API_BASE_URL`, `SIMBOARD_API_TOKEN` |
+### Scheduled scans on NERSC Spin
+
+Configure a separate CronJob through Rancher using the
+[NERSC Spin runbook](nersc-spin-runbook.md#workload-4-nersc-diagnostics-scanner-cronjob).
+
+### Check scanner results
+
+- `diagnostics_scanner_startup_configuration` reports the machine, archive and run mode.
+- `diagnostics_scanner_completed` reports the outcome and counters collected so far.
+- Fatal errors log `diagnostics_scanner_failed` and exit nonzero. Discovery failures
+  may leave the candidate count at zero; abrupt termination may omit the summary.
+- Nonzero `deferred_state_lookups` or `failed_link_submissions` also cause a
+  nonzero exit and a failed summary outcome. Later scans retry deferred work and
+  skip unchanged links.
 
 ## Operate safely
 
-- Review dry-run logs before enabling a live job.
+- Review ingestion dry-run logs before enabling live ingestion. Diagnostics dry
+  runs are optional; review live diagnostics counters and links after deployment.
 - A successful validation is not an ingestion; only a successful request records an execution as processed.
 - Correct filesystem or network failures and let the next scheduled run retry them.
 - Keep tokens out of logs, source control, site configs, and crontabs.

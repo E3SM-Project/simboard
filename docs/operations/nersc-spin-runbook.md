@@ -566,7 +566,114 @@ Security context requirements for NERSC global file system (NGF/CFS) mounts:
 
 Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/services/spin/storage/#nersc-global-file-systems).
 
-### Workload 4: Frontend Deployment (`frontend`)
+### Workload 4: NERSC Diagnostics Scanner CronJob
+
+Create this CronJob in Rancher for each target API namespace. It links published
+diagnostics to existing cases independently of the ingestion CronJobs. Run the
+Python scanner directly, not the host-side launcher.
+
+#### Setup procedure
+
+Under **Storage -> Secrets**, create the **Opaque** secret
+`nersc-diagnostics-scanner-env`:
+
+| Key | Value |
+| --- | --- |
+| `MACHINE_NAME` | `perlmutter` |
+| `DRY_RUN` | `false` |
+| `SIMBOARD_API_BASE_URL` | `http://backend:8000` |
+| `SIMBOARD_API_TOKEN` | Ingestion service-account token authorized for diagnostics |
+
+Use the same namespace's backend image and API credentials. Keep `DRY_RUN=false`
+for linking; `true` is an optional offline scan. Omitting it defaults to dry run.
+
+Open **Workloads -> CronJobs -> Create**:
+
+| Rancher field | Value |
+| --- | --- |
+| Name | `nersc-diagnostics-scanner` |
+| Schedule | `0 14 * * *` |
+| Time zone | `Etc/UTC` |
+
+#### 1. CronJob tab
+
+`Scaling and Upgrade Policy`:
+
+| Rancher field | Value |
+| --- | --- |
+| Concurrency policy | `Skip next run if current run hasn't finished` (`Forbid`) |
+| Successful jobs history limit | `3` |
+| Failed jobs history limit | `3` |
+| Job backoff limit | `0` (retry at the next schedule) |
+
+The daily scan is offset from 12:00 archive ingestion. If the time-zone field is
+unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
+`Forbid` only controls scheduled jobs.
+
+#### 2. Pod tab
+
+`Security Context` and `Pod`:
+
+| Rancher field | Value |
+| --- | --- |
+| Pod Filesystem Group | `62756` |
+| Restart policy | `Never` |
+
+`Storage`:
+
+| Rancher field | Value |
+| --- | --- |
+| Volume type | `Bind-Mount` |
+| Volume name | `diagnostics` |
+| Path on node | `/global/cfs/cdirs/e3sm/www/diagnostics_archive` |
+| The Path on the Node must be | `An existing directory` |
+
+#### 3. Container tab
+
+`General`:
+
+| Rancher field | Value |
+| --- | --- |
+| Container Name | `nersc-diagnostics-scanner` |
+| Container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
+| Pull policy | `Always` for `:dev`; `IfNotPresent` for versioned tags |
+| Image pull secret | `registry-nersc` |
+| Working directory | `/app` |
+| Command | `python` |
+| Arguments | `-m app.scripts.ingestion.diagnostics_link_scanner` |
+| Environment Variables | Type: Secret, Secret: `nersc-diagnostics-scanner-env` |
+
+`Security Context`:
+
+| Rancher field | Value |
+| --- | --- |
+| Run as User | Numeric NERSC UID authorized to read the archive |
+| allowPrivilegeEscalation | `false` |
+| privileged | `false` |
+| capabilities | drop `ALL` |
+
+`Storage`:
+
+| Rancher field | Value |
+| --- | --- |
+| Archive volume | `diagnostics` |
+| Archive mount path | `/global/cfs/cdirs/e3sm/www/diagnostics_archive` |
+| Archive read only | `true` |
+
+Mount the archive at the exact path registered in `diagnostics_archives.py` and
+confirm the configured UID/group can read it. No root/URL environment override
+is needed.
+
+#### Verify live linking
+
+1. Trigger a one-off job and confirm startup logs show `perlmutter`, the correct
+   archive root and `dry_run=false`.
+2. Check the [scanner results](setup-ingestion-operations.md#check-scanner-results)
+   and verify links in SimBoard. Deferred state lookups or failed link submissions
+   cause a nonzero scanner exit and a failed job.
+3. Confirm the next scheduled run and monitor duration: every scan walks the full archive.
+
+### Workload 5: Frontend Deployment (`frontend`)
 
 Workloads -> Deployments -> Create (top-right)
 
@@ -676,6 +783,9 @@ Ingress annotation if that backend limit changes.
 6. Update/redeploy frontend deployment with the target frontend image tag, then verify frontend pod status.
 7. Create/confirm an admin account (Rancher pod shell), then provision ingestion service-account token and create/update secrets `nersc-staging-ingestor-env` and `nersc-archive-ingestor-env`.
 8. Create/update CronJobs `nersc-staging-ingestor` and `nersc-archive-ingestor`, run one-off dry runs (`DRY_RUN=true`) for both, then set `DRY_RUN=false`.
+   Separately create `nersc-diagnostics-scanner-env` and `nersc-diagnostics-scanner`
+   using Workload 4 with `DRY_RUN=false`, verify its archive mount and live linking.
+   Keep existing ingestion workloads unchanged.
 9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling

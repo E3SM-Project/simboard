@@ -107,7 +107,7 @@ def test_launcher_runs_configured_ingestor_offline(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("scan_mode", "expected_returncode"),
-    [("staging", 0), ("archive", 1)],
+    [("staging", 0), ("archive", 1), ("diagnostics", 1)],
 )
 def test_launcher_reports_mode_specific_lock_contention(
     tmp_path: Path, scan_mode: str, expected_returncode: int
@@ -162,15 +162,127 @@ def test_launcher_reports_mode_specific_lock_contention(
 
     assert result.returncode == expected_returncode
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
-    raw_logs = list(
-        (work_dir / "raw_logs").glob(
-            f"simboard-ingestion-{scan_mode}-test-offline-*.log"
-        )
+    prefix = (
+        "simboard-diagnostics"
+        if scan_mode == "diagnostics"
+        else f"simboard-ingestion-{scan_mode}"
     )
+    raw_logs = list((work_dir / "raw_logs").glob(f"{prefix}-test-offline-*.log"))
     assert len(raw_logs) == 1
-    assert "lock already held; ingestion was not started" in raw_logs[0].read_text(
-        encoding="utf-8"
+    assert "lock already held;" in raw_logs[0].read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+@pytest.mark.parametrize("dry_run", [None, " TRUE ", "On", " false ", "OFF"])
+def test_diagnostics_launcher_dispatch_and_environment(
+    tmp_path: Path, environment: str, dry_run: str | None
+) -> None:
+    root = tmp_path / "deployment"
+    operations = root / "operations"
+    operations.mkdir(parents=True)
+    (root / "repository/simboard/backend/.venv").mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    capture = tmp_path / "capture"
+    fake_python = _write_executable(
+        bin_dir / "python",
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" "$MACHINE_NAME" "$DRY_RUN" '
+        '"${SIMBOARD_API_BASE_URL-unset}" "${SIMBOARD_API_TOKEN-unset}" '
+        '"${SCAN_MODE-unset}" "${ARCHIVE_YEAR_START-unset}" > "$CAPTURE_PATH"\n'
+        'exit "${PYTHON_EXIT_CODE:-0}"\n',
     )
+    # A diagnostics run must not acquire the legacy ingestion lock.
+    (operations / f"SBCS-chrysalis-env.{environment}.sh.lock").touch()
+    _write_executable(
+        bin_dir / "flock", '#!/usr/bin/env bash\n[[ "$*" == "-n 200" ]]\n'
+    )
+    config = tmp_path / "site.config"
+    config.write_text(
+        f"export MACHINE_NAME=chrysalis\nexport PYTHON_BIN={shlex.quote(str(fake_python))}\n",
+        encoding="utf-8",
+    )
+    live = dry_run is not None and dry_run.strip().lower() in {"false", "off"}
+    api_file = operations / f"env.{environment}.sh"
+    if live:
+        api_file.write_text(
+            f"export SIMBOARD_API_BASE_URL=https://{environment}.example.test\n"
+            f"export SIMBOARD_API_TOKEN={environment}-token\n",
+            encoding="utf-8",
+        )
+    # For dry runs the selected API file intentionally does not exist.
+    env = os.environ.copy()
+    for key in (
+        "DRY_RUN",
+        "SIMBOARD_API_BASE_URL",
+        "SIMBOARD_API_TOKEN",
+        "SIMBOARD_INGESTOR_MODULE",
+        "SCAN_MODE",
+        "ARCHIVE_YEAR_START",
+    ):
+        env.pop(key, None)
+    env.update(
+        SIMBOARD_ROOT=str(root),
+        SIMBOARD_SITE_CONFIG=str(config),
+        SIMBOARD_ENV_FILE=str(api_file),
+        CAPTURE_PATH=str(capture),
+        PATH=f"{bin_dir}:{env['PATH']}",
+    )
+    if dry_run is not None:
+        env["DRY_RUN"] = dry_run
+
+    def invoke():
+        return subprocess.run(
+            [_launcher_path(), "chrysalis", "diagnostics"],
+            capture_output=True,
+            check=False,
+            env=env,
+            text=True,
+        )
+
+    result = invoke()
+    assert result.returncode == 0, result.stderr
+    assert capture.read_text().splitlines() == [
+        "-m app.scripts.ingestion.diagnostics_link_scanner",
+        "chrysalis",
+        "false" if live else "true",
+        f"https://{environment}.example.test" if live else "unset",
+        f"{environment}-token" if live else "unset",
+        "unset",
+        "unset",
+    ]
+    assert (
+        operations / f"simboard-diagnostics-chrysalis-env.{environment}.sh.lock"
+    ).exists()
+    logs = list((operations / "raw_logs").glob("simboard-diagnostics-*.log"))
+    assert logs
+    assert f"{environment}-token" not in logs[0].read_text()
+    assert "dry_run_use_remote_state=" not in logs[0].read_text()
+    assert "invoking scanner:" in logs[0].read_text()
+
+    env["PYTHON_EXIT_CODE"] = "7"
+    assert invoke().returncode == 7
+    if live:
+        api_file.write_text("export SIMBOARD_API_BASE_URL=https://example.test\n")
+        result = invoke()
+        assert result.returncode != 0
+        assert "SIMBOARD_API_TOKEN failed to be set" in result.stderr
+    env["DRY_RUN"] = "typo"
+    result = invoke()
+    assert result.returncode != 0
+    assert "DRY_RUN must be a boolean" in result.stderr
+
+
+def test_cron_template_schedules_diagnostics_independently() -> None:
+    template = (_launcher_path().parent / "templates/crontab.example").read_text()
+    jobs = [
+        line for line in template.splitlines() if line.endswith("chrysalis diagnostics")
+    ]
+    assert len(jobs) == 2
+    for job, environment in zip(jobs, ("dev", "prod"), strict=True):
+        assert job.startswith("0 14 * * * DRY_RUN=false ")
+        assert f"/operations/env.{environment}.sh" in job
+        assert "&&" not in job
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ import os
 import posixpath
 import re
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,17 +37,27 @@ class Candidate:
     fingerprint: str
 
 
+@dataclass
+class ScanProgress:
+    """Track the active phase and candidate for fatal-error reporting."""
+
+    phase: str = "configuration"
+    candidate_path: str | None = None
+
+
+@dataclass(frozen=True)
+class ScannerConfig:
+    """Runtime settings shared by discovery and linking."""
+
+    machine: str
+    archive: DiagnosticsArchive
+    dry_run: bool
+    api_base: str
+    token: str
+
+
 def run(included_case_paths: set[Path] | None = None) -> int:
-    """Scan the archive, optionally limited to root-relative case paths."""
-    configured_machine = os.environ.get("MACHINE_NAME", "").strip()
-    if not configured_machine:
-        raise ValueError("MACHINE_NAME is required")
-
-    machine = canonicalize_machine_name(configured_machine)
-    archive = _resolve_archive(machine)
-    root = Path(archive.root)
-    dry_run = os.environ.get("DRY_RUN", "true").lower() in {"1", "true", "yes"}
-
+    """Scan optional root-relative case paths and always report exit counters."""
     summary = {
         "discovered_candidates": 0,
         "dry_run_candidates": 0,
@@ -55,11 +66,50 @@ def run(included_case_paths: set[Path] | None = None) -> int:
         "submitted_links": 0,
         "failed_link_submissions": 0,
     }
+    progress = ScanProgress()
+    outcome = "failed"
+    try:
+        result = _run_scan(summary, progress, included_case_paths)
+        outcome = "completed" if result == 0 else "failed"
+        return result
+    except Exception as exc:
+        # Do not log exception messages/locals: HTTP errors may contain URLs,
+        # credentials or response bodies. Keep frame locations for diagnosis.
+        frames = traceback.extract_tb(exc.__traceback__)
+        _log_event(
+            "diagnostics_scanner_failed",
+            {
+                "phase": progress.phase,
+                "archive_relative_case_path": progress.candidate_path,
+                "error_type": type(exc).__name__,
+                "traceback_frames": [
+                    f"{Path(frame.filename).name}:{frame.lineno}:{frame.name}"
+                    for frame in frames
+                ],
+            },
+        )
+        return 1
+    finally:
+        _log_event("diagnostics_scanner_completed", {**summary, "outcome": outcome})
+
+
+def _build_scanner_config() -> ScannerConfig:
+    """Resolve the reviewed archive and validate the scheduler settings."""
+    configured_machine = os.environ.get("MACHINE_NAME", "").strip()
+    if not configured_machine:
+        raise ValueError("MACHINE_NAME is required")
+
+    machine = canonicalize_machine_name(configured_machine)
+    archive = _resolve_archive(machine)
+    dry_run_value = os.environ.get("DRY_RUN", "true").strip().lower()
+    if dry_run_value not in {"1", "true", "yes", "on", "0", "false", "no", "off"}:
+        raise ValueError("DRY_RUN must be a boolean")
+    dry_run = dry_run_value in {"1", "true", "yes", "on"}
     _log_event(
         "diagnostics_scanner_startup_configuration",
         {
             "machine_name": machine,
-            "archive_root": str(root),
+            "archive_root": archive.root,
             "public_base_url": _sanitize_url(archive.public_base_url),
             "dry_run": dry_run,
             "has_api_base_url": bool(os.environ.get("SIMBOARD_API_BASE_URL")),
@@ -67,39 +117,91 @@ def run(included_case_paths: set[Path] | None = None) -> int:
         },
     )
 
-    candidates = _discover(root, archive.public_base_url, machine, included_case_paths)
+    api_base = ""
+    token = ""
+    if not dry_run:
+        api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
+        token = os.environ["SIMBOARD_API_TOKEN"]
+        if not api_base or not token:
+            raise ValueError("Live scans require API configuration")
+    return ScannerConfig(
+        machine=machine,
+        archive=archive,
+        dry_run=dry_run,
+        api_base=api_base,
+        token=token,
+    )
+
+
+def _run_scan(
+    summary: dict[str, int],
+    progress: ScanProgress,
+    included_case_paths: set[Path] | None = None,
+) -> int:
+    """Discover candidates, then log a dry run or link them through the API."""
+    config = _build_scanner_config()
+    root = Path(config.archive.root)
+    progress.phase = "discovery"
+    candidates = _discover(
+        root, config.archive.public_base_url, config.machine, included_case_paths
+    )
     summary["discovered_candidates"] = len(candidates)
     _log_event("diagnostics_scanner_discovery_completed", summary.copy())
+    if config.dry_run:
+        _log_dry_run(candidates, root, summary, progress)
+    else:
+        _link_candidates(candidates, config, summary, progress)
+    if summary["deferred_state_lookups"] or summary["failed_link_submissions"]:
+        return 1
+    return 0
 
-    if dry_run:
-        for candidate in candidates:
-            relative = candidate.path.parent.relative_to(root).as_posix()
-            summary["dry_run_candidates"] += 1
-            _log_event(
-                "diagnostics_scanner_dry_run_candidate",
-                {
-                    "archive_relative_case_path": relative,
-                    "settings_filename": candidate.settings.name,
-                    "fingerprint": candidate.fingerprint,
-                },
-            )
-        _log_event("diagnostics_scanner_dry_run_completed", summary.copy())
-        _log_event("diagnostics_scanner_completed", summary.copy())
 
-        return 0
+def _log_dry_run(
+    candidates: list[Candidate],
+    root: Path,
+    summary: dict[str, int],
+    progress: ScanProgress,
+) -> None:
+    """Report discovered candidates without opening an API client."""
+    progress.phase = "dry_run"
+    for candidate in candidates:
+        relative = candidate.path.parent.relative_to(root).as_posix()
+        progress.candidate_path = relative
+        summary["dry_run_candidates"] += 1
+        _log_event(
+            "diagnostics_scanner_dry_run_candidate",
+            {
+                "archive_relative_case_path": relative,
+                "settings_filename": candidate.settings.name,
+                "fingerprint": candidate.fingerprint,
+            },
+        )
+    _log_event("diagnostics_scanner_dry_run_completed", summary.copy())
 
-    api_base = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
-    token = os.environ["SIMBOARD_API_TOKEN"]
-    headers = {"Authorization": f"Bearer {token}"}
 
+def _link_candidates(
+    candidates: list[Candidate],
+    config: ScannerConfig,
+    summary: dict[str, int],
+    progress: ScanProgress,
+) -> None:
+    """Skip unchanged candidates and submit new links, counting API failures."""
+    root = Path(config.archive.root)
+    headers = {"Authorization": f"Bearer {config.token}"}
+    progress.phase = "api_client"
     with httpx.Client(timeout=30) as client:
         for candidate in candidates:
             relative = candidate.path.parent.relative_to(root).as_posix()
+            progress.candidate_path = relative
+            progress.phase = "state_lookup"
 
             state = _request_with_retry(
                 client.get,
-                f"{api_base}/api/v1/diagnostics/scanner-state",
-                params={"machine": machine, "archive_relative_case_path": relative},
+                f"{config.api_base}/api/v1/diagnostics/scanner-state",
+                params={
+                    "machine": config.machine,
+                    "archive_relative_case_path": relative,
+                },
                 headers=headers,
             )
             _log_event(
@@ -137,6 +239,7 @@ def run(included_case_paths: set[Path] | None = None) -> int:
                 )
                 continue
 
+            progress.phase = "link_submission"
             payload = {
                 "caseName": candidate.values["case_name"],
                 "machine": candidate.values["machine"],
@@ -158,11 +261,10 @@ def run(included_case_paths: set[Path] | None = None) -> int:
 
             response = _request_with_retry(
                 client.post,
-                f"{api_base}/api/v1/diagnostics/scanner/link",
+                f"{config.api_base}/api/v1/diagnostics/scanner/link",
                 json=payload,
                 headers=headers,
             )
-
             if response is None or response.status_code != 204:
                 summary["failed_link_submissions"] += 1
                 _log_event(
@@ -183,13 +285,6 @@ def run(included_case_paths: set[Path] | None = None) -> int:
                         "status_code": response.status_code,
                     },
                 )
-
-    _log_event("diagnostics_scanner_completed", summary)
-
-    if summary["deferred_state_lookups"] or summary["failed_link_submissions"]:
-        return 1
-
-    return 0
 
 
 def _resolve_archive(machine_name: str) -> DiagnosticsArchive:

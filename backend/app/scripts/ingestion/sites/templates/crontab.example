@@ -63,3 +63,16 @@ SIMBOARD_ROOT=/path/to/simboard_root
 0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
 # Production
 0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
+
+# =============================================================================
+# Diagnostics scans
+# =============================================================================
+# Link diagnostics daily at 14:00 UTC with independent locks and API credentials.
+# DRY_RUN=false enables linking regardless of ingestion's global run mode.
+# Use true for an optional offline scan. Archive settings are in
+# diagnostics_archives.py; ingestion year/case limits do not apply.
+
+# Development
+0 14 * * * DRY_RUN=false SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
+# Production
+0 14 * * * DRY_RUN=false SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
