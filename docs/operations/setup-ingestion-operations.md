@@ -264,14 +264,22 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
    protected API files contain authorized service-account credentials.
 2. Merge the template's dev/prod diagnostics entries into the installed crontab.
    They run daily at 14:00 UTC with `DRY_RUN=false` and separate locks.
-3. To run a scan manually, select the API environment:
+3. To run a scan manually, run Make from the deployed repository root
+   (`${SIMBOARD_ROOT}/repository/simboard`) and select the API environment explicitly:
 
    ```bash
-   DRY_RUN=false SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" \
-     "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
+   make diagnostics-dry-run SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
+   make diagnostics-apply SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
    ```
 
-   Use `env.dev.sh` for development or `DRY_RUN=true` for an offline dry scan.
+   Use `env=dev` for development. The dry-run target scans offline without loading
+   API credentials; `env` selects log and lock naming. The apply target loads the
+   protected `operations/env.<env>.sh` file and enables live linking. Both targets
+   use the existing launcher for locks, logs, and exit status. These targets only
+   link already-published output; use `v3-diagnostics-*` for historical backfill.
+   Dry-run and apply share the selected environment's diagnostics lock with
+   scheduled scans. A concurrent run fails without starting the scanner; check
+   the indicated log location for lock contention or scanner failures.
 4. Review `operations/raw_logs/simboard-diagnostics-chrysalis-*.log` and verify
    links in SimBoard. Each scan walks the full archive; ingestion year/case limits
    do not apply.
@@ -287,9 +295,9 @@ Configure a separate CronJob through Rancher using the
 - `diagnostics_scanner_completed` reports the outcome and counters collected so far.
 - Fatal errors log `diagnostics_scanner_failed` and exit nonzero. Discovery failures
   may leave the candidate count at zero; abrupt termination may omit the summary.
-- Check `deferred_state_lookups` and `failed_link_submissions` even when the run
-  succeeds: handled API failures are counted without a nonzero exit. Later scans
-  retry deferred work and skip unchanged links.
+- Nonzero `deferred_state_lookups` or `failed_link_submissions` also cause a
+  nonzero exit and a failed summary outcome. Later scans retry deferred work and
+  skip unchanged links.
 
 ## Operate safely
 

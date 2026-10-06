@@ -669,7 +669,8 @@ is needed.
 1. Trigger a one-off job and confirm startup logs show `perlmutter`, the correct
    archive root and `dry_run=false`.
 2. Check the [scanner results](setup-ingestion-operations.md#check-scanner-results)
-   and verify links in SimBoard. Handled API failures can occur even when the pod succeeds.
+   and verify links in SimBoard. Deferred state lookups or failed link submissions
+   cause a nonzero scanner exit and a failed job.
 3. Confirm the next scheduled run and monitor duration: every scan walks the full archive.
 
 ### Workload 5: Frontend Deployment (`frontend`)

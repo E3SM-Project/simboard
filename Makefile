@@ -56,6 +56,8 @@ help:
 	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
 	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
 	@echo "    Optional: case_name=<exact-case-name> to retry one v3 diagnostics case"
+	@echo "  make diagnostics-dry-run SIMBOARD_ROOT=<path> site=<site> env=<dev|prod> # Discover published diagnostics offline"
+	@echo "  make diagnostics-apply SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>   # Link published diagnostics to existing cases"
 	@echo ""
 
 	@echo "Frontend:"
@@ -186,6 +188,34 @@ V3_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_v3_environment.sh
 V3_ENV_TEMPLATE := $(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc-v3.env.example
 INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
 INGESTION_REFRESH_SCRIPT := $(INGESTION_OPERATIONS_DIR)/refresh_repository.sh
+DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
+
+.PHONY: diagnostics-dry-run diagnostics-apply
+
+# Use the host launcher for its protected API configuration, locks, and logs.
+# Dry scans select an environment for log/lock naming but never load credentials.
+diagnostics-dry-run diagnostics-apply:
+	@if [ -z "$(SIMBOARD_ROOT)" ] || [ -z "$(site)" ] || [ -z "$(env)" ]; then \
+		echo "Usage: make $@ SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>" >&2; \
+		exit 1; \
+	fi; \
+	case "$(site)" in *[!a-z0-9_-]*) echo "site must contain only lowercase letters, digits, underscores, or hyphens" >&2; exit 1 ;; esac; \
+	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
+		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
+		exit 1; \
+	fi; \
+	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
+		echo "env must be dev or prod" >&2; \
+		exit 1; \
+	fi; \
+	SIMBOARD_ROOT="$(SIMBOARD_ROOT)" SIMBOARD_ENV_FILE="$(SIMBOARD_ROOT)/operations/env.$(env).sh" \
+		SIMBOARD_SITE_CONFIG="$(CURDIR)/$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" \
+		DRY_RUN=$(if $(filter diagnostics-dry-run,$@),true,false) \
+		bash "$(DIAGNOSTICS_LAUNCHER)" "$(site)" diagnostics || { \
+			exit_code=$$?; \
+			echo "Diagnostics launcher failed (exit $$exit_code). If a run log was created, check $(SIMBOARD_ROOT)/operations/raw_logs/simboard-diagnostics-$(site)-env.$(env).sh-*.log" >&2; \
+			exit "$$exit_code"; \
+		}
 
 operations-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \

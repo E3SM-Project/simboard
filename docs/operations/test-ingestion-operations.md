@@ -104,16 +104,19 @@ Confirm two `chrysalis diagnostics` entries at `0 14 * * *`, using `env.dev.sh`
 and `env.prod.sh` with `DRY_RUN=false`. Do not execute these live jobs with dummy
 credentials or without the site archive. Staging/archive schedules are unchanged.
 
-Run the isolated launcher/scanner tests from the repository root:
+Run the isolated Make wrapper/launcher/scanner tests from the repository root:
 
 ```bash
 uv run --project backend pytest \
+  backend/tests/features/ingestion/test_diagnostics_make_targets.py \
   backend/tests/features/ingestion/test_site_collection_launcher.py \
   backend/tests/features/ingestion/test_diagnostics_link_scanner.py \
   --noconftest --no-cov
 ```
 
 These tests use temporary archives and mocked runtimes/API calls.
+The Make wrapper tests verify offline dry runs, dev/prod selection, argument
+validation, and failure propagation without running real scans.
 `--noconftest` skips the unused application-wide database setup.
 
 ## 5. Test a no-op refresh
