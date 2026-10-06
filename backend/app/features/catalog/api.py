@@ -615,6 +615,7 @@ def update_case(
         .options(
             selectinload(Case.machine),
             selectinload(Case.executions),
+            selectinload(Case.source_directories),
             selectinload(Case.links).selectinload(
                 ExternalLink.diagnostic_provenance_state
             ),
@@ -1454,6 +1455,7 @@ def _case_detail_query(db: Session):
         .options(
             selectinload(Case.machine),
             selectinload(Case.executions).selectinload(Execution.artifacts),
+            selectinload(Case.source_directories),
         )
         .options(
             selectinload(Case.links).selectinload(
@@ -1792,6 +1794,9 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
         key_features=case.key_features,
         known_issues=case.known_issues,
         notes_markdown=case.notes_markdown,
+        source_directories=sorted(
+            case.source_directories, key=lambda item: (item.kind, item.path)
+        ),
     )
 
     return result
@@ -1891,6 +1896,7 @@ def _execution_detail_query(db: Session):
         joinedload(Execution.case).selectinload(Case.links),
         selectinload(Execution.artifacts),
         selectinload(Execution.links),
+        selectinload(Execution.source_directories),
     )
 
 
@@ -1924,6 +1930,9 @@ def _execution_to_out(execution: Execution) -> ExecutionOut:
             "hpc_username": case.hpc_username,
             "machine": case.machine,
             "links": serialized_links,
+            "source_directories": sorted(
+                execution.source_directories, key=lambda item: (item.kind, item.path)
+            ),
             "summary_capabilities": ExecutionSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,

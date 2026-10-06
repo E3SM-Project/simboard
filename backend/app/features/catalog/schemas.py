@@ -18,6 +18,7 @@ from app.features.catalog.enums import (
     ExecutionStatus,
     ExperimentType,
     ExternalLinkKind,
+    SourceDirectoryKind,
 )
 from app.features.machine.schemas import MachineOut
 from app.features.user.schemas import UserPreview
@@ -73,6 +74,14 @@ def _validate_unique_resources(items: list[Any], *, value_attr: str) -> list[Any
         seen.add(normalized_key)
 
     return items
+
+
+class SourceDirectoryOut(CamelOutBaseModel):
+    """Observed original performance-data directory."""
+
+    id: UUID
+    kind: SourceDirectoryKind
+    path: str
 
 
 class ExternalLinkCreate(CamelInBaseModel):
@@ -777,6 +786,8 @@ class CaseSummaryOut(CamelOutBaseModel):
 class CaseDetailOut(CaseSummaryOut):
     """Schema for representing full case details used by Case Details."""
 
+    source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
+
     artifacts: Annotated[
         list[CaseExecutionArtifactOut],
         Field(
@@ -899,6 +910,8 @@ class MetadataHistoryPageOut(CamelOutBaseModel):
 
 class ExecutionOut(CamelOutBaseModel):
     """Schema for representing an execution with related entities."""
+
+    source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
 
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the execution.")

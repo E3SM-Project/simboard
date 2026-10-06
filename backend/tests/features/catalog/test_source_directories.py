@@ -64,3 +64,42 @@ def test_source_directory_requires_exactly_one_owner(db, both_owners):
             )
         )
         db.flush()
+
+
+def test_detail_responses_include_separate_source_directories(db):
+    from app.features.catalog.api import (
+        _case_detail_query,
+        _case_to_detail_out,
+        _execution_detail_query,
+        _execution_to_out,
+    )
+
+    user, machine, ingestion = _create_dependencies(db)
+    case = _create_case(db, machine=machine)
+    execution = _create_execution(
+        db,
+        case_id=case.id,
+        ingestion_id=ingestion.id,
+        user_id=user.id,
+        execution_id="123.250101-000000",
+    )
+    persist_source_directory(db, case, SourceDirectoryKind.STAGING, "/staging/case")
+    persist_source_directory(
+        db, execution, SourceDirectoryKind.ARCHIVE, "/archive/case/run"
+    )
+    db.expire_all()
+
+    case_response = _case_to_detail_out(
+        _case_detail_query(db).filter_by(id=case.id).one()
+    ).model_dump(by_alias=True)
+    execution_response = _execution_to_out(
+        _execution_detail_query(db).filter_by(id=execution.id).one()
+    ).model_dump(by_alias=True)
+    assert [
+        (item["kind"], item["path"]) for item in case_response["sourceDirectories"]
+    ] == [("staging", "/staging/case")]
+    assert [
+        (item["kind"], item["path"]) for item in execution_response["sourceDirectories"]
+    ] == [("archive", "/archive/case/run")]
+    assert case_response["artifacts"] == []
+    assert execution_response["artifacts"] == []
