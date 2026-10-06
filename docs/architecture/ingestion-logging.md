@@ -56,7 +56,7 @@ INFO CONFIG Maximum attempts: 3
 INFO CONFIG Request timeout: 60 seconds
 DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=100.1-1 outcome=selected reason=new_execution
 DEBUG EXECUTION_DETAIL event=execution_decision case=a execution_id=101.1-1 outcome=skipped reason=already_processed
-INFO CASE_SUMMARY event=case_discovered case=a executions.total=2 executions.selected=1 executions.skipped=1 executions.incomplete=0 executions.invalid=0 executions.unreadable=0 executions.deferred=0
+INFO CASE_SUMMARY event=case_discovered case=a EXECUTIONS total=2 selected=1 skipped=1 incomplete=0 invalid=0 unreadable=0 deferred=0
 INFO RUN_SUMMARY Cases found: 1
 INFO RUN_SUMMARY Cases eligible: 1
 INFO RUN_SUMMARY   Selected: 1
@@ -90,7 +90,7 @@ startup and final metrics are INFO and are suppressed at higher thresholds.
 | --- | --- |
 | `invocation_started` | Identifies an invocation before configuration validation. |
 | Readable `CONFIG` block | Validated API base URL, archive scope, runtime options, and token presence; never the credential itself. Replaces CLI rendering of internal `run_started` / `v3_run_started` and `startup_configuration_*` events. |
-| `case_discovered` | `case`, `executions.total`, and all six execution outcomes defined below. |
+| `case_discovered` | `case`, followed by one `EXECUTIONS` label, `total`, and all six execution outcomes defined below. |
 | `case_submission` | Successful INFO records contain only `case` and `outcome=succeeded`. Failed ERROR records add `attempts`, `status_code`, and `error` with `outcome=failed`. |
 | `execution_decision` | DEBUG: `case`, `execution_id`, `outcome`, and `reason`; relevant validation codes, missing-file specifications, or error detail may follow. |
 | `run_metrics` | INFO: `payload` contains the authoritative JSON record defined below. |

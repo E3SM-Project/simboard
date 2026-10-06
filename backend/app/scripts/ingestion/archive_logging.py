@@ -250,8 +250,8 @@ def presentation(
         )
         fields = {
             "case": fields["case"],
-            "executions.total": sum(counts.values()),
-            **{f"executions.{key}": value for key, value in counts.items()},
+            "total": sum(counts.values()),
+            **counts,
         }
     elif event in {"case_ingested", "case_ingestion_failed"}:
         category = "CASE_SUMMARY"

@@ -51,8 +51,8 @@ ARCHIVE_FILTER_VALUE_PATTERN = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})
 EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "case_discovered": (
         "case",
-        "executions.total",
-        *(f"executions.{key}" for key in OUTCOMES),
+        "total",
+        *OUTCOMES,
     ),
     "case_submission": (
         "case",
@@ -873,6 +873,8 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
             category, public_event, level = "CONFIG", event, logging.ERROR
         parts = [prefix(category), f"event={public_event}"]
         for key, value in _ordered_event_fields(public_event, sanitize(fields)):
+            if public_event == "case_discovered" and key == "total":
+                parts.append("EXECUTIONS")
             parts.append(f"{key}={_render_log_value(value)}")
         logger.log(level, " ".join(parts))
     except Exception:

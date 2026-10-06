@@ -92,6 +92,38 @@ def case_fields(case, **counts):
     }
 
 
+@pytest.mark.parametrize("level", ["INFO", "DEBUG"])
+def test_case_summary_has_compact_execution_counts(output, monkeypatch, level):
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", level)
+
+    @logs.logged_main
+    def main():
+        _log_event(
+            "case_collection_summary",
+            case_fields(
+                "user/case-a",
+                selected=1,
+                skipped=2,
+                incomplete=3,
+                invalid=4,
+                unreadable=5,
+                deferred=6,
+            ),
+        )
+        return 0
+
+    assert main() == 0
+    lines = [
+        line.split("CASE_SUMMARY ", 1)[1]
+        for line in output.getvalue().splitlines()
+        if "CASE_SUMMARY " in line
+    ]
+    assert lines == [
+        "event=case_discovered case=user/case-a EXECUTIONS total=21 selected=1 "
+        "skipped=2 incomplete=3 invalid=4 unreadable=5 deferred=6"
+    ]
+
+
 def test_invocation_reenables_disabled_logger_and_restores_state(output, monkeypatch):
     logger = logging.getLogger("app.scripts.ingestion.archive_ingestor_core")
     # Alembic's fileConfig disables existing loggers during full-suite setup.
@@ -441,7 +473,8 @@ def test_real_discovery_partitions_and_submission_results(
     for key, value in record["executions"].items():
         assert (
             sum(
-                int(line.split(f"executions.{key}=", 1)[1].split()[0]) for line in lines
+                int(line.split(" EXECUTIONS ", 1)[1].split(f"{key}=", 1)[1].split()[0])
+                for line in lines
             )
             == value
         )

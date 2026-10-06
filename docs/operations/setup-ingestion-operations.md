@@ -98,7 +98,9 @@ ${SIMBOARD_ROOT}/operations/
 ```
 
 `raw_logs/` receives files named
-`simboard-ingestion-<scan-mode>-<site>-<environment-file>-<UTC timestamp>.log`.
+`simboard-ingestion-<scan-mode>-<site>-<environment-file>-<UTC timestamp>-<PID>.log`.
+The timestamp uses `YYYYMMDD_HHMMSS`; the final suffix is the launcher's Bash
+process ID, which distinguishes invocations starting in the same second.
 Environment locks are named
 `simboard-ingestion-<scan-mode>-<site>-<environment-file>.lock`; this keeps
 development and production jobs independent and allows staging and archive jobs
