@@ -100,7 +100,7 @@ def test_targets_select_mode_environment_and_launcher_logs(
     logs = list((root / "operations/raw_logs").glob("simboard-diagnostics-*.log"))
     assert len(logs) == 1
     assert f"chrysalis-env.{api_env}.sh-" in logs[0].name
-    assert "exit_code 0" in logs[0].read_text()
+    assert "event=launcher_finished exit_code=0" in logs[0].read_text()
     assert (
         root / f"operations/simboard-diagnostics-chrysalis-env.{api_env}.sh.lock"
     ).exists()
@@ -155,7 +155,7 @@ def test_targets_propagate_scanner_failure(diagnostics_workspace, target) -> Non
     assert "Diagnostics launcher failed (exit 7)" in result.stderr
     assert str(root / "operations/raw_logs") in result.stderr
     log = next((root / "operations/raw_logs").glob("simboard-diagnostics-*.log"))
-    assert "exit_code 7" in log.read_text()
+    assert "event=launcher_finished exit_code=7" in log.read_text()
 
 
 @pytest.mark.parametrize(
@@ -174,4 +174,13 @@ def test_only_live_scans_require_api_environment_file(
     if not succeeds:
         assert "env.prod.sh" in result.stderr
         assert "Diagnostics launcher failed" in result.stderr
-        assert not (root / "operations/raw_logs").exists()
+        logs = list((root / "operations/raw_logs").glob("simboard-diagnostics-*.log"))
+        assert len(logs) == 1
+        text = logs[0].read_text()
+        assert "event=launcher_loading_api_environment" in text
+        assert "event=launcher_api_environment_unreadable" in text
+        assert "event=launcher_finished exit_code=1" in text
+        assert "invoking scanner:" not in text
+        assert not (
+            root / "operations/simboard-diagnostics-chrysalis-env.prod.sh.lock"
+        ).exists()

@@ -2,6 +2,53 @@
 set -euo pipefail
 umask 027
 
+finish_logging() {
+  local exit_code=$?
+  printf '[%s] event=launcher_finished exit_code=%s\n' "$(date -u -Is)" "$exit_code" >&"$log_output_fd" || true
+  # Do not wait for tee here: a failing source command may still hold saved
+  # output descriptors until the shell exits, preventing tee from seeing EOF.
+  exit "$exit_code"
+}
+
+start_logging() {
+  if [[ ${SIMBOARD_CONSOLE_LOG:-false} == true ]]; then
+    printf 'Ingestion log: %s\n' "$LOG_FILE"
+    # Keep writing the file if a console pipe closes (GNU tee's pipe mode).
+    exec > >(tee -p -a "$LOG_FILE") 2>&1
+  else
+    exec >> "$LOG_FILE" 2>&1
+  fi
+  # Keep the completion event visible even when source diagnostics are muted.
+  exec {log_output_fd}>&1
+  trap finish_logging EXIT
+}
+
+# Capture failures before configuration is sourced or Python is checked. If the
+# deployment root/log directory is unavailable, stderr remains scheduler-owned.
+if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
+  early_log_dir="${SIMBOARD_ROOT}/operations/raw_logs"
+  if mkdir -p -m 750 "${early_log_dir}"; then
+    early_environment="${SIMBOARD_ENV_FILE:-offline}"
+    early_environment="${early_environment##*/}"
+    early_site="${1:-unknown}"
+    early_mode="${2:-unknown}"
+    [[ "${early_site}" =~ ^[a-z0-9_-]+$ ]] || early_site=unknown
+    [[ "${early_mode}" == staging || "${early_mode}" == archive || "${early_mode}" == diagnostics ]] || early_mode=unknown
+    early_log_prefix="simboard-ingestion-${early_mode}"
+    if [[ "${early_mode}" == diagnostics ]]; then
+      early_log_prefix="simboard-diagnostics"
+    fi
+    early_environment="${early_environment//[^a-zA-Z0-9._-]/_}"
+    LOG_FILE="${early_log_dir}/${early_log_prefix}-${early_site}-${early_environment}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
+    if touch "${LOG_FILE}"; then
+      start_logging
+      printf '[%s] event=launcher_started\n' "$(date -u -Is)"
+    else
+      unset LOG_FILE
+    fi
+  fi
+fi
+
 # =============================================================================
 # Command-line input
 # =============================================================================
@@ -13,6 +60,7 @@ fi
 
 site=$1
 scan_mode=$2
+requested_dry_run="${DRY_RUN:-true}"
 
 # =============================================================================
 # Site configuration and standard layout
@@ -29,6 +77,9 @@ fi
 
 # Site config provides the machine identity and ingestion settings.
 source "${site_config}"
+if [[ ${SIMBOARD_ENFORCE_RUN_CONTROLS:-false} == true ]]; then
+  export DRY_RUN="${requested_dry_run}"
+fi
 
 # Every site uses the standard deployment layout. The scheduler supplies its
 # root; site configuration does not supply alternate repository or work paths.
@@ -71,7 +122,13 @@ remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*
 
 load_api_configuration() {
     : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
-    source "${SIMBOARD_ENV_FILE}"
+    # Malformed assignments can echo tokens in shell diagnostics. Preserve
+    # source/errexit semantics, but retain only the phase and final exit status.
+    printf '[%s] event=launcher_loading_api_environment\n' "$(date -u -Is)"
+    if [[ ! -r "${SIMBOARD_ENV_FILE}" ]]; then
+      printf '[%s] event=launcher_api_environment_unreadable\n' "$(date -u -Is)" >&2
+    fi
+    source "${SIMBOARD_ENV_FILE}" > /dev/null 2>&1
     : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
     : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
 }
@@ -107,6 +164,9 @@ else
   esac
 fi
 shopt -u nocasematch
+if [[ ${SIMBOARD_ENFORCE_RUN_CONTROLS:-false} == true ]]; then
+  export DRY_RUN="${requested_dry_run}" SCAN_MODE="${scan_mode}"
+fi
 
 # =============================================================================
 # Python runtime
@@ -126,25 +186,27 @@ fi
 # Write one log per invocation. Jobs targeting different API environments may
 # run together, so include the environment name in the log filename. Staging
 # and archive jobs use separate locks, while runs of the same mode share one.
-ts="$(date -u +%Y%m%d_%H%M%S)"
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
 mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
-LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-${ts}.log"
+if [[ -z "${LOG_FILE:-}" ]]; then
+  LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
+  start_logging
+fi
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
-  "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}" >> "${LOG_FILE}"
+  "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}"
 if [[ $scan_mode == "diagnostics" ]]; then
   printf '[%s] launcher configuration: site_config=%s scanner_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${module}" >> "${LOG_FILE}"
+    "$(date -Is)" "${site_config}" "${module}"
 else
   printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}" >> "${LOG_FILE}"
+    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}"
 fi
 
 LOCK_FILE="$SIMBOARD_WORKDIR/${log_prefix}-${site}-${environment_lock_name}.lock"
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$" >> "$LOG_FILE"
+  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$"
   if [[ "${scan_mode}" != "staging" ]]; then
     exit 1
   fi
@@ -157,7 +219,7 @@ legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 if [[ $scan_mode != "diagnostics" && -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
-    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$" >> "$LOG_FILE"
+    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$"
     if [[ "${scan_mode}" == "archive" ]]; then
       exit 1
     fi
@@ -165,17 +227,11 @@ if [[ $scan_mode != "diagnostics" && -e "${legacy_lock_file}" ]]; then
   fi
 fi
 
-cleanup() {
-  local exit_code=$?
-  echo "[$(date -Is)] simboard collection launcher exiting, pid $$, exit_code ${exit_code}" >> "$LOG_FILE"
-}
-trap cleanup EXIT
-
 # =============================================================================
 # Module execution
 # =============================================================================
 # Run the selected module and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
 printf '[%s] invoking %s: module=%s\n' \
-  "$(date -Is)" "${module_label}" "${module}" >> "${LOG_FILE}"
-"${PYTHON_BIN}" -m "${module}" >> "$LOG_FILE" 2>&1
+  "$(date -Is)" "${module_label}" "${module}"
+"${PYTHON_BIN}" -m "${module}" {log_output_fd}>&-

@@ -39,7 +39,7 @@ def _populate_complete_report(report: IngestorRunReport) -> None:
     report.discovery_stats = _new_discovery_stats()
     report.case_collection_data = {
         f"/lcrc/OLD_PERF/2024-01/snapshot/COMPLETED/user/{case_name}": (
-            CaseCollectionLogData(case_path=case_name, execution_count_total=1)
+            CaseCollectionLogData(case_path=case_name)
         )
         for case_name in v3_ingestor.V3_CASE_NAMES
     }

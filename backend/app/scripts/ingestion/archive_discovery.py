@@ -43,6 +43,7 @@ from app.scripts.ingestion.archive_layout import (
     _enumerate_archive_snapshot_keys,
     _record_archive_snapshot_reference,
 )
+from app.scripts.ingestion.archive_logging import scan_finished
 
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
 
@@ -53,7 +54,6 @@ class _CaseCollectionOutcome:
 
     valid_execution_ids: list[str]
     existing_ids: list[str]
-    new_ids: set[str]
     selected_new_ids: set[str]
     deferred_ids: list[str]
     rejected_incomplete: int
@@ -190,6 +190,7 @@ def _scan_archive(
         staging_root_basename=staging_root_basename,
     )
 
+    scan_finished(snapshot_scan.traversal_complete)
     if run_report is not None:
         run_report.scan_completed = True
         run_report.traversal_complete = snapshot_scan.traversal_complete
@@ -271,6 +272,7 @@ def _handle_archive_walk_error(
             "scan_mode": config.scan_mode,
             "archive_root": str(config.archive_root),
             "error": f"{exc.__class__.__name__}: {exc}",
+            "recoverable": True,
         },
     )
 
@@ -371,24 +373,16 @@ def _discover_case_executions(
         if directories_visited % DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES == 0:
             _log_archive_scan_progress(
                 event="archive_scan_progress",
-                archive_root=archive_root_str,
                 current_dir=dirpath,
                 directories_visited=directories_visited,
-                grouped=grouped,
-                stats=effective_stats,
                 started_at=scan_started_at,
-                scan_mode=scan_mode,
             )
 
     _log_archive_scan_progress(
         event="archive_scan_completed",
-        archive_root=archive_root_str,
         current_dir=current_dir,
         directories_visited=directories_visited,
-        grouped=grouped,
-        stats=effective_stats,
         started_at=scan_started_at,
-        scan_mode=scan_mode,
     )
 
     return {case_path: sorted(exec_ids) for case_path, exec_ids in grouped.items()}
@@ -397,33 +391,16 @@ def _discover_case_executions(
 def _log_archive_scan_progress(
     *,
     event: str,
-    archive_root: str,
     current_dir: str,
     directories_visited: int,
-    grouped: dict[str, set[str]],
-    stats: DiscoveryStats | None,
     started_at: float,
-    scan_mode: str,
 ) -> None:
     """Emit a structured archive-scan progress or completion log."""
     _log_event(
         event,
         {
-            "scan_mode": scan_mode,
-            "archive_root": archive_root,
             "current_dir": current_dir,
             "directories_visited": directories_visited,
-            "discovered_cases": len(grouped),
-            "execution_dirs_scanned": (
-                0 if stats is None else stats["execution_dirs_scanned"]
-            ),
-            "execution_dirs_accepted": (
-                0 if stats is None else stats["execution_dirs_accepted"]
-            ),
-            "skipped_transient": (0 if stats is None else stats["skipped_transient"]),
-            "rejected_existing_execution_ids": (
-                0 if stats is None else stats["rejected_existing_execution_ids"]
-            ),
             "duration_seconds": round(time.monotonic() - started_at, 3),
         },
     )
@@ -464,9 +441,6 @@ def _collect_case_execution(
     """Validate and record one discovered execution directory."""
     case_path = str(case_dir.resolve())
     log_data = _get_case_collection_log_data(case_path, case_collection_data)
-    if log_data is not None:
-        log_data.execution_count_total += 1
-
     case_identity_key = _case_identity_key(
         case_path,
         scan_mode,
@@ -768,10 +742,6 @@ def _log_execution_collection_outcomes(
             selected_new_ids,
         )
 
-        _log_event(
-            "case_collection_begin",
-            _case_collection_begin_fields(case_label, log_data, outcome),
-        )
         _update_collection_decision_stats(discovery_stats, outcome)
         for execution_id in sorted(outcome.decisions_by_execution_id):
             _log_execution_collection_decision(
@@ -835,7 +805,6 @@ def _calculate_case_collection_outcome(
     return _CaseCollectionOutcome(
         valid_execution_ids=valid_execution_ids,
         existing_ids=existing_ids,
-        new_ids=new_ids,
         selected_new_ids=selected_new_ids,
         deferred_ids=deferred_ids,
         rejected_incomplete=_count_rejected_decisions(log_data, "incomplete"),
@@ -865,26 +834,6 @@ def _update_collection_decision_stats(
             discovery_stats["accepted_execution_ids"] += 1
         elif decision.decision == "deferred":
             discovery_stats["deferred_execution_ids"] += 1
-
-
-def _case_collection_begin_fields(
-    case_label: str,
-    log_data: CaseCollectionLogData,
-    outcome: _CaseCollectionOutcome,
-) -> dict[str, Any]:
-    """Build ordered fields for a case collection begin event."""
-    return {
-        "case": case_label,
-        "execution_count_total": log_data.execution_count_total,
-        "execution_count_valid": len(outcome.valid_execution_ids),
-        "execution_count_rejected_incomplete": outcome.rejected_incomplete,
-        "execution_count_rejected_invalid": outcome.rejected_invalid,
-        "execution_count_transient": outcome.transient,
-        "execution_count_existing": len(outcome.existing_ids),
-        "execution_count_new": len(outcome.new_ids),
-        "execution_count_selected_new": len(outcome.selected_new_ids),
-        "execution_count_deferred": len(outcome.deferred_ids),
-    }
 
 
 def _case_collection_summary_fields(

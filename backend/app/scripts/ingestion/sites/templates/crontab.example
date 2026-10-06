@@ -6,6 +6,8 @@
 # =============================================================================
 # Use Bash, a minimal command path, and UTC for every schedule below.
 SHELL=/bin/bash
+# Optional ingestion detail: SIMBOARD_INGESTION_LOG_LEVEL=DEBUG (default INFO).
+# Keep INFO/DEBUG for canonical metrics; higher levels suppress summaries.
 PATH=/usr/local/bin:/usr/bin:/bin
 CRON_TZ=UTC
 

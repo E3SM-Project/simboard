@@ -53,9 +53,9 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _fresh_state,
     _log_event,
 )
+from app.scripts.ingestion.archive_logging import logged_main, record_config
 from app.scripts.ingestion.archive_workflow import (
     _finalize_archive_checkpoints,
-    _handle_dry_run,
     _handle_ingest_run,
     _log_scan_completed,
     _log_startup_configuration,
@@ -64,6 +64,7 @@ from app.scripts.ingestion.archive_workflow import (
 )
 
 
+@logged_main
 def main() -> int:
     """Build runtime configuration and execute the ingestion runner.
 
@@ -78,7 +79,7 @@ def main() -> int:
         _log_event("configuration_error", {"error": str(exc)})
         return 1
 
-    start_time = time.monotonic()
+    record_config(config)
     _log_event(
         "run_started",
         {
@@ -87,18 +88,7 @@ def main() -> int:
             "archive_root": str(config.archive_root),
         },
     )
-    exit_code = _run_ingestor(config)
-    _log_event(
-        "run_finished",
-        {
-            "mode": "dry-run" if config.dry_run else "ingest",
-            "scan_mode": config.scan_mode,
-            "exit_code": exit_code,
-            "duration_seconds": round(time.monotonic() - start_time, 3),
-        },
-    )
-
-    return exit_code
+    return _run_ingestor(config)
 
 
 def _case_submission_callback(
@@ -115,8 +105,6 @@ def _prepare_run_state(
     if config.dry_run and not config.dry_run_use_remote_state:
         _log_startup_configuration(
             config,
-            endpoint_url="",
-            state_endpoint_url="",
             log_event_fn=_log_event,
         )
         return _fresh_state(), set(), ""
@@ -125,8 +113,6 @@ def _prepare_run_state(
     state_endpoint_url = _build_state_endpoint_url(config)
     _log_startup_configuration(
         config,
-        endpoint_url=endpoint_url,
-        state_endpoint_url=state_endpoint_url,
         log_event_fn=_log_event,
     )
     try:
@@ -229,8 +215,6 @@ def _run_ingestor(
         return 1
 
     _log_scan_completed(
-        config,
-        scan_results,
         candidates,
         submission_qualified_case_count,
         discovery_stats,
@@ -238,14 +222,7 @@ def _run_ingestor(
     )
 
     if config.dry_run:
-        return _handle_dry_run(
-            candidates,
-            scan_results,
-            submission_qualified_case_count,
-            discovery_stats,
-            archive_root=config.archive_root,
-            log_event_fn=_log_event,
-        )
+        return 0
 
     if not _persist_discovery_results(
         new_discovery_results,
@@ -258,12 +235,9 @@ def _run_ingestor(
 
     ingest_exit_code = _handle_ingest_run(
         candidates,
-        scan_results,
         config,
         endpoint_url,
         state,
-        submission_qualified_case_count,
-        discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
         log_event_fn=_log_event,
