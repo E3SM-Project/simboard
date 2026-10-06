@@ -26,6 +26,7 @@ verbatim in discovery, selection, and run-summary events.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any
 
 from app.features.ingestion.parsers.parser import _locate_metadata_files
@@ -54,6 +55,10 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
 )
 from app.scripts.ingestion.archive_logging import logged_main, record_config
+from app.scripts.ingestion.archive_source_directories import (
+    SourceDirectoryPost,
+    _persist_visited_source_directories,
+)
 from app.scripts.ingestion.archive_workflow import (
     _finalize_archive_checkpoints,
     _handle_ingest_run,
@@ -162,6 +167,7 @@ def _run_ingestor(
     post_request_fn: CaseSubmissionCallback | None = None,
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
     checkpoint_post_request_fn: ArchiveCheckpointPersistenceCallback | None = None,
+    source_directory_post_request_fn: SourceDirectoryPost | None = None,
 ) -> int:
     """Execute one complete archive scan-and-ingest cycle.
 
@@ -190,6 +196,7 @@ def _run_ingestor(
     state, completed_snapshot_keys, endpoint_url = run_state
 
     new_discovery_results: list[ExecutionDiscoveryResult] = []
+    visited: list[tuple[Path, str]] = []
     try:
         (
             scan_results,
@@ -203,6 +210,7 @@ def _run_ingestor(
             metadata_locator=metadata_locator,
             discovery_results=new_discovery_results,
             completed_snapshot_keys=completed_snapshot_keys,
+            observed_execution_paths=visited,
         )
     except UnsupportedArchiveLayoutError as exc:
         _log_event("configuration_error", {"error": str(exc)})
@@ -242,6 +250,10 @@ def _run_ingestor(
         post_request_fn=post_request_fn,
         log_event_fn=_log_event,
     )
+    if not _persist_visited_source_directories(
+        visited, state, config, sleep_fn, source_directory_post_request_fn
+    ):
+        return 1
     if not _finalize_archive_checkpoints(
         snapshot_scan,
         state,

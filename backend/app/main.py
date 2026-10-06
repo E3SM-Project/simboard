@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.meta import router as meta_router
+from app.api.source_directories import router as source_directories_router
 from app.api.version import API_BASE
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix=API_BASE)
     app.include_router(token_router, prefix=API_BASE)
     app.include_router(ingestion_router, prefix=API_BASE)
+    app.include_router(source_directories_router, prefix=API_BASE)
     app.include_router(meta_router, prefix=API_BASE)
     app.include_router(health_router, prefix=API_BASE)
 

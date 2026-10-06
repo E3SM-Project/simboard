@@ -69,6 +69,10 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
 )
 from app.scripts.ingestion.archive_logging import logged_main, record_config
+from app.scripts.ingestion.archive_source_directories import (
+    SourceDirectoryPost,
+    _persist_visited_source_directories,
+)
 from app.scripts.ingestion.archive_workflow import (
     _finalize_archive_checkpoints,
     _handle_ingest_run,
@@ -183,6 +187,7 @@ def _run_ingestor(
     case_simulation_type: str | None = None,
     case_hpc_username_resolver: Callable[[IngestionCandidate], str | None]
     | None = None,
+    source_directory_post_request_fn: SourceDirectoryPost | None = None,
 ) -> int:
     """Execute one complete archive scan-and-upload cycle."""
     use_prepared_archives = post_request_fn is None
@@ -204,6 +209,7 @@ def _run_ingestor(
     state, completed_snapshot_keys, endpoint_url = run_state
 
     new_discovery_results: list[ExecutionDiscoveryResult] = []
+    visited: list[tuple[Path, str]] = []
     try:
         (
             scan_results,
@@ -220,6 +226,7 @@ def _run_ingestor(
             case_path_filter=case_path_filter,
             additional_dir_pruner=additional_dir_pruner,
             run_report=run_report,
+            observed_execution_paths=visited,
         )
     except Exception as exc:
         _log_event(
@@ -273,6 +280,16 @@ def _run_ingestor(
         ),
         run_report=run_report,
     )
+
+    if not _persist_visited_source_directories(
+        visited,
+        state,
+        config,
+        sleep_fn,
+        source_directory_post_request_fn,
+        case_hpc_username_resolver,
+    ):
+        return 1
 
     if not archive_checkpointing:
         return ingest_exit_code

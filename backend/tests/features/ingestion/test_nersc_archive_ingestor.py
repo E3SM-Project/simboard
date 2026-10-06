@@ -33,10 +33,14 @@ from app.scripts.ingestion.archive_ingestor_core import (
 from app.scripts.ingestion.nersc_archive_ingestor import (
     _run_ingestor,
 )
+from tests.features.ingestion.source_directory_utils import (
+    stub_source_directory_persistence,
+)
 
 
 @pytest.fixture(autouse=True)
 def _stub_remote_state(monkeypatch) -> None:
+    stub_source_directory_persistence(monkeypatch)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",

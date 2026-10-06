@@ -16,7 +16,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, or_, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
@@ -50,7 +50,9 @@ from app.features.ingestion.schemas import (
     IngestionStateCase,
     IngestionStateResponse,
     IngestionStatus,
+    SourceDirectoryObservation,
 )
+from app.features.ingestion.source_directories import persist_observed_directories
 from app.features.ingestion.v3_classification import (
     CHRYSALIS_MACHINE_NAME,
     V3_CASE_NAMES,
@@ -312,6 +314,7 @@ def ingest_from_path(
         archive_sha256=None,
         hpc_username=payload.hpc_username,
         processed_execution_ids=payload.processed_execution_ids,
+        source_directories=payload.source_directories,
         db=db,
     )
 
@@ -436,6 +439,7 @@ def ingest_from_hpc_upload(
     simulation_type: CaseSimulationType | None = Form(None),
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
+    source_directories: str | None = Form(None),
 ) -> IngestionResponse:
     """Ingest one service-account HPC archive upload with path-style semantics.
 
@@ -476,6 +480,17 @@ def ingest_from_hpc_upload(
     # placeholder when this optional argument is omitted.
     if not isinstance(simulation_type, CaseSimulationType):
         simulation_type = None
+
+    directories = []
+    if isinstance(source_directories, str):
+        try:
+            directories = TypeAdapter(list[SourceDirectoryObservation]).validate_json(
+                source_directories
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=exc.errors(include_context=False)
+            ) from exc
 
     payload = _build_hpc_upload_payload(
         machine_name=machine_name,
@@ -520,6 +535,7 @@ def ingest_from_hpc_upload(
             case_simulation_type=simulation_type,
             case_name_for_simulation_type=Path(payload.case_path).name,
             hpc_username_for_simulation_type=payload.hpc_username,
+            source_directories=directories,
         )
     finally:
         try:
@@ -836,6 +852,7 @@ def _process_ingestion(
     case_simulation_type: CaseSimulationType | None = None,
     case_name_for_simulation_type: str | None = None,
     hpc_username_for_simulation_type: str | None = None,
+    source_directories: list[SourceDirectoryObservation] | None = None,
 ) -> IngestionResponse:
     """Finalize and persist an ingestion operation.
 
@@ -898,6 +915,11 @@ def _process_ingestion(
         created_executions = _persist_executions(
             ingestion.id, ingest_result.executions, db, user, hpc_username
         )
+        if source_directories:
+            try:
+                persist_observed_directories(db, machine_id, source_directories)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
         if case_simulation_type is not None:
             _set_ingested_case_simulation_type(
                 machine_id,

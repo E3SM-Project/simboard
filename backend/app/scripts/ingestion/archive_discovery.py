@@ -98,6 +98,7 @@ def _scan_archive(
     case_path_filter: Callable[[Path], bool] | None = None,
     additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     run_report: IngestorRunReport | None = None,
+    observed_execution_paths: list[tuple[Path, str]] | None = None,
 ) -> tuple[
     list[CaseScanResult],
     list[IngestionCandidate],
@@ -166,6 +167,7 @@ def _scan_archive(
         staging_root_basename=staging_root_basename,
         walk_error_handler=_build_walk_error_handler(config, snapshot_scan),
         execution_observer=_build_execution_observer(config, snapshot_scan),
+        observed_execution_paths=observed_execution_paths,
     )
     scan_results = _build_case_scan_results(grouped_executions)
     all_candidates = _build_ingestion_candidates(
@@ -293,6 +295,7 @@ def _discover_case_executions(
     discovery_results_by_key: dict[tuple[str, str], str] | None = None,
     execution_observer: Callable[[Path, str], None] | None = None,
     walk_error_handler: Callable[[OSError], None] | None = None,
+    observed_execution_paths: list[tuple[Path, str]] | None = None,
 ) -> dict[str, list[str]]:
     """Discover parseable execution IDs grouped by case path.
 
@@ -355,6 +358,9 @@ def _discover_case_executions(
 
             if execution_observer is not None:
                 execution_observer(case_dir, dirname)
+
+            if observed_execution_paths is not None:
+                observed_execution_paths.append((case_dir.resolve(), dirname))
 
             _collect_case_execution(
                 grouped,

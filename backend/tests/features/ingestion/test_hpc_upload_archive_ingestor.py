@@ -37,10 +37,14 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _prepared_hpc_case_submission,
     _run_ingestor,
 )
+from tests.features.ingestion.source_directory_utils import (
+    stub_source_directory_persistence,
+)
 
 
 @pytest.fixture(autouse=True)
 def _stub_discovery_result_persistence(monkeypatch) -> None:
+    stub_source_directory_persistence(monkeypatch)
     monkeypatch.setattr(
         client_module,
         "_post_discovery_results_request",
