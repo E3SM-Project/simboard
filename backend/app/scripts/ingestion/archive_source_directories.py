@@ -5,6 +5,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from app.common.utils import _normalize_hpc_username
 from app.features.catalog.enums import SourceDirectoryKind
 from app.features.ingestion.parsers.parser import (
     _locate_metadata_files,
@@ -55,7 +56,9 @@ def _observe_source_directory(
         )
     return SourceDirectoryObservation(
         case_name=parsed.case_name or "",
-        hpc_username=parsed.hpc_username or hpc_username or "",
+        hpc_username=_normalize_hpc_username(parsed.hpc_username)
+        or _normalize_hpc_username(hpc_username)
+        or "",
         execution_id=parsed.execution_id,
         kind=SourceDirectoryKind(config.scan_mode),
         case_path=str(case_path),
@@ -80,7 +83,7 @@ def _persist_visited_source_directories(
     observations = []
     for case_path, execution_dirname in sorted(set(visited)):
         identity = _case_identity_key(
-            str(case_path),
+            str(case_path.resolve()),
             config.scan_mode,
             staging_root_basename=config.archive_root.name,
         )
@@ -121,13 +124,21 @@ def _persist_visited_source_directories(
         batch = observations[offset : offset + DISCOVERY_RESULT_BATCH_SIZE]
         for attempt in range(1, config.max_attempts + 1):
             try:
-                post_request_fn(
+                response = post_request_fn(
                     endpoint,
                     config.api_token,
                     config.machine_name,
                     directories=batch,
                     timeout_seconds=config.request_timeout_seconds,
                 )
+                for unresolved in response.get("body", {}).get("unresolved", []):
+                    _log_event(
+                        "source_directory_unresolved",
+                        {
+                            "execution_path": unresolved["execution_path"],
+                            "error": "No matching ingested case and execution",
+                        },
+                    )
                 break
             except IngestionRequestError as exc:
                 _log_event(

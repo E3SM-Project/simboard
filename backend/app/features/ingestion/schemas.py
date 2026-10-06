@@ -70,6 +70,7 @@ class SourceDirectoriesRequest(BaseModel):
 
 class SourceDirectoriesResponse(BaseModel):
     recorded_count: int
+    unresolved: list[SourceDirectoryObservation] = Field(default_factory=list)
 
 
 class IngestFromPathRequest(BaseModel):

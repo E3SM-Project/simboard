@@ -360,7 +360,7 @@ def _discover_case_executions(
                 execution_observer(case_dir, dirname)
 
             if observed_execution_paths is not None:
-                observed_execution_paths.append((case_dir.resolve(), dirname))
+                observed_execution_paths.append((case_dir.absolute(), dirname))
 
             _collect_case_execution(
                 grouped,

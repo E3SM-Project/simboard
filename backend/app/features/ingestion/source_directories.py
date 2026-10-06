@@ -13,9 +13,12 @@ def persist_observed_directories(
     db: Session,
     machine_id: UUID,
     directories: list[SourceDirectoryObservation],
-) -> None:
-    """Resolve the entire batch before writing; never guess or create owners."""
+    *,
+    strict: bool = True,
+) -> list[SourceDirectoryObservation]:
+    """Resolve before writing; report missing owners without creating them."""
     resolved: list[tuple[SourceDirectoryObservation, Case, Execution]] = []
+    unresolved: list[SourceDirectoryObservation] = []
     for directory in directories:
         pair = (
             db.query(Case, Execution)
@@ -29,11 +32,14 @@ def persist_observed_directories(
             .one_or_none()
         )
         if pair is None:
-            raise ValueError(
-                "Unresolved source directory: "
-                f"{directory.case_name!r}, user={directory.hpc_username!r}, "
-                f"execution={directory.execution_id!r}, path={directory.execution_path!r}"
-            )
+            if strict:
+                raise ValueError(
+                    "Unresolved source directory: "
+                    f"{directory.case_name!r}, user={directory.hpc_username!r}, "
+                    f"execution={directory.execution_id!r}, path={directory.execution_path!r}"
+                )
+            unresolved.append(directory)
+            continue
         case, execution = pair
         resolved.append((directory, case, execution))
 
@@ -42,3 +48,4 @@ def persist_observed_directories(
         persist_source_directory(
             db, execution, directory.kind, directory.execution_path
         )
+    return unresolved

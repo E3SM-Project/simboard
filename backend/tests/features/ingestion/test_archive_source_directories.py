@@ -168,8 +168,12 @@ def test_rejected_or_deferred_execution_needs_no_mapping(tmp_path, monkeypatch):
     [("case_name", None), ("hpc_username", None), ("machine", "chrysalis")],
 )
 def test_invalid_identity_is_reported(
-    tmp_path, monkeypatch, parsed_metadata, field, value, caplog
+    tmp_path, monkeypatch, parsed_metadata, field, value
 ):
+    events = []
+    monkeypatch.setattr(
+        source_module, "_log_event", lambda event, fields: events.append(event)
+    )
     setattr(parsed_metadata, field, value)
     case_path = tmp_path / "case"
     state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
@@ -179,7 +183,7 @@ def test_invalid_identity_is_reported(
         _config(tmp_path),
         lambda _: None,
     )
-    assert "source_directory_unresolved" in caplog.text
+    assert events == ["source_directory_unresolved"]
 
 
 def test_source_submission_retries_same_batch(tmp_path, parsed_metadata):
@@ -203,6 +207,76 @@ def test_source_submission_retries_same_batch(tmp_path, parsed_metadata):
     )
     assert calls[0] == calls[1]
     assert sleeps == [1]
+
+
+@pytest.mark.parametrize(
+    "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
+)
+def test_processed_but_missing_execution_is_reported_without_blocking_checkpoint(
+    tmp_path,
+    monkeypatch,
+    parsed_metadata,
+    runner,
+):
+    root = tmp_path / "OLD_PERF"
+    case_path = root / "2025-01" / "performance_archive_2025_01_01_00_00_00" / "case"
+    (case_path / "100.1-1").mkdir(parents=True)
+    state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    monkeypatch.setattr(runner, "_fetch_archive_checkpoints", lambda *a, **kw: set())
+    events = []
+    monkeypatch.setattr(
+        source_module, "_log_event", lambda event, fields: events.append(event)
+    )
+
+    def record(*args, directories, **kwargs):
+        return {
+            "status_code": 200,
+            "body": {
+                "recorded_count": 0,
+                "unresolved": [entry.model_dump(mode="json") for entry in directories],
+            },
+        }
+
+    def checkpoint(*args, **kwargs):
+        events.append("checkpoint")
+        return {"status_code": 200, "body": {}}
+
+    assert (
+        runner._run_ingestor(
+            _config(root, scan_mode="archive"),
+            source_directory_post_request_fn=record,
+            checkpoint_post_request_fn=checkpoint,
+        )
+        == 0
+    )
+    assert events == ["source_directory_unresolved", "checkpoint"]
+
+
+def test_observed_paths_preserve_symlink_spelling(
+    tmp_path, monkeypatch, parsed_metadata
+):
+    root = tmp_path / "performance_archive"
+    (root / "case" / "100.1-1").mkdir(parents=True)
+    alias = tmp_path / "observed-root"
+    alias.symlink_to(root, target_is_directory=True)
+    state = {"cases": {str(root / "case"): {"processed_execution_ids": ["100.1-1"]}}}
+    visited = []
+    config = _config(alias)
+    _scan_archive(
+        config, state, metadata_locator=lambda _: {}, observed_execution_paths=visited
+    )
+    assert visited == [(alias / "case", "100.1-1")]
+    entries = []
+
+    def record(*args, directories, **kwargs):
+        entries.extend(directories)
+        return {"status_code": 200, "body": {}}
+
+    assert source_module._persist_visited_source_directories(
+        visited, state, config, lambda _: None, record
+    )
+    assert entries[0].case_path == str(alias / "case")
 
 
 def test_source_submission_http_payload(tmp_path, monkeypatch, parsed_metadata):

@@ -35,10 +35,11 @@ def record_source_directories(
     if machine is None:
         raise HTTPException(status_code=404, detail="Machine not found.")
 
-    try:
-        with transaction(db):
-            persist_observed_directories(db, machine.id, payload.directories)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    with transaction(db):
+        unresolved = persist_observed_directories(
+            db, machine.id, payload.directories, strict=False
+        )
 
-    return SourceDirectoriesResponse(recorded_count=len(payload.directories))
+    return SourceDirectoriesResponse(
+        recorded_count=len(payload.directories) - len(unresolved), unresolved=unresolved
+    )

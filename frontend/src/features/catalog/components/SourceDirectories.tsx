@@ -24,7 +24,7 @@ export const SourceDirectories = ({ directories = [] }: SourceDirectoriesProps) 
         return (
           <ExecutionPathCard
             key={kind}
-            kind={kind}
+            kind={kind === 'staging' ? 'output' : 'archive'}
             title={kind === 'staging' ? 'Staging' : 'Archive'}
             paths={paths.map(({ id, path }) => ({ id, url: path, label: path }))}
             emptyText="No source directories available."

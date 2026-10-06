@@ -11,7 +11,8 @@ Non-dry-run ingestion executes these phases:
     2. In archive mode, fetch completed snapshot checkpoints.
     3. Discover and collect parseable execution directories grouped by case path.
     4. Persist discovery results, then submit each changed case with retry/backoff.
-    5. In archive mode, settle and persist completed snapshot checkpoints.
+    5. Record original directories for visited, ingested executions.
+    6. In archive mode, settle and persist completed snapshot checkpoints.
 
 Dry runs read remote state and checkpoints by default, stop after discovery,
 and emit a summary without writes. Set ``DRY_RUN_USE_REMOTE_STATE=false`` for

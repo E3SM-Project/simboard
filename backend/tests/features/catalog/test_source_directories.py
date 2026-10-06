@@ -1,11 +1,23 @@
 """Original performance directory persistence."""
 
-import pytest
-from sqlalchemy.exc import IntegrityError
+from concurrent.futures import ThreadPoolExecutor
+from typing import cast
+from uuid import uuid4
 
+import pytest
+from sqlalchemy import Table, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.common.models.base import Base
 from app.features.catalog.enums import SourceDirectoryKind
-from app.features.catalog.models import SourceDirectory
+from app.features.catalog.models import Case, Execution, SourceDirectory
 from app.features.catalog.source_directories import persist_source_directory
+from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
+from app.features.site.models import Site
+from app.features.user.models import User
+from tests.conftest import engine
 from tests.features.catalog.test_models import (
     _create_case,
     _create_dependencies,
@@ -103,3 +115,62 @@ def test_detail_responses_include_separate_source_directories(db):
     ] == [("archive", "/archive/case/run")]
     assert case_response["artifacts"] == []
     assert execution_response["artifacts"] == []
+
+
+def test_concurrent_source_directory_submissions_are_idempotent():
+    schema = f"test_source_directories_{uuid4().hex}"
+    tables = [
+        cast(Table, model.__table__)
+        for model in (User, Site, Machine, Ingestion, Case, Execution, SourceDirectory)
+    ]
+    with engine.connect() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        connection.execute(text(f'SET search_path TO "{schema}"'))
+        Base.metadata.create_all(connection, tables=tables)
+        connection.commit()
+        try:
+            with Session(connection) as db:
+                user, machine, ingestion = _create_dependencies(db)
+                case = _create_case(db, machine=machine)
+                execution = _create_execution(
+                    db,
+                    case_id=case.id,
+                    ingestion_id=ingestion.id,
+                    user_id=user.id,
+                    execution_id="100.1-1",
+                )
+                case_id, execution_id = case.id, execution.id
+                db.commit()
+
+            def record():
+                with engine.connect() as worker, Session(worker) as db:
+                    worker.execute(text(f'SET search_path TO "{schema}"'))
+                    worker.commit()
+                    persist_source_directory(
+                        db,
+                        Case(id=case_id),
+                        SourceDirectoryKind.STAGING,
+                        "/staging/case",
+                    )
+                    persist_source_directory(
+                        db,
+                        Execution(id=execution_id),
+                        SourceDirectoryKind.STAGING,
+                        "/staging/case/run",
+                    )
+                    db.commit()
+                    worker.execute(text("RESET search_path"))
+                    worker.commit()
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                list(executor.map(lambda _: record(), range(4)))
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM source_directories")
+                ).scalar_one()
+                == 2
+            )
+        finally:
+            connection.execute(text("RESET search_path"))
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+            connection.commit()

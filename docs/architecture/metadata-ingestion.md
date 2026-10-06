@@ -74,6 +74,29 @@ There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_
 > SimBoard automation can scan either `PERF_ARCHIVE_DIR` or
 > `OLD_PERF_ARCHIVE_DIR` depending on runner configuration.
 
+### Source directory mappings
+
+Normal ingestion records original case and execution directories as `staging`
+or `archive` mappings. Multiple paths are retained, including paths from
+different archive snapshots. Case and execution detail APIs return
+`sourceDirectories`; both detail pages display these paths with copy actions.
+
+Scanners also submit mappings for visited executions whose uploads are skipped.
+Owners are resolved from metadata using case name, machine, HPC username, and
+case-scoped execution ID. Missing or unresolved metadata is not guessed.
+Required mappings are persisted before archive checkpoints are completed.
+Observations without a matching ingested record are reported and create no
+placeholder records.
+
+Trusted scanners use `POST /api/v1/ingestions/source-directories` for metadata-only
+submissions. Path ingestion also accepts an optional `source_directories` list;
+HPC uploads accept the same list as a JSON form field. Legacy requests without
+these fields remain supported.
+
+These paths are observations, not availability guarantees, and are separate
+from `CASEROOT`, `RUNDIR`, and `DOUT_S_ROOT`. Checkpointed snapshots remain skipped;
+historical metadata backfill is tracked in GitHub issue #360.
+
 ### 1. Staging directory (`PERF_ARCHIVE_DIR`)
 
 Active filesystem location where E3SM cases write new performance output. PACE refers to this as `PERF_ARCHIVE_DIR`.
