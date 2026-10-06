@@ -30,6 +30,7 @@ from app.features.catalog.enums import (
     CaseSimulationType,
     ExecutionStatus,
     ExternalLinkKind,
+    SourceDirectoryKind,
 )
 
 if TYPE_CHECKING:
@@ -74,6 +75,9 @@ class Case(Base, IDMixin, TimestampMixin):
     )
 
     # Relationships
+    source_directories: Mapped[list[SourceDirectory]] = relationship(
+        back_populates="case", cascade="all, delete-orphan", passive_deletes=True
+    )
     machine: Mapped[Machine] = relationship("Machine", foreign_keys=[machine_id])
     executions: Mapped[list[Execution]] = relationship(
         "Execution",
@@ -179,6 +183,9 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Relationships
     # ~~~~~~~~~~~~~
+    source_directories: Mapped[list[SourceDirectory]] = relationship(
+        back_populates="execution", cascade="all, delete-orphan", passive_deletes=True
+    )
     case: Mapped[Case] = relationship(
         "Case", back_populates="executions", foreign_keys=[case_id]
     )
@@ -194,6 +201,49 @@ class Execution(Base, IDMixin, TimestampMixin):
     )
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="execution", cascade="all, delete-orphan"
+    )
+
+
+class SourceDirectory(Base, IDMixin):
+    """An observed original performance directory owned by a case or execution."""
+
+    __tablename__ = "source_directories"
+    __table_args__ = (
+        CheckConstraint(
+            "(case_id IS NOT NULL) <> (execution_id IS NOT NULL)",
+            name="exactly_one_owner",
+        ),
+        CheckConstraint("kind IN ('staging', 'archive')", name="source_directory_kind"),
+        Index(
+            "uq_source_directories_case",
+            "case_id",
+            "kind",
+            "path",
+            unique=True,
+            postgresql_where=text("case_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_source_directories_execution",
+            "execution_id",
+            "kind",
+            "path",
+            unique=True,
+            postgresql_where=text("execution_id IS NOT NULL"),
+        ),
+    )
+
+    case_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE")
+    )
+    execution_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("executions.id", ondelete="CASCADE")
+    )
+    kind: Mapped[SourceDirectoryKind] = mapped_column(String(20), nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    case: Mapped[Case | None] = relationship(back_populates="source_directories")
+    execution: Mapped[Execution | None] = relationship(
+        back_populates="source_directories"
     )
 
 
