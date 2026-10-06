@@ -290,7 +290,8 @@ def test_launcher_reports_mode_specific_lock_contention(
 
     assert result.returncode == expected_returncode
     if console_log:
-        assert "lock already held; ingestion was not started" in result.stdout
+        task = "diagnostics" if scan_mode == "diagnostics" else "ingestion"
+        assert f"lock already held; {task} was not started" in result.stdout
     else:
         assert not result.stdout + result.stderr
     assert flock_capture_path.read_text(encoding="utf-8").splitlines() == ["-n 200"]
@@ -306,8 +307,9 @@ def test_launcher_reports_mode_specific_lock_contention(
 
 @pytest.mark.parametrize("environment", ["dev", "prod"])
 @pytest.mark.parametrize("dry_run", [None, " TRUE ", "On", " false ", "OFF"])
+@pytest.mark.parametrize("console_log", [False, True])
 def test_diagnostics_launcher_dispatch_and_environment(
-    tmp_path: Path, environment: str, dry_run: str | None
+    tmp_path: Path, environment: str, dry_run: str | None, console_log: bool
 ) -> None:
     root = tmp_path / "deployment"
     operations = root / "operations"
@@ -357,11 +359,18 @@ def test_diagnostics_launcher_dispatch_and_environment(
         SIMBOARD_ROOT=str(root),
         SIMBOARD_SITE_CONFIG=str(config),
         SIMBOARD_ENV_FILE=str(api_file),
+        SIMBOARD_CONSOLE_LOG=str(console_log).lower(),
         CAPTURE_PATH=str(capture),
         PATH=f"{bin_dir}:{env['PATH']}",
     )
     if dry_run is not None:
         env["DRY_RUN"] = dry_run
+
+    def log_text():
+        return "\n".join(
+            path.read_text()
+            for path in (operations / "raw_logs").glob("simboard-diagnostics-*.log")
+        )
 
     def invoke():
         return subprocess.run(
@@ -398,11 +407,18 @@ def test_diagnostics_launcher_dispatch_and_environment(
         api_file.write_text("export SIMBOARD_API_BASE_URL=https://example.test\n")
         result = invoke()
         assert result.returncode != 0
-        assert "SIMBOARD_API_TOKEN failed to be set" in result.stderr
+        assert "SIMBOARD_API_TOKEN failed to be set" in log_text()
+        if console_log:
+            assert "SIMBOARD_API_TOKEN failed to be set" in result.stdout
     env["DRY_RUN"] = "typo"
     result = invoke()
     assert result.returncode != 0
-    assert "DRY_RUN must be a boolean" in result.stderr
+    assert "DRY_RUN must be a boolean" in log_text()
+    assert f"{environment}-token" not in log_text()
+    if console_log:
+        assert "DRY_RUN must be a boolean" in result.stdout
+    else:
+        assert not result.stdout + result.stderr
 
 
 def test_cron_template_schedules_diagnostics_independently() -> None:
