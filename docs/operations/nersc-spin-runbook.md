@@ -1,6 +1,5 @@
 # NERSC Spin Ingestion Operations Runbook
 
-1
 Audience: operators deploying SimBoard on NERSC Spin.
 
 This runbook defines the NERSC Spin workload baseline and backend rollout flow using an initContainer for automatic Alembic migrations.
