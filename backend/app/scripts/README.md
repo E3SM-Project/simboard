@@ -50,6 +50,15 @@ access, token storage, network egress, and candidate counts. A capped
 Site configs are operational inputs. Keep credentials in their referenced,
 protected files rather than committing them to a config file.
 
+### Performance Source Directories
+
+Both runners record observed case and execution directories, including visited
+executions that skip uploading. Mappings use metadata identities, retain multiple
+staging/archive paths, and appear on the case and execution detail pages.
+Mapping failures stop checkpoint completion; rerunning safely retries them.
+Dry runs do not write mappings, and checkpointed snapshots remain skipped.
+Historical metadata backfill is tracked in GitHub issue #360.
+
 ### Cron Setup
 
 Copy `sites/crontab.example` outside the repository, set `SIMBOARD_ROOT` to the

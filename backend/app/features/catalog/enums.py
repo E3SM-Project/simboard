@@ -28,6 +28,13 @@ class ArtifactKind(StrEnum):
     POSTPROCESS_SCRIPT = "postprocessing_script"
 
 
+class SourceDirectoryKind(StrEnum):
+    """Original performance-data directory, not simulation output."""
+
+    STAGING = "staging"
+    ARCHIVE = "archive"
+
+
 class ExternalLinkKind(StrEnum):
     """Enumeration of possible external link types."""
 

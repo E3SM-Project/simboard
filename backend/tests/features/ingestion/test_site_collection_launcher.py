@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 from pathlib import Path
+from shutil import which
 
 import pytest
 
@@ -131,10 +132,11 @@ def test_launcher_captures_early_failures(
             assert not result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("console_log", [False, True])
+@pytest.mark.parametrize("console_log", [False, True, "closed"])
 @pytest.mark.parametrize("exit_code", [0, 7])
+@pytest.mark.parametrize("tee_pipe_mode", [False, True])
 def test_launcher_runs_configured_ingestor_offline(
-    tmp_path: Path, console_log: bool, exit_code: int
+    tmp_path: Path, console_log: bool | str, exit_code: int, tee_pipe_mode: bool
 ) -> None:
     simboard_root = tmp_path / "simboard-root"
     work_dir = simboard_root / "operations"
@@ -144,11 +146,26 @@ def test_launcher_runs_configured_ingestor_offline(
     capture_path = tmp_path / "environment.txt"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    tee_capture_path = tmp_path / "tee-commands.txt"
+    real_tee = which("tee")
+    assert real_tee is not None
+    _write_executable(
+        bin_dir / "tee",
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "$TEE_CAPTURE_PATH"\n'
+        'if [[ "${1:-}" == "-p" ]]; then\n'
+        + ("  shift\n" if tee_pipe_mode else "  exit 1\n")
+        + "fi\n"
+        f'exec {shlex.quote(real_tee)} "$@"\n',
+    )
     fake_python = _write_executable(
         bin_dir / "python",
         "#!/usr/bin/env bash\n"
         'printf "%s\\n" "${SCAN_MODE}" "${ARCHIVE_YEAR_START-unset}" '
         '"${MACHINE_NAME}" "$*" > "${CAPTURE_PATH}"\n'
+        'if [[ -n "${RELEASE_PATH:-}" ]]; then\n'
+        '  while [[ ! -e "$RELEASE_PATH" ]]; do sleep 0.01; done\n'
+        "fi\n"
         'printf "ingestor stdout\\n"\n'
         'printf "ingestor stderr\\n" >&2\n'
         f"exit {exit_code}\n",
@@ -181,20 +198,49 @@ def test_launcher_runs_configured_ingestor_offline(
     env.pop("SIMBOARD_ROOT", None)
     env["CAPTURE_PATH"] = str(capture_path)
     env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
+    env["TEE_CAPTURE_PATH"] = str(tee_capture_path)
     env["SIMBOARD_ROOT"] = str(simboard_root)
     env["SIMBOARD_SITE_CONFIG"] = str(site_config)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    env["SIMBOARD_CONSOLE_LOG"] = str(console_log).lower()
+    env["SIMBOARD_CONSOLE_LOG"] = str(bool(console_log)).lower()
 
-    result = subprocess.run(
-        [_launcher_path(), "test", "archive"],
-        capture_output=True,
-        check=False,
-        env=env,
-        text=True,
-    )
+    if console_log == "closed":
+        release_path = tmp_path / "release"
+        env["RELEASE_PATH"] = str(release_path)
+        with subprocess.Popen(
+            [_launcher_path(), "test", "archive"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            text=True,
+        ) as process:
+            assert process.stdout is not None
+            first_line = process.stdout.readline()
+            process.stdout.close()
+            process.stdout = None
+            release_path.touch()
+            _, stderr = process.communicate(timeout=15)
+            result = subprocess.CompletedProcess(
+                process.args, process.returncode, first_line, stderr
+            )
+    else:
+        result = subprocess.run(
+            [_launcher_path(), "test", "archive"],
+            capture_output=True,
+            check=False,
+            env=env,
+            text=True,
+            timeout=15,
+        )
 
     assert result.returncode == exit_code, result.stderr
+    if console_log:
+        expected_options = "-p -a " if tee_pipe_mode else "-a "
+        assert (
+            tee_capture_path.read_text().splitlines()[-1].startswith(expected_options)
+        )
+    else:
+        assert not tee_capture_path.exists()
     assert capture_path.read_text(encoding="utf-8").splitlines() == [
         "archive",
         "2024-01",
@@ -215,7 +261,8 @@ def test_launcher_runs_configured_ingestor_offline(
     assert f"event=launcher_finished exit_code={exit_code}" in raw_log_contents
     if console_log:
         assert f"Ingestion log: {raw_logs[0]}" in result.stdout
-        assert raw_log_contents in result.stdout
+        if console_log != "closed":
+            assert raw_log_contents in result.stdout
     else:
         assert not result.stdout + result.stderr
     assert f"site_config={site_config}" in raw_log_contents
@@ -529,6 +576,44 @@ def test_launcher_requires_scheduler_root(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "SIMBOARD_ROOT must be set by the scheduler environment" in result.stderr
+
+
+def test_launcher_reports_missing_flock_instead_of_lock_contention(tmp_path: Path):
+    root = tmp_path / "deployment"
+    (root / "repository/simboard/backend/.venv").mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # Restrict PATH so this test is independent of the host's flock installation.
+    for name in ("bash", "date", "mkdir", "dirname", "touch"):
+        executable = which(name)
+        assert executable is not None
+        (bin_dir / name).symlink_to(executable)
+    python = _write_executable(bin_dir / "python", "#!/bin/sh\nexit 0\n")
+    config = tmp_path / "site.config"
+    config.write_text(
+        "export SIMBOARD_INGESTOR_MODULE=example\n"
+        "export DRY_RUN=true DRY_RUN_USE_REMOTE_STATE=false\n"
+        f"export PYTHON_BIN={shlex.quote(str(python))}\n"
+    )
+    result = subprocess.run(
+        [_launcher_path(), "test", "staging"],
+        env={
+            **os.environ,
+            "PATH": str(bin_dir),
+            "SIMBOARD_ROOT": str(root),
+            "SIMBOARD_SITE_CONFIG": str(config),
+            "SIMBOARD_CONSOLE_LOG": "false",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 1
+    log = next((root / "operations/raw_logs").glob("*.log")).read_text()
+    assert "flock is required" in log
+    assert "lock already held" not in log
+    assert "event=launcher_finished exit_code=1" in log
 
 
 def test_launcher_loads_credentials_for_default_remote_state_dry_run(

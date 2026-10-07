@@ -10,6 +10,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.features.catalog.enums import SourceDirectoryKind
 from app.features.ingestion.enums import (
     ExecutionDiscoveryOutcome,
     IngestionSourceType,
@@ -34,6 +35,44 @@ class IngestionExecutionSummary(BaseModel):
     ]
 
 
+class SourceDirectoryObservation(BaseModel):
+    """Observed paths and explicit catalog identity for one execution."""
+
+    case_name: Annotated[str, Field(min_length=1)]
+    hpc_username: Annotated[str, Field(min_length=1)]
+    execution_id: Annotated[str, Field(min_length=1)]
+    kind: SourceDirectoryKind
+    case_path: Annotated[str, Field(min_length=1)]
+    execution_path: Annotated[str, Field(min_length=1)]
+
+    @field_validator("case_name", "hpc_username", "execution_id")
+    @classmethod
+    def normalize_identity(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Identity must not be blank")
+        return value
+
+    @field_validator("case_path", "execution_path")
+    @classmethod
+    def validate_observed_path(cls, value: str) -> str:
+        if not value.startswith("/") or "\x00" in value:
+            raise ValueError("Source directory must be an absolute path")
+        return value
+
+
+class SourceDirectoriesRequest(BaseModel):
+    machine_name: Annotated[str, Field(min_length=1)]
+    directories: Annotated[
+        list[SourceDirectoryObservation], Field(min_length=1, max_length=500)
+    ]
+
+
+class SourceDirectoriesResponse(BaseModel):
+    recorded_count: int
+    unresolved: list[SourceDirectoryObservation] = Field(default_factory=list)
+
+
 class IngestFromPathRequest(BaseModel):
     """
     Request payload for ingesting an archive from a path and persisting
@@ -41,6 +80,7 @@ class IngestFromPathRequest(BaseModel):
     """
 
     archive_path: Annotated[str, Field(..., description="Path to the archive file")]
+    source_directories: list[SourceDirectoryObservation] = Field(default_factory=list)
     machine_name: Annotated[
         str,
         Field(..., description="Name of the machine associated with the executions"),

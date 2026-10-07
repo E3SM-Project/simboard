@@ -1,7 +1,7 @@
 """
 SimBoard Development Seeder
 -----------------------------
-Seeds the database with case, execution, artifact, and external link data
+Seeds the database with case, execution, source directory, artifact, and external link data
 from a JSON file. Safe to run only in non-production environments.
 
 Usage:
@@ -22,12 +22,14 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.features.catalog.enums import SourceDirectoryKind
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import (
     ArtifactCreate,
     ExecutionCreate,
     ExternalLinkCreate,
 )
+from app.features.catalog.source_directories import persist_source_directory
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
@@ -176,6 +178,8 @@ def seed_from_json(db: Session, json_path: str):
         db.add(case)
         db.flush()
 
+        _seed_source_directories(db, case, case_entry)
+
         for execution_entry in executions_data:
             _ = _seed_execution(db, execution_entry, case, case_name, first_user_id)
 
@@ -186,6 +190,14 @@ def seed_from_json(db: Session, json_path: str):
         f"✅ Done! Inserted {len(data)} cases with "
         f"{total_executions} executions, artifacts, and links."
     )
+
+
+def _seed_source_directories(db: Session, owner: Case | Execution, entry: dict) -> None:
+    """Persist optional illustrative paths; no filesystem directories are created."""
+    for directory in entry.get("sourceDirectories", []):
+        persist_source_directory(
+            db, owner, SourceDirectoryKind(directory["kind"]), directory["path"]
+        )
 
 
 def _parse_datetime(value):
@@ -272,7 +284,7 @@ def _seed_execution(
     seed_payload = {
         key: value
         for key, value in execution_entry.items()
-        if key not in {"machine", "machineId", "hpcUsername"}
+        if key not in {"machine", "machineId", "hpcUsername", "sourceDirectories"}
     }
 
     execution_in = ExecutionCreate(
@@ -334,6 +346,8 @@ def _seed_execution(
     execution.ingestion_id = ingestion.id
     db.add(execution)
     db.flush()
+
+    _seed_source_directories(db, execution, execution_entry)
 
     for a in execution_in.artifacts or []:
         db.add(

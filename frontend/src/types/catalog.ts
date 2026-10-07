@@ -81,7 +81,15 @@ export interface CaseSummaryOut {
   updatedAt: string;
 }
 
+export interface SourceDirectoryOut {
+  id: string;
+  kind: 'staging' | 'archive';
+  path: string;
+}
+
 export interface CaseDetailOut extends CaseSummaryOut {
+  sourceDirectories?: SourceDirectoryOut[];
+  performanceSourceDirectory?: SourceDirectoryOut | null;
   artifacts: CaseExecutionArtifactOut[];
   description: string | null;
   keyFeatures: string | null;
@@ -167,7 +175,9 @@ export const CASE_EDITABLE_FIELDS = [
 
 export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
 
-export type CaseUpdate = Partial<Record<Exclude<CaseEditableField, 'simulationType'>, string | null>> & {
+export type CaseUpdate = Partial<
+  Record<Exclude<CaseEditableField, 'simulationType'>, string | null>
+> & {
   simulationType?: CaseSimulationTypeValue;
   links?: ExternalLinkIn[];
   editReason?: string | null;
@@ -300,6 +310,8 @@ export interface ExecutionOut extends ExecutionCreate {
   // Relationships
   // ~~~~~~~~~~~~~~
   artifacts: ArtifactOut[];
+  sourceDirectories?: SourceDirectoryOut[];
+  performanceSourceDirectory?: SourceDirectoryOut | null;
   links: ExternalLinkOut[]; // merged execution-owned + case-owned links, with ownerType metadata
   machine: Machine;
 

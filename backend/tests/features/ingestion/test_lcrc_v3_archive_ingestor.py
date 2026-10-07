@@ -17,6 +17,9 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _fresh_state,
 )
 from app.scripts.ingestion.v3_data import lcrc_v3_archive_ingestor as v3_ingestor
+from tests.features.ingestion.source_directory_utils import (
+    stub_source_directory_persistence,
+)
 
 
 def _config(archive_root: Path, *, dry_run: bool) -> IngestorConfig:
@@ -251,6 +254,7 @@ def test_v3_summary_reports_paths_missing_and_execution_outcomes(
 def test_targeted_archive_run_filters_cases_and_skips_all_checkpoints(
     tmp_path: Path, monkeypatch
 ) -> None:
+    stub_source_directory_persistence(monkeypatch)
     archive_root = tmp_path / "OLD_PERF"
     snapshot = (
         archive_root

@@ -2,9 +2,29 @@
   {
     "caseName": "E3SMv1_piControl_DECK_r1i1p1f1",
     "caseGroup": "E3SM Control Group",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/pscratch/sd/s/simboard-dev/performance/E3SMv1_piControl_DECK_r1i1p1f1"
+      },
+      {
+        "kind": "archive",
+        "path": "/global/cfs/cdirs/e3sm/simboard-dev/performance_archive/E3SMv1_piControl_DECK_r1i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000001.240101-120000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/pscratch/sd/s/simboard-dev/performance/E3SMv1_piControl_DECK_r1i1p1f1/1000001.240101-120000"
+          },
+          {
+            "kind": "archive",
+            "path": "/global/cfs/cdirs/e3sm/simboard-dev/performance_archive/E3SMv1_piControl_DECK_r1i1p1f1/1000001.240101-120000"
+          }
+        ],
         "description": "Reference preindustrial control run for E3SM version 1.1.0.",
         "compset": "PICNTRL",
         "compsetAlias": "piControl",
@@ -57,6 +77,16 @@
       },
       {
         "executionId": "1000002.240215-093000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/pscratch/sd/s/simboard-dev/performance/E3SMv1_piControl_DECK_r1i1p1f1/1000002.240215-093000"
+          },
+          {
+            "kind": "archive",
+            "path": "/global/cfs/cdirs/e3sm/simboard-dev/performance_archive/E3SMv1_piControl_DECK_r1i1p1f1/1000002.240215-093000"
+          }
+        ],
         "description": "Second execution of piControl \u2014 continued from year 45.",
         "compset": "PICNTRL",
         "compsetAlias": "piControl",
@@ -89,9 +119,21 @@
   {
     "caseName": "E3SMv2_HIST_CMIP6_r2i1p1f1",
     "caseGroup": "E3SM CMIP6",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/simboard-demo/staging/E3SMv2_HIST_CMIP6_r2i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000003.240301-080000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/simboard-demo/staging/E3SMv2_HIST_CMIP6_r2i1p1f1/1000003.240301-080000"
+          }
+        ],
         "description": "E3SM historical simulation for CMIP6 experiments.",
         "compset": "HIST",
         "compsetAlias": "historical",
@@ -146,9 +188,21 @@
   {
     "caseName": "E3SMv3_SSP585_CMIP6_r3i1p1f1",
     "caseGroup": "E3SM Future Projections",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/simboard-demo/staging/E3SMv3_SSP585_CMIP6_r3i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000004.240401-140000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/simboard-demo/staging/E3SMv3_SSP585_CMIP6_r3i1p1f1/1000004.240401-140000"
+          }
+        ],
         "description": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
         "compset": "SSP585",
         "compsetAlias": "ssp585",
@@ -192,9 +246,21 @@
   {
     "caseName": "E3SMv1_AMIP_DECK_r4i1p1f1",
     "caseGroup": "E3SM AMIP Group",
+    "sourceDirectories": [
+      {
+        "kind": "archive",
+        "path": "/simboard-demo/archive/E3SMv1_AMIP_DECK_r4i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000005.240501-100000",
+        "sourceDirectories": [
+          {
+            "kind": "archive",
+            "path": "/simboard-demo/archive/E3SMv1_AMIP_DECK_r4i1p1f1/1000005.240501-100000"
+          }
+        ],
         "description": "Atmospheric Model Intercomparison Project (AMIP) simulation for E3SM v1.2.0.",
         "compset": "AMIP",
         "compsetAlias": "amip",
@@ -239,9 +305,21 @@
   {
     "caseName": "E3SMv2_RCP45_CMIP5_r5i1p1f1",
     "caseGroup": "E3SM Future Projections",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/simboard-demo/staging/E3SMv2_RCP45_CMIP5_r5i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000006.240601-060000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/simboard-demo/staging/E3SMv2_RCP45_CMIP5_r5i1p1f1/1000006.240601-060000"
+          }
+        ],
         "description": "Representative Concentration Pathway 4.5 (RCP4.5) simulation for E3SM v2.1.0.",
         "compset": "RCP45",
         "compsetAlias": "rcp45",
@@ -286,9 +364,21 @@
   {
     "caseName": "E3SMv3_piClim_DECK_r6i1p1f1",
     "caseGroup": "E3SM Control Group",
+    "sourceDirectories": [
+      {
+        "kind": "archive",
+        "path": "/simboard-demo/archive/E3SMv3_piClim_DECK_r6i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000007.240701-070000",
+        "sourceDirectories": [
+          {
+            "kind": "archive",
+            "path": "/simboard-demo/archive/E3SMv3_piClim_DECK_r6i1p1f1/1000007.240701-070000"
+          }
+        ],
         "description": "Preindustrial climate simulation for E3SM v3.1.0.",
         "compset": "PICLIM",
         "compsetAlias": "piClim",
@@ -329,6 +419,12 @@
       },
       {
         "executionId": "1000008.240815-110000",
+        "sourceDirectories": [
+          {
+            "kind": "archive",
+            "path": "/simboard-demo/archive/E3SMv3_piClim_DECK_r6i1p1f1/1000008.240815-110000"
+          }
+        ],
         "description": "Second piClim execution with updated aerosol scheme.",
         "compset": "PICLIM",
         "compsetAlias": "piClim",
@@ -361,9 +457,21 @@
   {
     "caseName": "E3SMv3_SSP126_CMIP6_r7i1p1f1",
     "caseGroup": "E3SM Future Projections",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/simboard-demo/staging/E3SMv3_SSP126_CMIP6_r7i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000009.240901-150000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/simboard-demo/staging/E3SMv3_SSP126_CMIP6_r7i1p1f1/1000009.240901-150000"
+          }
+        ],
         "description": "Low-emissions scenario (SSP1-2.6) projection using E3SM v3.2.0.",
         "compset": "SSP126",
         "compsetAlias": "ssp126",
@@ -407,9 +515,21 @@
   {
     "caseName": "E3SMv3_HighRes_DECK_r8i1p1f1",
     "caseGroup": "E3SM HighRes Group",
+    "sourceDirectories": [
+      {
+        "kind": "staging",
+        "path": "/simboard-demo/staging/E3SMv3_HighRes_DECK_r8i1p1f1"
+      }
+    ],
     "executions": [
       {
         "executionId": "1000010.241001-180000",
+        "sourceDirectories": [
+          {
+            "kind": "staging",
+            "path": "/simboard-demo/staging/E3SMv3_HighRes_DECK_r8i1p1f1/1000010.241001-180000"
+          }
+        ],
         "description": "High-resolution simulation for E3SM v3.3.0.",
         "compset": "HIGHRES",
         "compsetAlias": "highres",
