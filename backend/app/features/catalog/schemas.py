@@ -787,6 +787,7 @@ class CaseDetailOut(CaseSummaryOut):
     """Schema for representing full case details used by Case Details."""
 
     source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
+    performance_source_directory: SourceDirectoryOut | None = None
 
     artifacts: Annotated[
         list[CaseExecutionArtifactOut],
@@ -912,6 +913,7 @@ class ExecutionOut(CamelOutBaseModel):
     """Schema for representing an execution with related entities."""
 
     source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
+    performance_source_directory: SourceDirectoryOut | None = None
 
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the execution.")

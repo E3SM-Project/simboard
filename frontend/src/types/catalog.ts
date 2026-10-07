@@ -89,6 +89,7 @@ export interface SourceDirectoryOut {
 
 export interface CaseDetailOut extends CaseSummaryOut {
   sourceDirectories?: SourceDirectoryOut[];
+  performanceSourceDirectory?: SourceDirectoryOut | null;
   artifacts: CaseExecutionArtifactOut[];
   description: string | null;
   keyFeatures: string | null;
@@ -310,6 +311,7 @@ export interface ExecutionOut extends ExecutionCreate {
   // ~~~~~~~~~~~~~~
   artifacts: ArtifactOut[];
   sourceDirectories?: SourceDirectoryOut[];
+  performanceSourceDirectory?: SourceDirectoryOut | null;
   links: ExternalLinkOut[]; // merged execution-owned + case-owned links, with ownerType metadata
   machine: Machine;
 

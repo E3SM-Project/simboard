@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from app.api.source_directories import record_source_directories
 from app.features.catalog.models import SourceDirectory
+from app.features.catalog.source_directories import select_performance_source_directory
 from app.features.ingestion.api import _process_ingestion
 from app.features.ingestion.enums import IngestionSourceType
 from app.features.ingestion.ingest import IngestArchiveResult
@@ -128,6 +129,33 @@ def test_missing_paths_do_not_insert_mappings(db):
         db,
     )
     assert db.query(SourceDirectory).count() == 0
+
+
+def test_staging_to_archive_then_late_staging_keeps_archive(db):
+    user, machine, case, execution = _owners(db)
+    for kind, path, expected_path in [
+        ("staging", "/staging/case", "/staging/case"),
+        ("archive", "/archive/case", "/archive/case"),
+        ("staging", "/staging/another/case", "/archive/case"),
+    ]:
+        response = _process_ingestion(
+            IngestArchiveResult(executions=[], created_count=0, duplicate_count=1),
+            IngestionSourceType.HPC_UPLOAD,
+            path,
+            machine.id,
+            user,
+            None,
+            db,
+            source_directories=_request(machine.name, kind=kind, path=path).directories,
+        )
+        assert response.duplicate_count == 1
+        db.expire_all()
+        for owner, suffix in [(case, ""), (execution, "/100.1-1")]:
+            selected = select_performance_source_directory(owner.source_directories)
+            assert selected is not None
+            assert selected.path == expected_path + suffix
+
+    assert db.query(SourceDirectory).count() == 6
 
 
 def test_source_directory_http_validation_and_response(db, client, monkeypatch):

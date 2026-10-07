@@ -1,0 +1,52 @@
+import { Copy } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import type { SourceDirectoryOut } from '@/types';
+
+export const PerformanceSourceDirectory = ({
+  directory,
+}: {
+  directory?: SourceDirectoryOut | null;
+}) => {
+  const copyPath = async () => {
+    if (!directory) return;
+    try {
+      await navigator.clipboard.writeText(directory.path);
+    } catch {
+      // Clipboard access is best-effort, as with other catalog paths.
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-2">
+      <Label className="block text-xs text-muted-foreground">Performance Source Directory</Label>
+      {directory ? (
+        <>
+          <div className="flex min-w-0 items-start gap-2">
+            <code className="min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">
+              {directory.path}
+            </code>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={() => void copyPath()}
+              aria-label="Copy performance source directory"
+              title="Copy full path"
+            >
+              <Copy size={14} />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Recorded performance-data location. The directory may have been moved, compressed, or
+            removed.
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">Not recorded</p>
+      )}
+    </div>
+  );
+};

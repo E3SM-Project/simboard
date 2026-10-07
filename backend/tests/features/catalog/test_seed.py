@@ -1,9 +1,11 @@
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy.orm import Session
 
-from app.features.catalog.models import Case, Execution, MetadataChange
+from app.features.catalog.api import _case_to_detail_out, _execution_to_out
+from app.features.catalog.models import Case, Execution, MetadataChange, SourceDirectory
 from app.features.machine.models import Machine
 from app.features.user.models import User, UserRole
 from app.scripts.db.rollback_seed import DEV_EMAIL, rollback_seed
@@ -11,6 +13,8 @@ from app.scripts.db.seed import (
     DEV_HPC_USERNAME,
     _resolve_seed_case_machine,
     _seed_execution,
+    load_json,
+    seed_from_json,
 )
 from tests.features.site.utils import get_or_create_site
 
@@ -117,6 +121,75 @@ class TestSeedExecution:
         assert execution.ingestion_id is not None
         assert execution.compute_type == "gpu"
         assert execution.simulation_start_date == date(2023, 1, 1)
+
+
+class TestSeedSourceDirectories:
+    def test_catalog_directories_survive_reseeding(
+        self, db: Session, normal_user_sync
+    ) -> None:
+        catalog_path = str(
+            Path(__file__).resolve().parents[3] / "app/scripts/db/catalog.json"
+        )
+        catalog = load_json(catalog_path)
+        for entry in catalog:
+            assert entry.get("sourceDirectories"), entry["caseName"]
+            for execution in entry["executions"]:
+                assert execution.get("sourceDirectories"), execution["executionId"]
+        expected_count = sum(
+            len(entry.get("sourceDirectories", []))
+            + sum(
+                len(execution.get("sourceDirectories", []))
+                for execution in entry["executions"]
+            )
+            for entry in catalog
+        )
+        assert expected_count > 0
+
+        for _ in range(2):
+            seed_from_json(db, catalog_path)
+            db.expire_all()
+
+            for entry in catalog:
+                case = db.query(Case).filter_by(name=entry["caseName"]).one()
+                assert {(d.kind, d.path) for d in case.source_directories} == {
+                    (d["kind"], d["path"]) for d in entry.get("sourceDirectories", [])
+                }
+                expected_directory = min(
+                    entry.get("sourceDirectories", []),
+                    key=lambda d: (d["kind"] != "archive", d["path"]),
+                    default=None,
+                )
+                selected = _case_to_detail_out(case).performance_source_directory
+                assert (selected.path if selected else None) == (
+                    expected_directory["path"] if expected_directory else None
+                )
+                for execution_entry in entry["executions"]:
+                    execution = (
+                        db.query(Execution)
+                        .filter_by(
+                            case_id=case.id,
+                            execution_id=execution_entry["executionId"],
+                        )
+                        .one()
+                    )
+                    assert {(d.kind, d.path) for d in execution.source_directories} == {
+                        (d["kind"], d["path"])
+                        for d in execution_entry.get("sourceDirectories", [])
+                    }
+                    expected_directory = min(
+                        execution_entry.get("sourceDirectories", []),
+                        key=lambda d: (d["kind"] != "archive", d["path"]),
+                        default=None,
+                    )
+                    selected = _execution_to_out(execution).performance_source_directory
+                    assert (selected.path if selected else None) == (
+                        expected_directory["path"] if expected_directory else None
+                    )
+
+            assert db.query(SourceDirectory).count() == expected_count
+
+        rollback_seed(db)
+        assert db.query(SourceDirectory).count() == 0
 
 
 class TestRollbackSeed:

@@ -50,6 +50,7 @@ from app.features.catalog.schemas import (
     FilterOptionOut,
     MetadataHistoryPageOut,
 )
+from app.features.catalog.source_directories import select_performance_source_directory
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
@@ -1797,6 +1798,9 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
         source_directories=sorted(
             case.source_directories, key=lambda item: (item.kind, item.path)
         ),
+        performance_source_directory=select_performance_source_directory(
+            case.source_directories
+        ),
     )
 
     return result
@@ -1932,6 +1936,9 @@ def _execution_to_out(execution: Execution) -> ExecutionOut:
             "links": serialized_links,
             "source_directories": sorted(
                 execution.source_directories, key=lambda item: (item.kind, item.path)
+            ),
+            "performance_source_directory": select_performance_source_directory(
+                execution.source_directories
             ),
             "summary_capabilities": ExecutionSummaryCapabilitiesOut(
                 llm_available=llm_available,

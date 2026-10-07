@@ -59,7 +59,7 @@ import {
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
-import { SourceDirectories } from '@/features/catalog/components/SourceDirectories';
+import { PerformanceSourceDirectory } from '@/features/catalog/components/PerformanceSourceDirectory';
 import {
   areResourceListsEqual,
   createEmptyRowErrors,
@@ -1100,6 +1100,8 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
+            <PerformanceSourceDirectory directory={caseRecord.performanceSourceDirectory} />
+
             {formState ? (
               <div className="space-y-5">
                 <div className="space-y-2">
@@ -1858,12 +1860,6 @@ export const CaseDetailsPage = ({
               </Button>
             </div>
           ) : null}
-
-          {Boolean(caseRecord.sourceDirectories?.length) && (
-            <div className="border-t border-slate-200 px-5 py-5">
-              <SourceDirectories directories={caseRecord.sourceDirectories} />
-            </div>
-          )}
 
           <div className="border-t border-slate-200 px-5 py-5">
             <CaseArtifactsTable

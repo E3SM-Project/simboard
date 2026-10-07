@@ -1,10 +1,27 @@
 """Idempotent persistence of observed performance-data directories."""
 
+from collections.abc import Iterable
+
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.features.catalog.enums import SourceDirectoryKind
 from app.features.catalog.models import Case, Execution, SourceDirectory
+
+
+def select_performance_source_directory(
+    directories: Iterable[SourceDirectory],
+) -> SourceDirectory | None:
+    """Prefer archive over staging, with stable path ordering within each kind."""
+
+    def preference(item: SourceDirectory) -> tuple[bool, str]:
+        return item.kind != SourceDirectoryKind.ARCHIVE, item.path
+
+    return min(
+        directories,
+        key=preference,
+        default=None,
+    )
 
 
 def persist_source_directory(

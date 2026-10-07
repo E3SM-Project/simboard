@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.common.models.base import Base
 from app.features.catalog.enums import SourceDirectoryKind
 from app.features.catalog.models import Case, Execution, SourceDirectory
-from app.features.catalog.source_directories import persist_source_directory
+from app.features.catalog.source_directories import (
+    persist_source_directory,
+    select_performance_source_directory,
+)
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
 from app.features.site.models import Site
@@ -78,7 +81,23 @@ def test_source_directory_requires_exactly_one_owner(db, both_owners):
         db.flush()
 
 
-def test_detail_responses_include_separate_source_directories(db):
+@pytest.mark.parametrize(
+    "entries, expected",
+    [
+        ([], None),
+        ([("staging", "/staging/b"), ("staging", "/staging/a")], "/staging/a"),
+        ([("archive", "/archive/a"), ("staging", "/staging/a")], "/archive/a"),
+        ([("archive", "/archive/b"), ("archive", "/archive/a")], "/archive/a"),
+    ],
+)
+def test_select_performance_source_directory(entries, expected):
+    directories = [SourceDirectory(kind=kind, path=path) for kind, path in entries]
+    for ordered in (directories, list(reversed(directories))):
+        selected = select_performance_source_directory(ordered)
+        assert (selected.path if selected else None) == expected
+
+
+def test_detail_responses_include_separate_source_directories(db, client):
     from app.features.catalog.api import (
         _case_detail_query,
         _case_to_detail_out,
@@ -103,10 +122,10 @@ def test_detail_responses_include_separate_source_directories(db):
 
     case_response = _case_to_detail_out(
         _case_detail_query(db).filter_by(id=case.id).one()
-    ).model_dump(by_alias=True)
+    ).model_dump(by_alias=True, mode="json")
     execution_response = _execution_to_out(
         _execution_detail_query(db).filter_by(id=execution.id).one()
-    ).model_dump(by_alias=True)
+    ).model_dump(by_alias=True, mode="json")
     assert [
         (item["kind"], item["path"]) for item in case_response["sourceDirectories"]
     ] == [("staging", "/staging/case")]
@@ -115,6 +134,58 @@ def test_detail_responses_include_separate_source_directories(db):
     ] == [("archive", "/archive/case/run")]
     assert case_response["artifacts"] == []
     assert execution_response["artifacts"] == []
+    assert case_response["performanceSourceDirectory"]["path"] == "/staging/case"
+    assert (
+        execution_response["performanceSourceDirectory"]["path"] == "/archive/case/run"
+    )
+
+    identity = {
+        "machine": machine.name,
+        "hpc_username": case.hpc_username,
+        "case_name": case.name,
+    }
+    for url, params, expected in [
+        (f"/api/v1/cases/{case.id}", {}, case_response),
+        ("/api/v1/cases/resolve", identity, case_response),
+        (f"/api/v1/executions/{execution.id}", {}, execution_response),
+        (
+            "/api/v1/executions/resolve",
+            {**identity, "execution_id": execution.execution_id},
+            execution_response,
+        ),
+    ]:
+        response = client.get(url, params=params)
+        assert response.status_code == 200
+        assert (
+            response.json()["performanceSourceDirectory"]
+            == expected["performanceSourceDirectory"]
+        )
+
+
+def test_detail_responses_include_null_for_missing_directory(db):
+    from app.features.catalog.api import _case_to_detail_out, _execution_to_out
+
+    user, machine, ingestion = _create_dependencies(db)
+    case = _create_case(db, machine=machine)
+    execution = _create_execution(
+        db,
+        case_id=case.id,
+        ingestion_id=ingestion.id,
+        user_id=user.id,
+        execution_id="123.250101-000000",
+    )
+    assert (
+        _case_to_detail_out(case).model_dump(by_alias=True)[
+            "performanceSourceDirectory"
+        ]
+        is None
+    )
+    assert (
+        _execution_to_out(execution).model_dump(by_alias=True)[
+            "performanceSourceDirectory"
+        ]
+        is None
+    )
 
 
 def test_concurrent_source_directory_submissions_are_idempotent():

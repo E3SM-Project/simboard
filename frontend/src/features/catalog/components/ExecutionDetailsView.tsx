@@ -38,7 +38,7 @@ import {
 } from '@/features/catalog/components/ExecutionSummaryPanel';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
-import { SourceDirectories } from '@/features/catalog/components/SourceDirectories';
+import { PerformanceSourceDirectory } from '@/features/catalog/components/PerformanceSourceDirectory';
 import {
   areResourceListsEqual,
   createEmptyRowErrors,
@@ -1155,6 +1155,7 @@ export const ExecutionDetailsView = ({
                     <CardTitle className="text-base">Provenance</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
+                    <PerformanceSourceDirectory directory={execution.performanceSourceDirectory} />
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Created:
@@ -1675,7 +1676,6 @@ export const ExecutionDetailsView = ({
 
         {/* OUTPUTS TAB */}
         <TabsContent value="outputs" className="space-y-6">
-          <SourceDirectories directories={execution.sourceDirectories} />
           {isEditing ? (
             <Card>
               <CardHeader className="pb-2">
