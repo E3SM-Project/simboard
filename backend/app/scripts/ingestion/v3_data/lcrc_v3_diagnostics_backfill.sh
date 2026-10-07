@@ -38,7 +38,7 @@ if [[ "${TRUST_EXISTING:-false}" == "true" ]]; then
   TRUST_ARGS+=(--trust-existing)
 fi
 
-DRY_RUN_NORMALIZED="${DRY_RUN,,}"
+DRY_RUN_NORMALIZED="$(printf '%s' "${DRY_RUN}" | tr '[:upper:]' '[:lower:]')"
 if [[ "${DRY_RUN_NORMALIZED}" != "true" && "${DRY_RUN}" != "1" && "${DRY_RUN_NORMALIZED}" != "yes" ]]; then
   : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN must be set in ENV_FILE when DRY_RUN is false.}"
 fi
