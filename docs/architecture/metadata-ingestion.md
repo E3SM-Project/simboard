@@ -79,7 +79,16 @@ There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_
 Normal ingestion records original case and execution directories as `staging`
 or `archive` mappings. Multiple paths are retained, including paths from
 different archive snapshots. Case and execution detail APIs return
-`sourceDirectories`; both detail pages display these paths with copy actions.
+`sourceDirectories`, preserving all observations regardless of UI selection.
+
+Case Metadata displays **Performance Source Directories**: all distinct archive
+paths when any exist, otherwise all distinct staging paths, sorted alphabetically.
+Execution metadata displays one **Performance Source Directory** using the API's
+`performanceSourceDirectory`: archive first, otherwise staging, with alphabetical
+path ordering as a deterministic tie-breaker, not a guarantee of the newest snapshot.
+Selection is independent for each case and execution; a case archive mapping does
+not imply that all its executions have been archived or exist in every listed location.
+Both displays provide per-path copy actions and show **Not recorded** when absent.
 
 Scanners also submit mappings for visited executions whose uploads are skipped.
 Owners are resolved from metadata using case name, machine, HPC username, and
