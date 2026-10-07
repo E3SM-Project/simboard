@@ -114,7 +114,7 @@ setup-local: setup-local-assets db-up install
 
 	@echo "Running migrations + seeding via bare-metal backend..."
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
-	cd $(BACKEND_DIR) && uv run python app/scripts/seed.py || true
+	$(MAKE) backend-seed
 
 	@echo "Bare-metal local environment is ready!"
 	@echo "Run:  make backend-run"
