@@ -203,7 +203,7 @@ diagnostics-dry-run diagnostics-apply:
 		echo "Usage: make $@ SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>" >&2; \
 		exit 1; \
 	fi; \
-	case "$(site)" in *[!a-z0-9_-]*) echo "site must contain only lowercase letters, digits, underscores, or hyphens" >&2; exit 1 ;; esac; \
+	case "$(site)" in *[!abcdefghijklmnopqrstuvwxyz0123456789_-]*) echo "site must contain only lowercase letters, digits, underscores, or hyphens" >&2; exit 1 ;; esac; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
 		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
 		exit 1; \

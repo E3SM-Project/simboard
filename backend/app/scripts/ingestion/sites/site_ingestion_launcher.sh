@@ -4,7 +4,7 @@ umask 027
 
 finish_logging() {
   local exit_code=$?
-  printf '[%s] event=launcher_finished exit_code=%s\n' "$(date -u -Is)" "$exit_code" >&"$log_output_fd" || true
+  printf '[%s] event=launcher_finished exit_code=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$exit_code" >&9 || true
   # Do not wait for tee here: a failing source command may still hold saved
   # output descriptors until the shell exits, preventing tee from seeing EOF.
   exit "$exit_code"
@@ -13,13 +13,19 @@ finish_logging() {
 start_logging() {
   if [[ ${SIMBOARD_CONSOLE_LOG:-false} == true ]]; then
     printf 'Ingestion log: %s\n' "$LOG_FILE"
-    # Keep writing the file if a console pipe closes (GNU tee's pipe mode).
-    exec > >(tee -p -a "$LOG_FILE") 2>&1
+    local tee_options=(-a)
+    # GNU tee has pipe mode; BSD tee instead needs SIGPIPE ignored so a
+    # closed console pipe does not prevent writing the log file.
+    if tee -p < /dev/null > /dev/null 2>&1; then
+      tee_options=(-p -a)
+    fi
+    exec > >(trap '' PIPE; tee "${tee_options[@]}" "$LOG_FILE") 2>&1
   else
     exec >> "$LOG_FILE" 2>&1
   fi
   # Keep the completion event visible even when source diagnostics are muted.
-  exec {log_output_fd}>&1
+  # Reserve descriptor 9 for logging (dynamic descriptors need newer Bash).
+  exec 9>&1
   trap finish_logging EXIT
 }
 
@@ -32,7 +38,7 @@ if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
     early_environment="${early_environment##*/}"
     early_site="${1:-unknown}"
     early_mode="${2:-unknown}"
-    [[ "${early_site}" =~ ^[a-z0-9_-]+$ ]] || early_site=unknown
+    [[ "${early_site}" =~ ^[abcdefghijklmnopqrstuvwxyz0123456789_-]+$ ]] || early_site=unknown
     [[ "${early_mode}" == staging || "${early_mode}" == archive || "${early_mode}" == diagnostics ]] || early_mode=unknown
     early_log_prefix="simboard-ingestion-${early_mode}"
     if [[ "${early_mode}" == diagnostics ]]; then
@@ -42,7 +48,7 @@ if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
     LOG_FILE="${early_log_dir}/${early_log_prefix}-${early_site}-${early_environment}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
     if touch "${LOG_FILE}"; then
       start_logging
-      printf '[%s] event=launcher_started\n' "$(date -u -Is)"
+      printf '[%s] event=launcher_started\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     else
       unset LOG_FILE
     fi
@@ -53,7 +59,7 @@ fi
 # Command-line input
 # =============================================================================
 # Accept one configured site and one supported operation.
-if (( $# != 2 )) || [[ ! $1 =~ ^[a-z0-9_-]+$ ]] || [[ $2 != "archive" && $2 != "staging" && $2 != "diagnostics" ]]; then
+if (( $# != 2 )) || [[ ! $1 =~ ^[abcdefghijklmnopqrstuvwxyz0123456789_-]+$ ]] || [[ $2 != "archive" && $2 != "staging" && $2 != "diagnostics" ]]; then
     echo "Usage: $0 <site> <staging|archive|diagnostics>" >&2
     exit 1
 fi
@@ -121,16 +127,28 @@ remote_state_normalized="${remote_state_normalized#"${remote_state_normalized%%[
 remote_state_normalized="${remote_state_normalized%"${remote_state_normalized##*[![:space:]]}"}"
 
 load_api_configuration() {
-    : "${SIMBOARD_ENV_FILE:?SIMBOARD_ENV_FILE must be set when remote API access is enabled}"
+    if [[ -z "${SIMBOARD_ENV_FILE:-}" ]]; then
+      echo "SIMBOARD_ENV_FILE must be set when remote API access is enabled" >&2
+      exit 1
+    fi
     # Malformed assignments can echo tokens in shell diagnostics. Preserve
     # source/errexit semantics, but retain only the phase and final exit status.
-    printf '[%s] event=launcher_loading_api_environment\n' "$(date -u -Is)"
+    printf '[%s] event=launcher_loading_api_environment\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if [[ ! -r "${SIMBOARD_ENV_FILE}" ]]; then
-      printf '[%s] event=launcher_api_environment_unreadable\n' "$(date -u -Is)" >&2
+      printf '[%s] event=launcher_api_environment_unreadable\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+      exit 1
     fi
     source "${SIMBOARD_ENV_FILE}" > /dev/null 2>&1
-    : "${SIMBOARD_API_BASE_URL:?SIMBOARD_API_BASE_URL must be set when remote API access is enabled}"
-    : "${SIMBOARD_API_TOKEN:?SIMBOARD_API_TOKEN failed to be set}"
+    # Bash 3.2 can report status 0 to EXIT traps for expansion errors inside
+    # functions. Use explicit exits so missing credentials remain failures.
+    if [[ -z "${SIMBOARD_API_BASE_URL:-}" ]]; then
+      echo "SIMBOARD_API_BASE_URL must be set when remote API access is enabled" >&2
+      exit 1
+    fi
+    if [[ -z "${SIMBOARD_API_TOKEN:-}" ]]; then
+      echo "SIMBOARD_API_TOKEN failed to be set" >&2
+      exit 1
+    fi
 }
 
 shopt -s nocasematch
@@ -194,19 +212,23 @@ if [[ -z "${LOG_FILE:-}" ]]; then
   start_logging
 fi
 printf '[%s] launcher started: site=%s scan_mode=%s dry_run=%s\n' \
-  "$(date -Is)" "${site}" "${scan_mode}" "${dry_run_normalized}"
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${site}" "${scan_mode}" "${dry_run_normalized}"
 if [[ $scan_mode == "diagnostics" ]]; then
   printf '[%s] launcher configuration: site_config=%s scanner_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${module}"
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${site_config}" "${module}"
 else
   printf '[%s] launcher configuration: site_config=%s dry_run_use_remote_state=%s ingestor_module=%s\n' \
-    "$(date -Is)" "${site_config}" "${remote_state_normalized}" "${module}"
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${site_config}" "${remote_state_normalized}" "${module}"
 fi
 
 LOCK_FILE="$SIMBOARD_WORKDIR/${log_prefix}-${site}-${environment_lock_name}.lock"
+if ! command -v flock > /dev/null 2>&1; then
+  echo "flock is required to prevent overlapping ${task_label} runs" >&2
+  exit 1
+fi
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "[$(date -Is)] lock already held; ${task_label} was not started, pid $$"
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] lock already held; ${task_label} was not started, pid $$"
   if [[ "${scan_mode}" != "staging" ]]; then
     exit 1
   fi
@@ -219,7 +241,7 @@ legacy_lock_file="$SIMBOARD_WORKDIR/SBCS-${site}-${environment_lock_name}.lock"
 if [[ $scan_mode != "diagnostics" && -e "${legacy_lock_file}" ]]; then
   exec 201>"$legacy_lock_file"
   if ! flock -n 201; then
-    echo "[$(date -Is)] legacy lock already held; ingestion was not started, pid $$"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] legacy lock already held; ingestion was not started, pid $$"
     if [[ "${scan_mode}" == "archive" ]]; then
       exit 1
     fi
@@ -233,5 +255,5 @@ fi
 # Run the selected module and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
 printf '[%s] invoking %s: module=%s\n' \
-  "$(date -Is)" "${module_label}" "${module}"
-"${PYTHON_BIN}" -m "${module}" {log_output_fd}>&-
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${module_label}" "${module}"
+"${PYTHON_BIN}" -m "${module}" 9>&-

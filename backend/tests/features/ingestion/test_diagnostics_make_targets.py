@@ -28,6 +28,11 @@ def diagnostics_workspace(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     )
     python.chmod(0o755)
     capture = tmp_path / "capture.txt"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flock = bin_dir / "flock"
+    flock.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    flock.chmod(0o755)
     process_env = os.environ.copy()
     for key in (
         "SIMBOARD_ROOT",
@@ -41,7 +46,11 @@ def diagnostics_workspace(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "MAKEOVERRIDES",
     ):
         process_env.pop(key, None)
-    process_env.update(PYTHON_BIN=str(python), CAPTURE_PATH=str(capture))
+    process_env.update(
+        PYTHON_BIN=str(python),
+        CAPTURE_PATH=str(capture),
+        PATH=f"{bin_dir}:{process_env['PATH']}",
+    )
     return root, capture, process_env
 
 

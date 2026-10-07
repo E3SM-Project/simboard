@@ -46,12 +46,18 @@ def test_machine_dispatch(
         'exit "${FAKE_EXIT:-0}"\n'
     )
     python.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flock = bin_dir / "flock"
+    flock.write_text("#!/bin/sh\nexit 0\n")
+    flock.chmod(0o755)
     env = {
         **os.environ,
         "PYTHON_BIN": str(python),
         "CAPTURE": str(capture),
         "PERF_ARCHIVE_ROOT": "/custom/staging",
         "OLD_PERF_ARCHIVE_ROOT": "/custom/archive",
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
     result = run_make(
         [
