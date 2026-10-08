@@ -171,9 +171,95 @@ def test_perlmutter_offline_defaults_and_exit_status(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert (
         "perlmutter\n/global/cfs/cdirs/e3sm/performance_archive\n"
-        "/global/cfs/cdirs/e3sm/OLD_PERF\nunbounded"
+        "/global/cfs/cdirs/e3sm/OLD_PERF\n2025-01"
     ) in result.stdout
     assert "Error 7" in result.stderr
+
+
+@pytest.mark.parametrize("machine", ["chrysalis", "perlmutter"])
+@pytest.mark.parametrize("mode", ["archive", "staging"])
+@pytest.mark.parametrize("lower_bound", [None, "2024-01"])
+@pytest.mark.parametrize("entrypoint", ["make", "site"])
+def test_site_defaults_and_historical_override(
+    tmp_path: Path, machine: str, mode: str, lower_bound: str | None, entrypoint: str
+) -> None:
+    root = tmp_path / "deployment"
+    (root / "repository/simboard/backend/.venv").mkdir(parents=True)
+    (root / "operations").mkdir()
+    capture = tmp_path / "capture"
+    python = tmp_path / "python"
+    python.write_text(
+        '#!/bin/bash\nprintf "%s\\n" "$MACHINE_NAME" "$PERF_ARCHIVE_ROOT" '
+        '"$OLD_PERF_ARCHIVE_ROOT" "${ARCHIVE_YEAR_START-unset}" > "$CAPTURE"\n'
+    )
+    python.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flock = bin_dir / "flock"
+    flock.write_text("#!/bin/sh\nexit 0\n")
+    flock.chmod(0o755)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("SIMBOARD_")
+    }
+    for key in (
+        "PERF_ARCHIVE_ROOT",
+        "OLD_PERF_ARCHIVE_ROOT",
+        "ARCHIVE_YEAR_START",
+        "ARCHIVE_YEAR_END",
+    ):
+        env.pop(key, None)
+    env.update(
+        PYTHON_BIN=str(python),
+        CAPTURE=str(capture),
+        DRY_RUN_USE_REMOTE_STATE="false",
+        SIMBOARD_ROOT=str(root),
+        PATH=f"{bin_dir}:{env['PATH']}",
+    )
+    # Historical bounds are archive-only; staging must not acquire one implicitly.
+    args = [
+        "ingest-dry-run",
+        f"machine={machine}",
+        "env=dev",
+        f"scan_mode={mode}",
+        f"SIMBOARD_ROOT={root}",
+    ]
+    if mode == "archive" and lower_bound is not None:
+        args.append(f"ARCHIVE_YEAR_START={lower_bound}")
+    if entrypoint == "make":
+        result = run_make(args, env)
+    else:
+        if mode == "archive" and lower_bound is not None:
+            env["ARCHIVE_YEAR_START"] = lower_bound
+        result = subprocess.run(
+            [
+                "bash",
+                str(
+                    ROOT
+                    / "backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh"
+                ),
+                machine,
+                mode,
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    assert result.returncode == 0, result.stderr
+    site_root = (
+        "/lcrc/group/e3sm/PERF_Chrysalis"
+        if machine == "chrysalis"
+        else "/global/cfs/cdirs/e3sm"
+    )
+    assert capture.read_text().splitlines() == [
+        machine,
+        f"{site_root}/performance_archive",
+        f"{site_root}/OLD_PERF",
+        (lower_bound or "2025-01") if mode == "archive" else "unset",
+    ]
 
 
 def test_malformed_environment_does_not_leak_token(tmp_path: Path) -> None:

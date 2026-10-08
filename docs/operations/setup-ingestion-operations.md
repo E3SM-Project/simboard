@@ -180,7 +180,25 @@ API credentials before installing them; use `DRY_RUN=true` for an optional dry s
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
 
+Site configuration owns the filesystem roots and machine identity. Shared
+ingestors have no fallback paths or machine name: staging requires
+`PERF_ARCHIVE_ROOT`, archive requires `OLD_PERF_ARCHIVE_ROOT`, and both require
+`MACHINE_NAME`. Unset or blank required values are configuration errors. Site
+files may supply overridable site-specific values; direct Python invocations
+must receive explicit deployment values.
+
+Routine archive scans across sites default `ARCHIVE_YEAR_START` to `2025-01`
+when unset or blank, with no default upper bound. Set an explicit earlier bound
+for an intentional historical backfill. The targeted Chrysalis v3 operation
+retains its fixed `2024-01` lower bound.
+
 ### Migrate an existing deployment
+
+Before rolling out ingestion configuration changes, review protected environment
+files, copied crontabs, and Spin secrets for explicit archive bounds that override
+the routine default. Confirm the active filesystem root and `MACHINE_NAME` are
+configured, especially for direct Python invocations. Validate with a dry run
+before enabling live ingestion; do not reuse NERSC host paths inside Spin.
 
 1. Run `make operations-provision` to add `raw_logs/` and
    `quality_assurance/` without replacing existing deployment-local files.

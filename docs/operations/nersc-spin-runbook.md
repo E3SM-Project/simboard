@@ -357,7 +357,7 @@ Key table for `nersc-archive-ingestor-env`:
 | `OLD_PERF_ARCHIVE_ROOT` | Yes                       | `/OLD_PERF`                                                | `nersc-archive-ingestor` |
 | `MACHINE_NAME`          | Yes                       | `perlmutter`                                               | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No                        | `true` or `false`                                          | `nersc-archive-ingestor` |
-| `ARCHIVE_YEAR_START`    | No, scoped backfills only | `2025` or `2025-01`                                        | `nersc-archive-ingestor` |
+| `ARCHIVE_YEAR_START`    | No, defaults to `2025-01` | `2025-01`; explicit earlier bounds for backfills            | `nersc-archive-ingestor` |
 | `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
 
 `OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
@@ -366,6 +366,19 @@ snapshots. The runner stores completed snapshot checkpoints in SimBoard's
 database, so no separate checkpoint file or persistent checkpoint volume is
 needed. `ARCHIVE_YEAR_START` is the earliest month considered; newly arriving
 snapshots in any eligible month are discovered automatically.
+
+Routine archive ingestion defaults an unset or blank `ARCHIVE_YEAR_START` to
+`2025-01`, consistently with other sites. `ARCHIVE_YEAR_END` remains unset by
+default. Explicit date bounds override this policy for scoped historical
+backfills; the targeted Chrysalis v3 runner separately starts at `2024-01`.
+Review existing secret values during rollout, since explicit bounds continue to
+take precedence.
+
+The shared ingestor does not supply filesystem paths or machine identity.
+Configure `MACHINE_NAME` and the active root explicitly in each Spin secret:
+`PERF_ARCHIVE_ROOT` for staging, `OLD_PERF_ARCHIVE_ROOT` for archive. The inactive
+root is not required. Unset or blank required values fail before scanning. Use
+the container mount paths shown above, not NERSC host-side site configuration.
 
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.

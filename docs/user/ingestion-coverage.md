@@ -13,8 +13,11 @@ daily. Site operators can adjust schedules and archive date bounds, so the
 available coverage varies by configured environment.
 
 Historical archive scans use configurable inclusive lower and upper bounds in
-`YYYY` or `YYYY-MM` form. Refer to the configured environment and the catalog
-itself for the current coverage of a particular machine or case.
+`YYYY` or `YYYY-MM` form. Routine archive ingestion across sites defaults to
+January 2025 onward, with no upper bound. Operators can explicitly select an
+earlier starting point for historical backfills. Refer to the configured
+environment and the catalog itself for the current coverage of a particular
+machine or case.
 
 ## E3SM v3 historical data
 
