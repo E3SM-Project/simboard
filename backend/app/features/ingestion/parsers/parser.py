@@ -635,12 +635,12 @@ def _resolve_run_script_path(
         rf"(?P<provenance>run\.{re.escape(case_name)}\.sh\.\d{{8}}-\d{{6}})"
         rf"\.{re.escape(execution_id)}(?:\.gz)?"
     )
-    matches: list[str] = []
+    matches: set[str] = set()
     for directory in _find_casedocs_dirs(exec_dir):
         for path in Path(directory).iterdir():
             match = pattern.fullmatch(path.name)
             if match and path.is_file():
-                matches.append(match.group("provenance"))
+                matches.add(match.group("provenance"))
 
     if len(matches) > 1:
         logger.warning(
@@ -651,7 +651,7 @@ def _resolve_run_script_path(
     if not matches:
         return None
 
-    return str(Path(case_root.strip()) / "run_script_provenance" / matches[0])
+    return str(Path(case_root.strip()) / "run_script_provenance" / next(iter(matches)))
 
 
 def _resolve_execution_id(execution_id: str | None, exec_dir: str) -> str:

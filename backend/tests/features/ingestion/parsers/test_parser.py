@@ -100,6 +100,26 @@ class TestMainParser:
             f"{case_root}/run_script_provenance/{provenance}"
         )
 
+    @pytest.mark.parametrize("separate_directories", [False, True])
+    def test_duplicate_copies_resolve_to_one_provenance_path(
+        self, tmp_path, separate_directories
+    ):
+        lid = "729179.250417-002844"
+        provenance = "run.case.sh.20250306-102912"
+        docs = tmp_path / f"CaseDocs.{lid}"
+        docs.mkdir()
+        (docs / f"{provenance}.{lid}").touch()
+        if separate_directories:
+            docs = tmp_path / "CaseDocs"
+            docs.mkdir()
+        (docs / f"{provenance}.{lid}.gz").touch()
+        assert (
+            parser._resolve_run_script_path(
+                str(tmp_path), lid, "case", "/remote/case_scripts"
+            )
+            == f"/remote/case_scripts/run_script_provenance/{provenance}"
+        )
+
     @pytest.mark.parametrize("case_root", [None, "", " "])
     def test_run_script_requires_case_root(self, tmp_path, case_root):
         casedocs = tmp_path / "CaseDocs"
