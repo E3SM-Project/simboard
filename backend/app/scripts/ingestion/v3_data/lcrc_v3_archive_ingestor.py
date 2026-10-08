@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
-from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
@@ -56,16 +55,13 @@ def _build_v3_config_from_env() -> IngestorConfig:
             "SIMBOARD_API_BASE_URL is required for remote Chrysalis uploads"
         )
 
-    config = _build_config_from_env(
+    return _build_config_from_env(
         scan_mode_override="archive",
         archive_year_start_override=V3_ARCHIVE_YEAR_START,
-    )
-    return replace(
-        config,
-        archive_root=Path(
-            os.getenv("OLD_PERF_ARCHIVE_ROOT", CHRYSALIS_ARCHIVE_ROOT)
-        ).resolve(),
-        machine_name=CHRYSALIS_MACHINE_NAME,
+        archive_root_override=os.getenv(
+            "OLD_PERF_ARCHIVE_ROOT", CHRYSALIS_ARCHIVE_ROOT
+        ),
+        machine_name_override=CHRYSALIS_MACHINE_NAME,
     )
 
 

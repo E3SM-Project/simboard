@@ -31,9 +31,10 @@ TRANSIENT_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 STATE_VERSION = 1
 # NERSC Spin backend service DNS name.
 DEFAULT_API_BASE_URL = "http://backend:8000"
-DEFAULT_PERF_ARCHIVE_ROOT = "/performance_archive"
-DEFAULT_OLD_PERF_ARCHIVE_ROOT = "/OLD_PERF"
-DEFAULT_MACHINE_NAME = "perlmutter"
+# Layout markers, not fallback filesystem paths.
+STAGING_ROOT_BASENAME = "performance_archive"
+ARCHIVE_ROOT_BASENAME = "OLD_PERF"
+DEFAULT_ARCHIVE_YEAR_START = "2025-01"
 DEFAULT_SCAN_MODE = "staging"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
@@ -433,10 +434,20 @@ class StructuredLogCallback(Protocol):
 # -------------
 
 
+def _required_config_value(env_name: str, override: str | None = None) -> str:
+    """Require a nonblank site value before resolving paths or scanning."""
+    value = (override if override is not None else os.getenv(env_name, "")).strip()
+    if not value:
+        raise ValueError(f"{env_name} is required")
+    return value
+
+
 def _build_config_from_env(
     *,
     scan_mode_override: Literal["staging", "archive"] | None = None,
     archive_year_start_override: str | None = None,
+    archive_root_override: str | None = None,
+    machine_name_override: str | None = None,
 ) -> IngestorConfig:
     """Build and validate runtime config from environment variables.
 
@@ -461,16 +472,16 @@ def _build_config_from_env(
     if scan_mode not in ARCHIVE_SCAN_MODES:
         raise ValueError("SCAN_MODE must be either 'staging' or 'archive'")
 
-    staging_root = Path(
-        os.getenv("PERF_ARCHIVE_ROOT", DEFAULT_PERF_ARCHIVE_ROOT)
-    ).resolve()
+    root_env_name = (
+        "OLD_PERF_ARCHIVE_ROOT" if scan_mode == "archive" else "PERF_ARCHIVE_ROOT"
+    )
+    root_value = _required_config_value(
+        root_env_name,
+        archive_root_override if scan_mode == "archive" else None,
+    )
+    archive_root = Path(root_value).resolve()
 
-    configured_archive_root = Path(
-        os.getenv("OLD_PERF_ARCHIVE_ROOT", DEFAULT_OLD_PERF_ARCHIVE_ROOT)
-    ).resolve()
-    archive_root = configured_archive_root if scan_mode == "archive" else staging_root
-
-    machine_name = os.getenv("MACHINE_NAME", DEFAULT_MACHINE_NAME)
+    machine_name = _required_config_value("MACHINE_NAME", machine_name_override)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=True)
     dry_run_use_remote_state = _parse_bool(
         os.getenv("DRY_RUN_USE_REMOTE_STATE"), default=True
@@ -492,10 +503,15 @@ def _build_config_from_env(
     if timeout_seconds <= 0:
         raise ValueError("REQUEST_TIMEOUT_SECONDS must be greater than 0")
 
-    archive_year_start = _parse_optional_archive_bound(
+    archive_year_start_value = (
         archive_year_start_override
         if archive_year_start_override is not None
-        else os.getenv("ARCHIVE_YEAR_START"),
+        else os.getenv("ARCHIVE_YEAR_START")
+    )
+    if scan_mode == "archive" and not (archive_year_start_value or "").strip():
+        archive_year_start_value = DEFAULT_ARCHIVE_YEAR_START
+    archive_year_start = _parse_optional_archive_bound(
+        archive_year_start_value,
         env_name="ARCHIVE_YEAR_START",
         is_end_bound=False,
     )

@@ -797,7 +797,18 @@ def test_run_ingestor_unreadable_archive_root_returns_config_error(
     assert not any(event == "scan_completed" for event, _ in logged_events)
 
 
-def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) -> None:
+@pytest.fixture
+def site_config_env(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path / "performance_archive"))
+    monkeypatch.setenv("OLD_PERF_ARCHIVE_ROOT", str(tmp_path / "OLD_PERF"))
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    for name in ("SCAN_MODE", "ARCHIVE_YEAR_START", "ARCHIVE_YEAR_END"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_build_config_from_env_parses_valid_values(
+    monkeypatch, tmp_path: Path, site_config_env
+) -> None:
     monkeypatch.setenv("SIMBOARD_API_BASE_URL", "http://example")
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path / "archive"))
@@ -824,7 +835,7 @@ def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) 
 
 
 def test_build_config_from_env_parses_archive_mode_and_year_range(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, site_config_env
 ) -> None:
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("SCAN_MODE", "archive")
@@ -841,7 +852,7 @@ def test_build_config_from_env_parses_archive_mode_and_year_range(
 
 
 def test_build_config_from_env_allows_offline_dry_runs(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, site_config_env
 ) -> None:
     monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path / "archive"))
     monkeypatch.setenv("DRY_RUN_USE_REMOTE_STATE", "false")
@@ -853,7 +864,7 @@ def test_build_config_from_env_allows_offline_dry_runs(
 
 
 def test_build_config_from_env_parses_archive_mode_and_month_range(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, site_config_env
 ) -> None:
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("SCAN_MODE", "archive")
@@ -888,6 +899,7 @@ def test_build_config_from_env_parses_archive_mode_and_month_range(
 )
 def test_build_config_from_env_rejects_invalid_positive_values(
     monkeypatch,
+    site_config_env,
     env_name: str,
     env_value: str,
     message: str,
@@ -902,6 +914,7 @@ def test_build_config_from_env_rejects_invalid_positive_values(
 
 def test_build_config_from_env_rejects_archive_year_range_inverted(
     monkeypatch,
+    site_config_env,
 ) -> None:
     monkeypatch.setenv("SCAN_MODE", "archive")
     monkeypatch.setenv("ARCHIVE_YEAR_START", "2026-02")
@@ -931,6 +944,7 @@ def test_build_config_from_env_rejects_archive_year_range_inverted(
 )
 def test_build_config_from_env_rejects_invalid_archive_bound_formats(
     monkeypatch,
+    site_config_env,
     env_name: str,
     env_value: str,
     message: str,
