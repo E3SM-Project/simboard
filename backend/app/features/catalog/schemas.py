@@ -826,6 +826,16 @@ class CaseUpdate(CamelInBaseModel):
             raise ValueError(msg)
         return value
 
+    case_group: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Case group shared by all executions. Omit to leave unchanged; send "
+                "null to clear. Ingestion may populate a cleared group again."
+            ),
+        ),
+    ]
     description: Annotated[
         str | None, Field(None, description="Optional shared description of the case")
     ]
@@ -869,7 +879,12 @@ class CaseUpdate(CamelInBaseModel):
         return _normalize_optional_text(value)
 
     @field_validator(
-        "description", "key_features", "known_issues", "notes_markdown", mode="before"
+        "case_group",
+        "description",
+        "key_features",
+        "known_issues",
+        "notes_markdown",
+        mode="before",
     )
     @classmethod
     def normalize_optional_metadata(cls, value: Any) -> Any:
