@@ -607,7 +607,51 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         case_root=metadata.get("case_root"),
         postprocessing_script=metadata.get("postprocessing_script"),
         case_hash=metadata.get("case_hash"),
+        run_script_path=_resolve_run_script_path(
+            exec_dir,
+            execution_id,
+            metadata.get("case_name"),
+            metadata.get("case_root"),
+        ),
     )
+
+
+def _resolve_run_script_path(
+    exec_dir: str,
+    execution_id: str,
+    case_name: str | None,
+    case_root: str | None,
+) -> str | None:
+    """Resolve an archived E3SM script to its original HPC provenance path.
+
+    CaseDocs copies append the execution LID to the saved provenance filename.
+    Only the observed run.<case>.sh.<timestamp> convention is supported; CIME
+    wrappers and run output must not be used as fallbacks.
+    """
+    if not case_name or not case_root or not case_root.strip():
+        return None
+
+    pattern = re.compile(
+        rf"(?P<provenance>run\.{re.escape(case_name)}\.sh\.\d{{8}}-\d{{6}})"
+        rf"\.{re.escape(execution_id)}(?:\.gz)?"
+    )
+    matches: set[str] = set()
+    for directory in _find_casedocs_dirs(exec_dir):
+        for path in Path(directory).iterdir():
+            match = pattern.fullmatch(path.name)
+            if match and path.is_file():
+                matches.add(match.group("provenance"))
+
+    if len(matches) > 1:
+        logger.warning(
+            "Skipping run-script artifact for '%s': multiple E3SM provenance scripts.",
+            exec_dir,
+        )
+        return None
+    if not matches:
+        return None
+
+    return str(Path(case_root.strip()) / "run_script_provenance" / next(iter(matches)))
 
 
 def _resolve_execution_id(execution_id: str | None, exec_dir: str) -> str:
