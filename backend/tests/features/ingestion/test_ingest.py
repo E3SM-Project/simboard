@@ -61,6 +61,33 @@ def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
     assert executions[-1].run_end_date.date() == date(2025, 4, 18)
 
 
+@pytest.mark.parametrize("coupler", ["missing", "damaged"])
+def test_qa_continuation_without_start_date_reports_ingestion_errors(tmp_path, coupler):
+    case = stage_continuation_case(tmp_path, compressed_cpl=True)
+    for path in case.glob("*/cpl.log.*.gz"):
+        if coupler == "missing":
+            path.unlink()
+        else:
+            path.write_bytes(
+                b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x07" + b"\x00" * 8
+            )
+    db = MagicMock(spec=Session)
+    with (
+        patch(
+            "app.features.ingestion.ingest._resolve_machine_id", return_value=uuid4()
+        ),
+        patch("app.features.ingestion.ingest._find_case", return_value=None),
+    ):
+        result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+    assert result.executions == []
+    assert result.created_count == 0
+    assert result.skipped_count == 0
+    assert len(result.errors) == 5
+    assert all(error["error_type"] == "ValidationError" for error in result.errors)
+    assert all("valid date" in error["error"] for error in result.errors)
+    db.add.assert_not_called()
+
+
 def _parsed_executions_from_mapping(
     simulations_by_dir: Mapping[str, Mapping[str, str | None]],
 ) -> list[ParsedExecution]:

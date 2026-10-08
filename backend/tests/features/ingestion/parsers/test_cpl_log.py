@@ -71,3 +71,10 @@ def test_corrupt_gzip(tmp_path):
     path = tmp_path / "cpl.log.lid.gz"
     path.write_bytes(b"not gzip")
     assert parse_cpl_log(path) == {}
+
+
+def test_damaged_deflate_payload(tmp_path):
+    path = tmp_path / "cpl.log.lid.gz"
+    # Valid gzip header followed by a reserved deflate block type (BTYPE=3).
+    path.write_bytes(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x07" + b"\x00" * 8)
+    assert parse_cpl_log(path) == {}

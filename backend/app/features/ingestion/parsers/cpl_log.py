@@ -1,6 +1,7 @@
 """Execution simulation dates from the initial coupler driver clock."""
 
 import re
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -16,7 +17,7 @@ def parse_cpl_log(path: str | Path) -> dict[str, str]:
     """
     try:
         text = _open_text(Path(path))
-    except (OSError, EOFError, UnicodeDecodeError):
+    except (OSError, EOFError, UnicodeDecodeError, zlib.error):
         return {}
 
     clocks = list(
