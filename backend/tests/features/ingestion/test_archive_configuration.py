@@ -112,3 +112,11 @@ def test_v3_supplies_site_values_before_shared_validation(monkeypatch) -> None:
     assert config.archive_root == Path(v3_ingestor.CHRYSALIS_ARCHIVE_ROOT)
     assert config.machine_name == "chrysalis"
     assert config.archive_year_start == "2024-01"
+
+
+@pytest.mark.parametrize("root_value", ["", " \t "])
+def test_v3_rejects_explicitly_blank_archive_root(monkeypatch, root_value) -> None:
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://simboard.example")
+    monkeypatch.setenv("OLD_PERF_ARCHIVE_ROOT", root_value)
+    with pytest.raises(ValueError, match="OLD_PERF_ARCHIVE_ROOT is required"):
+        v3_ingestor._build_v3_config_from_env()

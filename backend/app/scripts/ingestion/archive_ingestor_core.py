@@ -451,6 +451,10 @@ def _build_config_from_env(
 ) -> IngestorConfig:
     """Build and validate runtime config from environment variables.
 
+    Site-specific runners may supply machine identity and an archive-mode root
+    before shared validation. ``archive_root_override`` applies only in archive
+    mode; staging always requires ``PERF_ARCHIVE_ROOT`` from the environment.
+
     Returns
     -------
     IngestorConfig
