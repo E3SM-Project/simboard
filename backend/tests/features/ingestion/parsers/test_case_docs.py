@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.features.ingestion.parsers.case_docs import (
     _substitute_path_variables,
     parse_env_build,
@@ -188,6 +190,25 @@ class TestSubstitutePathVariables:
 
 
 class TestParseEnvRun:
+    @pytest.mark.parametrize("run_type", ["startup", "branch", "hybrid"])
+    @pytest.mark.parametrize("continue_run", ["TRUE", " true "])
+    def test_continuation_does_not_use_initial_dates(
+        self, tmp_path, run_type, continue_run
+    ):
+        path = tmp_path / "env_run.xml"
+        path.write_text(f"""<config>
+            <entry id="RUN_TYPE" value="{run_type}" />
+            <entry id="CONTINUE_RUN" value="{continue_run}" />
+            <entry id="RUN_STARTDATE" value="1850-01-01" />
+            <entry id="RUN_REFDATE" value="0201-01-01" />
+            <entry id="STOP_OPTION" value="date" />
+            <entry id="STOP_DATE" value="18510101" />
+        </config>""")
+        result = parse_env_run(path)
+        assert result["simulation_start_date"] is None
+        assert result["simulation_end_date"] is None
+        assert result["initialization_type"] == run_type
+
     def test_extracts_path_artifact_values(self, tmp_path):
         xml_run = """
         <config>

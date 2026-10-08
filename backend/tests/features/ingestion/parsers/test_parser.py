@@ -19,6 +19,44 @@ from app.scripts.ingestion.hpc_upload_archive_ingestor import _create_case_archi
 
 
 class TestMainParser:
+    @pytest.mark.parametrize("compressed", [False, True])
+    def test_coupler_dates_override_xml_without_changing_run_dates(
+        self, tmp_path, compressed
+    ):
+        lid = "729179.250417-002844"
+        execution_dir = tmp_path / lid
+        execution_dir.mkdir()
+        self._create_execution_metadata_files(execution_dir, lid)
+        path = execution_dir / f"cpl.log.{lid}{'.gz' if compressed else ''}"
+        text = """(seq_timemgr_clockPrint) Clock = drv 1
+(seq_timemgr_clockPrint) Curr Time = 20190101 00000
+(seq_timemgr_clockPrint) Stop Time = 20200101 00000
+"""
+        if compressed:
+            with gzip.open(path, "wt") as stream:
+                stream.write(text)
+        else:
+            path.write_text(text)
+        with self._mock_all_parsers(
+            parse_env_run={
+                "simulation_start_date": "1850-01-01",
+                "simulation_end_date": "1851-01-01",
+            },
+            parse_case_status={
+                "status": "completed",
+                "run_start_date": "2025-04-17T00:28:44",
+                "run_end_date": "2025-04-17T11:00:00",
+            },
+        ):
+            files = parser._locate_metadata_files(str(execution_dir))
+            assert files["cpl_log"] == str(path)
+            result = parser._parse_all_files(str(execution_dir), files)
+        assert result.simulation_start_date == "2019-01-01"
+        assert result.simulation_end_date == "2020-01-01"
+        assert result.run_start_date == "2025-04-17T00:28:44"
+        assert result.run_end_date == "2025-04-17T11:00:00"
+        assert result.status == "completed"
+
     @staticmethod
     def _create_execution_metadata_files(
         execution_dir: Path,
@@ -537,6 +575,7 @@ class TestMainParser:
         execution_dir.mkdir(parents=True)
         self._create_execution_metadata_files(execution_dir, "001.001")
         self._create_optional_files(execution_dir, "001")
+        (execution_dir / "cpl.log.1.0-0").write_text("")
 
         archive_path = tmp_path / "with_optional.zip"
         self._create_zip_archive(archive_base, archive_path)
