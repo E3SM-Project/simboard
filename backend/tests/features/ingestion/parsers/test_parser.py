@@ -68,6 +68,82 @@ class TestMainParser:
         assert all(execution.simulation_end_date is None for execution in results)
 
     @pytest.mark.parametrize("compressed", [False, True])
+    def test_resolves_original_hpc_run_script_provenance(self, tmp_path, compressed):
+        lid = "729179.250417-002844"
+        case_name = "v3.LR.piClim-histGHG_0201"
+        case_root = "/lcrc/group/e3sm2/user/E3SMv3/case/case_scripts"
+        execution_dir = tmp_path / lid
+        execution_dir.mkdir()
+        self._create_execution_metadata_files(execution_dir, lid)
+        casedocs = execution_dir / "CaseDocs"
+        casedocs.rename(execution_dir / f"CaseDocs.{lid}")
+        casedocs = execution_dir / f"CaseDocs.{lid}"
+        provenance = f"run.{case_name}.sh.20250306-102912"
+        script = casedocs / f"{provenance}.{lid}{'.gz' if compressed else ''}"
+        if compressed:
+            with gzip.open(script, "wt") as stream:
+                stream.write("#!/bin/bash\n")
+        else:
+            script.write_text("#!/bin/bash\n")
+        (casedocs / f"case.run.{lid}").write_text("CIME wrapper")
+        (execution_dir / f"run.{case_name}.729179.{lid}").write_text("run log")
+
+        with self._mock_all_parsers(
+            parse_env_case={"case_name": case_name, "case_root": f" {case_root} "},
+            parse_e3sm_timing={"execution_id": lid},
+        ):
+            results, skipped = parser.main_parser(tmp_path, tmp_path / "out")
+
+        assert skipped == 0
+        assert len(results) == 1
+        assert results[0].run_script_path == (
+            f"{case_root}/run_script_provenance/{provenance}"
+        )
+
+    @pytest.mark.parametrize("case_root", [None, "", " "])
+    def test_run_script_requires_case_root(self, tmp_path, case_root):
+        casedocs = tmp_path / "CaseDocs"
+        casedocs.mkdir()
+        (casedocs / "run.case.sh.20250306-102912.729179.250417-002844").touch()
+        assert (
+            parser._resolve_run_script_path(
+                str(tmp_path), "729179.250417-002844", "case", case_root
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        "scripts",
+        [
+            [],
+            ["case.run.729179.250417-002844", ".case.run"],
+            ["run.other.sh.20250306-102912.729179.250417-002844"],
+            ["run.case.sh.20250306-102912.729278.250417-112829"],
+            ["run.case.sh.20250306-102912.729179.250417-002844.extra"],
+            [
+                "run.case.sh.20250306-102912.729179.250417-002844",
+                "run.case.sh.20250307-102912.729179.250417-002844.gz",
+            ],
+        ],
+    )
+    def test_omits_missing_unmatched_or_ambiguous_run_scripts(self, tmp_path, scripts):
+        lid = "729179.250417-002844"
+        execution_dir = tmp_path / lid
+        execution_dir.mkdir()
+        self._create_execution_metadata_files(execution_dir, lid)
+        for name in scripts:
+            (execution_dir / "CaseDocs" / name).touch()
+        (execution_dir / f"run.case.729179.{lid}").write_text("run log")
+        with self._mock_all_parsers(
+            parse_env_case={"case_name": "case", "case_root": "/remote/case_scripts"},
+            parse_e3sm_timing={"execution_id": lid},
+        ):
+            results, skipped = parser.main_parser(tmp_path, tmp_path / "out")
+        assert skipped == 0
+        assert len(results) == 1
+        assert results[0].run_script_path is None
+
+    @pytest.mark.parametrize("compressed", [False, True])
     def test_coupler_dates_override_xml_without_changing_run_dates(
         self, tmp_path, compressed
     ):
