@@ -16,7 +16,7 @@ import pytest
 from app.features.ingestion.parsers import parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.scripts.ingestion.hpc_upload_archive_ingestor import _create_case_archive
-from tests.features.ingestion.continuation_case import (
+from tests.fixtures.continuation_case import (
     CASE_NAME,
     stage_continuation_case,
 )

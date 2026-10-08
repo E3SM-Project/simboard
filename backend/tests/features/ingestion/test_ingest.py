@@ -33,8 +33,8 @@ from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.models import User
-from tests.features.ingestion.continuation_case import stage_continuation_case
 from tests.features.site.utils import get_or_create_site
+from tests.fixtures.continuation_case import stage_continuation_case
 
 
 def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
