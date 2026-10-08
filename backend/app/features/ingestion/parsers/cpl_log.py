@@ -7,7 +7,7 @@ from pathlib import Path
 from app.features.ingestion.parsers.utils import _open_text
 
 
-def parse_cpl_log(path: str | Path) -> dict[str, str | None]:
+def parse_cpl_log(path: str | Path) -> dict[str, str]:
     """Read Curr Time and Stop Time, not the original run's Start Time.
 
     Only the first driver clock is authoritative. Component clocks and later
@@ -27,7 +27,7 @@ def parse_cpl_log(path: str | Path) -> dict[str, str | None]:
             continue
         end = clocks[index + 1].start() if index + 1 < len(clocks) else len(text)
         block = text[clock.end() : end]
-        dates = {}
+        dates: dict[str, str] = {}
         for label, key in (
             ("Curr", "simulation_start_date"),
             ("Stop", "simulation_end_date"),

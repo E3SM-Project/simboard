@@ -29,10 +29,36 @@ from app.features.ingestion.models import (
     IngestionSourceType,
     IngestionStatus,
 )
+from app.features.ingestion.parsers.parser import main_parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.models import User
+from tests.features.ingestion.continuation_case import stage_continuation_case
 from tests.features.site.utils import get_or_create_site
+
+
+def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
+    case = stage_continuation_case(tmp_path)
+    parsed, skipped = main_parser(case, tmp_path / "out", strict_validation=True)
+    assert skipped == 0
+    case_id = uuid4()
+    executions = [
+        _validate_execution_create(_build_execution_create_draft(item, case_id))
+        for item in parsed
+    ]
+    assert [
+        (item.simulation_start_date, item.simulation_end_date) for item in executions
+    ] == [
+        (date(2019, 1, 1), date(2020, 1, 1)),
+        (date(2020, 1, 1), date(2021, 1, 1)),
+        (date(2021, 1, 1), date(2022, 1, 1)),
+        (date(2022, 1, 1), date(2023, 1, 1)),
+        (date(2023, 1, 1), date(2024, 1, 1)),
+    ]
+    assert all(item.case_id == case_id for item in executions)
+    assert all(item.status == ExecutionStatus.COMPLETED for item in executions)
+    assert executions[0].run_start_date.date() == date(2025, 4, 17)
+    assert executions[-1].run_end_date.date() == date(2025, 4, 18)
 
 
 def _parsed_executions_from_mapping(
