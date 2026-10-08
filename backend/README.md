@@ -52,6 +52,20 @@ not themselves fail required-file validation.
 Existing executions are still skipped as duplicates; correcting previously
 stored dates is a separate backfill operation.
 
+## Ingested Run-Script Paths
+
+New ingestion discovers the case-specific E3SM script in CaseDocs using
+`run.<case>.sh.<timestamp>.<execution_id>[.gz]`. Its `run_script` artifact records
+the original HPC provenance path:
+`<CASEROOT>/run_script_provenance/run.<case>.sh.<timestamp>`.
+The provenance timestamp is preserved; the execution suffix and optional gzip
+suffix are removed. CIME wrappers and run logs are not used as fallbacks.
+
+Missing scripts, ambiguous matches, or missing case metadata omit this artifact
+without rejecting an otherwise valid execution. Paths are metadata only: the
+API does not check remote file availability or host the script for download.
+Existing records are unchanged; historical repair is tracked separately in #360.
+
 ## Configuration
 
 Backend env templates live in `.envs/example/backend.env.example`. Local developer values live in `.envs/local/backend.env`.

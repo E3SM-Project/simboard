@@ -424,7 +424,7 @@ def _build_path_artifacts(parsed_execution: ParsedExecution) -> list[ArtifactCre
 
     output_path = _normalize_path_candidate(parsed_execution.output_path)
     archive_path = _normalize_path_candidate(parsed_execution.archive_path)
-    run_script_path = _derive_case_run_script_path(parsed_execution.case_root)
+    run_script_path = _normalize_path_candidate(parsed_execution.run_script_path)
     postprocessing_path = _extract_postprocessing_script_path(
         parsed_execution.postprocessing_script,
         execution_dir=parsed_execution.execution_dir,
@@ -449,14 +449,6 @@ def _append_path_artifact(
         return
 
     artifacts.append(ArtifactCreate(kind=kind, uri=uri))
-
-
-def _derive_case_run_script_path(case_root: str | None) -> str | None:
-    normalized_case_root = _normalize_path_candidate(case_root)
-    if normalized_case_root is None:
-        return None
-
-    return str(Path(normalized_case_root) / ".case.run")
 
 
 def _extract_postprocessing_script_path(

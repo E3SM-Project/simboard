@@ -1,3 +1,4 @@
+import gzip
 from datetime import date, datetime
 from pathlib import Path
 from typing import Mapping
@@ -34,7 +35,7 @@ from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.models import User
 from tests.features.site.utils import get_or_create_site
-from tests.fixtures.continuation_case import stage_continuation_case
+from tests.fixtures.continuation_case import CASE_NAME, stage_continuation_case
 
 
 def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
@@ -59,6 +60,41 @@ def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
     assert all(item.status == ExecutionStatus.COMPLETED for item in executions)
     assert executions[0].run_start_date.date() == date(2025, 4, 17)
     assert executions[-1].run_end_date.date() == date(2025, 4, 18)
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_qa_run_script_provenance_survives_ingestion(tmp_path, db, compressed):
+    case = stage_continuation_case(tmp_path)
+    case_root = f"/lcrc/group/e3sm2/ac.kai.zhang/E3SMv3/{CASE_NAME}/case_scripts"
+    provenance = f"run.{CASE_NAME}.sh.20250306-102912"
+    for execution_dir in case.iterdir():
+        lid = execution_dir.name
+        docs = execution_dir / f"CaseDocs.{lid}"
+        env_case = docs / f"env_case.xml.{lid}.gz"
+        with gzip.open(env_case, "rt") as stream:
+            xml = stream.read()
+        with gzip.open(env_case, "wt") as stream:
+            stream.write(
+                xml.replace(
+                    "</config>", f'<entry id="CASEROOT" value="{case_root}" /></config>'
+                )
+            )
+        script = docs / f"{provenance}.{lid}{'.gz' if compressed else ''}"
+        if compressed:
+            with gzip.open(script, "wt") as stream:
+                stream.write("#!/bin/bash\n")
+        else:
+            script.write_text("#!/bin/bash\n")
+        (docs / f"case.run.{lid}").write_text("CIME wrapper")
+        (execution_dir / f"run.{CASE_NAME}.{lid}").write_text("run log")
+
+    result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+    assert result.errors == []
+    assert len(result.executions) == 5
+    for execution in result.executions:
+        assert [(artifact.kind, artifact.uri) for artifact in execution.artifacts] == [
+            (ArtifactKind.RUN_SCRIPT, f"{case_root}/run_script_provenance/{provenance}")
+        ]
 
 
 @pytest.mark.parametrize("coupler", ["missing", "damaged"])
@@ -124,6 +160,7 @@ def _parsed_executions_from_mapping(
                 output_path=metadata.get("output_path"),
                 archive_path=metadata.get("archive_path"),
                 case_root=metadata.get("case_root"),
+                run_script_path=metadata.get("run_script_path"),
                 postprocessing_script=metadata.get("postprocessing_script"),
                 case_hash=metadata.get("case_hash"),
             )
@@ -2654,7 +2691,9 @@ class TestIngestHelpers:
         archive_path.mkdir()
         case_root = tmp_path / "case_root"
         case_root.mkdir()
-        run_script = case_root / ".case.run"
+        provenance_dir = case_root / "run_script_provenance"
+        provenance_dir.mkdir()
+        run_script = provenance_dir / "run.case-artifacts.sh.20250306-102912"
         run_script.write_text("#!/bin/sh\n")
         post_script = tmp_path / "post.sh"
         post_script.write_text("#!/bin/sh\n")
@@ -2674,6 +2713,7 @@ class TestIngestHelpers:
                 "output_path": str(output_path),
                 "archive_path": str(archive_path),
                 "case_root": str(case_root),
+                "run_script_path": str(run_script),
                 "postprocessing_script": f"{post_script} --flag value",
             }
         }
@@ -2725,6 +2765,7 @@ class TestIngestHelpers:
                 "output_path": "run",
                 "archive_path": "archive",
                 "case_root": "case_root",
+                "run_script_path": "case_root/run_script_provenance/run.case-artifacts.sh.20250306-102912",
                 "postprocessing_script": "scripts/post.sh --flag value",
             }
         }
@@ -2744,11 +2785,22 @@ class TestIngestHelpers:
         }
         assert by_kind[ArtifactKind.OUTPUT] == "run"
         assert by_kind[ArtifactKind.ARCHIVE] == "archive"
-        assert by_kind[ArtifactKind.RUN_SCRIPT] == "case_root/.case.run"
+        assert by_kind[ArtifactKind.RUN_SCRIPT] == (
+            "case_root/run_script_provenance/run.case-artifacts.sh.20250306-102912"
+        )
         assert by_kind[ArtifactKind.POSTPROCESS_SCRIPT] == "scripts/post.sh"
 
+    @pytest.mark.parametrize(
+        "run_script_path",
+        [
+            None,
+            "",
+            " ",
+            "/remote/case_scripts/run_script_provenance/run.case.sh.20250306-102912",
+        ],
+    )
     def test_ingest_metadata_only_preserves_missing_remote_like_paths(
-        self, db: Session
+        self, db: Session, run_script_path: str | None
     ) -> None:
         machine = Machine(
             name="missing-artifact-machine",
@@ -2776,6 +2828,7 @@ class TestIngestHelpers:
                 "output_path": "/lcrc/group/e3sm/missing-run",
                 "archive_path": "/lcrc/group/e3sm/missing-archive",
                 "case_root": "/lcrc/group/e3sm/missing-case-root",
+                "run_script_path": run_script_path,
                 "postprocessing_script": "/global/homes/a/ac.golaz/missing-post.sh --foo",
             }
         }
@@ -2796,10 +2849,10 @@ class TestIngestHelpers:
         }
         assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/missing-run"
         assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/missing-archive"
-        assert (
-            by_kind[ArtifactKind.RUN_SCRIPT]
-            == "/lcrc/group/e3sm/missing-case-root/.case.run"
-        )
+        if run_script_path and run_script_path.strip():
+            assert by_kind[ArtifactKind.RUN_SCRIPT] == run_script_path
+        else:
+            assert ArtifactKind.RUN_SCRIPT not in by_kind
         assert (
             by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
             == "/global/homes/a/ac.golaz/missing-post.sh"

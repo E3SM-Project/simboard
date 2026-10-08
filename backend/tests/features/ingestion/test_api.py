@@ -1728,14 +1728,16 @@ class TestIngestFromUploadEndpoint:
         # Should either reject or handle gracefully
         assert res.status_code in [400, 422]
 
+    @pytest.mark.parametrize("include_run_script", [False, True])
     def test_upload_persists_remote_hpc_path_artifacts_as_metadata(
-        self, client, db: Session
+        self, client, db: Session, include_run_script
     ):
         machine = db.query(Machine).first()
         assert machine is not None
 
         file = BytesIO(b"PK\x03\x04")
         execution_id = "1083010.260305-120010"
+        run_script_path = "/lcrc/group/e3sm/case_scripts/run_script_provenance/run.v3.LR.historical_0121.sh.20250306-102912"
         parsed_executions = [
             ParsedExecution(
                 execution_dir="/tmp/uploaded/archive/case/1083010.260305-120010",
@@ -1764,6 +1766,7 @@ class TestIngestFromUploadEndpoint:
                 output_path="/lcrc/group/e3sm/run",
                 archive_path="/lcrc/group/e3sm/archive",
                 case_root="/lcrc/group/e3sm/case_scripts",
+                run_script_path=run_script_path if include_run_script else None,
                 postprocessing_script="/global/homes/a/ac.golaz/post.sh --flag value",
             )
         ]
@@ -1786,10 +1789,10 @@ class TestIngestFromUploadEndpoint:
         by_kind = {artifact.kind: artifact.uri for artifact in execution.artifacts}
         assert by_kind[ArtifactKind.OUTPUT] == "/lcrc/group/e3sm/run"
         assert by_kind[ArtifactKind.ARCHIVE] == "/lcrc/group/e3sm/archive"
-        assert (
-            by_kind[ArtifactKind.RUN_SCRIPT]
-            == "/lcrc/group/e3sm/case_scripts/.case.run"
-        )
+        if include_run_script:
+            assert by_kind[ArtifactKind.RUN_SCRIPT] == run_script_path
+        else:
+            assert ArtifactKind.RUN_SCRIPT not in by_kind
         assert (
             by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
             == "/global/homes/a/ac.golaz/post.sh"
@@ -1849,6 +1852,7 @@ class TestIngestFromUploadEndpoint:
                 output_path="/pscratch/sd/a/ac.golaz/run",
                 archive_path="/pscratch/sd/a/ac.golaz/archive",
                 case_root="/pscratch/sd/a/ac.golaz/case_scripts",
+                run_script_path="/pscratch/sd/a/ac.golaz/case_scripts/run_script_provenance/run.v3.LR.historical_0121.sh.20250306-102912",
                 postprocessing_script="/pscratch/sd/a/ac.golaz/post.sh --flag value",
             )
         ]
@@ -1869,7 +1873,7 @@ class TestIngestFromUploadEndpoint:
         assert by_kind[ArtifactKind.ARCHIVE] == "/pscratch/sd/a/ac.golaz/archive"
         assert (
             by_kind[ArtifactKind.RUN_SCRIPT]
-            == "/pscratch/sd/a/ac.golaz/case_scripts/.case.run"
+            == "/pscratch/sd/a/ac.golaz/case_scripts/run_script_provenance/run.v3.LR.historical_0121.sh.20250306-102912"
         )
         assert (
             by_kind[ArtifactKind.POSTPROCESS_SCRIPT]
