@@ -17,8 +17,8 @@ from app.features.ingestion.parsers.parser import (
     _locate_metadata_files,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
-    DEFAULT_PERF_ARCHIVE_ROOT,
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
+    STAGING_ROOT_BASENAME,
     ArchiveSnapshotScan,
     CaseCollectionLogData,
     CaseScanResult,
@@ -128,9 +128,7 @@ def _scan_archive(
     """
     case_collection_data: dict[str, CaseCollectionLogData] = {}
     discovery_stats = _new_discovery_stats()
-    staging_root_basename = (
-        config.archive_root.name or Path(DEFAULT_PERF_ARCHIVE_ROOT).name
-    )
+    staging_root_basename = config.archive_root.name or STAGING_ROOT_BASENAME
     case_path_filter = _combine_case_path_filters(
         _build_case_path_filter(config),
         case_path_filter,
@@ -290,7 +288,7 @@ def _discover_case_executions(
     additional_dir_pruner: Callable[[str, list[str]], None] | None = None,
     scan_mode: str = "staging",
     processed_ids_by_key: defaultdict[str, set[str]] | None = None,
-    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    staging_root_basename: str = STAGING_ROOT_BASENAME,
     discovery_results: list[ExecutionDiscoveryResult] | None = None,
     discovery_results_by_key: dict[tuple[str, str], str] | None = None,
     execution_observer: Callable[[Path, str], None] | None = None,
@@ -718,7 +716,7 @@ def _log_execution_collection_outcomes(
     *,
     archive_root: Path,
     scan_mode: str = "staging",
-    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    staging_root_basename: str = STAGING_ROOT_BASENAME,
 ) -> None:
     """Emit one contiguous decision block for each discovered case."""
     processed_ids_by_key = _build_processed_ids_by_key(
@@ -1005,7 +1003,7 @@ def _build_processed_ids_by_key(
     state: dict[str, Any],
     *,
     scan_mode: str,
-    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    staging_root_basename: str = STAGING_ROOT_BASENAME,
 ) -> defaultdict[str, set[str]]:
     """Aggregate processed execution IDs under normalized case identity keys."""
     case_state = state.get("cases", {})
@@ -1034,7 +1032,7 @@ def _build_ingestion_candidates(
     max_cases_per_run: int | None,
     *,
     scan_mode: str = "staging",
-    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    staging_root_basename: str = STAGING_ROOT_BASENAME,
 ) -> list[IngestionCandidate]:
     """Select cases that contain newly observed execution IDs.
 

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Callable
 
 from app.scripts.ingestion.archive_ingestor_core import (
-    DEFAULT_OLD_PERF_ARCHIVE_ROOT,
-    DEFAULT_PERF_ARCHIVE_ROOT,
+    ARCHIVE_ROOT_BASENAME,
+    STAGING_ROOT_BASENAME,
     IngestorConfig,
     UnsupportedArchiveLayoutError,
 )
@@ -20,9 +20,7 @@ ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
 )
 # When snapshot layouts use status buckets, scan only COMPLETED cases.
 ARCHIVE_COMPLETED_STATUS_DIR_NAME = "COMPLETED"
-KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset(
-    {Path(DEFAULT_PERF_ARCHIVE_ROOT).name, Path(DEFAULT_OLD_PERF_ARCHIVE_ROOT).name}
-)
+KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset({STAGING_ROOT_BASENAME, ARCHIVE_ROOT_BASENAME})
 
 
 def _build_case_path_filter(
@@ -321,7 +319,7 @@ def _case_identity_key(
     case_path: str,
     scan_mode: str,
     *,
-    staging_root_basename: str = Path(DEFAULT_PERF_ARCHIVE_ROOT).name,
+    staging_root_basename: str = STAGING_ROOT_BASENAME,
 ) -> str:
     """Return dedupe key for a discovered case path."""
     if scan_mode != "archive":
