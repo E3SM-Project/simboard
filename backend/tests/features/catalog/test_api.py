@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from threading import Barrier
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -39,8 +40,9 @@ from app.features.catalog.schemas import (
     ExecutionUpdate,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
-from app.features.ingestion.ingest import _get_or_create_case
+from app.features.ingestion.ingest import ingest_archive
 from app.features.ingestion.models import Ingestion
+from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
@@ -1411,15 +1413,42 @@ class TestUpdateCase:
         assert change["editor"]["email"] == normal_user_sync["email"]
         assert change["reason"] == "Correct grouping"
 
-        ingested_case = _get_or_create_case(
-            db,
-            name=case.name,
-            machine_id=case.machine_id,
+        parsed_execution = ParsedExecution(
+            execution_dir="/archive/group-patch-3",
+            execution_id="group-patch-3",
+            case_name=case.name,
+            machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="original-group",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_start_date="2023-01-01",
+            campaign=None,
+            experiment_type=None,
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
         )
-        assert ingested_case.id == case.id
-        assert ingested_case.case_group == "corrected-group"
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=([parsed_execution], 0),
+        ):
+            result = ingest_archive(Path("/archive/case.zip"), Path("/archive/out"), db)
+
+        assert result.created_count == 1
+        assert result.errors == []
+        assert result.executions[0].case_id == case.id
+        db.expire_all()
+        assert db.get(Case, case.id).case_group == "corrected-group"
 
     @pytest.mark.parametrize("value", [None, "   "])
     def test_cleared_case_group_can_be_repopulated_by_ingestion(
@@ -1442,15 +1471,42 @@ class TestUpdateCase:
         assert change["oldValue"] == "original-group"
         assert change["newValue"] is None
 
-        ingested_case = _get_or_create_case(
-            db,
-            name=case.name,
-            machine_id=case.machine_id,
+        parsed_execution = ParsedExecution(
+            execution_dir="/archive/group-clear-new",
+            execution_id="group-clear-new",
+            case_name=case.name,
+            machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="ingested-group",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_start_date="2023-01-01",
+            campaign=None,
+            experiment_type=None,
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
         )
-        assert ingested_case.id == case.id
-        assert ingested_case.case_group == "ingested-group"
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=([parsed_execution], 0),
+        ):
+            result = ingest_archive(Path("/archive/case.zip"), Path("/archive/out"), db)
+
+        assert result.created_count == 1
+        assert result.errors == []
+        assert result.executions[0].case_id == case.id
+        db.expire_all()
+        assert db.get(Case, case.id).case_group == "ingested-group"
 
     def test_endpoint_updates_case_metadata(
         self, client, db: Session, normal_user_sync
