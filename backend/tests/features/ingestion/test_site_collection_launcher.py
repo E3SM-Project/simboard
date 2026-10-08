@@ -259,6 +259,7 @@ def test_launcher_runs_configured_ingestor_offline(
     assert "ingestor stdout" in raw_log_contents
     assert "ingestor stderr" in raw_log_contents
     assert f"event=launcher_finished exit_code={exit_code}" in raw_log_contents
+    assert "invalid argument" not in raw_log_contents
     if console_log:
         assert f"Ingestion log: {raw_logs[0]}" in result.stdout
         if console_log != "closed":
