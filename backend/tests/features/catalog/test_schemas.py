@@ -305,6 +305,19 @@ class TestCaseUpdateSchema:
         assert update.model_dump(exclude_unset=True) == {"description": None}
         assert "description" in update.model_fields_set
 
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("  corrected-group  ", "corrected-group"), (None, None)],
+    )
+    def test_case_group_normalization_and_alias(self, value, expected):
+        update = CaseUpdate(caseGroup=value)
+
+        assert update.case_group == expected
+        assert update.model_dump(exclude_unset=True) == {"case_group": expected}
+        assert update.model_dump(by_alias=True, exclude_unset=True) == {
+            "caseGroup": expected
+        }
+
     @pytest.mark.parametrize("value", ["production", "development", None])
     def test_case_simulation_type_accepts_supported_values(self, value):
         update = CaseUpdate(simulationType=value)
@@ -327,6 +340,7 @@ class TestCaseUpdateSchema:
     @pytest.mark.parametrize(
         ("input_field", "model_field"),
         [
+            ("caseGroup", "case_group"),
             ("description", "description"),
             ("keyFeatures", "key_features"),
             ("knownIssues", "known_issues"),

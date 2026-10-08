@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from threading import Barrier
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -39,7 +40,9 @@ from app.features.catalog.schemas import (
     ExecutionUpdate,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
+from app.features.ingestion.ingest import ingest_archive
 from app.features.ingestion.models import Ingestion
+from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.auth.token import generate_token
 from app.features.user.manager import current_active_user
@@ -1338,6 +1341,173 @@ class TestCreateExecution:
 
 
 class TestUpdateCase:
+    def test_case_group_edit_propagates_and_survives_ingestion(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "test_case_group_patch")
+        case.case_group = "original-group"
+        ingestion = _create_ingestion(
+            db, case.machine_id, normal_user_sync["id"], source_reference="group-patch"
+        )
+        executions = []
+        for execution_id in ["group-patch-1", "group-patch-2"]:
+            execution = Execution(
+                case_id=case.id,
+                execution_id=execution_id,
+                compset="AQUAPLANET",
+                compset_alias="QPC4",
+                grid_name="f19_f19",
+                grid_resolution="1.9x2.5",
+                initialization_type="startup",
+                status=ExecutionStatus.CREATED,
+                simulation_start_date=date(2023, 1, 1),
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                ingestion_id=ingestion.id,
+            )
+            db.add(execution)
+            executions.append(execution)
+        db.commit()
+
+        response = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"caseGroup": "  corrected-group  ", "editReason": "Correct grouping"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["caseGroup"] == "corrected-group"
+        for execution in executions:
+            detail = client.get(f"{API_BASE}/executions/{execution.id}")
+            assert detail.status_code == 200
+            assert detail.json()["caseGroup"] == "corrected-group"
+            history = client.get(f"{API_BASE}/executions/{execution.id}/history")
+            assert history.status_code == 200
+            assert history.json()["total"] == 0
+
+        for resource in ["cases", "executions"]:
+            filtered = client.get(
+                f"{API_BASE}/{resource}", params={"case_group": "corrected-group"}
+            )
+            assert filtered.status_code == 200
+            assert len(filtered.json()["items"]) == (1 if resource == "cases" else 2)
+            assert all(
+                item["caseGroup"] == "corrected-group"
+                for item in filtered.json()["items"]
+            )
+            old_group = client.get(
+                f"{API_BASE}/{resource}", params={"case_group": "original-group"}
+            )
+            assert old_group.status_code == 200
+            assert old_group.json()["items"] == []
+            options = client.get(f"{API_BASE}/{resource}/filter-options")
+            assert options.status_code == 200
+            assert "corrected-group" in options.json()["caseGroups"]
+            assert "original-group" not in options.json()["caseGroups"]
+
+        history = client.get(f"{API_BASE}/cases/{case.id}/history")
+        assert history.status_code == 200
+        change = history.json()["items"][0]
+        assert change["fieldName"] == "case_group"
+        assert change["oldValue"] == "original-group"
+        assert change["newValue"] == "corrected-group"
+        assert change["editor"]["email"] == normal_user_sync["email"]
+        assert change["reason"] == "Correct grouping"
+
+        parsed_execution = ParsedExecution(
+            execution_dir="/archive/group-patch-3",
+            execution_id="group-patch-3",
+            case_name=case.name,
+            machine=case.machine.name,
+            hpc_username=case.hpc_username,
+            case_group="original-group",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_start_date="2023-01-01",
+            campaign=None,
+            experiment_type=None,
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+        )
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=([parsed_execution], 0),
+        ):
+            result = ingest_archive(Path("/archive/case.zip"), Path("/archive/out"), db)
+
+        assert result.created_count == 1
+        assert result.errors == []
+        assert result.executions[0].case_id == case.id
+        db.expire_all()
+        assert db.get(Case, case.id).case_group == "corrected-group"
+
+    @pytest.mark.parametrize("value", [None, "   "])
+    def test_cleared_case_group_can_be_repopulated_by_ingestion(
+        self, client, db: Session, value
+    ):
+        case = _create_case(db, "test_case_group_clear")
+        case.case_group = "original-group"
+        db.commit()
+
+        response = client.patch(
+            f"{API_BASE}/cases/{case.id}", json={"caseGroup": value}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["caseGroup"] is None
+        history = client.get(f"{API_BASE}/cases/{case.id}/history")
+        assert history.status_code == 200
+        change = history.json()["items"][0]
+        assert change["fieldName"] == "case_group"
+        assert change["oldValue"] == "original-group"
+        assert change["newValue"] is None
+
+        parsed_execution = ParsedExecution(
+            execution_dir="/archive/group-clear-new",
+            execution_id="group-clear-new",
+            case_name=case.name,
+            machine=case.machine.name,
+            hpc_username=case.hpc_username,
+            case_group="ingested-group",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_start_date="2023-01-01",
+            campaign=None,
+            experiment_type=None,
+            simulation_end_date=None,
+            run_start_date=None,
+            run_end_date=None,
+            compiler=None,
+            git_repository_url=None,
+            git_branch=None,
+            git_tag=None,
+            git_commit_hash=None,
+            status=None,
+        )
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=([parsed_execution], 0),
+        ):
+            result = ingest_archive(Path("/archive/case.zip"), Path("/archive/out"), db)
+
+        assert result.created_count == 1
+        assert result.errors == []
+        assert result.executions[0].case_id == case.id
+        db.expire_all()
+        assert db.get(Case, case.id).case_group == "ingested-group"
+
     def test_endpoint_updates_case_metadata(
         self, client, db: Session, normal_user_sync
     ):
@@ -1346,6 +1516,7 @@ class TestUpdateCase:
         case.key_features = "Original case features"
         case.known_issues = "Original case issues"
         case.notes_markdown = "Original case notes"
+        case.case_group = "unchanged-group"
         original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
         case.updated_at = original_updated_at
         db.commit()
@@ -1365,6 +1536,7 @@ class TestUpdateCase:
         assert data["keyFeatures"] == payload["keyFeatures"]
         assert data["knownIssues"] == "Original case issues"
         assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["caseGroup"] == "unchanged-group"
         assert data["updatedAt"] != original_updated_at.isoformat()
 
         db.expire_all()
@@ -1456,13 +1628,18 @@ class TestUpdateCase:
     def test_endpoint_skips_history_for_unchanged_values(self, client, db: Session):
         case = _create_case(db, "test_case_metadata_noop")
         case.description = "Unchanged"
+        case.case_group = "unchanged-group"
         original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
         case.updated_at = original_updated_at
         db.commit()
 
         res = client.patch(
             f"{API_BASE}/cases/{case.id}",
-            json={"description": "Unchanged", "editReason": "No effective change"},
+            json={
+                "description": "Unchanged",
+                "caseGroup": "  unchanged-group  ",
+                "editReason": "No effective change",
+            },
         )
 
         assert res.status_code == 200
@@ -1966,7 +2143,10 @@ class TestUpdateCase:
 
         assert res.status_code == 401
 
-    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+    @pytest.mark.parametrize("field", ["description", "caseGroup"])
+    def test_plain_user_gets_403_for_patch(
+        self, client, db: Session, normal_user_sync, field
+    ):
         case = _create_case(db, "test_case_metadata_forbidden")
         db.commit()
 
@@ -1979,7 +2159,7 @@ class TestUpdateCase:
 
         res = client.patch(
             f"{API_BASE}/cases/{case.id}",
-            json={"description": "Should fail"},
+            json={field: "Should fail"},
         )
 
         assert res.status_code == 403

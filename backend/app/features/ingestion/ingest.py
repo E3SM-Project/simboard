@@ -233,7 +233,7 @@ def _process_execution_for_ingest(
     prevalidated_draft = _prevalidate_execution_create(
         parsed_execution,
     )
-    case = existing_case or _resolve_case(
+    case = _resolve_case(
         parsed_execution,
         case_name,
         machine_id,
