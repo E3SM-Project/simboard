@@ -356,13 +356,20 @@ or blank `ARCHIVE_YEAR_START` to `2025-01` and leave `ARCHIVE_YEAR_END` unset.
 Callers may explicitly override either bound for a historical backfill. The
 targeted Chrysalis v3 runner retains its fixed `2024-01` lower bound.
 
-Filesystem roots and machine identity have no shared deployment defaults.
-Staging mode requires a nonblank `PERF_ARCHIVE_ROOT`; archive mode requires a
-nonblank `OLD_PERF_ARCHIVE_ROOT`. Both require `MACHINE_NAME`. Only the active
+The general-purpose ingestors have no shared defaults for filesystem roots or
+machine identity. Staging mode requires a nonblank `PERF_ARCHIVE_ROOT`; archive
+mode requires a nonblank `OLD_PERF_ARCHIVE_ROOT`. Both require `MACHINE_NAME`. Only the active
 mode's root is required. Host launchers supply these values from site
 configuration; direct Python invocation must receive them explicitly from its
 deployment environment. NERSC Spin uses container-mounted paths, not host paths.
 Missing or blank required values fail configuration validation before scanning.
+
+The targeted Chrysalis v3 runner supplies its site-specific configuration before
+shared validation: it fixes the machine identity to `chrysalis` and uses
+`/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF` when `OLD_PERF_ARCHIVE_ROOT` is unset.
+An explicit root overrides that path; a blank root passed directly to the Python
+runner is rejected. It does not require an environment-provided `MACHINE_NAME`
+and retains its fixed `2024-01` lower bound.
 
 `MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
 operation when runners should submit every submission-qualified case they find.
