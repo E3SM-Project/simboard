@@ -244,6 +244,7 @@ const getGroupRunDateWindow = (executions: GroupExecution[]) => {
 const countDistinctValues = (values: string[]) => new Set(values).size;
 
 const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
+  'caseGroup',
   'simulationType',
   'description',
   'keyFeatures',
@@ -252,6 +253,7 @@ const CASE_EDIT_FIELDS: ReadonlyArray<CaseEditableField> = [
 ];
 
 const toEditableFormState = (caseRecord: CaseDetailOut): EditableFormState => ({
+  caseGroup: caseRecord.caseGroup ?? '',
   simulationType: caseRecord.simulationType,
   description: caseRecord.description ?? '',
   keyFeatures: caseRecord.keyFeatures ?? '',
@@ -1104,6 +1106,34 @@ export const CaseDetailsPage = ({
 
             {formState ? (
               <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={isEditing ? 'case-group' : undefined}
+                    className="block text-xs text-muted-foreground"
+                  >
+                    Case Group
+                  </Label>
+                  {isEditing ? (
+                    <>
+                      <Input
+                        id="case-group"
+                        className="max-w-sm"
+                        value={formState.caseGroup}
+                        onChange={(event) => updateField('caseGroup', event.target.value)}
+                        aria-describedby="case-group-help"
+                        placeholder="No case group"
+                      />
+                      <p id="case-group-help" className="text-xs text-muted-foreground">
+                        Changing Case Group applies to all executions in this case. Clearing it
+                        allows future ingestion to populate it again.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-950">
+                      {caseRecord.caseGroup ?? 'Unset'}
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label className="block text-xs text-muted-foreground">Case classification</Label>
                   {isEditing ? (

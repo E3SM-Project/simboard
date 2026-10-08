@@ -166,6 +166,7 @@ export interface CaseFilterOptionsOut {
 }
 
 export const CASE_EDITABLE_FIELDS = [
+  'caseGroup',
   'simulationType',
   'description',
   'keyFeatures',
