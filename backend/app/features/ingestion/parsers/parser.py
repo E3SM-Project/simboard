@@ -37,6 +37,7 @@ from app.features.ingestion.parsers.case_docs import (
     parse_env_run,
 )
 from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.cpl_log import parse_cpl_log
 from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
     parse_git_config,
@@ -139,6 +140,13 @@ FILE_SPECS: dict[str, FileSpec] = {
         "display_pattern": "GIT_STATUS..*.gz",
         "location": "root",
         "parser": parse_git_status,
+        "required": False,
+    },
+    "cpl_log": {
+        "pattern": r"cpl\.log\.\d+\.\d+-\d+(?:\.gz)?$",
+        "display_pattern": "cpl.log.<execution_id>[.gz]",
+        "location": "root",
+        "parser": parse_cpl_log,
         "required": False,
     },
 }
@@ -526,6 +534,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
     """
     metadata: dict[str, str | None] = {}
     case_status_metadata: dict[str, str | None] | None = None
+    cpl_metadata: dict[str, str | None] = {}
 
     for key, spec in FILE_SPECS.items():
         path = files.get(key)
@@ -539,7 +548,15 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
             case_status_metadata = parsed_metadata
             continue
 
+        if key == "cpl_log":
+            cpl_metadata = parsed_metadata
+            continue
+
         metadata.update(parsed_metadata)
+
+    # The initial driver clock describes this execution, including restarts.
+    # XML dates describe initialization and are only a fallback.
+    metadata.update(cpl_metadata)
 
     # CaseStatus reflects the latest case.run attempt, so its status and run
     # timestamps should override timing-file values when the artifact exists.

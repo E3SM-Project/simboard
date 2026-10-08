@@ -35,6 +35,23 @@ make backend-migrate m='message'
 make backend-upgrade
 ```
 
+## Ingested Simulation Dates
+
+Execution simulation dates use `Curr Time` and `Stop Time` from the initial
+driver clock in `cpl.log.<execution_id>` (plain or gzipped). `Stop Time` is the
+configured simulation end; termination timestamps do not override it. These
+dates are separate from the wall-clock run timestamps supplied by CaseStatus.
+
+Without usable coupler dates, non-continuation runs retain the XML-derived
+fallback. For `CONTINUE_RUN=TRUE`, XML initialization dates do not describe the
+execution interval and are not used. If the simulation start remains unknown,
+ingestion reports a per-execution date validation error without creating the
+execution. A missing simulation end may remain null. Missing coupler logs do
+not themselves fail required-file validation.
+
+Existing executions are still skipped as duplicates; correcting previously
+stored dates is a separate backfill operation.
+
 ## Configuration
 
 Backend env templates live in `.envs/example/backend.env.example`. Local developer values live in `.envs/local/backend.env`.

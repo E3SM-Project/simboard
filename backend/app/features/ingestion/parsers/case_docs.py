@@ -103,8 +103,8 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         and path-based artifact metadata, including:
 
         - ``initialization_type``: Run type (``RUN_TYPE``)
-        - ``simulation_start_date``: Effective start date for the run
-        - ``simulation_end_date``: Derived end date for the run
+        - ``simulation_start_date``: Initialization date for non-continuation runs
+        - ``simulation_end_date``: Derived end date for non-continuation runs
         - ``output_path``: Run directory path (``RUNDIR``)
         - ``archive_path``: Short-term archive root (``DOUT_S_ROOT``)
         - ``postprocessing_script``: Post-run script command (``POSTRUN_SCRIPT``)
@@ -113,6 +113,7 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     initialization_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
     run_start_date = _extract_value_from_file(env_run_path, "RUN_STARTDATE")
     run_ref_date = _extract_value_from_file(env_run_path, "RUN_REFDATE")
+    continue_run = _extract_value_from_file(env_run_path, "CONTINUE_RUN")
     stop_option = _extract_value_from_file(env_run_path, "STOP_OPTION")
     stop_n = _extract_value_from_file(env_run_path, "STOP_N")
     stop_date = _extract_value_from_file(env_run_path, "STOP_DATE")
@@ -129,6 +130,11 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         stop_n,
         stop_date,
     )
+    # Continuations retain the original initialization date in XML. Their
+    # execution interval must come from the coupler clock, not this fallback.
+    if continue_run and continue_run.strip().upper() == "TRUE":
+        simulation_start_date = None
+        simulation_end_date = None
 
     return {
         "initialization_type": initialization_type,

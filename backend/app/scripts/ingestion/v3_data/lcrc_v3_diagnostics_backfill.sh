@@ -45,4 +45,4 @@ fi
 
 cd "${BACKEND_DIR}"
 exec "${PYTHON_BIN}" -m app.scripts.ingestion.v3_data.diagnostics_backfill \
-  --machine chrysalis "${SIZE_ARGS[@]}" "${TRUST_ARGS[@]}" "$@"
+  --machine chrysalis ${SIZE_ARGS[@]+"${SIZE_ARGS[@]}"} ${TRUST_ARGS[@]+"${TRUST_ARGS[@]}"} "$@"

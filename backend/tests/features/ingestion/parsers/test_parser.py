@@ -16,9 +16,95 @@ import pytest
 from app.features.ingestion.parsers import parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.scripts.ingestion.hpc_upload_archive_ingestor import _create_case_archive
+from tests.fixtures.continuation_case import (
+    CASE_NAME,
+    stage_continuation_case,
+)
 
 
 class TestMainParser:
+    @pytest.mark.parametrize("compressed", [False, True])
+    def test_qa_continuation_execution_ranges(self, tmp_path, compressed):
+        case = stage_continuation_case(tmp_path, compressed_cpl=compressed)
+        results, skipped = parser.main_parser(
+            case, tmp_path / "out", strict_validation=True
+        )
+        assert skipped == 0
+        assert [
+            (
+                execution.execution_id,
+                execution.simulation_start_date,
+                execution.simulation_end_date,
+            )
+            for execution in results
+        ] == [
+            ("729179.250417-002844", "2019-01-01", "2020-01-01"),
+            ("729278.250417-112829", "2020-01-01", "2021-01-01"),
+            ("729596.250417-144221", "2021-01-01", "2022-01-01"),
+            ("729670.250417-175452", "2022-01-01", "2023-01-01"),
+            ("729682.250417-210752", "2023-01-01", "2024-01-01"),
+        ]
+        assert all(execution.case_name == CASE_NAME for execution in results)
+        assert all(execution.status == "completed" for execution in results)
+        assert results[0].run_start_date == "2025-04-17 00:28:44"
+        assert results[-1].run_end_date == "2025-04-18 00:19:49"
+
+    @pytest.mark.parametrize("coupler", ["missing", "malformed"])
+    def test_qa_continuation_does_not_fabricate_dates(self, tmp_path, coupler):
+        case = stage_continuation_case(tmp_path)
+        for path in case.glob("*/cpl.log.*"):
+            if coupler == "missing":
+                path.unlink()
+            else:
+                path.write_text(
+                    "(seq_timemgr_clockPrint) Clock = drv 1\ninvalid clock\n"
+                )
+        results, skipped = parser.main_parser(
+            case, tmp_path / "out", strict_validation=True
+        )
+        assert len(results) == 5
+        assert skipped == 0
+        assert all(execution.simulation_start_date is None for execution in results)
+        assert all(execution.simulation_end_date is None for execution in results)
+
+    @pytest.mark.parametrize("compressed", [False, True])
+    def test_coupler_dates_override_xml_without_changing_run_dates(
+        self, tmp_path, compressed
+    ):
+        lid = "729179.250417-002844"
+        execution_dir = tmp_path / lid
+        execution_dir.mkdir()
+        self._create_execution_metadata_files(execution_dir, lid)
+        path = execution_dir / f"cpl.log.{lid}{'.gz' if compressed else ''}"
+        text = """(seq_timemgr_clockPrint) Clock = drv 1
+(seq_timemgr_clockPrint) Curr Time = 20190101 00000
+(seq_timemgr_clockPrint) Stop Time = 20200101 00000
+"""
+        if compressed:
+            with gzip.open(path, "wt") as stream:
+                stream.write(text)
+        else:
+            path.write_text(text)
+        with self._mock_all_parsers(
+            parse_env_run={
+                "simulation_start_date": "1850-01-01",
+                "simulation_end_date": "1851-01-01",
+            },
+            parse_case_status={
+                "status": "completed",
+                "run_start_date": "2025-04-17T00:28:44",
+                "run_end_date": "2025-04-17T11:00:00",
+            },
+        ):
+            files = parser._locate_metadata_files(str(execution_dir))
+            assert files["cpl_log"] == str(path)
+            result = parser._parse_all_files(str(execution_dir), files)
+        assert result.simulation_start_date == "2019-01-01"
+        assert result.simulation_end_date == "2020-01-01"
+        assert result.run_start_date == "2025-04-17T00:28:44"
+        assert result.run_end_date == "2025-04-17T11:00:00"
+        assert result.status == "completed"
+
     @staticmethod
     def _create_execution_metadata_files(
         execution_dir: Path,
@@ -537,6 +623,7 @@ class TestMainParser:
         execution_dir.mkdir(parents=True)
         self._create_execution_metadata_files(execution_dir, "001.001")
         self._create_optional_files(execution_dir, "001")
+        (execution_dir / "cpl.log.1.0-0").write_text("")
 
         archive_path = tmp_path / "with_optional.zip"
         self._create_zip_archive(archive_base, archive_path)
