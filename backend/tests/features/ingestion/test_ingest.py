@@ -30,7 +30,7 @@ from app.features.ingestion.models import (
     IngestionSourceType,
     IngestionStatus,
 )
-from app.features.ingestion.parsers.parser import main_parser
+from app.features.ingestion.parsers.parser import ArchiveValidationError, main_parser
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.models import Machine
 from app.features.user.models import User
@@ -114,6 +114,17 @@ def test_qa_continuation_without_start_date_reports_ingestion_errors(tmp_path, c
         ),
         patch("app.features.ingestion.ingest._find_case", return_value=None),
     ):
+        if coupler == "missing":
+            with pytest.raises(ArchiveValidationError) as exc_info:
+                ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+            assert len(exc_info.value.errors) == 5
+            assert all(
+                error["code"] == "missing_required_file"
+                and error["file_spec"] == "cpl.log.<execution_id>[.gz]"
+                for error in exc_info.value.errors
+            )
+            db.add.assert_not_called()
+            return
         result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
     assert result.executions == []
     assert result.created_count == 0
