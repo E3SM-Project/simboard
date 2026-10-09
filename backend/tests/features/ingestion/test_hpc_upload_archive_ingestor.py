@@ -217,7 +217,12 @@ def test_parser_accepts_delta_archive_with_required_metadata(
         "README.case.001.gz",
     ):
         (casedocs_dir / filename).write_text("fixture")
-    for filename in ("CaseStatus.001.gz", "e3sm_timing.001", "GIT_DESCRIBE.001.gz"):
+    for filename in (
+        "CaseStatus.001.gz",
+        "e3sm_timing.001",
+        "GIT_DESCRIBE.001.gz",
+        "cpl.log.100.1-1",
+    ):
         (execution_dir / filename).write_text("fixture")
     (case_dir / "101.1-1").mkdir()
 

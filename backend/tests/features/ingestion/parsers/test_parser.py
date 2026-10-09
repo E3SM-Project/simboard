@@ -49,16 +49,12 @@ class TestMainParser:
         assert results[0].run_start_date == "2025-04-17 00:28:44"
         assert results[-1].run_end_date == "2025-04-18 00:19:49"
 
-    @pytest.mark.parametrize("coupler", ["missing", "malformed"])
-    def test_qa_continuation_does_not_fabricate_dates(self, tmp_path, coupler):
+    def test_qa_continuation_with_malformed_coupler_does_not_fabricate_dates(
+        self, tmp_path
+    ):
         case = stage_continuation_case(tmp_path)
         for path in case.glob("*/cpl.log.*"):
-            if coupler == "missing":
-                path.unlink()
-            else:
-                path.write_text(
-                    "(seq_timemgr_clockPrint) Clock = drv 1\ninvalid clock\n"
-                )
+            path.write_text("(seq_timemgr_clockPrint) Clock = drv 1\ninvalid clock\n")
         results, skipped = parser.main_parser(
             case, tmp_path / "out", strict_validation=True
         )
@@ -66,6 +62,41 @@ class TestMainParser:
         assert skipped == 0
         assert all(execution.simulation_start_date is None for execution in results)
         assert all(execution.simulation_end_date is None for execution in results)
+
+    @pytest.mark.parametrize("compressed", [False, True])
+    @pytest.mark.parametrize("strict_validation", [False, True])
+    def test_missing_coupler_log_rejects_execution(
+        self, tmp_path, compressed, strict_validation
+    ):
+        case = stage_continuation_case(tmp_path, compressed_cpl=compressed)
+        missing_log = sorted(case.glob("*/cpl.log.*"))[0]
+        execution_dir = missing_log.parent
+        missing_log.unlink()
+
+        if strict_validation:
+            with pytest.raises(parser.ArchiveValidationError) as exc_info:
+                parser.main_parser(case, tmp_path / "out", strict_validation=True)
+            assert exc_info.value.errors == [
+                {
+                    "code": "missing_required_file",
+                    "execution_dir": str(execution_dir),
+                    "file_spec": "cpl.log.<execution_id>[.gz]",
+                    "location": "archive root",
+                    "message": (
+                        "Missing required 'cpl.log.<execution_id>[.gz]' in "
+                        f"archive root for '{execution_dir}'."
+                    ),
+                }
+            ]
+        else:
+            results, skipped = parser.main_parser(case, tmp_path / "out")
+            assert skipped == 1
+            assert len(results) == 4
+            assert execution_dir.name not in {
+                execution.execution_id for execution in results
+            }
+            assert all(execution.simulation_start_date for execution in results)
+            assert all(execution.simulation_end_date for execution in results)
 
     @pytest.mark.parametrize("compressed", [False, True])
     def test_resolves_original_hpc_run_script_provenance(self, tmp_path, compressed):
@@ -171,6 +202,7 @@ class TestMainParser:
         execution_dir = tmp_path / lid
         execution_dir.mkdir()
         self._create_execution_metadata_files(execution_dir, lid)
+        (execution_dir / f"cpl.log.{lid}").unlink()
         path = execution_dir / f"cpl.log.{lid}{'.gz' if compressed else ''}"
         text = """(seq_timemgr_clockPrint) Clock = drv 1
 (seq_timemgr_clockPrint) Curr Time = 20190101 00000
@@ -212,6 +244,7 @@ class TestMainParser:
     ) -> None:
         """Create standard execution files for testing."""
         version_base = version.split(".")[0]
+        (execution_dir / f"cpl.log.{execution_dir.name}").write_text("")
 
         if include_timing:
             timing_file = execution_dir / f"e3sm_timing.{version}"
@@ -342,13 +375,14 @@ class TestMainParser:
             parser.FILE_SPECS.clear()
             parser.FILE_SPECS.update(original_file_specs)
 
-    def test_file_specs_include_case_status_and_env_run(self) -> None:
+    def test_file_specs_include_required_execution_metadata(self) -> None:
         assert "case_status" in parser.FILE_SPECS
         assert "case_docs_env_run" in parser.FILE_SPECS
         assert "e3sm_timing" in parser.FILE_SPECS
         assert parser.FILE_SPECS["case_status"]["required"] is True
         assert parser.FILE_SPECS["case_docs_env_run"]["required"] is True
         assert parser.FILE_SPECS["e3sm_timing"]["required"] is True
+        assert parser.FILE_SPECS["cpl_log"]["required"] is True
 
     def test_resolve_execution_id_rejects_blank_values(self) -> None:
         with pytest.raises(
@@ -551,6 +585,7 @@ class TestMainParser:
             f.write("2025-01-01 00:00:00: case.run success")
         with gzip.open(execution_dir / "GIT_DESCRIBE.001.gz", "wt") as f:
             f.write("describe")
+        (execution_dir / "cpl.log.1.0-0").write_text("")
 
         archive_path = tmp_path / "duplicate_archive.zip"
         self._create_zip_archive(archive_base, archive_path)
@@ -719,7 +754,6 @@ class TestMainParser:
         execution_dir.mkdir(parents=True)
         self._create_execution_metadata_files(execution_dir, "001.001")
         self._create_optional_files(execution_dir, "001")
-        (execution_dir / "cpl.log.1.0-0").write_text("")
 
         archive_path = tmp_path / "with_optional.zip"
         self._create_zip_archive(archive_base, archive_path)
