@@ -147,7 +147,7 @@ FILE_SPECS: dict[str, FileSpec] = {
         "display_pattern": "cpl.log.<execution_id>[.gz]",
         "location": "root",
         "parser": parse_cpl_log,
-        "required": False,
+        "required": True,
     },
 }
 
