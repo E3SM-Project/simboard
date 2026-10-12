@@ -100,7 +100,7 @@ grep -n "SIMBOARD_ROOT\|refresh_repository\|site_ingestion_launcher" \
 Do **not** run `crontab "${SIMBOARD_ROOT}/operations/chrysalis.crontab"` during
 this test.
 
-Confirm two `chrysalis diagnostics` entries at `0 14 * * *`, using `env.dev.sh`
+Confirm two `chrysalis diagnostics` entries at `0 2,8,14,20 * * *`, using `env.dev.sh`
 and `env.prod.sh` with `DRY_RUN=false`. Do not execute these live jobs with dummy
 credentials or without the site archive. Staging/archive schedules are unchanged.
 

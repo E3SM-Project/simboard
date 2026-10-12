@@ -233,7 +233,8 @@ The copied crontab:
   production jobs use separate locks and may run at the same time; staging and
   archive jobs for one environment also use separate locks and may run at the
   same time; and
-- runs diagnostics daily at 14:00 UTC with separate locks and live linking.
+- runs diagnostics every six hours at 02:00, 08:00, 14:00, and 20:00 UTC
+  with separate locks and live linking.
 
 Diagnostics entries use `DRY_RUN=false` independently of ingestion. Supply valid
 API credentials before installing them; use `DRY_RUN=true` for an optional dry scan.

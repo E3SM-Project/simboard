@@ -640,7 +640,7 @@ Open **Workloads -> CronJobs -> Create**:
 | Rancher field | Value |
 | --- | --- |
 | Name | `nersc-diagnostics-scanner` |
-| Schedule | `0 14 * * *` |
+| Schedule | `0 2,8,14,20 * * *` |
 | Time zone | `Etc/UTC` |
 
 #### 1. CronJob tab
@@ -654,8 +654,9 @@ Open **Workloads -> CronJobs -> Create**:
 | Failed jobs history limit | `3` |
 | Job backoff limit | `0` (retry at the next schedule) |
 
-The daily scan is offset from 12:00 archive ingestion. If the time-zone field is
-unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
+Scans run every six hours at 02:00, 08:00, 14:00, and 20:00 UTC, retaining the
+14:00 run after 12:00 archive ingestion. If the time-zone field is unavailable,
+verify the controller uses UTC. Avoid overlapping manual jobs;
 `Forbid` only controls scheduled jobs.
 
 #### 2. Pod tab
@@ -720,7 +721,9 @@ is needed.
 2. Check the [scanner results](setup-ingestion-operations.md#check-scanner-results)
    and verify links in SimBoard. Deferred state lookups or failed link submissions
    cause a nonzero scanner exit and a failed job.
-3. Confirm the next scheduled run and monitor duration: every scan walks the full archive.
+3. Confirm the next scheduled run and monitor duration: every scan walks the full
+   archive. Return to daily scans if the six-hour schedule causes excessive load
+   or scans routinely exceed the interval.
 
 ### Workload 5: Frontend Deployment (`frontend`)
 
