@@ -34,7 +34,7 @@ rm -rf "${TEST_ROOT}"
 ## 2. Provision the deployment
 
 ```bash
-make operations-provision
+make ops-provision
 ```
 
 This creates `${SIMBOARD_ROOT}`, creates `${SIMBOARD_ROOT}/operations` with
@@ -57,7 +57,7 @@ a summary workflow is introduced.
 ## 3. Initialize dummy API environments
 
 ```bash
-make operations-init-env site=chrysalis
+make ops-init-env site=chrysalis
 ```
 
 Use harmless test values at the prompts:
@@ -80,7 +80,7 @@ They should both be mode `640`. Do not print these files when using real tokens.
 ## 4. Generate, but do not install, the cron file
 
 ```bash
-make operations-init-cron site=chrysalis
+make ops-init-cron site=chrysalis
 ```
 
 Replace the template root with the isolated test deployment:
@@ -123,7 +123,7 @@ validation, and failure propagation without running real scans.
 ## 5. Test a no-op refresh
 
 ```bash
-make operations-refresh
+make ops-refresh
 ```
 
 Expected output reports that the checkout is already current. This verifies the
@@ -151,7 +151,7 @@ deployment clone:
 
 ```bash
 git commit --allow-empty -m "test: verify operations refresh"
-make operations-refresh
+make ops-refresh
 ```
 
 The refresh should fetch and check out the new revision, then synchronize the

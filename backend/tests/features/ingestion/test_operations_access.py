@@ -10,6 +10,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPTS = ROOT / "backend/app/scripts/ingestion/sites/operations"
+OPS_TARGETS = (
+    "ops-provision",
+    "ops-refresh",
+    "ops-init-env",
+    "ops-init-v3-env",
+    "ops-init-cron",
+    "ops-configure-access",
+)
 
 
 def run(*args: str | Path, **kwargs) -> subprocess.CompletedProcess[str]:
@@ -28,6 +36,48 @@ def acl(path: Path) -> str:
     result = run("getfacl", "-cp", path)
     assert result.returncode == 0, result.stderr
     return result.stdout
+
+
+def test_operations_help_has_its_own_section() -> None:
+    result = run("make", "help")
+    assert result.returncode == 0, result.stderr
+    backend, rest = result.stdout.split("Operations:\n", 1)
+    operations, _ = rest.split("Frontend:\n", 1)
+    deployment, rest = operations.split("  Ingestion:\n", 1)
+    ingestion, diagnostics = rest.split("  Diagnostics:\n", 1)
+    assert "  Deployment:\n" in deployment
+    groups = (
+        (deployment, OPS_TARGETS),
+        (
+            ingestion,
+            ("ingest-dry-run", "ingest-apply", "v3-ingest-dry-run", "v3-ingest-apply"),
+        ),
+        (
+            diagnostics,
+            (
+                "diags-dry-run",
+                "diags-apply",
+                "diags-init-archive",
+                "v3-diags-dry-run",
+                "v3-diags-apply",
+            ),
+        ),
+    )
+    for section, targets in groups:
+        for target in targets:
+            assert f"make {target} " in section
+            assert target not in backend
+    assert "make operations-" not in result.stdout
+    assert "make diagnostics-" not in result.stdout
+    assert "make v3-diagnostics-" not in result.stdout
+
+
+@pytest.mark.parametrize("target", OPS_TARGETS)
+def test_operations_targets_are_phony(tmp_path: Path, target: str) -> None:
+    (tmp_path / target).touch()
+    result = run("make", "-f", ROOT / "Makefile", "-C", tmp_path, "-n", target)
+    assert result.returncode == 0, result.stderr
+    assert "bash" in result.stdout
 
 
 @pytest.fixture
@@ -55,7 +105,7 @@ def deployment(tmp_path: Path) -> tuple[Path, str]:
 def configure(root: Path, operator: str, apply: str = "false", **kwargs):
     return run(
         "make",
-        "operations-configure-access",
+        "ops-configure-access",
         f"SIMBOARD_ROOT={root}",
         "site=chrysalis",
         f"operators={operator}",
@@ -105,7 +155,7 @@ def test_make_rejects_invalid_inputs(
 ) -> None:
     result = run(
         "make",
-        "operations-configure-access",
+        "ops-configure-access",
         f"SIMBOARD_ROOT={tmp_path}",
         "site=chrysalis",
         "operators=root",
@@ -307,9 +357,7 @@ def test_missing_defaults_fail_closed_during_initialization(
     assert result.returncode == 0, result.stderr
     result = run("setfacl", "-k", root / "operations")
     assert result.returncode == 0, result.stderr
-    result = run(
-        "make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"
-    )
+    result = run("make", "ops-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}")
     assert result.returncode != 0
     assert "missing restrictive default ACLs" in result.stderr
     assert not (root / "operations/chrysalis.crontab").exists()
@@ -342,7 +390,7 @@ def test_default_drift_blocks_artifact_creation(
 
     before = set(root.rglob("*"))
     for arguments in (
-        ("make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"),
+        ("make", "ops-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"),
         ("bash", SCRIPTS / "provision_operations.sh"),
         ("bash", SCRIPTS.parent / "site_ingestion_launcher.sh", "chrysalis", "staging"),
     ):
@@ -354,9 +402,7 @@ def test_default_drift_blocks_artifact_creation(
     # Reapplying the configured policy repairs defaults and upgrades old markers.
     result = configure(root, operator, "true")
     assert result.returncode == 0, result.stderr
-    result = run(
-        "make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"
-    )
+    result = run("make", "ops-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}")
     assert result.returncode == 0, result.stderr
     assert_private_access(operations / "chrysalis.crontab", operator, "rw-")
 
@@ -392,20 +438,18 @@ def test_initializers_preserve_inherited_operator_write_access(
     assert result.returncode == 0, result.stderr
     result = run(
         "make",
-        "operations-init-env",
+        "ops-init-env",
         "site=chrysalis",
         f"SIMBOARD_ROOT={root}",
         input="https://dev.test\nsecret-dev\nhttps://prod.test\nsecret-prod\n",
     )
     assert result.returncode == 0, result.stderr
     assert "secret-dev" not in result.stdout + result.stderr
-    result = run(
-        "make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"
-    )
+    result = run("make", "ops-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}")
     assert result.returncode == 0, result.stderr
     result = run(
         "make",
-        "operations-init-v3-env",
+        "ops-init-v3-env",
         "env=dev",
         f"SIMBOARD_ROOT={root}",
         input="https://dev.test\nsecret-v3\n/data/diagnostics\n",

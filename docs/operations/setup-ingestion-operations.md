@@ -67,7 +67,7 @@ The operator's user account owns scheduling for this deployment.
 3. Provision the deployment-local `operations/` workspace and SimBoard checkout:
 
    ```bash
-   make operations-provision
+   make ops-provision
    ```
 
 This creates `operations/` with restrictive permissions when absent, clones
@@ -128,8 +128,8 @@ Run as the owner of `SIMBOARD_ROOT` and all operations entries. Stop scheduled
 jobs and let active jobs finish, then preview and apply:
 
 ```bash
-make operations-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1"
-make operations-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1" apply=true
+make ops-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1"
+make ops-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1" apply=true
 getfacl "${SIMBOARD_ROOT}/operations" "${SIMBOARD_ROOT}/operations/env.dev.sh"
 ```
 
@@ -170,7 +170,7 @@ reapply the desired operator list before resuming artifact creation.
 Create the protected API files:
 
 ```bash
-make operations-init-env site=chrysalis
+make ops-init-env site=chrysalis
 ```
 
 Each command prompts for `SIMBOARD_API_BASE_URL` (with the environment
@@ -183,7 +183,7 @@ without echoing either token. It creates `operations/env.dev.sh` and
 Copy the site crontab into `operations/`:
 
 ```bash
-make operations-init-cron site=chrysalis
+make ops-init-cron site=chrysalis
 ```
 
 Before installing, save the current account's crontab in a protected location
@@ -219,7 +219,7 @@ deployment complete.
 
 The copied crontab:
 
-- runs `make operations-refresh` (via the deployed refresh helper) weekly to
+- runs `make ops-refresh` (via the deployed refresh helper) weekly to
   refresh a clean checkout;
 - synchronizes the backend runtime only after a revision change;
 - writes refresh output to `simboard-ingestion-provision.log`; review it after
@@ -246,10 +246,10 @@ linking for all jobs. Supply valid API credentials before enabling live mode.
 | Location                        | Configure                                                                                                                                                            |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sites/configs/<site>.config`   | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME`                                      |
-| `operations/`                   | Deployment-local workspace, created with `make operations-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
+| `operations/`                   | Deployment-local workspace, created with `make ops-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
 | `operations/raw_logs/`          | Per-launcher-run logs; apply the site's retention policy without recording secrets                                                                                   |
 | `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output                                                                                       |
-| `repository/simboard`           | Deployment checkout, cloned and prepared by `make operations-provision`, then updated by `make operations-refresh`                                                   |
+| `repository/simboard`           | Deployment checkout, cloned and prepared by `make ops-provision`, then updated by `make ops-refresh`                                                   |
 | `operations/env.dev.sh`         | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                         |
 | `operations/env.prod.sh`        | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                          |
 | Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
@@ -286,9 +286,9 @@ invocations. The targeted v3 runner supplies these site values itself as
 described above. Validate with a dry run
 before enabling live ingestion; do not reuse NERSC host paths inside Spin.
 
-1. Run `make operations-provision` to add `raw_logs/` and
+1. Run `make ops-provision` to add `raw_logs/` and
    `quality_assurance/` without replacing existing deployment-local files.
-2. Update the copied crontab with `make operations-init-cron` only after
+2. Update the copied crontab with `make ops-init-cron` only after
    backing up the existing file; the initializer refuses to overwrite it.
    Alternatively, merge the template's diagnostics entries and provisioning-log
    path manually, preserving local schedules and `SIMBOARD_ROOT`. Diagnostics
@@ -347,7 +347,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 1. Create the protected v3 configuration in the deployment operations workspace:
 
    ```bash
-   make operations-init-v3-env \
+   make ops-init-v3-env \
      SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
@@ -376,7 +376,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 The same configuration supports v3 diagnostics backfill:
 
 ```bash
-make v3-diagnostics-dry-run \
+make v3-diags-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
@@ -385,11 +385,11 @@ To retry one case without comparing or scanning the other cases, specify
 its exact reviewed name. First review the dry-run reconciliation, then apply:
 
 ```bash
-make v3-diagnostics-dry-run \
+make v3-diags-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 
-make v3-diagnostics-apply \
+make v3-diags-apply \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 ```
@@ -425,8 +425,8 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
    (`${SIMBOARD_ROOT}/repository/simboard`) and select the API environment explicitly:
 
    ```bash
-   make diagnostics-dry-run SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
-   make diagnostics-apply SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
+   make diags-dry-run SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
+   make diags-apply SIMBOARD_ROOT="${SIMBOARD_ROOT}" site=chrysalis env=prod
    ```
 
    Use `env=dev` for development. The dry-run target scans offline without loading

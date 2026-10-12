@@ -48,7 +48,7 @@ Committed site configs should set only site-specific defaults such as:
 - `SIMBOARD_INGESTOR_MODULE`
 - `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`
 
-Set `SIMBOARD_ROOT` in the scheduler environment. `make operations-provision`
+Set `SIMBOARD_ROOT` in the scheduler environment. `make ops-provision`
 creates `repository/simboard/backend` and the standardized `operations`
 workspace; the launcher derives its module and working paths from that root.
 Each scheduled command sets
@@ -64,7 +64,7 @@ the file's group must be authorized to use its token:
 Create a new environment file without overwriting an existing one:
 
 ```bash
-make operations-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
+make ops-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
 ```
 
 The development and production templates supply their respective public API

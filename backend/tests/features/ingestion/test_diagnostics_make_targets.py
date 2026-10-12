@@ -11,19 +11,19 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 
 def test_archive_bootstrap_target_requires_machine() -> None:
     result = subprocess.run(
-        ["make", "--no-print-directory", "diagnostics-init-archive", "machine="],
+        ["make", "--no-print-directory", "diags-init-archive", "machine="],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode != 0
-    assert "Usage: make diagnostics-init-archive machine=" in result.stderr
+    assert "Usage: make diags-init-archive machine=" in result.stderr
 
 
 def test_archive_bootstrap_target_passes_machine_name() -> None:
     result = subprocess.run(
-        ["make", "-n", "diagnostics-init-archive", "machine=perlmutter"],
+        ["make", "-n", "diags-init-archive", "machine=perlmutter"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -93,7 +93,7 @@ def _make(target: str, args: list[str], process_env: dict[str, str]):
 @pytest.mark.parametrize("api_env", ["dev", "prod"])
 @pytest.mark.parametrize(
     ("target", "dry_run"),
-    [("diagnostics-dry-run", "true"), ("diagnostics-apply", "false")],
+    [("diags-dry-run", "true"), ("diags-apply", "false")],
 )
 def test_targets_select_mode_environment_and_launcher_logs(
     diagnostics_workspace, target: str, dry_run: str, api_env: str
@@ -141,7 +141,7 @@ def test_targets_select_mode_environment_and_launcher_logs(
     assert "test-token" not in result.stdout + result.stderr + logs[0].read_text()
 
 
-@pytest.mark.parametrize("target", ["diagnostics-dry-run", "diagnostics-apply"])
+@pytest.mark.parametrize("target", ["diags-dry-run", "diags-apply"])
 @pytest.mark.parametrize(
     ("missing", "site", "api_env", "message"),
     [
@@ -173,7 +173,7 @@ def test_targets_reject_invalid_arguments_before_execution(
     assert not (root / "operations/raw_logs").exists()
 
 
-@pytest.mark.parametrize("target", ["diagnostics-dry-run", "diagnostics-apply"])
+@pytest.mark.parametrize("target", ["diags-dry-run", "diags-apply"])
 def test_targets_propagate_scanner_failure(diagnostics_workspace, target) -> None:
     root, capture, process_env = diagnostics_workspace
     (root / "operations/env.prod.sh").write_text(
@@ -194,7 +194,7 @@ def test_targets_propagate_scanner_failure(diagnostics_workspace, target) -> Non
 
 @pytest.mark.parametrize(
     ("target", "succeeds"),
-    [("diagnostics-dry-run", True), ("diagnostics-apply", False)],
+    [("diags-dry-run", True), ("diags-apply", False)],
 )
 def test_only_live_scans_require_api_environment_file(
     diagnostics_workspace, target, succeeds

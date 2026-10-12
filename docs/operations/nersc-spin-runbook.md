@@ -612,7 +612,7 @@ run this optional bootstrap from the repository root on Perlmutter as the
 authorized NERSC archive owner:
 
 ```bash
-make diagnostics-init-archive machine=perlmutter
+make diags-init-archive machine=perlmutter
 getent group e3sm
 ```
 

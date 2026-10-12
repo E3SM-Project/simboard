@@ -729,7 +729,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-env",
+            "ops-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={missing_root}",
         ],
@@ -751,7 +751,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-env",
+            "ops-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -772,7 +772,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-env",
+            "ops-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -808,7 +808,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-cron",
+            "ops-init-cron",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -828,7 +828,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-env",
+            "ops-init-env",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -844,7 +844,7 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     result = subprocess.run(
         [
             "make",
-            "operations-init-cron",
+            "ops-init-cron",
             "site=chrysalis",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
@@ -919,7 +919,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
             f"SIMBOARD_ROOT={invalid_root}",
         ],
         capture_output=True,
@@ -938,7 +938,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
         ],
         capture_output=True,
         check=False,
@@ -969,7 +969,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     ]
     env["CHGRP_FAIL"] = "true"
     result = subprocess.run(
-        ["make", "operations-provision"],
+        ["make", "ops-provision"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -994,7 +994,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
         capture_output=True,
@@ -1018,7 +1018,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
             f"SIMBOARD_ROOT={simboard_root}",
         ],
         capture_output=True,
@@ -1041,7 +1041,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
             f"SIMBOARD_ROOT={collision_root}",
         ],
         capture_output=True,
@@ -1062,7 +1062,7 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     result = subprocess.run(
         [
             "make",
-            "operations-provision",
+            "ops-provision",
             f"SIMBOARD_ROOT={checkout_collision_root}",
         ],
         capture_output=True,
@@ -1118,7 +1118,7 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     env["SIMBOARD_ROOT"] = str(simboard_root)
 
     result = subprocess.run(
-        ["make", "operations-refresh"],
+        ["make", "ops-refresh"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -1138,7 +1138,7 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     env["FLOCK_CAPTURE_PATH"] = str(flock_capture_path)
     env["GIT_FETCHED_REVISION"] = "updated-revision"
     result = subprocess.run(
-        ["make", "operations-refresh"],
+        ["make", "ops-refresh"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -1156,7 +1156,7 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
 
     env["GIT_STATUS_OUTPUT"] = " M deployment-change"
     result = subprocess.run(
-        ["make", "operations-refresh"],
+        ["make", "ops-refresh"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -1172,7 +1172,7 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     env["SIMBOARD_ROOT"] = str(empty_root)
     env.pop("GIT_STATUS_OUTPUT")
     result = subprocess.run(
-        ["make", "operations-refresh"],
+        ["make", "ops-refresh"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -1181,15 +1181,12 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
     )
 
     assert result.returncode != 0
-    assert (
-        "SimBoard checkout does not exist; run operations-provision first"
-        in result.stderr
-    )
+    assert "SimBoard checkout does not exist; run ops-provision first" in result.stderr
 
     missing_root = tmp_path / "missing"
     env["SIMBOARD_ROOT"] = str(missing_root)
     result = subprocess.run(
-        ["make", "operations-refresh"],
+        ["make", "ops-refresh"],
         capture_output=True,
         check=False,
         cwd=repository_root,
@@ -1199,8 +1196,7 @@ def test_operations_refresh_updates_only_changed_clean_checkout(tmp_path: Path) 
 
     assert result.returncode != 0
     assert (
-        "Operations directory does not exist; run operations-provision first"
-        in result.stderr
+        "Operations directory does not exist; run ops-provision first" in result.stderr
     )
 
 
@@ -1213,7 +1209,7 @@ def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) ->
     result = subprocess.run(
         [
             "make",
-            "operations-init-v3-env",
+            "ops-init-v3-env",
             f"SIMBOARD_ROOT={simboard_root}",
             "env=prod",
         ],
@@ -1239,7 +1235,7 @@ def test_operations_init_v3_env_creates_protected_environment(tmp_path: Path) ->
     result = subprocess.run(
         [
             "make",
-            "operations-init-v3-env",
+            "ops-init-v3-env",
             f"SIMBOARD_ROOT={simboard_root}",
             "env=prod",
         ],
@@ -1260,7 +1256,7 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             "make",
-            "v3-diagnostics-dry-run",
+            "v3-diags-dry-run",
             f"SIMBOARD_ROOT={simboard_root}",
             "env=dev",
         ],
@@ -1274,8 +1270,7 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert f"Missing v3 environment file: {expected_path}" in result.stderr
     assert (
-        f"make operations-init-v3-env SIMBOARD_ROOT={simboard_root} env=dev"
-        in result.stderr
+        f"make ops-init-v3-env SIMBOARD_ROOT={simboard_root} env=dev" in result.stderr
     )
 
 
@@ -1284,8 +1279,8 @@ def test_v3_commands_report_missing_derived_environment(tmp_path: Path) -> None:
     [
         ("v3-ingest-dry-run", "true"),
         ("v3-ingest-apply", "false"),
-        ("v3-diagnostics-dry-run", "true"),
-        ("v3-diagnostics-apply", "false"),
+        ("v3-diags-dry-run", "true"),
+        ("v3-diags-apply", "false"),
     ],
 )
 @pytest.mark.parametrize(
@@ -1319,11 +1314,11 @@ def test_v3_make_arguments_translate_to_runner_environment(
     assert result.returncode == 0, result.stderr
     assert f'ENV_FILE="{env_file}"' in result.stdout
     assert f"DRY_RUN={dry_run}" in result.stdout
-    if target == "v3-diagnostics-dry-run":
+    if target == "v3-diags-dry-run":
         assert 'INCLUDE_SIZES="true" TRUST_EXISTING="true"' in result.stdout
-    elif target == "v3-diagnostics-apply":
+    elif target == "v3-diags-apply":
         assert 'TRUST_EXISTING="true"' in result.stdout
-    if target.startswith("v3-diagnostics-") and case_name is not None:
+    if target.startswith("v3-diags-") and case_name is not None:
         quoted_case_name = "'" + case_name.replace("'", "'\"'\"'") + "'"
         assert f"--case-name {quoted_case_name}" in result.stdout
     else:
