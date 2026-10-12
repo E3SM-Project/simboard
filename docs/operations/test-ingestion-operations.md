@@ -101,8 +101,9 @@ Do **not** run `crontab "${SIMBOARD_ROOT}/operations/chrysalis.crontab"` during
 this test.
 
 Confirm two `chrysalis diagnostics` entries at `0 2,8,14,20 * * *`, using `env.dev.sh`
-and `env.prod.sh` with `DRY_RUN=false`. Do not execute these live jobs with dummy
-credentials or without the site archive. Staging/archive schedules are unchanged.
+and `env.prod.sh`, without inline `DRY_RUN` assignments. Both inherit the top-level
+run mode; leave it unset or `true` during this test. Do not enable live mode with
+dummy credentials or without the site archive. Staging/archive schedules are unchanged.
 
 Run the isolated Make wrapper/launcher/scanner tests from the repository root:
 

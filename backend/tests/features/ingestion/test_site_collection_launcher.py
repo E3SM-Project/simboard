@@ -476,7 +476,8 @@ def test_cron_template_schedules_diagnostics_independently() -> None:
     ]
     assert len(jobs) == 2
     for job, environment in zip(jobs, ("dev", "prod"), strict=True):
-        assert job.startswith("0 2,8,14,20 * * * DRY_RUN=false ")
+        assert job.startswith("0 2,8,14,20 * * * SIMBOARD_ENV_FILE=")
+        assert "DRY_RUN=" not in job
         assert f"/operations/env.{environment}.sh" in job
         assert "&&" not in job
 

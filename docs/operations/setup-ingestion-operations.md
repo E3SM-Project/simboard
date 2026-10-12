@@ -234,10 +234,12 @@ The copied crontab:
   archive jobs for one environment also use separate locks and may run at the
   same time; and
 - runs diagnostics every six hours at 02:00, 08:00, 14:00, and 20:00 UTC
-  with separate locks and live linking.
+  with separate locks and the shared top-level run mode.
 
-Diagnostics entries use `DRY_RUN=false` independently of ingestion. Supply valid
-API credentials before installing them; use `DRY_RUN=true` for an optional dry scan.
+Diagnostics entries inherit the top-level `DRY_RUN` setting, just like ingestion.
+Unset or `true` performs an offline diagnostics scan. Set `DRY_RUN=false` only
+after validating both ingestion and diagnostics; it enables live submissions and
+linking for all jobs. Supply valid API credentials before enabling live mode.
 
 ### Reference: configuration files and variables
 
