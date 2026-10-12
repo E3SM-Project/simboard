@@ -63,6 +63,7 @@ help:
 	@echo "    Optional: case_name=<exact-case-name> to retry one v3 diagnostics case"
 	@echo "  make diagnostics-dry-run SIMBOARD_ROOT=<path> site=<site> env=<dev|prod> # Discover published diagnostics offline"
 	@echo "  make diagnostics-apply SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>   # Link published diagnostics to existing cases"
+	@echo "  make diagnostics-init-archive machine=<perlmutter|chrysalis> # Optionally create a missing diagnostics root on-site"
 	@echo ""
 
 	@echo "Frontend:"
@@ -197,7 +198,14 @@ INGESTION_ACCESS_SCRIPT := $(INGESTION_OPERATIONS_DIR)/configure_access.sh
 INGESTION_ACCESS_POLICY := $(INGESTION_OPERATIONS_DIR)/access_policy.sh
 DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 
-.PHONY: diagnostics-dry-run diagnostics-apply
+.PHONY: diagnostics-dry-run diagnostics-apply diagnostics-init-archive
+
+diagnostics-init-archive:
+	@if [ -z "$(machine)" ]; then \
+		echo "Usage: make $@ machine=<perlmutter|chrysalis>" >&2; \
+		exit 1; \
+	fi
+	cd $(BACKEND_DIR) && MACHINE_NAME="$(machine)" uv run python -m app.scripts.ingestion.initialize_diagnostics_archive
 
 # Use the host launcher for its protected API configuration, locks, and logs.
 # Dry scans select an environment for log/lock naming but never load credentials.

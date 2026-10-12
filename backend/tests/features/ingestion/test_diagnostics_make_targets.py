@@ -9,6 +9,31 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
+def test_archive_bootstrap_target_requires_machine() -> None:
+    result = subprocess.run(
+        ["make", "--no-print-directory", "diagnostics-init-archive", "machine="],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "Usage: make diagnostics-init-archive machine=" in result.stderr
+
+
+def test_archive_bootstrap_target_passes_machine_name() -> None:
+    result = subprocess.run(
+        ["make", "-n", "diagnostics-init-archive", "machine=perlmutter"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert 'MACHINE_NAME="perlmutter" uv run python -m' in result.stdout
+    assert "app.scripts.ingestion.initialize_diagnostics_archive" in result.stdout
+
+
 @pytest.fixture
 def diagnostics_workspace(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     # Include spaces to exercise quoting of deployment and interpreter paths.

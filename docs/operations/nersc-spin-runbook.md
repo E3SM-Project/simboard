@@ -606,6 +606,22 @@ Python scanner directly, not the host-side launcher.
 
 #### Setup procedure
 
+zppy normally creates `diagnostics_archive/production/` and
+`diagnostics_archive/development/` when publishing. If deploying the scanner first,
+run this optional bootstrap from the repository root on Perlmutter as the
+authorized NERSC archive owner:
+
+```bash
+make diagnostics-init-archive machine=perlmutter
+getent group e3sm
+```
+
+The command creates only the missing configured archive root, with your UID,
+group `e3sm`, and mode `2775` (group access/inheritance); existing directories stay
+unchanged. The publishing parent must already exist. Have its owners ensure
+parent `o+x` traversal permissions required by Spin. Confirm Spin sees the root;
+keep **An existing directory**, not `DirectoryOrCreate`. zppy creates the contents.
+
 Under **Storage -> Secrets**, create the **Opaque** secret
 `nersc-diagnostics-scanner-env`:
 
@@ -680,6 +696,7 @@ unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
 | Rancher field | Value |
 | --- | --- |
 | Run as User | Numeric NERSC UID authorized to read the archive |
+| Run as Group ID | Numeric `e3sm` GID from `getent group e3sm`; also use it for Pod Filesystem Group |
 | allowPrivilegeEscalation | `false` |
 | privileged | `false` |
 | capabilities | drop `ALL` |
