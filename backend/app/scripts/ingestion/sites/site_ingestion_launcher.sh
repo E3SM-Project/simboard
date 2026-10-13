@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
+source "$(dirname -- "${BASH_SOURCE[0]}")/operations/access_policy.sh"
 
 finish_logging() {
   local exit_code=$?
@@ -33,7 +34,7 @@ start_logging() {
 # deployment root/log directory is unavailable, stderr remains scheduler-owned.
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
   early_log_dir="${SIMBOARD_ROOT}/operations/raw_logs"
-  if mkdir -p -m 750 "${early_log_dir}"; then
+  if mkdir -p -m "$(operations_directory_mode "${SIMBOARD_ROOT}/operations")" "${early_log_dir}"; then
     early_environment="${SIMBOARD_ENV_FILE:-offline}"
     early_environment="${early_environment##*/}"
     early_site="${1:-unknown}"
@@ -206,7 +207,7 @@ fi
 # and archive jobs use separate locks, while runs of the same mode share one.
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
-mkdir -p -m 750 "${SIMBOARD_RAW_LOG_DIR}"
+mkdir -p -m "$(operations_directory_mode "$SIMBOARD_WORKDIR")" "${SIMBOARD_RAW_LOG_DIR}"
 if [[ -z "${LOG_FILE:-}" ]]; then
   LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
   start_logging

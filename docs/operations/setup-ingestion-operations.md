@@ -118,6 +118,46 @@ environment files into `raw_logs/`, `quality_assurance/`, or source control.
 The local workflow validation is required before this deployment; see
 [Prerequisites](#prerequisites).
 
+### Configure named-operator access (optional)
+
+Use ACLs (Access Control Lists) to share `operations/` with named operators
+without creating a `simboard` group. The site must support Linux POSIX ACLs and
+permit their use; `getfacl` and `setfacl` must be installed.
+
+Run as the owner of `SIMBOARD_ROOT` and all operations entries. Stop scheduled
+jobs and let active jobs finish, then preview and apply:
+
+```bash
+make operations-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1"
+make operations-configure-access site=chrysalis operators="ac.tvo ac.bartoletti1" apply=true
+getfacl "${SIMBOARD_ROOT}/operations" "${SIMBOARD_ROOT}/operations/env.dev.sh"
+```
+
+The target:
+
+- grants owner and operators read/write access throughout `operations/`,
+  including credentials, logs, and locks, while preserving file execution;
+- removes access for unlisted users and groups;
+- updates existing entries and sets directory defaults for new entries;
+- grants traversal on `SIMBOARD_ROOT`, leaving repository permissions unchanged.
+
+Verify access from operator accounts and rejection from an unlisted account.
+SimBoard's creation helpers preserve configured access; external tools and later
+`chmod` commands can restrict inherited permissions. Use `getfacl`, not group
+mode bits alone, to check effective access.
+
+Keep one scheduler account to limit mixed ownership. Another operator's files
+require coordination with their owner or admins before reconfiguring ACLs or
+restoring a backup. Review parent permissions separately: operators need
+traversal, and broad parent write access can permit renaming or removal.
+Repository group-write access remains a trust decision because modified code
+can access scheduler credentials.
+
+The helper prints a protected ACL backup and restore command. Changes are not
+atomic; restore after a partial failure before retrying. For a first-time setup,
+also remove `operations/.simboard-acl-enabled` after restoring. Restoration does
+not remove files created after the backup.
+
 ### Configure protected API environments
 
 Create the protected API files:

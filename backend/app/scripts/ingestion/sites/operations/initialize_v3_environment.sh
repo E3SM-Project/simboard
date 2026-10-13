@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/access_policy.sh"
 
 if (( $# != 4 )); then
   echo "Usage: $0 <api-template> <v3-template> <destination> <environment>" >&2
@@ -42,7 +43,7 @@ if [[ -z "${api_base_url}" || -z "${api_token}" || -z "${diagnostics_source_root
   exit 1
 fi
 
-install -m 640 /dev/null "${destination}"
+operations_install /dev/null "${destination}"
 {
   printf '# %s E3SM v3 Chrysalis backfill configuration. Keep outside the repository.\n' "${environment}"
   printf 'SIMBOARD_API_BASE_URL=%q\n' "${api_base_url}"

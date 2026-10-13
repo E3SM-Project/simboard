@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
+source "$(dirname -- "${BASH_SOURCE[0]}")/access_policy.sh"
 
 # Provision the deployment-local workspace and SimBoard checkout used by
 # scheduled site ingestion. Credentials and installed crontabs are created
@@ -52,12 +53,12 @@ for directory_name in raw_logs quality_assurance; do
   if [[ -d "${directory_path}" ]]; then
     echo "Verified existing operations ${directory_name} directory: ${directory_path}"
   else
-    mkdir -p -m 750 "${directory_path}"
+    mkdir -p -m "$(operations_directory_mode "$operations_dir")" "${directory_path}"
     echo "Created operations ${directory_name} directory: ${directory_path}"
   fi
 done
 
-if command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
+if ! operations_acl_enabled "$operations_dir" && command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
   group_access_configured=true
   for directory_path in "${operations_dir}" "${operations_dir}/raw_logs" "${operations_dir}/quality_assurance"; do
     if ! chgrp simboard "${directory_path}"; then
