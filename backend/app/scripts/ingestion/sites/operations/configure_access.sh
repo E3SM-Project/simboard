@@ -22,6 +22,7 @@ apply=$3
 : "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set}"
 [[ "$site" =~ ^[a-z0-9_-]+$ ]] || fail "Invalid site name"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/access_policy.sh"
 [[ -r "$script_dir/../configs/$site.config" ]] || fail "Site configuration not readable: $site"
 [[ "$apply" == false || "$apply" == true ]] || fail "apply must be false or true"
 
@@ -137,6 +138,8 @@ done
 marker="$operations_dir/.simboard-acl-enabled"
 touch "$marker"
 setfacl --set "$file_acl" -- "$marker"
+# Record numeric default entries so account name resolution cannot cause drift.
+operations_default_acl "$operations_dir" > "$marker"
 
 # Verify exact ACLs, not just command exit status. getfacl includes no contents.
 verify_acl() {

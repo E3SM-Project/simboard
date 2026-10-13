@@ -7,17 +7,29 @@ operations_acl_enabled() {
   [[ -f "$1/.simboard-acl-enabled" && ! -L "$1/.simboard-acl-enabled" ]]
 }
 
+operations_default_acl() {
+  getfacl -cpn -- "$1" | while IFS= read -r entry; do
+    case "$entry" in default:*) printf '%s\n' "$entry" ;; esac
+  done | LC_ALL=C sort
+}
+
+operations_validate_defaults() {
+  local directory=$1 policy_directory=${2:-$1} expected actual
+  expected="$(cat -- "$policy_directory/.simboard-acl-enabled")" || return 1
+  actual="$(operations_default_acl "$directory")" || return 1
+  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+    echo "Managed directory is missing restrictive default ACLs or configured operator defaults have drifted: $directory. Re-run operations-configure-access." >&2
+    return 1
+  fi
+}
+
 operations_install() {
-  local source=$1 destination=$2 directory defaults
+  local source=$1 destination=$2 directory
   directory="$(dirname -- "$destination")"
   if operations_acl_enabled "$directory"; then
     # GNU install strips ACLs. Create by redirection to inherit defaults, then
     # preserve named-user entries while setting their effective mask to rw.
-    defaults="$(getfacl -cp -- "$directory")" || return 1
-    if [[ "$defaults" != *'default:group::---'* || "$defaults" != *'default:other::---'* ]]; then
-      echo "Managed directory is missing restrictive default ACLs: $directory" >&2
-      return 1
-    fi
+    operations_validate_defaults "$directory" || return 1
     (umask 077; set -o noclobber; cat -- "$source" > "$destination") || return 1
     chmod 660 "$destination"
   else
@@ -27,6 +39,7 @@ operations_install() {
 
 operations_directory_mode() {
   if operations_acl_enabled "$1"; then
+    operations_validate_defaults "$1" || return 1
     printf '770\n'
   else
     printf '750\n'

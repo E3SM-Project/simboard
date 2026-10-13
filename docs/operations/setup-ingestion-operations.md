@@ -146,6 +146,11 @@ SimBoard's creation helpers preserve configured access; external tools and later
 `chmod` commands can restrict inherited permissions. Use `getfacl`, not group
 mode bits alone, to check effective access.
 
+The ACL marker records the configured directory defaults, including named
+operators. Creation helpers fail if those defaults drift; re-run the preview and
+apply steps to repair them. Deployments with an older empty marker must also
+reapply ACL setup before creating artifacts with the updated helpers.
+
 Keep one scheduler account to limit mixed ownership. Another operator's files
 require coordination with their owner or admins before reconfiguring ACLs or
 restoring a backup. Review parent permissions separately: operators need
@@ -157,6 +162,8 @@ The helper prints a protected ACL backup and restore command. Changes are not
 atomic; restore after a partial failure before retrying. For a first-time setup,
 also remove `operations/.simboard-acl-enabled` after restoring. Restoration does
 not remove files created after the backup.
+For an existing ACL deployment, restoration does not restore marker contents;
+reapply the desired operator list before resuming artifact creation.
 
 ### Configure protected API environments
 

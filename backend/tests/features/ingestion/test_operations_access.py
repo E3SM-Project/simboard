@@ -315,6 +315,74 @@ def test_missing_defaults_fail_closed_during_initialization(
     assert not (root / "operations/chrysalis.crontab").exists()
 
 
+@pytest.mark.parametrize(
+    "drift",
+    ["removed-operator", "restricted-operator", "group", "mask", "empty-marker"],
+)
+def test_default_drift_blocks_artifact_creation(
+    deployment: tuple[Path, str], drift: str
+) -> None:
+    root, operator = deployment
+    operations = root / "operations"
+    result = configure(root, operator, "true")
+    assert result.returncode == 0, result.stderr
+    marker = operations / ".simboard-acl-enabled"
+    assert f"default:user:{pwd.getpwnam(operator).pw_uid}:rwx" in marker.read_text()
+    if drift == "empty-marker":
+        marker.write_text("")
+    else:
+        arguments = {
+            "removed-operator": ("-x", f"d:u:{operator}"),
+            "restricted-operator": ("-m", f"d:u:{operator}:r-x"),
+            "group": ("-m", "d:g::rwx"),
+            "mask": ("-m", "d:m::r-x"),
+        }[drift]
+        result = run("setfacl", *arguments, operations)
+        assert result.returncode == 0, result.stderr
+
+    before = set(root.rglob("*"))
+    for arguments in (
+        ("make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"),
+        ("bash", SCRIPTS / "provision_operations.sh"),
+        ("bash", SCRIPTS.parent / "site_ingestion_launcher.sh", "chrysalis", "staging"),
+    ):
+        result = run(*arguments, env={**os.environ, "SIMBOARD_ROOT": str(root)})
+        assert result.returncode != 0
+        assert "configured operator defaults have drifted" in result.stderr
+        assert set(root.rglob("*")) == before
+
+    # Reapplying the configured policy repairs defaults and upgrades old markers.
+    result = configure(root, operator, "true")
+    assert result.returncode == 0, result.stderr
+    result = run(
+        "make", "operations-init-cron", "site=chrysalis", f"SIMBOARD_ROOT={root}"
+    )
+    assert result.returncode == 0, result.stderr
+    assert_private_access(operations / "chrysalis.crontab", operator, "rw-")
+
+
+def test_launcher_rejects_log_directory_default_drift(
+    deployment: tuple[Path, str],
+) -> None:
+    root, operator = deployment
+    log_directory = root / "operations/raw_logs"
+    log_directory.mkdir()
+    result = configure(root, operator, "true")
+    assert result.returncode == 0, result.stderr
+    result = run("setfacl", "-x", f"d:u:{operator}", log_directory)
+    assert result.returncode == 0, result.stderr
+    result = run(
+        "bash",
+        SCRIPTS.parent / "site_ingestion_launcher.sh",
+        "chrysalis",
+        "staging",
+        env={**os.environ, "SIMBOARD_ROOT": str(root)},
+    )
+    assert result.returncode != 0
+    assert "configured operator defaults have drifted" in result.stderr
+    assert not list(log_directory.iterdir())
+
+
 def test_initializers_preserve_inherited_operator_write_access(
     deployment: tuple[Path, str],
 ) -> None:

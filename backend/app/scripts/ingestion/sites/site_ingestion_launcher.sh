@@ -34,7 +34,11 @@ start_logging() {
 # deployment root/log directory is unavailable, stderr remains scheduler-owned.
 if [[ -n "${SIMBOARD_ROOT:-}" ]]; then
   early_log_dir="${SIMBOARD_ROOT}/operations/raw_logs"
-  if mkdir -p -m "$(operations_directory_mode "${SIMBOARD_ROOT}/operations")" "${early_log_dir}"; then
+  directory_mode="$(operations_directory_mode "${SIMBOARD_ROOT}/operations")" || exit 1
+  if mkdir -p -m "$directory_mode" "${early_log_dir}"; then
+    if operations_acl_enabled "${SIMBOARD_ROOT}/operations"; then
+      operations_validate_defaults "$early_log_dir" "${SIMBOARD_ROOT}/operations" || exit 1
+    fi
     early_environment="${SIMBOARD_ENV_FILE:-offline}"
     early_environment="${early_environment##*/}"
     early_site="${1:-unknown}"
@@ -207,7 +211,11 @@ fi
 # and archive jobs use separate locks, while runs of the same mode share one.
 environment_lock_name="${SIMBOARD_ENV_FILE:-offline}"
 environment_lock_name="${environment_lock_name##*/}"
-mkdir -p -m "$(operations_directory_mode "$SIMBOARD_WORKDIR")" "${SIMBOARD_RAW_LOG_DIR}"
+directory_mode="$(operations_directory_mode "$SIMBOARD_WORKDIR")" || exit 1
+mkdir -p -m "$directory_mode" "${SIMBOARD_RAW_LOG_DIR}"
+if operations_acl_enabled "$SIMBOARD_WORKDIR"; then
+  operations_validate_defaults "$SIMBOARD_RAW_LOG_DIR" "$SIMBOARD_WORKDIR" || exit 1
+fi
 if [[ -z "${LOG_FILE:-}" ]]; then
   LOG_FILE="${SIMBOARD_RAW_LOG_DIR}/${log_prefix}-${site}-${environment_lock_name}-$(date -u +%Y%m%d_%H%M%S)-$$.log"
   start_logging

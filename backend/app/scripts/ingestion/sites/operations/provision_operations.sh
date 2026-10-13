@@ -44,6 +44,7 @@ fi
 # Runtime logs and operator-reviewed validation artifacts are deliberately kept
 # separate. Do not create summarized_logs until a summary-producing workflow is
 # introduced.
+directory_mode="$(operations_directory_mode "$operations_dir")" || exit 1
 for directory_name in raw_logs quality_assurance; do
   directory_path="${operations_dir}/${directory_name}"
   if [[ ( -e "${directory_path}" || -L "${directory_path}" ) && ! -d "${directory_path}" ]]; then
@@ -53,7 +54,7 @@ for directory_name in raw_logs quality_assurance; do
   if [[ -d "${directory_path}" ]]; then
     echo "Verified existing operations ${directory_name} directory: ${directory_path}"
   else
-    mkdir -p -m "$(operations_directory_mode "$operations_dir")" "${directory_path}"
+    mkdir -p -m "$directory_mode" "${directory_path}"
     echo "Created operations ${directory_name} directory: ${directory_path}"
   fi
 done
