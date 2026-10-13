@@ -397,6 +397,7 @@ def test_default_drift_blocks_artifact_creation(
         result = run(*arguments, env={**os.environ, "SIMBOARD_ROOT": str(root)})
         assert result.returncode != 0
         assert "configured operator defaults have drifted" in result.stderr
+        assert "Re-run make ops-configure-access." in result.stderr
         assert set(root.rglob("*")) == before
 
     # Reapplying the configured policy repairs defaults and upgrades old markers.

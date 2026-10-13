@@ -82,6 +82,56 @@ def test_existing_file_is_rejected(archive_root: Path) -> None:
     assert archive_root.read_text() == "not a directory"
 
 
+@pytest.mark.parametrize("target_kind", ["directory", "file", "missing"])
+def test_existing_symlink_is_rejected(archive_root: Path, target_kind: str) -> None:
+    target = archive_root.parent / "target"
+    if target_kind == "directory":
+        target.mkdir(mode=0o700)
+        (target / "published.txt").write_text("published diagnostics")
+    elif target_kind == "file":
+        target.write_text("not a directory")
+    before = target.stat() if target.exists() else None
+    archive_root.symlink_to(target, target_is_directory=target_kind == "directory")
+
+    with pytest.raises(ValueError, match="not a directory"):
+        bootstrap.initialize_archive("test-site")
+
+    assert archive_root.is_symlink()
+    assert (target.stat() if target.exists() else None) == before
+    if target_kind == "directory":
+        assert (target / "published.txt").read_text() == "published diagnostics"
+    elif target_kind == "file":
+        assert target.read_text() == "not a directory"
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_concurrent_creation_accepts_only_a_directory(
+    archive_root: Path, monkeypatch: pytest.MonkeyPatch, symlink: bool
+) -> None:
+    target = archive_root.parent / "target"
+    target.mkdir(mode=0o700)
+    before = target.stat()
+    mkdir = Path.mkdir
+
+    def concurrent_mkdir(path: Path, *args, **kwargs) -> None:
+        assert path == archive_root
+        if symlink:
+            path.symlink_to(target, target_is_directory=True)
+        else:
+            mkdir(path, mode=0o700)
+        raise FileExistsError("archive created concurrently")
+
+    monkeypatch.setattr(Path, "mkdir", concurrent_mkdir)
+    if symlink:
+        with pytest.raises(FileExistsError, match="created concurrently"):
+            bootstrap.initialize_archive("test-site")
+        assert archive_root.is_symlink()
+    else:
+        assert bootstrap.initialize_archive("test-site") == archive_root
+        assert stat.S_IMODE(archive_root.stat().st_mode) == 0o700
+    assert target.stat() == before
+
+
 def test_unknown_machine_is_rejected(archive_root: Path) -> None:
     with pytest.raises(ValueError, match="Unknown diagnostics machine"):
         bootstrap.initialize_archive("unknown")

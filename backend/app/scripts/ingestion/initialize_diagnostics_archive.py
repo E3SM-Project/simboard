@@ -14,10 +14,12 @@ def initialize_archive(machine: str) -> Path:
     if archive is None:
         raise ValueError(f"Unknown diagnostics machine: {machine}")
     root = Path(archive.root)
+    if root.is_symlink():
+        raise ValueError(f"Archive path is not a directory: {root}")
     if root.is_dir():
         print(f"Archive already exists; unchanged: {root}")
         return root
-    if root.exists() or root.is_symlink():
+    if root.exists():
         raise ValueError(f"Archive path is not a directory: {root}")
 
     # Require the site's publishing parent; never create a local substitute tree.
@@ -30,7 +32,7 @@ def initialize_archive(machine: str) -> Path:
     try:
         root.mkdir(mode=0o700)
     except FileExistsError:
-        if not root.is_dir():
+        if root.is_symlink() or not root.is_dir():
             raise
         print(f"Archive already exists; unchanged: {root}")
         return root

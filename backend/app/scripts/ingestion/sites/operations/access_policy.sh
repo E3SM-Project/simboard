@@ -18,7 +18,7 @@ operations_validate_defaults() {
   expected="$(cat -- "$policy_directory/.simboard-acl-enabled")" || return 1
   actual="$(operations_default_acl "$directory")" || return 1
   if [[ -z "$expected" || "$actual" != "$expected" ]]; then
-    echo "Managed directory is missing restrictive default ACLs or configured operator defaults have drifted: $directory. Re-run operations-configure-access." >&2
+    echo "Managed directory is missing restrictive default ACLs or configured operator defaults have drifted: $directory. Re-run make ops-configure-access." >&2
     return 1
   fi
 }

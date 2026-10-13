@@ -613,11 +613,10 @@ authorized NERSC archive owner:
 
 ```bash
 make diags-init-archive machine=perlmutter
-getent group e3sm
 ```
 
 The command creates only the missing configured archive root, with your UID,
-group `e3sm`, and mode `2775` (group access/inheritance); existing directories stay
+group `e3sm` (GID `62756`), and mode `2775` (group access/inheritance); existing directories stay
 unchanged. The publishing parent must already exist. Have its owners ensure
 parent `o+x` traversal permissions required by Spin. Confirm Spin sees the root;
 keep **An existing directory**, not `DirectoryOrCreate`. zppy creates the contents.
@@ -665,7 +664,7 @@ verify the controller uses UTC. Avoid overlapping manual jobs;
 
 | Rancher field | Value |
 | --- | --- |
-| Pod Filesystem Group | `62756` |
+| Pod Filesystem Group | `62756` (`e3sm`); match the container's Run as Group ID |
 | Restart policy | `Never` |
 
 `Storage`:
@@ -697,7 +696,7 @@ verify the controller uses UTC. Avoid overlapping manual jobs;
 | Rancher field | Value |
 | --- | --- |
 | Run as User | Numeric NERSC UID authorized to read the archive |
-| Run as Group ID | Numeric `e3sm` GID from `getent group e3sm`; also use it for Pod Filesystem Group |
+| Run as Group ID | `62756` (`e3sm`); also use it for Pod Filesystem Group |
 | allowPrivilegeEscalation | `false` |
 | privileged | `false` |
 | capabilities | drop `ALL` |

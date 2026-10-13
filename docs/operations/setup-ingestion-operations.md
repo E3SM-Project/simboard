@@ -190,9 +190,9 @@ Before installing, save the current account's crontab in a protected location
 and merge unrelated entries into the reviewed file: `crontab <file>` replaces
 the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
 `/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
-Disable the diagnostics entries during initial validation because they
-explicitly set `DRY_RUN=false`. Run offline diagnostics discovery before
-enabling those entries.
+Leave the global `DRY_RUN=false` setting commented during initial validation.
+Diagnostics entries inherit this setting and scan offline when it is unset or
+`true`. Run offline diagnostics discovery before enabling scheduled scans.
 
 After reviewing the merged file, install it:
 
@@ -200,17 +200,17 @@ After reviewing the merged file, install it:
 crontab /lcrc/group/e3sm/simboard/operations/chrysalis.crontab
 ```
 
-After offline diagnostics discovery succeeds and API credentials are approved,
-uncomment the diagnostics entries in the copied crontab and reinstall the
-reviewed file with the `crontab` command above. Each diagnostics entry sets
-`DRY_RUN=false`; leave the global run-mode setting commented until live
-ingestion is separately approved.
+After offline diagnostics discovery succeeds, enable the reviewed diagnostics
+entries and reinstall the file with the `crontab` command above. Leave the global
+run-mode setting commented to keep diagnostics offline and ingestion in dry-run
+mode. Supply approved API credentials before enabling live linking.
 
-Review `operations/raw_logs/simboard-ingestion-*.log`. After the ingestion
-dry-run results are correct and live ingestion is approved, uncomment the
-global `DRY_RUN=false` in the copied crontab to enable live staging/archive
-jobs, then reinstall the reviewed file. Use `MAX_CASES_PER_RUN` for a bounded
-first live ingestion run.
+Review `operations/raw_logs/simboard-ingestion-*.log` and diagnostics logs. After
+both workflows pass validation and live ingestion and linking are approved,
+uncomment global `DRY_RUN=false` to enable live staging/archive and diagnostics
+jobs, then reinstall the reviewed file. If approvals differ, use per-job
+`DRY_RUN` overrides instead. Use `MAX_CASES_PER_RUN` for a bounded first live
+ingestion run; this limit does not apply to diagnostics.
 
 After installation, verify `crontab -l` matches the reviewed schedules and new
 root, retains unrelated entries, and has no obsolete duplicate jobs in the
@@ -420,7 +420,10 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
 1. Confirm the scheduler account can read the diagnostics archive and the
    protected API files contain authorized service-account credentials.
 2. Merge the template's dev/prod diagnostics entries into the installed crontab.
-   They run daily at 14:00 UTC with `DRY_RUN=false` and separate locks.
+   They run at 02:00, 08:00, 14:00, and 20:00 UTC with separate locks and inherit
+   global `DRY_RUN`. Leave it unset or `true` for offline scans; set it to `false`
+   only after approving live ingestion and diagnostics linking, or use per-job
+   overrides when approvals differ.
 3. To run a scan manually, run Make from the deployed repository root
    (`${SIMBOARD_ROOT}/repository/simboard`) and select the API environment explicitly:
 
@@ -433,7 +436,7 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
    API credentials; `env` selects log and lock naming. The apply target loads the
    protected `operations/env.<env>.sh` file and enables live linking. Both targets
    use the existing launcher for locks, logs, and exit status. These targets only
-   link already-published output; use `v3-diagnostics-*` for historical backfill.
+   link already-published output; use `v3-diags-*` for historical backfill.
    Dry-run and apply share the selected environment's diagnostics lock with
    scheduled scans. A concurrent run fails without starting the scanner; check
    the indicated log location for lock contention or scanner failures.
