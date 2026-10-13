@@ -18,6 +18,95 @@ from app.scripts.ingestion.diagnostics_link_scanner import (
 BASE_URL = "https://diagnostics.example.org/archive"
 
 
+def test_discovery_reports_throttled_progress_without_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    (tmp_path / "production/a/b/c").mkdir(parents=True)
+    events = []
+    clock = [0.0]
+    original_walk = scanner.os.walk
+
+    def walk(*args, **kwargs):
+        for entry in original_walk(*args, **kwargs):
+            clock[0] += 10
+            yield entry
+
+    monkeypatch.setattr(scanner.os, "walk", walk)
+    monkeypatch.setattr(scanner.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        scanner, "_log_event", lambda event, fields: events.append((event, fields))
+    )
+
+    assert _discover(tmp_path, BASE_URL, "perlmutter") == []
+    assert [event for event, _fields in events] == [
+        "diagnostics_scanner_discovery_tier_started",
+        "diagnostics_scanner_discovery_progress",
+        "diagnostics_scanner_discovery_tier_completed",
+    ]
+    assert events[1][1] == {
+        "tier": "production",
+        "phase": "traversal",
+        "elapsed_seconds": 30.0,
+        "directories_visited": 3,
+        "provenance_files_found": 0,
+        "cases_checked": 0,
+        "valid_candidates": 0,
+    }
+    assert events[-1][1]["directories_visited"] == 4
+
+
+def test_discovery_reports_validation_progress_and_tier_totals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    _case(tmp_path, "production/first")
+    _case(tmp_path, "production/second")
+    (tmp_path / "development").mkdir()
+    events = []
+    clock = [0.0]
+    original_read = scanner._read_settings_bytes
+
+    def read_settings(path):
+        clock[0] += 31
+        return original_read(path)
+
+    monkeypatch.setattr(scanner, "_read_settings_bytes", read_settings)
+    monkeypatch.setattr(scanner.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        scanner, "_log_event", lambda event, fields: events.append((event, fields))
+    )
+
+    assert len(_discover(tmp_path, BASE_URL, "perlmutter")) == 2
+    progress = [fields for event, fields in events if event.endswith("_progress")]
+    assert len(progress) == 1
+    assert progress[0]["phase"] == "validation"
+    assert progress[0]["cases_checked"] == 2
+    completed = [
+        fields for event, fields in events if event.endswith("_tier_completed")
+    ]
+    assert completed[0]["provenance_files_found"] == 2
+    assert completed[0]["valid_candidates"] == 2
+    assert completed[1]["tier"] == "development"
+    assert completed[1]["cases_checked"] == 0
+    assert completed[1]["valid_candidates"] == 0
+
+
+def test_discovery_does_not_follow_directory_or_provenance_symlinks(
+    tmp_path: Path,
+) -> None:
+    directory = _case(tmp_path, "production/case")
+    (tmp_path / "production/alias").symlink_to(directory, target_is_directory=True)
+    (directory / "provenance.20260812_120000_000000.cfg").symlink_to(
+        directory / "provenance.20260811_120000_000000.cfg"
+    )
+    candidates = _discover(tmp_path, BASE_URL, "perlmutter")
+    assert [candidate.path.parent for candidate in candidates] == [directory]
+    assert candidates[0].path.name == "provenance.20260811_120000_000000.cfg"
+
+
 def test_chrysalis_diagnostics_archive_settings() -> None:
     archive = DIAGNOSTICS_ARCHIVES_BY_MACHINE["chrysalis"]
     assert (

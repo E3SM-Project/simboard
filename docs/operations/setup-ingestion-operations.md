@@ -350,6 +350,13 @@ file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,
 
 ## Diagnostics linking
 
+Discovery logs tier start/completion events and throttled progress roughly every
+30 seconds during directory traversal and candidate validation. Progress includes
+the tier, phase, elapsed seconds, directories visited, provenance files found,
+cases checked, and valid candidates. Filesystem calls can block between events;
+these logs are not guaranteed heartbeats. Set `SIMBOARD_CONSOLE_LOG=true` for
+interactive diagnostics Make targets to stream the retained log to the console.
+
 The scanner links published zppy diagnostics to existing SimBoard cases. Publish
 output using [Configure zppy Diagnostics for SimBoard](../user/diagnostics.md)
 and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_archives.py`.
