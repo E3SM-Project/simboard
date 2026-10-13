@@ -118,7 +118,7 @@ operations workspace. The initializer uses the committed template for defaults
 and prompts for the API credentials without echoing the token:
 
 ```bash
-make operations-init-v3-env \
+make ops-init-v3-env \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
@@ -173,12 +173,12 @@ Use the same v3 configuration for diagnostics. Start with reconciliation-only
 mode, which does not copy diagnostics, generate settings, or run the scanner:
 
 ```bash
-make v3-diagnostics-dry-run \
+make v3-diags-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 
 # Include per-source and aggregate selected-source sizes (may take longer).
-make v3-diagnostics-dry-run \
+make v3-diags-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod \
   include_sizes=true
@@ -193,7 +193,7 @@ For a quicker inventory of previously copied cases, opt in to trusting paired
 provenance:
 
 ```bash
-make v3-diagnostics-dry-run \
+make v3-diags-dry-run \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=dev \
   trust_existing=true
@@ -239,7 +239,7 @@ When you are ready to install missing files and run scanner linkage, use the
 explicit write-enabled backfill:
 
 ```bash
-make v3-diagnostics-apply \
+make v3-diags-apply \
   SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```

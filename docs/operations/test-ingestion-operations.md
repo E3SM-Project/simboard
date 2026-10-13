@@ -34,7 +34,7 @@ rm -rf "${TEST_ROOT}"
 ## 2. Provision the deployment
 
 ```bash
-make operations-provision
+make ops-provision
 ```
 
 This creates `${SIMBOARD_ROOT}`, creates `${SIMBOARD_ROOT}/operations` with
@@ -57,7 +57,7 @@ a summary workflow is introduced.
 ## 3. Initialize dummy API environments
 
 ```bash
-make operations-init-env site=chrysalis
+make ops-init-env site=chrysalis
 ```
 
 Use harmless test values at the prompts:
@@ -80,7 +80,7 @@ They should both be mode `640`. Do not print these files when using real tokens.
 ## 4. Generate, but do not install, the cron file
 
 ```bash
-make operations-init-cron site=chrysalis
+make ops-init-cron site=chrysalis
 ```
 
 Replace the template root with the isolated test deployment:
@@ -100,9 +100,10 @@ grep -n "SIMBOARD_ROOT\|refresh_repository\|site_ingestion_launcher" \
 Do **not** run `crontab "${SIMBOARD_ROOT}/operations/chrysalis.crontab"` during
 this test.
 
-Confirm two `chrysalis diagnostics` entries at `0 14 * * *`, using `env.dev.sh`
-and `env.prod.sh` with `DRY_RUN=false`. Do not execute these live jobs with dummy
-credentials or without the site archive. Staging/archive schedules are unchanged.
+Confirm two `chrysalis diagnostics` entries at `0 2,8,14,20 * * *`, using `env.dev.sh`
+and `env.prod.sh`, without inline `DRY_RUN` assignments. Both inherit the top-level
+run mode; leave it unset or `true` during this test. Do not enable live mode with
+dummy credentials or without the site archive. Staging/archive schedules are unchanged.
 
 Run the isolated Make wrapper/launcher/scanner tests from the repository root:
 
@@ -122,7 +123,7 @@ validation, and failure propagation without running real scans.
 ## 5. Test a no-op refresh
 
 ```bash
-make operations-refresh
+make ops-refresh
 ```
 
 Expected output reports that the checkout is already current. This verifies the
@@ -150,7 +151,7 @@ deployment clone:
 
 ```bash
 git commit --allow-empty -m "test: verify operations refresh"
-make operations-refresh
+make ops-refresh
 ```
 
 The refresh should fetch and check out the new revision, then synchronize the

@@ -606,6 +606,21 @@ Python scanner directly, not the host-side launcher.
 
 #### Setup procedure
 
+zppy normally creates `diagnostics_archive/production/` and
+`diagnostics_archive/development/` when publishing. If deploying the scanner first,
+run this optional bootstrap from the repository root on Perlmutter as the
+authorized NERSC archive owner:
+
+```bash
+make diags-init-archive machine=perlmutter
+```
+
+The command creates only the missing configured archive root, with your UID,
+group `e3sm` (GID `62756`), and mode `2775` (group access/inheritance); existing directories stay
+unchanged. The publishing parent must already exist. Have its owners ensure
+parent `o+x` traversal permissions required by Spin. Confirm Spin sees the root;
+keep **An existing directory**, not `DirectoryOrCreate`. zppy creates the contents.
+
 Under **Storage -> Secrets**, create the **Opaque** secret
 `nersc-diagnostics-scanner-env`:
 
@@ -624,7 +639,7 @@ Open **Workloads -> CronJobs -> Create**:
 | Rancher field | Value |
 | --- | --- |
 | Name | `nersc-diagnostics-scanner` |
-| Schedule | `0 14 * * *` |
+| Schedule | `0 2,8,14,20 * * *` |
 | Time zone | `Etc/UTC` |
 
 #### 1. CronJob tab
@@ -638,8 +653,9 @@ Open **Workloads -> CronJobs -> Create**:
 | Failed jobs history limit | `3` |
 | Job backoff limit | `0` (retry at the next schedule) |
 
-The daily scan is offset from 12:00 archive ingestion. If the time-zone field is
-unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
+Scans run every six hours at 02:00, 08:00, 14:00, and 20:00 UTC, retaining the
+14:00 run after 12:00 archive ingestion. If the time-zone field is unavailable,
+verify the controller uses UTC. Avoid overlapping manual jobs;
 `Forbid` only controls scheduled jobs.
 
 #### 2. Pod tab
@@ -648,7 +664,7 @@ unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
 
 | Rancher field | Value |
 | --- | --- |
-| Pod Filesystem Group | `62756` |
+| Pod Filesystem Group | `62756` (`e3sm`); match the container's Run as Group ID |
 | Restart policy | `Never` |
 
 `Storage`:
@@ -680,6 +696,7 @@ unavailable, verify the controller uses UTC. Avoid overlapping manual jobs;
 | Rancher field | Value |
 | --- | --- |
 | Run as User | Numeric NERSC UID authorized to read the archive |
+| Run as Group ID | `62756` (`e3sm`); also use it for Pod Filesystem Group |
 | allowPrivilegeEscalation | `false` |
 | privileged | `false` |
 | capabilities | drop `ALL` |
@@ -703,7 +720,9 @@ is needed.
 2. Check the [scanner results](setup-ingestion-operations.md#check-scanner-results)
    and verify links in SimBoard. Deferred state lookups or failed link submissions
    cause a nonzero scanner exit and a failed job.
-3. Confirm the next scheduled run and monitor duration: every scan walks the full archive.
+3. Confirm the next scheduled run and monitor duration: every scan walks the full
+   archive. Return to daily scans if the six-hour schedule causes excessive load
+   or scans routinely exceed the interval.
 
 ### Workload 5: Frontend Deployment (`frontend`)
 

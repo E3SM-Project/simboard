@@ -3,7 +3,7 @@ set -euo pipefail
 umask 027
 
 # Refresh an existing clean deployment checkout. Bootstrap directories and a
-# missing checkout with operations-provision instead.
+# missing checkout with ops-provision instead.
 : "${SIMBOARD_ROOT:?SIMBOARD_ROOT must be set}"
 repository_ref="${SIMBOARD_REPOSITORY_REF:-main}"
 operations_dir="${SIMBOARD_ROOT}/operations"
@@ -16,12 +16,12 @@ if ! command -v git >/dev/null || ! command -v make >/dev/null; then
 fi
 
 if [[ ! -d "${operations_dir}" ]]; then
-  echo "Operations directory does not exist; run operations-provision first: ${operations_dir}" >&2
+  echo "Operations directory does not exist; run ops-provision first: ${operations_dir}" >&2
   exit 1
 fi
 
 if [[ ! -d "${checkout_dir}/.git" ]]; then
-  echo "SimBoard checkout does not exist; run operations-provision first: ${checkout_dir}" >&2
+  echo "SimBoard checkout does not exist; run ops-provision first: ${checkout_dir}" >&2
   exit 1
 fi
 

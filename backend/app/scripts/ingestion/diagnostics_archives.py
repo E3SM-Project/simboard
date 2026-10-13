@@ -7,6 +7,7 @@ from dataclasses import dataclass
 class DiagnosticsArchive:
     root: str
     public_base_url: str
+    group: str | None = None
 
 
 # Refresh from Mache [web_portal] configuration in a reviewed change when sites move.
@@ -15,18 +16,22 @@ DIAGNOSTICS_ARCHIVES_BY_MACHINE: dict[str, DiagnosticsArchive] = {
     "perlmutter": DiagnosticsArchive(
         root="/global/cfs/cdirs/e3sm/www/diagnostics_archive",
         public_base_url="https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
+        group="e3sm",
     ),
     "pm": DiagnosticsArchive(
         root="/global/cfs/cdirs/e3sm/www/diagnostics_archive",
         public_base_url="https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
+        group="e3sm",
     ),
     "pm-cpu": DiagnosticsArchive(
         root="/global/cfs/cdirs/e3sm/www/diagnostics_archive",
         public_base_url="https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
+        group="e3sm",
     ),
     "pm-gpu": DiagnosticsArchive(
         root="/global/cfs/cdirs/e3sm/www/diagnostics_archive",
         public_base_url="https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
+        group="e3sm",
     ),
     "chrysalis": DiagnosticsArchive(
         root="/lcrc/group/e3sm/public_html/diagnostic_output/diagnostics_archive",

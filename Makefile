@@ -46,23 +46,32 @@ help:
 	@echo "  make backend-rollback-seed                 # Rollback seeded data"
 	@echo "  make backend-create-admin 					# Create admin user (interactive)"
 	@echo "  make backend-provision-service service_name=<name>  # Provision service account"
+	@echo ""
+
+	@echo "Operations:"
+	@echo "  Deployment:"
+	@echo "  make ops-provision SIMBOARD_ROOT=<path>       # Provision checkout, runtime, and operations workspace"
+	@echo "  make ops-refresh SIMBOARD_ROOT=<path>         # Refresh checkout and backend runtime"
+	@echo "  make ops-init-env site=<site> SIMBOARD_ROOT=<path> # Create protected dev and prod API environment files"
+	@echo "  make ops-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod> # Create protected v3 backfill configuration"
+	@echo "  make ops-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
+	@echo '  make ops-configure-access site=<site> SIMBOARD_ROOT=<path> operators="<users>" [apply=true] # Preview or apply operator ACLs'
+	@echo ""
+	@echo "  Ingestion:"
 	@echo "  make ingest-dry-run machine=<chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging> # General ingestion without writes"
 	@echo "  make ingest-apply machine=<chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
 	@echo "    Chrysalis: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make operations-provision SIMBOARD_ROOT=<path>  # Provision checkout, runtime, and standardized operations workspace"
-	@echo "  make operations-refresh SIMBOARD_ROOT=<path>    # Refresh an existing clean checkout and its backend runtime"
-	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
-	@echo "  make operations-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod> # Create protected v3 backfill configuration"
-	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
-	@echo '  make operations-configure-access site=<site> SIMBOARD_ROOT=<path> operators="<users>" [apply=true] # Preview or apply operator ACLs'
-	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
-	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
+	@echo ""
+	@echo "  Diagnostics:"
+	@echo "  make v3-diags-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
+	@echo "  make v3-diags-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
 	@echo "    Optional: case_name=<exact-case-name> to retry one v3 diagnostics case"
-	@echo "  make diagnostics-dry-run SIMBOARD_ROOT=<path> site=<site> env=<dev|prod> # Discover published diagnostics offline"
-	@echo "  make diagnostics-apply SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>   # Link published diagnostics to existing cases"
+	@echo "  make diags-dry-run SIMBOARD_ROOT=<path> site=<site> env=<dev|prod> # Discover published diagnostics offline"
+	@echo "  make diags-apply SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>   # Link published diagnostics to existing cases"
+	@echo "  make diags-init-archive machine=<perlmutter|chrysalis> # Optionally create a missing diagnostics root on-site"
 	@echo ""
 
 	@echo "Frontend:"
@@ -108,7 +117,7 @@ help:
 # CORE SETUP
 # ============================================================
 
-.PHONY: setup-local setup-local-assets copy-env-files gen-certs install operations-provision operations-refresh operations-init-env operations-init-v3-env operations-init-cron
+.PHONY: setup-local setup-local-assets copy-env-files gen-certs install
 
 # ------------------------------------------------------------
 # Bare-metal environment
@@ -182,6 +191,20 @@ copy-env-files:
 		echo "Missing $$src"; \
 	fi
 
+gen-certs:
+	@echo "Generating local SSL certificates..."
+	cd certs && ./generate-local-certs.sh
+
+# ============================================================
+# OPERATIONS
+# ============================================================
+
+# ------------------------------------------------------------
+# Deployment
+# ------------------------------------------------------------
+
+.PHONY: ops-provision ops-refresh ops-init-env ops-init-v3-env ops-init-cron ops-configure-access
+
 INGESTION_SITE_CONFIGS_DIR := backend/app/scripts/ingestion/sites/configs
 INGESTION_TEMPLATES_DIR := backend/app/scripts/ingestion/sites/templates
 INGESTION_OPERATIONS_DIR := backend/app/scripts/ingestion/sites/operations
@@ -195,58 +218,29 @@ INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.s
 INGESTION_REFRESH_SCRIPT := $(INGESTION_OPERATIONS_DIR)/refresh_repository.sh
 INGESTION_ACCESS_SCRIPT := $(INGESTION_OPERATIONS_DIR)/configure_access.sh
 INGESTION_ACCESS_POLICY := $(INGESTION_OPERATIONS_DIR)/access_policy.sh
-DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 
-.PHONY: diagnostics-dry-run diagnostics-apply
-
-# Use the host launcher for its protected API configuration, locks, and logs.
-# Dry scans select an environment for log/lock naming but never load credentials.
-diagnostics-dry-run diagnostics-apply:
-	@if [ -z "$(SIMBOARD_ROOT)" ] || [ -z "$(site)" ] || [ -z "$(env)" ]; then \
-		echo "Usage: make $@ SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>" >&2; \
-		exit 1; \
-	fi; \
-	case "$(site)" in *[!abcdefghijklmnopqrstuvwxyz0123456789_-]*) echo "site must contain only lowercase letters, digits, underscores, or hyphens" >&2; exit 1 ;; esac; \
-	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
-		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
-		exit 1; \
-	fi; \
-	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
-		echo "env must be dev or prod" >&2; \
-		exit 1; \
-	fi; \
-	SIMBOARD_ROOT="$(SIMBOARD_ROOT)" SIMBOARD_ENV_FILE="$(SIMBOARD_ROOT)/operations/env.$(env).sh" \
-		SIMBOARD_SITE_CONFIG="$(CURDIR)/$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" \
-		DRY_RUN=$(if $(filter diagnostics-dry-run,$@),true,false) \
-		bash "$(DIAGNOSTICS_LAUNCHER)" "$(site)" diagnostics || { \
-			exit_code=$$?; \
-			echo "Diagnostics launcher failed (exit $$exit_code). If a run log was created, check $(SIMBOARD_ROOT)/operations/raw_logs/simboard-diagnostics-$(site)-env.$(env).sh-*.log" >&2; \
-			exit "$$exit_code"; \
-		}
-
-operations-provision:
+ops-provision:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make operations-provision SIMBOARD_ROOT=<path>" >&2; \
+		echo "Usage: make ops-provision SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_PROVISION_SCRIPT)" && \
 	echo "For v3 archive or diagnostics backfill, create a protected environment with:" && \
-	echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=<dev|prod>"
+	echo "  make ops-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=<dev|prod>"
 
-operations-refresh:
+ops-refresh:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make operations-refresh SIMBOARD_ROOT=<path>" >&2; \
+		echo "Usage: make ops-refresh SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_REFRESH_SCRIPT)"
 
-.PHONY: operations-configure-access
-operations-configure-access:
+ops-configure-access:
 	@SIMBOARD_ROOT="$(SIMBOARD_ROOT)" bash "$(INGESTION_ACCESS_SCRIPT)" "$(site)" "$(operators)" "$(if $(apply),$(apply),false)"
 
-operations-init-env:
+ops-init-env:
 	@if [ -z "$(site)" ]; then \
-		echo "Usage: make operations-init-env site=<site> SIMBOARD_ROOT=<path>" >&2; \
+		echo "Usage: make ops-init-env site=<site> SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
@@ -272,9 +266,9 @@ operations-init-env:
 	echo "Created $$dev_env_file and $$prod_env_file."; \
 	echo "Keep these files protected; they contain service-account tokens."
 
-operations-init-v3-env:
+ops-init-v3-env:
 	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make operations-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
+		echo "Usage: make ops-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
 		exit 1; \
 	fi; \
 	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
@@ -284,7 +278,7 @@ operations-init-v3-env:
 	operations_dir="$(SIMBOARD_ROOT)/operations"; \
 	if [ ! -d "$$operations_dir" ]; then \
 		echo "Operations workspace does not exist: $$operations_dir" >&2; \
-		echo "Run: make operations-provision SIMBOARD_ROOT=$(SIMBOARD_ROOT)" >&2; \
+		echo "Run: make ops-provision SIMBOARD_ROOT=$(SIMBOARD_ROOT)" >&2; \
 		exit 1; \
 	fi; \
 	destination="$$operations_dir/lcrc-v3.$(env).env"; \
@@ -294,11 +288,11 @@ operations-init-v3-env:
 	fi; \
 	bash "$(V3_ENV_INITIALIZER)" "$(INGESTION_TEMPLATES_DIR)/env.$(env).sh.example" "$(V3_ENV_TEMPLATE)" "$$destination" "$(env)"; \
 	echo "Created $$destination."; \
-	echo "Start with: make v3-diagnostics-dry-run SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)"
+	echo "Start with: make v3-diags-dry-run SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)"
 
-operations-init-cron:
+ops-init-cron:
 	@if [ -z "$(site)" ]; then \
-		echo "Usage: make operations-init-cron site=<site> SIMBOARD_ROOT=<path>" >&2; \
+		echo "Usage: make ops-init-cron site=<site> SIMBOARD_ROOT=<path>" >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
@@ -322,13 +316,102 @@ operations-init-cron:
 	echo "Created $$cron_file."; \
 	echo "Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file."
 
-gen-certs:
-	@echo "Generating local SSL certificates..."
-	cd certs && ./generate-local-certs.sh
+# Shared environment validation for v3 ingestion and diagnostics.
+ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
+
+.PHONY: validate-v3-env
+validate-v3-env:
+	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
+		echo "Usage: make $(target) SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
+		exit 1; \
+	fi; \
+	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
+		echo "env must be dev or prod" >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -r "$(ENV_PATH)" ]; then \
+		echo "Missing v3 environment file: $(ENV_PATH)" >&2; \
+		echo "Create it with:" >&2; \
+		echo "  make ops-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)" >&2; \
+		exit 1; \
+	fi
 
 # ------------------------------------------------------------
-# Pre-commit
+# Ingestion
 # ------------------------------------------------------------
+
+.PHONY: ingest-dry-run ingest-apply v3-ingest-dry-run v3-ingest-apply
+ingest-dry-run ingest-apply: export machine := $(machine)
+ingest-dry-run ingest-apply: export env := $(env)
+ingest-dry-run ingest-apply: export env_file := $(env_file)
+ingest-dry-run ingest-apply: export scan_mode := $(scan_mode)
+ingest-dry-run ingest-apply: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
+ingest-dry-run ingest-apply:
+	@bash $(BACKEND_DIR)/app/scripts/ingestion/run_machine_ingestion.sh $(if $(filter ingest-apply,$@),false,true)
+
+v3-ingest-dry-run:
+	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-dry-run
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
+
+v3-ingest-apply:
+	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-apply
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
+
+# ------------------------------------------------------------
+# Diagnostics
+# ------------------------------------------------------------
+
+DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
+
+.PHONY: diags-dry-run diags-apply diags-init-archive v3-diags-dry-run v3-diags-apply
+
+diags-init-archive:
+	@if [ -z "$(machine)" ]; then \
+		echo "Usage: make $@ machine=<perlmutter|chrysalis>" >&2; \
+		exit 1; \
+	fi
+	cd $(BACKEND_DIR) && MACHINE_NAME="$(machine)" uv run python -m app.scripts.ingestion.initialize_diagnostics_archive
+
+# Use the host launcher for its protected API configuration, locks, and logs.
+# Dry scans select an environment for log/lock naming but never load credentials.
+diags-dry-run diags-apply:
+	@if [ -z "$(SIMBOARD_ROOT)" ] || [ -z "$(site)" ] || [ -z "$(env)" ]; then \
+		echo "Usage: make $@ SIMBOARD_ROOT=<path> site=<site> env=<dev|prod>" >&2; \
+		exit 1; \
+	fi; \
+	case "$(site)" in *[!abcdefghijklmnopqrstuvwxyz0123456789_-]*) echo "site must contain only lowercase letters, digits, underscores, or hyphens" >&2; exit 1 ;; esac; \
+	if [ ! -r "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" ]; then \
+		echo "Site configuration not readable: $(INGESTION_SITE_CONFIGS_DIR)/$(site).config" >&2; \
+		exit 1; \
+	fi; \
+	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
+		echo "env must be dev or prod" >&2; \
+		exit 1; \
+	fi; \
+	SIMBOARD_ROOT="$(SIMBOARD_ROOT)" SIMBOARD_ENV_FILE="$(SIMBOARD_ROOT)/operations/env.$(env).sh" \
+		SIMBOARD_SITE_CONFIG="$(CURDIR)/$(INGESTION_SITE_CONFIGS_DIR)/$(site).config" \
+		DRY_RUN=$(if $(filter diags-dry-run,$@),true,false) \
+		bash "$(DIAGNOSTICS_LAUNCHER)" "$(site)" diagnostics || { \
+			exit_code=$$?; \
+			echo "Diagnostics launcher failed (exit $$exit_code). If a run log was created, check $(SIMBOARD_ROOT)/operations/raw_logs/simboard-diagnostics-$(site)-env.$(env).sh-*.log" >&2; \
+			exit "$$exit_code"; \
+		}
+
+v3-diags-dry-run:
+	@$(MAKE) --no-print-directory validate-v3-env target=v3-diags-dry-run
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true INCLUDE_SIZES="$(include_sizes)" TRUST_EXISTING="$(trust_existing)" \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
+
+v3-diags-apply:
+	@$(MAKE) --no-print-directory validate-v3-env target=v3-diags-apply
+	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false TRUST_EXISTING="$(trust_existing)" \
+		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
+
+# ============================================================
+# PRE-COMMIT
+# ============================================================
 
 .PHONY: pre-commit-install pre-commit-run
 
@@ -367,7 +450,7 @@ docs-build:
 # BACKEND COMMANDS
 # ============================================================
 
-.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service v3-ingest-dry-run v3-ingest-apply v3-diagnostics-dry-run v3-diagnostics-apply
+.PHONY: backend-install backend-clean backend-run backend-migrate backend-upgrade backend-downgrade backend-test backend-seed backend-rollback-seed backend-create-admin backend-provision-service
 
 backend-install:
 	cd $(BACKEND_DIR) && if [ ! -d .venv ]; then uv venv .venv; fi && uv sync --all-groups
@@ -411,54 +494,6 @@ backend-provision-service:
 	cd $(BACKEND_DIR) && \
 	uv run python -m app.scripts.users.provision_service_account \
 		--service-name "$(service_name)"
-
-.PHONY: ingest-dry-run ingest-apply
-ingest-dry-run ingest-apply: export machine := $(machine)
-ingest-dry-run ingest-apply: export env := $(env)
-ingest-dry-run ingest-apply: export env_file := $(env_file)
-ingest-dry-run ingest-apply: export scan_mode := $(scan_mode)
-ingest-dry-run ingest-apply: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
-ingest-dry-run ingest-apply:
-	@bash $(BACKEND_DIR)/app/scripts/ingestion/run_machine_ingestion.sh $(if $(filter ingest-apply,$@),false,true)
-
-v3-ingest-dry-run:
-	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-dry-run
-	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
-
-v3-ingest-apply:
-	@$(MAKE) --no-print-directory validate-v3-env target=v3-ingest-apply
-	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3.sh
-
-v3-diagnostics-dry-run:
-	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-dry-run
-	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=true INCLUDE_SIZES="$(include_sizes)" TRUST_EXISTING="$(trust_existing)" \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
-
-v3-diagnostics-apply:
-	@$(MAKE) --no-print-directory validate-v3-env target=v3-diagnostics-apply
-	PYTHONUNBUFFERED=1 ENV_FILE="$(ENV_PATH)" DRY_RUN=false TRUST_EXISTING="$(trust_existing)" \
-		$(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc_v3_diagnostics_backfill.sh $(if $(case_name),--case-name '$(subst ','"'"',$(case_name))')
-
-ENV_PATH = $(if $(env_file),$(env_file),$(SIMBOARD_ROOT)/operations/lcrc-v3.$(env).env)
-
-.PHONY: validate-v3-env
-validate-v3-env:
-	@if [ -z "$(SIMBOARD_ROOT)" ]; then \
-		echo "Usage: make $(target) SIMBOARD_ROOT=<path> env=<dev|prod>" >&2; \
-		exit 1; \
-	fi; \
-	if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then \
-		echo "env must be dev or prod" >&2; \
-		exit 1; \
-	fi; \
-	if [ ! -r "$(ENV_PATH)" ]; then \
-		echo "Missing v3 environment file: $(ENV_PATH)" >&2; \
-		echo "Create it with:" >&2; \
-		echo "  make operations-init-v3-env SIMBOARD_ROOT=$(SIMBOARD_ROOT) env=$(env)" >&2; \
-		exit 1; \
-	fi
 
 # ============================================================
 # FRONTEND COMMANDS
