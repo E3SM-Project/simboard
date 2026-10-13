@@ -119,7 +119,7 @@ and prompts for the API credentials without echoing the token:
 
 ```bash
 make operations-init-v3-env \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 
@@ -137,7 +137,7 @@ Start with the Make dry run:
 
 ```bash
 make v3-ingest-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 
@@ -159,7 +159,7 @@ run the explicit apply target:
 
 ```bash
 make v3-ingest-apply \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 
@@ -174,12 +174,12 @@ mode, which does not copy diagnostics, generate settings, or run the scanner:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 
 # Include per-source and aggregate selected-source sizes (may take longer).
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod \
   include_sizes=true
 ```
@@ -194,7 +194,7 @@ provenance:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=dev \
   trust_existing=true
 ```
@@ -240,7 +240,7 @@ explicit write-enabled backfill:
 
 ```bash
 make v3-diagnostics-apply \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 

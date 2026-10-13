@@ -49,7 +49,13 @@ an approved deployment requires a different source, branch, or tag.
 
 | Machine   | `SIMBOARD_ROOT`              | Site config                      | Repository checkout                    |
 | --------- | ---------------------------- | -------------------------------- | -------------------------------------- |
-| Chrysalis | `/lcrc/group/e3sm2/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+| Chrysalis | `/lcrc/group/e3sm/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+
+The operator's user account owns scheduling for this deployment. Tony's
+`/lcrc/group/e3sm2/simboard` workspace and jobs remain available for development
+and testing under his account. Each deployment keeps its own operations locks;
+these locks do not serialize requests between deployments. Review concurrent
+API requests when validating the new deployment.
 
 ### Provision the runtime
 
@@ -59,7 +65,7 @@ an approved deployment requires a different source, branch, or tag.
    `repository/simboard/backend`. For Chrysalis:
 
    ```bash
-   export SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+   export SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
    ```
 
 3. Provision the deployment-local `operations/` workspace and SimBoard checkout:
@@ -131,17 +137,34 @@ without echoing either token. It creates `operations/env.dev.sh` and
 
 ### Install scheduler configuration
 
-Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedules
-if needed, then install it:
+Copy the site crontab into `operations/`:
 
 ```bash
 make operations-init-cron site=chrysalis
-crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
+```
+
+Before installing, save the current account's crontab in a protected location
+and merge unrelated entries into the reviewed file: `crontab <file>` replaces
+the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
+`/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
+Disable the diagnostics entries during initial validation because they
+explicitly set `DRY_RUN=false`. Run offline diagnostics discovery before
+enabling those entries. Do not change Tony's crontab or workspace.
+
+After reviewing the merged file, install it:
+
+```bash
+crontab /lcrc/group/e3sm/simboard/operations/chrysalis.crontab
 ```
 
 Review `operations/raw_logs/simboard-ingestion-*.log`. After the dry-run
 results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use
 `MAX_CASES_PER_RUN` for a bounded first live run.
+
+After installation, verify `crontab -l` matches the reviewed schedules and new
+root, retains unrelated entries, and has no obsolete duplicate jobs in the
+operator's account. Review the first scheduled-run logs before declaring the
+deployment complete.
 
 The copied crontab:
 
@@ -235,8 +258,8 @@ Both targets require `scan_mode=archive` or `scan_mode=staging`; there is no def
 After provisioning Chrysalis:
 
 ```bash
-make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive
-make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
+make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard env=dev scan_mode=archive
+make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
 ```
 
 - **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
@@ -271,7 +294,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make operations-init-v3-env \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -284,7 +307,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make v3-ingest-dry-run \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -292,7 +315,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make v3-ingest-apply \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -300,7 +323,7 @@ The same configuration supports v3 diagnostics backfill:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 
@@ -309,11 +332,11 @@ its exact reviewed name. First review the dry-run reconciliation, then apply:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 
 make v3-diagnostics-apply \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 ```
 
