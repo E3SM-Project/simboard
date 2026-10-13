@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
+source "$(dirname -- "${BASH_SOURCE[0]}")/access_policy.sh"
 
 # Provision the deployment-local workspace and SimBoard checkout used by
 # scheduled site ingestion. Credentials and installed crontabs are created
@@ -43,6 +44,7 @@ fi
 # Runtime logs and operator-reviewed validation artifacts are deliberately kept
 # separate. Do not create summarized_logs until a summary-producing workflow is
 # introduced.
+directory_mode="$(operations_directory_mode "$operations_dir")" || exit 1
 for directory_name in raw_logs quality_assurance; do
   directory_path="${operations_dir}/${directory_name}"
   if [[ ( -e "${directory_path}" || -L "${directory_path}" ) && ! -d "${directory_path}" ]]; then
@@ -52,12 +54,12 @@ for directory_name in raw_logs quality_assurance; do
   if [[ -d "${directory_path}" ]]; then
     echo "Verified existing operations ${directory_name} directory: ${directory_path}"
   else
-    mkdir -p -m 750 "${directory_path}"
+    mkdir -p -m "$directory_mode" "${directory_path}"
     echo "Created operations ${directory_name} directory: ${directory_path}"
   fi
 done
 
-if command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
+if ! operations_acl_enabled "$operations_dir" && command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
   group_access_configured=true
   for directory_path in "${operations_dir}" "${operations_dir}/raw_logs" "${operations_dir}/quality_assurance"; do
     if ! chgrp simboard "${directory_path}"; then

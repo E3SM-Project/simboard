@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/access_policy.sh"
 
 if (( $# != 4 )); then
   echo "Usage: $0 <dev-template> <prod-template> <dev-destination> <prod-destination>" >&2
@@ -62,7 +63,7 @@ write_environment() {
   local api_base_url=$3
   local api_token=$4
 
-  install -m 640 /dev/null "${destination}"
+  operations_install /dev/null "${destination}"
   {
   printf '#!/usr/bin/env bash\n'
   printf '# %s SimBoard API configuration. Keep this file outside the repository.\n' \

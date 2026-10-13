@@ -57,6 +57,7 @@ help:
 	@echo "  make operations-init-env site=<site> SIMBOARD_ROOT=<path> # Interactively create protected dev and prod API environment files"
 	@echo "  make operations-init-v3-env SIMBOARD_ROOT=<path> env=<dev|prod> # Create protected v3 backfill configuration"
 	@echo "  make operations-init-cron site=<site> SIMBOARD_ROOT=<path> # Copy a site crontab into operations"
+	@echo '  make operations-configure-access site=<site> SIMBOARD_ROOT=<path> operators="<users>" [apply=true] # Preview or apply operator ACLs'
 	@echo "  make v3-diagnostics-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
 	@echo "  make v3-diagnostics-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Backfill and link Chrysalis v3 diagnostics"
 	@echo "    Optional: case_name=<exact-case-name> to retry one v3 diagnostics case"
@@ -192,6 +193,8 @@ V3_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_v3_environment.sh
 V3_ENV_TEMPLATE := $(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc-v3.env.example
 INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
 INGESTION_REFRESH_SCRIPT := $(INGESTION_OPERATIONS_DIR)/refresh_repository.sh
+INGESTION_ACCESS_SCRIPT := $(INGESTION_OPERATIONS_DIR)/configure_access.sh
+INGESTION_ACCESS_POLICY := $(INGESTION_OPERATIONS_DIR)/access_policy.sh
 DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 
 .PHONY: diagnostics-dry-run diagnostics-apply
@@ -236,6 +239,10 @@ operations-refresh:
 		exit 1; \
 	fi; \
 	bash "$(INGESTION_REFRESH_SCRIPT)"
+
+.PHONY: operations-configure-access
+operations-configure-access:
+	@SIMBOARD_ROOT="$(SIMBOARD_ROOT)" bash "$(INGESTION_ACCESS_SCRIPT)" "$(site)" "$(operators)" "$(if $(apply),$(apply),false)"
 
 operations-init-env:
 	@if [ -z "$(site)" ]; then \
@@ -311,7 +318,7 @@ operations-init-cron:
 		echo "$$cron_file already exists; refusing to overwrite it." >&2; \
 		exit 1; \
 	fi; \
-	install -m 640 "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file"; \
+	bash "$(INGESTION_ACCESS_POLICY)" "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file" || exit $$?; \
 	echo "Created $$cron_file."; \
 	echo "Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file."
 
@@ -329,7 +336,7 @@ pre-commit-install:
 	cd $(BACKEND_DIR) && uv run pre-commit install --install-hooks
 
 pre-commit-run:
-	cd $(BACKEND_DIR) && uv run pre-commit run --all-files
+	uv run --project $(BACKEND_DIR) pre-commit run --all-files
 
 
 # ============================================================
