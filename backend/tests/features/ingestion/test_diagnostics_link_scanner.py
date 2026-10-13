@@ -94,6 +94,26 @@ def test_discovery_reports_validation_progress_and_tier_totals(
     assert completed[1]["valid_candidates"] == 0
 
 
+@pytest.mark.parametrize("tier", ["production", "development"])
+def test_discovery_does_not_traverse_symlinked_tier_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tier: str
+) -> None:
+    from app.scripts.ingestion import diagnostics_link_scanner as scanner
+
+    root = tmp_path / "archive"
+    root.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    (root / tier).symlink_to(external, target_is_directory=True)
+
+    def unexpected_walk(*args, **kwargs):
+        pytest.fail("Discovery must not traverse a symlinked tier root")
+
+    monkeypatch.setattr(scanner.os, "walk", unexpected_walk)
+
+    assert _discover(root, BASE_URL, "perlmutter") == []
+
+
 def test_discovery_does_not_follow_directory_or_provenance_symlinks(
     tmp_path: Path,
 ) -> None:

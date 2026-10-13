@@ -47,15 +47,11 @@ clones the current `main` branch of the canonical SimBoard repository beneath
 this root; use `SIMBOARD_REPOSITORY_URL` or `SIMBOARD_REPOSITORY_REF` only when
 an approved deployment requires a different source, branch, or tag.
 
-| Machine   | `SIMBOARD_ROOT`              | Site config                      | Repository checkout                    |
-| --------- | ---------------------------- | -------------------------------- | -------------------------------------- |
+| Machine   | `SIMBOARD_ROOT`             | Site config                      | Repository checkout                    |
+| --------- | --------------------------- | -------------------------------- | -------------------------------------- |
 | Chrysalis | `/lcrc/group/e3sm/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 
-The operator's user account owns scheduling for this deployment. Tony's
-`/lcrc/group/e3sm2/simboard` workspace and jobs remain available for development
-and testing under his account. Each deployment keeps its own operations locks;
-these locks do not serialize requests between deployments. Review concurrent
-API requests when validating the new deployment.
+The operator's user account owns scheduling for this deployment.
 
 ### Provision the runtime
 
@@ -149,7 +145,7 @@ the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
 `/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
 Disable the diagnostics entries during initial validation because they
 explicitly set `DRY_RUN=false`. Run offline diagnostics discovery before
-enabling those entries. Do not change Tony's crontab or workspace.
+enabling those entries.
 
 After reviewing the merged file, install it:
 
@@ -157,9 +153,17 @@ After reviewing the merged file, install it:
 crontab /lcrc/group/e3sm/simboard/operations/chrysalis.crontab
 ```
 
-Review `operations/raw_logs/simboard-ingestion-*.log`. After the dry-run
-results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use
-`MAX_CASES_PER_RUN` for a bounded first live run.
+After offline diagnostics discovery succeeds and API credentials are approved,
+uncomment the diagnostics entries in the copied crontab and reinstall the
+reviewed file with the `crontab` command above. Each diagnostics entry sets
+`DRY_RUN=false`; leave the global run-mode setting commented until live
+ingestion is separately approved.
+
+Review `operations/raw_logs/simboard-ingestion-*.log`. After the ingestion
+dry-run results are correct and live ingestion is approved, uncomment the
+global `DRY_RUN=false` in the copied crontab to enable live staging/archive
+jobs, then reinstall the reviewed file. Use `MAX_CASES_PER_RUN` for a bounded
+first live ingestion run.
 
 After installation, verify `crontab -l` matches the reviewed schedules and new
 root, retains unrelated entries, and has no obsolete duplicate jobs in the
@@ -383,6 +387,7 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
    Dry-run and apply share the selected environment's diagnostics lock with
    scheduled scans. A concurrent run fails without starting the scanner; check
    the indicated log location for lock contention or scanner failures.
+
 4. Review `operations/raw_logs/simboard-diagnostics-chrysalis-*.log` and verify
    links in SimBoard. Each scan walks the full archive; ingestion year/case limits
    do not apply.

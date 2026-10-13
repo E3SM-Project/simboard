@@ -342,7 +342,7 @@ def _discover(  # noqa: C901
     for tier in ("production", "development"):
         tier_root = root / tier
 
-        if not tier_root.is_dir():
+        if tier_root.is_symlink() or not tier_root.is_dir():
             continue
 
         newest_by_case: dict[Path, tuple[Path, datetime]] = {}
