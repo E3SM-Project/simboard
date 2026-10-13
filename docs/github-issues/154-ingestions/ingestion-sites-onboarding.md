@@ -64,7 +64,7 @@ the file's group must be authorized to use its token:
 Create a new environment file without overwriting an existing one:
 
 ```bash
-make operations-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+make operations-init-env site=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
 ```
 
 The development and production templates supply their respective public API

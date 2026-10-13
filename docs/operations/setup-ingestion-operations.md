@@ -47,9 +47,11 @@ clones the current `main` branch of the canonical SimBoard repository beneath
 this root; use `SIMBOARD_REPOSITORY_URL` or `SIMBOARD_REPOSITORY_REF` only when
 an approved deployment requires a different source, branch, or tag.
 
-| Machine   | `SIMBOARD_ROOT`              | Site config                      | Repository checkout                    |
-| --------- | ---------------------------- | -------------------------------- | -------------------------------------- |
-| Chrysalis | `/lcrc/group/e3sm2/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+| Machine   | `SIMBOARD_ROOT`             | Site config                      | Repository checkout                    |
+| --------- | --------------------------- | -------------------------------- | -------------------------------------- |
+| Chrysalis | `/lcrc/group/e3sm/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+
+The operator's user account owns scheduling for this deployment.
 
 ### Provision the runtime
 
@@ -59,7 +61,7 @@ an approved deployment requires a different source, branch, or tag.
    `repository/simboard/backend`. For Chrysalis:
 
    ```bash
-   export SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard
+   export SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
    ```
 
 3. Provision the deployment-local `operations/` workspace and SimBoard checkout:
@@ -131,17 +133,42 @@ without echoing either token. It creates `operations/env.dev.sh` and
 
 ### Install scheduler configuration
 
-Copy the site crontab into `operations/`, edit its `SIMBOARD_ROOT` and schedules
-if needed, then install it:
+Copy the site crontab into `operations/`:
 
 ```bash
 make operations-init-cron site=chrysalis
-crontab /lcrc/group/e3sm2/simboard/operations/chrysalis.crontab
 ```
 
-Review `operations/raw_logs/simboard-ingestion-*.log`. After the dry-run
-results are correct, uncomment `DRY_RUN=false` in the copied crontab. Use
-`MAX_CASES_PER_RUN` for a bounded first live run.
+Before installing, save the current account's crontab in a protected location
+and merge unrelated entries into the reviewed file: `crontab <file>` replaces
+the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
+`/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
+Disable the diagnostics entries during initial validation because they
+explicitly set `DRY_RUN=false`. Run offline diagnostics discovery before
+enabling those entries.
+
+After reviewing the merged file, install it:
+
+```bash
+crontab /lcrc/group/e3sm/simboard/operations/chrysalis.crontab
+```
+
+After offline diagnostics discovery succeeds and API credentials are approved,
+uncomment the diagnostics entries in the copied crontab and reinstall the
+reviewed file with the `crontab` command above. Each diagnostics entry sets
+`DRY_RUN=false`; leave the global run-mode setting commented until live
+ingestion is separately approved.
+
+Review `operations/raw_logs/simboard-ingestion-*.log`. After the ingestion
+dry-run results are correct and live ingestion is approved, uncomment the
+global `DRY_RUN=false` in the copied crontab to enable live staging/archive
+jobs, then reinstall the reviewed file. Use `MAX_CASES_PER_RUN` for a bounded
+first live ingestion run.
+
+After installation, verify `crontab -l` matches the reviewed schedules and new
+root, retains unrelated entries, and has no obsolete duplicate jobs in the
+operator's account. Review the first scheduled-run logs before declaring the
+deployment complete.
 
 The copied crontab:
 
@@ -235,8 +262,8 @@ Both targets require `scan_mode=archive` or `scan_mode=staging`; there is no def
 After provisioning Chrysalis:
 
 ```bash
-make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive
-make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
+make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard env=dev scan_mode=archive
+make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
 ```
 
 - **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
@@ -271,7 +298,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make operations-init-v3-env \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -284,7 +311,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make v3-ingest-dry-run \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -292,7 +319,7 @@ This one-time Chrysalis job scans the fixed v3 case list from the fixed archive 
 
    ```bash
    make v3-ingest-apply \
-     SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+     SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
      env=prod
    ```
 
@@ -300,7 +327,7 @@ The same configuration supports v3 diagnostics backfill:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod
 ```
 
@@ -309,11 +336,11 @@ its exact reviewed name. First review the dry-run reconciliation, then apply:
 
 ```bash
 make v3-diagnostics-dry-run \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 
 make v3-diagnostics-apply \
-  SIMBOARD_ROOT=/lcrc/group/e3sm2/simboard \
+  SIMBOARD_ROOT=/lcrc/group/e3sm/simboard \
   env=prod case_name=v3.LR.historical_0201
 ```
 
@@ -326,6 +353,13 @@ file are `OLD_PERF_ARCHIVE_ROOT`, `MAX_ATTEMPTS`, `MAX_CASES_PER_RUN`,
 `REQUEST_TIMEOUT_SECONDS`, and `ARCHIVE_YEAR_END`.
 
 ## Diagnostics linking
+
+Discovery logs tier start/completion events and throttled progress roughly every
+30 seconds during directory traversal and candidate validation. Progress includes
+the tier, phase, elapsed seconds, directories visited, provenance files found,
+cases checked, and valid candidates. Filesystem calls can block between events;
+these logs are not guaranteed heartbeats. Set `SIMBOARD_CONSOLE_LOG=true` for
+interactive diagnostics Make targets to stream the retained log to the console.
 
 The scanner links published zppy diagnostics to existing SimBoard cases. Publish
 output using [Configure zppy Diagnostics for SimBoard](../user/diagnostics.md)
@@ -353,6 +387,7 @@ and verify the machine's archive in `backend/app/scripts/ingestion/diagnostics_a
    Dry-run and apply share the selected environment's diagnostics lock with
    scheduled scans. A concurrent run fails without starting the scanner; check
    the indicated log location for lock contention or scanner failures.
+
 4. Review `operations/raw_logs/simboard-diagnostics-chrysalis-*.log` and verify
    links in SimBoard. Each scan walks the full archive; ingestion year/case limits
    do not apply.

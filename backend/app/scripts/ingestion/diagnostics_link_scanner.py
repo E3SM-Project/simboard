@@ -26,6 +26,7 @@ TIMESTAMP_RE = re.compile(r"^provenance\.(\d{8}_\d{6}_\d{6})\.cfg$")
 REQUIRED_SETTINGS = {"case_name", "machine", "hpc_username", "diagnostics_url"}
 MAX_SETTINGS_BYTES = 64 * 1024
 MAX_SETTINGS_LINES = 200
+DISCOVERY_PROGRESS_INTERVAL_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,19 @@ class ScanProgress:
 
     phase: str = "configuration"
     candidate_path: str | None = None
+
+
+@dataclass
+class DiscoveryProgress:
+    """Keep counters and logging timestamps for one archive tier."""
+
+    tier: str
+    started: float
+    last_report: float
+    directories_visited: int = 0
+    provenance_files_found: int = 0
+    cases_checked: int = 0
+    valid_candidates: int = 0
 
 
 @dataclass(frozen=True)
@@ -328,36 +342,54 @@ def _discover(  # noqa: C901
     for tier in ("production", "development"):
         tier_root = root / tier
 
-        if not tier_root.is_dir():
+        if tier_root.is_symlink() or not tier_root.is_dir():
             continue
 
         newest_by_case: dict[Path, tuple[Path, datetime]] = {}
-
-        for cfg in tier_root.rglob("provenance.*.cfg"):
-            try:
-                if cfg.is_symlink() or root not in cfg.resolve().parents:
+        started = time.monotonic()
+        progress = DiscoveryProgress(tier, started, started)
+        _report_discovery_progress(
+            progress, "traversal", "diagnostics_scanner_discovery_tier_started"
+        )
+        # Unlike rglob, walk lets us report progress even without matching files.
+        # Do not follow directory symlinks; retain the existing containment checks.
+        for directory, _dirnames, filenames in os.walk(tier_root, followlinks=False):
+            progress.directories_visited += 1
+            _report_discovery_progress(progress, "traversal")
+            for filename in filenames:
+                if not (
+                    filename.startswith("provenance.") and filename.endswith(".cfg")
+                ):
                     continue
-            except OSError as exc:
-                _log_invalid_provenance(root, cfg, exc)
-                continue
+                progress.provenance_files_found += 1
+                _report_discovery_progress(progress, "traversal")
+                cfg = Path(directory) / filename
+                try:
+                    if cfg.is_symlink() or root not in cfg.resolve().parents:
+                        continue
+                except OSError as exc:
+                    _log_invalid_provenance(root, cfg, exc)
+                    continue
 
-            timestamp = _timestamp(cfg)
-            if timestamp is None:
-                continue
+                timestamp = _timestamp(cfg)
+                if timestamp is None:
+                    continue
 
-            case_dir = cfg.parent
-            if (
-                included_case_paths is not None
-                and case_dir.relative_to(root) not in included_case_paths
-            ):
-                continue
+                case_dir = cfg.parent
+                if (
+                    included_case_paths is not None
+                    and case_dir.relative_to(root) not in included_case_paths
+                ):
+                    continue
 
-            prior = newest_by_case.get(case_dir)
+                prior = newest_by_case.get(case_dir)
 
-            if prior is None or timestamp > prior[1]:
-                newest_by_case[case_dir] = (cfg, timestamp)
+                if prior is None or timestamp > prior[1]:
+                    newest_by_case[case_dir] = (cfg, timestamp)
 
         for case_dir, (cfg, timestamp) in newest_by_case.items():
+            progress.cases_checked += 1
+            _report_discovery_progress(progress, "validation")
             settings = cfg.with_suffix(".settings")
             try:
                 if (
@@ -387,10 +419,42 @@ def _discover(  # noqa: C901
 
                 digest = hashlib.sha256(settings_bytes).hexdigest()
                 candidates.append(Candidate(cfg, settings, timestamp, values, digest))
+                progress.valid_candidates += 1
             except (OSError, UnicodeError, ValueError) as exc:
                 _log_invalid_provenance(root, cfg, exc)
 
+        _report_discovery_progress(
+            progress, "validation", "diagnostics_scanner_discovery_tier_completed"
+        )
+
     return candidates
+
+
+def _report_discovery_progress(
+    progress: DiscoveryProgress,
+    phase: str,
+    event: str = "diagnostics_scanner_discovery_progress",
+) -> None:
+    """Log tier boundaries unconditionally and throttle intermediate updates."""
+    now = time.monotonic()
+    if (
+        event == "diagnostics_scanner_discovery_progress"
+        and now - progress.last_report < DISCOVERY_PROGRESS_INTERVAL_SECONDS
+    ):
+        return
+    _log_event(
+        event,
+        {
+            "tier": progress.tier,
+            "phase": phase,
+            "elapsed_seconds": round(now - progress.started, 1),
+            "directories_visited": progress.directories_visited,
+            "provenance_files_found": progress.provenance_files_found,
+            "cases_checked": progress.cases_checked,
+            "valid_candidates": progress.valid_candidates,
+        },
+    )
+    progress.last_report = now
 
 
 def _log_invalid_provenance(root: Path, cfg: Path, exc: Exception) -> None:
