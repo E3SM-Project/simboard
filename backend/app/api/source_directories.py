@@ -37,7 +37,7 @@ def record_source_directories(
 
     with transaction(db):
         unresolved = persist_observed_directories(
-            db, machine.id, payload.directories, strict=False
+            db, machine.id, payload.directories, strict=False, dry_run=payload.dry_run
         )
 
     return SourceDirectoriesResponse(

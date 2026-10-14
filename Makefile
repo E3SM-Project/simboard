@@ -64,6 +64,7 @@ help:
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
+	@echo "  make metadata-backfill args='<options>'                  # Metadata-only backfill; dry-run by default"
 	@echo ""
 	@echo "  Diagnostics:"
 	@echo "  make v3-diags-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
@@ -362,6 +363,10 @@ v3-ingest-apply:
 # ------------------------------------------------------------
 # Diagnostics
 # ------------------------------------------------------------
+
+.PHONY: metadata-backfill
+metadata-backfill:
+	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.backfill.metadata $(args)
 
 DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 
