@@ -98,6 +98,7 @@ This scan finished without finding a path-level match. Replace placeholders such
 #### Output streams and pauses
 
 - Progress logs go to **stderr**. Existing configuration, per-record JSON, and final summaries remain on **stdout**.
+- A readable `RUN_SUMMARY` block also goes to **stderr** after the JSON totals. It distinguishes unresolved database owners from read/parse/API/scan failures.
 - No persistent log file is created.
 - Directory progress is not a timed heartbeat. A blocked filesystem operation or in-flight API request can still pause output.
 - Retry events make subsequent API waits visible:
@@ -105,6 +106,39 @@ This scan finished without finding a path-level match. Replace placeholders such
 ```text
 INFO event=backfill_api_retry attempt=1 delay_seconds=1 status_code=503
 ```
+
+#### Readable final summary
+
+For example, a dry run with one resolved owner, one unresolved owner, and one
+source-read failure ends with the following block (timestamps and logger prefixes
+omitted):
+
+```text
+INFO RUN_SUMMARY Metadata backfill
+INFO RUN_SUMMARY Mode: dry run
+INFO RUN_SUMMARY Existing owners matched: 1
+INFO RUN_SUMMARY Unresolved owners: 1
+INFO RUN_SUMMARY Read/parse/API/scan failures: 1
+INFO RUN_SUMMARY Database writes: disabled (dry run)
+INFO RUN_SUMMARY Status: failure
+INFO RUN_SUMMARY Exit code: 1
+INFO RUN_SUMMARY Elapsed seconds: 12.345
+```
+
+The existing JSON `failed` total includes unresolved owners as well as failures.
+Readable totals separate them without changing the exit status. An unresolved
+owner is not an API outage; it means no exact match exists in the selected
+database for machine, case name, HPC username, and execution ID.
+
+`Missing identity file case_docs_env_case` means no file matched the supported
+`CaseDocs*/env_case.xml.<suffix>.gz` pattern. The file may be absent, uncompressed,
+or named differently. Inspect the actual source filenames before changing parser
+rules; backfill never infers missing identity from directory names.
+
+For database-first updates, the summary shows records with **planned changes**
+in dry-run mode, **records changed** in apply mode, unchanged records, and
+record/request failures. Matched owners and planned changes do not mean writes
+occurred during a dry run.
 
 ## 2. Backfill execution metadata
 

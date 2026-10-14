@@ -479,6 +479,83 @@ def test_page_logs_identify_cumulative_failures(monkeypatch, capsys):
     assert '"failed": 101' in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("apply", [False, True])
+def test_readable_directory_summary_separates_unresolved_and_failures(
+    tmp_path, monkeypatch, capsys, caplog, apply
+):
+    for number in (123, 124, 125):
+        (tmp_path / "alice" / "case" / f"{number}.250101-000000").mkdir(parents=True)
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+        apply=apply,
+    )
+    monkeypatch.setattr(metadata, "_read_execution", _summary_read_stub)
+    monkeypatch.setattr(metadata, "_request", _summary_request_stub)
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    assert '"matched": 1, "failed": 2' in capsys.readouterr().out
+    assert "RUN_SUMMARY Metadata backfill" in caplog.text
+    assert "RUN_SUMMARY Existing owners matched: 1" in caplog.text
+    assert "RUN_SUMMARY Unresolved owners: 1" in caplog.text
+    assert "RUN_SUMMARY Read/parse/API/scan failures: 1" in caplog.text
+    assert "RUN_SUMMARY Status: failure" in caplog.text
+    assert "RUN_SUMMARY Exit code: 1" in caplog.text
+    assert ("Database writes: disabled (dry run)" in caplog.text) == (not apply)
+
+
+@pytest.mark.parametrize(
+    "apply,label", [(False, "Records with planned changes"), (True, "Records changed")]
+)
+def test_readable_metadata_summary_uses_mode_appropriate_labels(caplog, apply, label):
+    args = Namespace(apply=apply)
+
+    metadata._log_metadata_summary(
+        args, {"changed": 2, "unchanged": 3}, 0, metadata.time.monotonic()
+    )
+
+    assert f"RUN_SUMMARY {label}: 2" in caplog.text
+    assert "RUN_SUMMARY Records unchanged: 3" in caplog.text
+    assert "RUN_SUMMARY Record/request failures: 0" in caplog.text
+    assert "RUN_SUMMARY Status: success" in caplog.text
+    assert "RUN_SUMMARY Exit code: 0" in caplog.text
+
+
+def test_metadata_fetch_failure_still_has_readable_summary(monkeypatch, caplog):
+    args = _source_args(machine="perlmutter", case_name=None, hpc_username=None)
+    monkeypatch.setattr(metadata, "_request", _terminal_request_failure)
+
+    assert metadata._backfill_metadata(args, "https://example.test", "token") == 1
+    assert "RUN_SUMMARY Record/request failures: 1" in caplog.text
+    assert "RUN_SUMMARY Status: failure" in caplog.text
+
+
+def _summary_read_stub(path, machine, fields):
+    if path.name.startswith("123."):
+        raise ValueError(f"Missing identity file case_docs_env_case: {path}")
+
+    return Namespace(case_name="case", hpc_username="alice", execution_id=path.name)
+
+
+def _summary_request_stub(api, token, route, payload):
+    directory = payload["directories"][0]
+
+    return {
+        "unresolved": [directory]
+        if directory["execution_id"].startswith("124.")
+        else []
+    }
+
+
+def _terminal_request_failure(*args, **kwargs):
+    raise metadata.IngestionRequestError(
+        "API unavailable", status_code=503, transient=False
+    )
+
+
 def _page_request_stub(pages, api, token, route, payload=None):
     return {"records": next(pages)}
 
@@ -498,6 +575,7 @@ def _transient_request_failure(*args, **kwargs):
 def _source_args(**overrides):
     values = {
         "fields": ["source-directories"],
+        "apply": False,
         "sources": "both",
         "staging_root": None,
         "archive_root": None,

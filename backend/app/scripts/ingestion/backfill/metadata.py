@@ -35,6 +35,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     IngestionRequestError,
     _log_event,
 )
+from app.scripts.ingestion.archive_ingestor_core import logger as ingestion_logger
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
 
 FIELD_NAMES = {
@@ -264,8 +265,10 @@ def _log_scan_progress(event: str, progress: dict, started_at: float) -> None:
 
 
 def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
+    started_at = time.monotonic()
     failures = 0
     matched = 0
+    unresolved_owners = 0
 
     for kind in ("staging", "archive"):
         if args.sources not in (kind, "both"):
@@ -313,6 +316,7 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
                     unresolved = bool(result["unresolved"])
                     failures += unresolved
                     matched += not unresolved
+                    unresolved_owners += unresolved
 
                     print(
                         json.dumps(
@@ -337,6 +341,16 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
             )
 
     print(json.dumps({"matched": matched, "failed": failures}))
+    _log_backfill_summary(
+        args,
+        [
+            ("Existing owners matched", matched),
+            ("Unresolved owners", unresolved_owners),
+            ("Read/parse/API/scan failures", failures - unresolved_owners),
+        ],
+        failures,
+        started_at,
+    )
 
     return int(bool(failures))
 
@@ -403,6 +417,7 @@ def _normalized_date(value: str | None) -> str | None:
 
 def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
     """Select database owners first, then read their observed source paths."""
+    started_at = time.monotonic()
     failures = 0
     outcomes: dict[str, int] = {}
     offset = 0
@@ -420,6 +435,7 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
             )["records"]
         except IngestionRequestError as exc:
             print(json.dumps({"outcome": "failed", "error": str(exc)}))
+            _log_metadata_summary(args, outcomes, failures + 1, started_at)
 
             return 1
 
@@ -476,8 +492,49 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
         offset += len(records)
 
     print(json.dumps({**outcomes, "failed": failures}))
+    _log_metadata_summary(args, outcomes, failures, started_at)
 
     return int(bool(failures))
+
+
+def _log_metadata_summary(
+    args: argparse.Namespace, outcomes: dict[str, int], failures: int, started_at: float
+) -> None:
+    _log_backfill_summary(
+        args,
+        [
+            (
+                "Records changed" if args.apply else "Records with planned changes",
+                outcomes.get("changed", 0),
+            ),
+            ("Records unchanged", outcomes.get("unchanged", 0)),
+            ("Record/request failures", failures),
+        ],
+        failures,
+        started_at,
+    )
+
+
+def _log_backfill_summary(
+    args: argparse.Namespace,
+    counts: list[tuple[str, int]],
+    failures: int,
+    started_at: float,
+) -> None:
+    """Render readable totals alongside the existing machine-readable output."""
+    ingestion_logger.info("RUN_SUMMARY Metadata backfill")
+    ingestion_logger.info("RUN_SUMMARY Mode: %s", "apply" if args.apply else "dry run")
+    for label, value in counts:
+        ingestion_logger.info("RUN_SUMMARY %s: %s", label, value)
+    if not args.apply:
+        ingestion_logger.info("RUN_SUMMARY Database writes: disabled (dry run)")
+    ingestion_logger.info(
+        "RUN_SUMMARY Status: %s", "failure" if failures else "success"
+    )
+    ingestion_logger.info("RUN_SUMMARY Exit code: %s", int(bool(failures)))
+    ingestion_logger.info(
+        "RUN_SUMMARY Elapsed seconds: %.3f", time.monotonic() - started_at
+    )
 
 
 def _validate_sources(
