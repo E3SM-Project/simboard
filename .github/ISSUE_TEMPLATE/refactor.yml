@@ -1,0 +1,50 @@
+name: Refactor
+description: Propose an internal structural change without changing intended product behavior.
+title: "[Refactor]: "
+labels: ["refactor"]
+assignees: []
+
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Explain the maintenance, reliability, performance, or clarity problem to address.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and proposed changes
+      description: List affected components, modules, interfaces, and the intended structure.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Identify API, configuration, data, deployment, or user-facing compatibility considerations. State what must remain unchanged.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: List focused and integration checks that will demonstrate behavior is preserved.
+      placeholder: |
+        - Unit or integration tests:
+        - Type and lint checks:
+        - Manual or deployment verification:
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and rollback
+      description: Describe expected risks and how to recover if the change causes regressions.
+    validations:
+      required: false

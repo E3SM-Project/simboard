@@ -1,7 +1,7 @@
 name: DevOps Task
 description: Template for tracking DevOps-related tasks and improvements.
 title: "[DevOps]: "
-labels: ["type: devops"]
+labels: ["devops"]
 assignees: []
 
 body:
@@ -18,6 +18,17 @@ body:
       label: Task Details
       description: Describe the task, including goals, requirements, and any relevant context.
       placeholder: What needs to be done? Why is it important?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List observable outcomes that will show this task is complete, such as a passing CI check or a verified deployment state.
+      placeholder: |
+        - Expected operational outcome:
+        - Completion can be verified by:
     validations:
       required: true
 

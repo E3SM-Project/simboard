@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and support
+    url: https://github.com/E3SM-Project/simboard/discussions
+    about: Ask usage and setup questions in GitHub Discussions. Use issue templates for bugs and proposed changes.
+  - name: Report a security vulnerability privately
+    url: https://github.com/E3SM-Project/simboard/security/advisories/new
+    about: Use GitHub private vulnerability reporting. Do not disclose vulnerabilities in public issues or discussions.

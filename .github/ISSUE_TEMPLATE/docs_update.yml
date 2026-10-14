@@ -1,7 +1,7 @@
 name: Docs Update
 description: Report missing, wrong, stale, or unclear documentation.
 title: "[Docs]: "
-labels: ["type: doc"]
+labels: ["doc"]
 assignees: []
 
 body:

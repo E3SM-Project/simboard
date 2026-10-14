@@ -1,10 +1,17 @@
 name: Bug Report
 description: File a bug report to help improve SimBoard.
 title: "[Bug]: "
-labels: ["type: bug"]
+labels: ["bug"]
 assignees: []
 
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for defects, including UI/UX and accessibility problems. Use Enhancement Request for new capabilities or improvements. Maintainers can add `ui/ux` during triage.
+
+        Do not report vulnerabilities or share sensitive data in public issues. Use [GitHub private vulnerability reporting](https://github.com/E3SM-Project/simboard/security/advisories/new).
+
   - type: textarea
     id: what-happened
     attributes:
@@ -40,7 +47,13 @@ body:
     attributes:
       label: Environment
       description: |
-        Include browser, OS, Node.js, and npm versions if relevant.
+        Include the affected component (backend, frontend, ingestion, or tooling), commit or release version, and relevant runtime and configuration details. Remove secrets.
+      placeholder: |
+        Affected component:
+        Commit or release version:
+        OS or HPC site:
+        Relevant runtime versions (Python, uv, Node.js, pnpm, browser):
+        Relevant configuration (no secrets):
     validations:
       required: false
 

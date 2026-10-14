@@ -1,7 +1,7 @@
 name: Planning Task
 description: General project management or planning task
 title: "[Planning] "
-labels: ["type: planning"]
+labels: ["planning"]
 assignees: []
 
 body:
