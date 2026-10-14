@@ -39,6 +39,65 @@ FIELD_NAMES = {
 }
 
 
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("--machine", required=True)
+    parser.add_argument(
+        "--fields",
+        nargs="+",
+        choices=["source-directories", "simulation-dates", "run-script"],
+        required=True,
+    )
+    parser.add_argument(
+        "--sources", choices=["staging", "archive", "both"], default="both"
+    )
+    parser.add_argument("--staging-root", type=Path)
+    parser.add_argument("--archive-root", type=Path)
+    parser.add_argument("--archive-start")
+    parser.add_argument("--archive-end")
+    parser.add_argument("--case-name")
+    parser.add_argument("--hpc-username")
+    parser.add_argument("--overwrite", action="store_true")
+
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true")
+    mode.add_argument("--dry-run", action="store_true")
+
+    args = parser.parse_args()
+    _resolve_source_defaults(args)
+    _validate_sources(parser, args)
+
+    api = os.environ.get("SIMBOARD_API_BASE_URL", "")
+    token = os.environ.get("SIMBOARD_API_TOKEN", "")
+    if not api or not token:
+        parser.error(
+            "SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN are required, including for dry runs"
+        )
+
+    api = _normalized_api_base_url(api)
+    target = urlsplit(api)
+    if target.username or target.password or target.query or target.fragment:
+        parser.error("API_BASE_URL must not contain credentials, query, or fragment")
+    if target.scheme not in ("http", "https") or not target.hostname:
+        parser.error("API_BASE_URL must be an HTTP(S) URL")
+
+    scope = {"api": api, "sources": args.sources, "dry_run": not args.apply}
+    if args.fields == ["source-directories"]:
+        scope.update(
+            staging_root=str(args.staging_root) if args.staging_root else None,
+            archive_root=str(args.archive_root) if args.archive_root else None,
+            archive_start=args.archive_start,
+            archive_end=args.archive_end,
+        )
+    print(json.dumps(scope))
+
+    return (
+        _bootstrap(args, api, token)
+        if args.fields == ["source-directories"]
+        else _backfill_metadata(args, api, token)
+    )
+
+
 def _read_execution(path: Path, machine: str, fields: list[str]):
     """Read only identity files and requested metadata, not full ingestion input."""
     keys = ["case_docs_env_case", "e3sm_timing"]
@@ -386,54 +445,27 @@ def _validate_sources(
         )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--machine", required=True)
-    parser.add_argument(
-        "--fields",
-        nargs="+",
-        choices=["source-directories", "simulation-dates", "run-script"],
-        required=True,
-    )
-    parser.add_argument(
-        "--sources", choices=["staging", "archive", "both"], default="both"
-    )
-    parser.add_argument("--staging-root", type=Path)
-    parser.add_argument("--archive-root", type=Path)
-    parser.add_argument("--archive-start")
-    parser.add_argument("--archive-end")
-    parser.add_argument("--case-name")
-    parser.add_argument("--hpc-username")
-    parser.add_argument("--overwrite", action="store_true")
+def _resolve_source_defaults(args: argparse.Namespace) -> None:
+    """Use site defaults only for selected directory-bootstrap sources."""
+    if args.fields != ["source-directories"]:
+        return
 
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--apply", action="store_true")
-    mode.add_argument("--dry-run", action="store_true")
+    if args.sources in ("staging", "both") and args.staging_root is None:
+        root = os.environ.get("PERF_ARCHIVE_ROOT", "").strip()
+        args.staging_root = Path(root) if root else None
 
-    args = parser.parse_args()
-    _validate_sources(parser, args)
-
-    api = os.environ.get("SIMBOARD_API_BASE_URL", "")
-    token = os.environ.get("SIMBOARD_API_TOKEN", "")
-    if not api or not token:
-        parser.error(
-            "SIMBOARD_API_BASE_URL and SIMBOARD_API_TOKEN are required, including for dry runs"
-        )
-
-    api = _normalized_api_base_url(api)
-    target = urlsplit(api)
-    if target.username or target.password or target.query or target.fragment:
-        parser.error("API_BASE_URL must not contain credentials, query, or fragment")
-    if target.scheme not in ("http", "https") or not target.hostname:
-        parser.error("API_BASE_URL must be an HTTP(S) URL")
-
-    print(json.dumps({"api": api, "sources": args.sources, "dry_run": not args.apply}))
-
-    return (
-        _bootstrap(args, api, token)
-        if args.fields == ["source-directories"]
-        else _backfill_metadata(args, api, token)
-    )
+    if args.sources in ("archive", "both"):
+        if args.archive_root is None:
+            root = os.environ.get("OLD_PERF_ARCHIVE_ROOT", "").strip()
+            args.archive_root = Path(root) if root else None
+        if args.archive_start is None:
+            args.archive_start = (
+                os.environ.get("ARCHIVE_YEAR_START", "").strip()
+                or os.environ.get("SIMBOARD_DEFAULT_ARCHIVE_YEAR_START", "").strip()
+                or None
+            )
+        if args.archive_end is None:
+            args.archive_end = os.environ.get("ARCHIVE_YEAR_END", "").strip() or None
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Metadata-only archive and staging traversal."""
 
+import argparse
 import gzip
 from argparse import Namespace
 from datetime import date
@@ -206,3 +207,150 @@ def test_unreadable_mapping_prevents_update(monkeypatch):
     args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
     with pytest.raises(ValueError, match="Cannot safely backfill"):
         metadata._observed_values(record, args)
+
+
+@pytest.mark.parametrize("sources", ["staging", "archive", "both"])
+def test_source_defaults_apply_only_to_selected_sources(monkeypatch, sources):
+    _set_source_environment(monkeypatch)
+    args = _source_args(sources=sources)
+
+    metadata._resolve_source_defaults(args)
+
+    assert str(args.staging_root) == (
+        "/configured/staging" if sources != "archive" else "None"
+    )
+    assert str(args.archive_root) == (
+        "/configured/archive" if sources != "staging" else "None"
+    )
+    assert args.archive_start == ("2024-01" if sources != "staging" else None)
+    assert args.archive_end == ("2024-12" if sources != "staging" else None)
+
+
+def test_cli_source_settings_override_environment(monkeypatch, tmp_path):
+    _set_source_environment(monkeypatch)
+    args = _source_args(
+        staging_root=tmp_path / "stage",
+        archive_root=tmp_path / "archive",
+        archive_start="2023-01",
+        archive_end="2023-12",
+    )
+
+    metadata._resolve_source_defaults(args)
+
+    assert args.staging_root == tmp_path / "stage"
+    assert args.archive_root == tmp_path / "archive"
+    assert (args.archive_start, args.archive_end) == ("2023-01", "2023-12")
+
+
+def test_archive_start_uses_site_default_and_end_remains_optional(monkeypatch):
+    _set_source_environment(monkeypatch)
+    monkeypatch.delenv("ARCHIVE_YEAR_START")
+    monkeypatch.delenv("ARCHIVE_YEAR_END")
+    args = _source_args()
+
+    metadata._resolve_source_defaults(args)
+
+    assert args.archive_start == "2025-01"
+    assert args.archive_end is None
+
+
+def test_database_first_does_not_inherit_filesystem_settings(monkeypatch):
+    _set_source_environment(monkeypatch)
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "invalid")
+    args = _source_args(fields=["simulation-dates", "run-script"])
+
+    metadata._resolve_source_defaults(args)
+    metadata._validate_sources(argparse.ArgumentParser(), args)
+
+    assert args.staging_root is None
+    assert args.archive_root is None
+    assert args.archive_start is None
+    assert args.archive_end is None
+
+
+@pytest.mark.parametrize("root", ["", "   "])
+def test_missing_configured_root_fails_validation(monkeypatch, root):
+    monkeypatch.setenv("PERF_ARCHIVE_ROOT", root)
+    args = _source_args(sources="staging")
+    metadata._resolve_source_defaults(args)
+
+    with pytest.raises(SystemExit):
+        metadata._validate_sources(argparse.ArgumentParser(), args)
+
+
+@pytest.mark.parametrize("start,end", [("invalid", None), ("2025-02", "2025-01")])
+def test_invalid_configured_archive_bounds_fail(monkeypatch, start, end):
+    _set_source_environment(monkeypatch)
+    monkeypatch.setenv("ARCHIVE_YEAR_START", start)
+    monkeypatch.setenv("ARCHIVE_YEAR_END", end or "")
+    args = _source_args()
+    metadata._resolve_source_defaults(args)
+
+    with pytest.raises(SystemExit):
+        metadata._validate_sources(argparse.ArgumentParser(), args)
+
+
+def test_main_reports_resolved_scope_without_credentials(monkeypatch, capsys):
+    _set_source_environment(monkeypatch)
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://example.test")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "hidden-token")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["metadata", "--machine", "perlmutter", "--fields", "source-directories"],
+    )
+    captured = []
+    monkeypatch.setattr(metadata, "_bootstrap", partial(_capture_command, captured))
+
+    assert metadata.main() == 0
+    output = capsys.readouterr().out
+    assert "/configured/staging" in output
+    assert "/configured/archive" in output
+    assert "2024-01" in output
+    assert "hidden-token" not in output
+    assert captured[0].apply is False
+
+
+def test_abbreviated_machine_cannot_override_launcher_selection(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "metadata",
+            "--machine",
+            "perlmutter",
+            "--fields",
+            "source-directories",
+            "--mach",
+            "chrysalis",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        metadata.main()
+
+
+def _source_args(**overrides):
+    values = {
+        "fields": ["source-directories"],
+        "sources": "both",
+        "staging_root": None,
+        "archive_root": None,
+        "archive_start": None,
+        "archive_end": None,
+    }
+    values.update(overrides)
+
+    return Namespace(**values)
+
+
+def _set_source_environment(monkeypatch):
+    monkeypatch.setenv("PERF_ARCHIVE_ROOT", "/configured/staging")
+    monkeypatch.setenv("OLD_PERF_ARCHIVE_ROOT", "/configured/archive")
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2024-01")
+    monkeypatch.setenv("ARCHIVE_YEAR_END", "2024-12")
+    monkeypatch.setenv("SIMBOARD_DEFAULT_ARCHIVE_YEAR_START", "2025-01")
+
+
+def _capture_command(captured, args, api, token):
+    captured.append(args)
+
+    return 0

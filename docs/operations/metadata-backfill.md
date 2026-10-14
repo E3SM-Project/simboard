@@ -1,61 +1,96 @@
 # Historical metadata backfill
 
-The initial target is the NERSC-hosted staging PostgreSQL database, accessed
-through its API deployment. This database target is independent of performance
-staging and archive filesystem sources. No production backfill is needed now.
+Backfill the **NERSC-hosted staging PostgreSQL database** through its API deployment. The database target is independent of the performance staging and archive filesystem sources. No production backfill is needed now.
 
-Load the existing protected API environment for the target deployment. The
-command requires `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`, including for dry runs. Never
-place tokens in command arguments or logs.
+## Prerequisites
 
-Deploy the updated backend first: it adds source-directory dry-run support and
-metadata selection/update endpoints. Implementation approval does not authorize
-applying changes to the live staging database.
+1. **Deploy the updated backend.** It provides source-directory dry-run support and metadata selection/update endpoints.
+2. **Configure API access** using one of the options below.
+3. **Obtain explicit authorization before applying changes.** Implementation approval does not authorize writes to the live staging database.
 
-## Bootstrap directory mappings
+The Make command loads the selected machine's site config and a protected API environment file. Both `machine` and `env` are required.
 
-Start with a small case filter and both source types:
+| API configuration             | Usage                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Existing operations workspace | Set `SIMBOARD_ROOT=/path/to/simboard_root`. `env=dev` loads `$SIMBOARD_ROOT/operations/env.dev.sh`; `env=prod` loads `env.prod.sh`. |
+| Explicit environment file     | Set `env_file=/path/to/protected/env.dev.sh`. This overrides the operations-file lookup and does not require `SIMBOARD_ROOT`.       |
 
-```bash
-make metadata-backfill args='--machine perlmutter --fields source-directories --sources both --staging-root /path/to/performance_archive --archive-root /path/to/OLD_PERF --archive-start 2025-01 --archive-end 2025-02 --case-name exact-case-name --hpc-username exact-user --dry-run'
-```
+Use the existing operations workspace for `SIMBOARD_ROOT`, not a performance staging or archive root. No machine-to-workspace mapping is assumed.
 
-Archive bounds apply only to archive directories. The command deliberately
-ignores ingestion checkpoints and processed-execution skips. It reads identity
-metadata and adds staging/archive mappings only to matching existing records.
-It does not upload data, create catalog records, or change ingestion state.
+Never place tokens in command arguments or logs.
 
-Dry runs resolve owners through the API without writing mappings. `matched`
-means the existing owner resolved; it does not mean a new mapping was inserted.
-After explicit authorization, replace `--dry-run` with `--apply`. Rerun safely:
-existing mappings are retained without duplicates. Failures and unresolved
-owners produce a nonzero exit status. Missing files are never guessed.
+## 1. Bootstrap source-directory mappings
 
-The command prints its API target and mode before scanning. Check both before
-applying. Stored paths are observations, not guarantees of current availability.
-
-## Backfill execution metadata
-
-Once mappings exist, select existing database records and read their mapped
-directories. No archive-wide scan or filesystem roots are needed:
+Start with a small case/user filter and both source types:
 
 ```bash
-make metadata-backfill args='--machine perlmutter --fields simulation-dates run-script --sources both --case-name exact-case-name --hpc-username exact-user --dry-run --overwrite'
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields source-directories --sources both --case-name exact-case-name --hpc-username exact-user --dry-run'
 ```
 
-Without `--overwrite`, only missing values are populated. Corrections of existing
-simulation dates and CIME wrapper links require `--overwrite`. Missing source
-values never clear stored metadata. Conflicting observations, identity mismatches,
-unavailable mappings, and failures are reported. If any selected mapped path
-cannot be read safely, that record is not updated. Unrelated artifacts remain intact.
-Simulation end dates retain the current parser's initial driver `Stop Time`
-semantics, not actual termination time.
+The command reads identity metadata and maps staging/archive directories to **matching existing records**. It ignores ingestion checkpoints and processed-execution skips. It does not upload data, create catalog records, or change ingestion state.
 
-Dry-run and apply independently read current records; there is no saved preview
-session. Correction writes reject changes to expected old values. Review the
-dry-run, obtain authorization, then replace `--dry-run` with `--apply`. Validate a
-small subset first and rerun it to check idempotency before expanding scope.
+### Review the scan scope
 
-Future fields should add explicit extraction/update functions, validated payload
-fields, tests, and documentation to the same command. Database migrations and
-normal-ingestion support remain separate from historical backfill.
+| Setting       | Default                                                                          | CLI override      |
+| ------------- | -------------------------------------------------------------------------------- | ----------------- |
+| Staging root  | Site config: `PERF_ARCHIVE_ROOT`                                                 | `--staging-root`  |
+| Archive root  | Site config: `OLD_PERF_ARCHIVE_ROOT`                                             | `--archive-root`  |
+| Archive start | `ARCHIVE_YEAR_START`, otherwise the site's `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START` | `--archive-start` |
+| Archive end   | `ARCHIVE_YEAR_END`; unbounded when unset                                         | `--archive-end`   |
+
+Archive bounds apply only to archive directories. Review the printed effective scope, especially the lower bound when backfilling older records.
+
+Site configs supply root defaults only when variables are unset. Exported shell values or assignments in the protected environment file override site defaults; explicit CLI arguments take precedence over both.
+
+Case/user filters are optional. Keep them for validation runs and focused retries; omit them to select the full configured scope. Set the machine through Make's `machine` argument, not `--machine` inside `args`.
+
+### Review and apply
+
+Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.
+
+1. Check the printed API target, mode, and effective scope.
+2. Review the dry-run results and obtain explicit authorization.
+3. Replace `--dry-run` with `--apply`.
+
+Reruns retain existing mappings without duplicates. Failures and unresolved owners produce a nonzero exit status. Missing files are never guessed.
+
+Stored paths record observations; they do not guarantee current availability.
+
+## 2. Backfill execution metadata
+
+Once mappings exist, select database records and read their mapped directories. This step requires no archive-wide scan or filesystem roots.
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields simulation-dates run-script --sources both --case-name exact-case-name --hpc-username exact-user --dry-run --overwrite'
+```
+
+### Update behavior
+
+- **Without `--overwrite`:** populate only missing values.
+- **With `--overwrite`:** also correct existing simulation dates and CIME wrapper links.
+- Missing source values never clear stored metadata. Unrelated artifacts remain intact.
+- Conflicts, identity mismatches, unavailable mappings, and failures are reported. If any selected mapped path cannot be read safely, that record is not updated.
+
+Simulation end dates use the current parser's initial driver `Stop Time`, not actual termination time.
+
+This database-first step does not inherit filesystem roots or archive bounds from the environment.
+
+### Review and apply
+
+1. Review the dry-run results and obtain authorization.
+2. Replace `--dry-run` with `--apply`.
+3. Validate the small subset and rerun it to check idempotency before expanding scope.
+
+Dry-run and apply independently read current records; there is no saved preview session. Correction writes reject updates if the expected old values have changed.
+
+## Direct Python invocation
+
+Direct Python invocation requires explicit `--machine` and exported `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`, including for dry runs. The Python command does not load shell files itself.
+
+## Adding future fields
+
+Extend the same command with explicit extraction/update functions, validated payload fields, tests, and documentation. Database migrations and normal-ingestion support remain separate from historical backfill.

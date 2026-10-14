@@ -64,7 +64,7 @@ help:
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
-	@echo "  make metadata-backfill args='<options>'                  # Metadata-only backfill; dry-run by default"
+	@echo "  make metadata-backfill machine=<chrysalis|perlmutter> env=<dev|prod> SIMBOARD_ROOT=<path> args='<options>' # Metadata-only backfill; dry-run by default"
 	@echo ""
 	@echo "  Diagnostics:"
 	@echo "  make v3-diags-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
@@ -365,8 +365,12 @@ v3-ingest-apply:
 # ------------------------------------------------------------
 
 .PHONY: metadata-backfill
+metadata-backfill: export machine := $(machine)
+metadata-backfill: export env := $(env)
+metadata-backfill: export env_file := $(env_file)
+metadata-backfill: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
 metadata-backfill:
-	cd $(BACKEND_DIR) && uv run python -m app.scripts.ingestion.backfill.metadata $(args)
+	@bash $(BACKEND_DIR)/app/scripts/ingestion/backfill/run_metadata_backfill.sh $(args)
 
 DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 
