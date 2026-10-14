@@ -2,6 +2,7 @@
 
 import argparse
 import gzip
+import urllib.error
 from argparse import Namespace
 from datetime import date
 from functools import partial
@@ -326,6 +327,172 @@ def test_abbreviated_machine_cannot_override_launcher_selection(monkeypatch):
 
     with pytest.raises(SystemExit):
         metadata.main()
+
+
+@pytest.mark.parametrize("case_name", ["case", "no-match"])
+def test_scan_logs_progress_even_when_filters_match_nothing(
+    tmp_path, monkeypatch, case_name
+):
+    execution = tmp_path / "alice" / "case" / "123.250101-000000"
+    execution.mkdir(parents=True)
+    args = _source_args(case_name=case_name, hpc_username="alice")
+    events = []
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+    monkeypatch.setattr(metadata, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2)
+
+    paths = list(metadata._execution_paths(tmp_path, "staging", args))
+
+    assert paths == ([execution] if case_name == "case" else [])
+    assert events[0][0] == "backfill_scan_started"
+    progress = [fields for event, fields in events if event == "backfill_scan_progress"]
+    assert [p["directories_visited"] for p in progress] == [2, 4]
+    completed = next(
+        fields for event, fields in events if event == "backfill_scan_completed"
+    )
+    assert completed["traversal_complete"] is True
+    assert completed["directories_visited"] == 4
+    assert completed["matching_executions"] == len(paths)
+    assert completed["source"] == "staging"
+    assert completed["duration_seconds"] >= 0
+    assert (events[-1][0] == "backfill_scan_no_matches") == (not paths)
+
+
+def test_failed_scan_logs_incomplete_completion(tmp_path, monkeypatch):
+    events = []
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+    args = _source_args(case_name=None, hpc_username=None)
+
+    with pytest.raises(ValueError, match="not a directory"):
+        list(metadata._execution_paths(tmp_path / "missing", "staging", args))
+
+    assert [event for event, _ in events] == [
+        "backfill_scan_started",
+        "backfill_scan_completed",
+    ]
+    assert events[-1][1]["traversal_complete"] is False
+
+
+def test_filesystem_matches_are_distinct_from_unresolved_owners(
+    tmp_path, monkeypatch, capsys
+):
+    execution = tmp_path / "alice" / "case" / "123.250101-000000"
+    execution.mkdir(parents=True)
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name="case",
+        hpc_username="alice",
+        apply=False,
+    )
+    record = {"execution_id": execution.name}
+    events = []
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+    monkeypatch.setattr(
+        metadata, "_read_execution", partial(_read_execution_stub, record)
+    )
+    monkeypatch.setattr(metadata, "_request", _unresolved_request)
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    assert not any(event == "backfill_scan_no_matches" for event, _ in events)
+    assert (
+        next(fields for event, fields in events if event == "backfill_scan_completed")[
+            "matching_executions"
+        ]
+        == 1
+    )
+    output = capsys.readouterr().out
+    assert '"outcome": "unresolved"' in output
+    assert '"matched": 0, "failed": 1' in output
+
+
+def test_retry_log_is_sanitized_and_does_not_include_payload(monkeypatch, caplog):
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "hidden-token")
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", _transient_request_failure)
+    delays = []
+    monkeypatch.setattr(metadata.time, "sleep", delays.append)
+
+    with pytest.raises(metadata.IngestionRequestError):
+        metadata._request(
+            "https://example.test",
+            "hidden-token",
+            "secret-route",
+            {"token": "hidden-token"},
+        )
+
+    retry_logs = [
+        r.getMessage() for r in caplog.records if "backfill_api_retry" in r.getMessage()
+    ]
+    assert len(retry_logs) == 2
+    assert len(delays) == 2
+    assert all("delay_seconds=" in message for message in retry_logs)
+    assert "hidden-token" not in caplog.text
+    assert "secret-route" not in caplog.text
+
+
+def test_scan_logs_reuse_credential_redaction(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "hidden-token"
+    root.mkdir()
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "hidden-token")
+    args = _source_args(case_name=None, hpc_username=None)
+
+    assert list(metadata._execution_paths(root, "staging", args)) == []
+    assert "backfill_scan_no_matches" in caplog.text
+    assert "[REDACTED]" in caplog.text
+    assert "hidden-token" not in caplog.text
+
+
+def test_database_page_progress_preserves_summary(monkeypatch, capsys):
+    calls = []
+    events = []
+    record = {"record_id": str(uuid4()), "error": "missing source"}
+    args = _source_args(machine="perlmutter", case_name=None, hpc_username=None)
+    monkeypatch.setattr(metadata, "_request", partial(_request_stub, record, calls))
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+
+    assert metadata._backfill_metadata(args, "https://example.test", "token") == 1
+    assert [event for event, _ in events] == [
+        "backfill_page_started",
+        "backfill_page_completed",
+    ]
+    assert events[0][1] == {"offset": 0, "records": 1}
+    assert events[1][1] == {"offset": 0, "records": 1, "failed_total": 1}
+    assert '"failed": 1' in capsys.readouterr().out
+
+
+def test_page_logs_identify_cumulative_failures(monkeypatch, capsys):
+    events = []
+    record = {"record_id": str(uuid4()), "error": "missing source"}
+    pages = iter([[record] * 100, [record]])
+    args = _source_args(machine="perlmutter", case_name=None, hpc_username=None)
+    monkeypatch.setattr(metadata, "_request", partial(_page_request_stub, pages))
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+
+    assert metadata._backfill_metadata(args, "https://example.test", "token") == 1
+    completed = [
+        fields for event, fields in events if event == "backfill_page_completed"
+    ]
+    assert completed == [
+        {"offset": 0, "records": 100, "failed_total": 100},
+        {"offset": 100, "records": 1, "failed_total": 101},
+    ]
+    assert '"failed": 101' in capsys.readouterr().out
+
+
+def _page_request_stub(pages, api, token, route, payload=None):
+    return {"records": next(pages)}
+
+
+def _capture_log(events, event, fields):
+    events.append((event, fields))
+
+
+def _unresolved_request(*args, **kwargs):
+    return {"unresolved": ["missing owner"]}
+
+
+def _transient_request_failure(*args, **kwargs):
+    raise urllib.error.URLError("hidden-token")
 
 
 def _source_args(**overrides):

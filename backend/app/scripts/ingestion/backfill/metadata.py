@@ -30,7 +30,11 @@ from app.scripts.ingestion.archive_client import (
     _timeout_request_error,
     _url_request_error,
 )
-from app.scripts.ingestion.archive_ingestor_core import IngestionRequestError
+from app.scripts.ingestion.archive_ingestor_core import (
+    DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
+    IngestionRequestError,
+    _log_event,
+)
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
 
 FIELD_NAMES = {
@@ -169,7 +173,16 @@ def _request(
         if not error.transient or attempt == 3:
             raise error
 
-        time.sleep(_retry_backoff_seconds(attempt))
+        delay = _retry_backoff_seconds(attempt)
+        _log_event(
+            "backfill_api_retry",
+            {
+                "attempt": attempt,
+                "status_code": error.status_code,
+                "delay_seconds": delay,
+            },
+        )
+        time.sleep(delay)
 
     raise RuntimeError("Unreachable request retry state")
 
@@ -180,33 +193,74 @@ def _raise_walk_error(error: OSError) -> None:
 
 def _execution_paths(root: Path, kind: str, args: argparse.Namespace):
     """Traverse supported layouts without reading ingestion skip state."""
-    if not root.is_dir():
-        raise ValueError(f"Source root is not a directory: {root}")
+    started_at = time.monotonic()
+    progress = {
+        "source": kind,
+        "root": str(root),
+        "current_dir": str(root),
+        "directories_visited": 0,
+        "matching_executions": 0,
+        "case_name": args.case_name,
+        "hpc_username": args.hpc_username,
+    }
+    traversal_complete = False
+    _log_scan_progress("backfill_scan_started", progress, started_at)
 
-    for current, dirs, _ in os.walk(root, onerror=_raise_walk_error):
-        path = Path(current)
-        dirs[:] = sorted(name for name in dirs if not (path / name).is_symlink())
+    try:
+        if not root.is_dir():
+            raise ValueError(f"Source root is not a directory: {root}")
 
-        if kind == "archive":
-            _filter_archive_walk_dirnames(
-                current,
-                dirs,
-                archive_root=root,
-                archive_start=args.archive_start,
-                archive_end=args.archive_end,
-                archive_year_filter_enabled=bool(
-                    args.archive_start or args.archive_end
-                ),
-            )
+        for current, dirs, _ in os.walk(root, onerror=_raise_walk_error):
+            path = Path(current)
+            progress["current_dir"] = current
+            progress["directories_visited"] += 1
+            dirs[:] = sorted(name for name in dirs if not (path / name).is_symlink())
 
-        if re.fullmatch(r"\d+\.\d{6}-\d{6}", path.name):
-            dirs.clear()
-            if args.case_name and path.parent.name != args.case_name:
-                continue
-            if args.hpc_username and path.parent.parent.name != args.hpc_username:
-                continue
+            if kind == "archive":
+                _filter_archive_walk_dirnames(
+                    current,
+                    dirs,
+                    archive_root=root,
+                    archive_start=args.archive_start,
+                    archive_end=args.archive_end,
+                    archive_year_filter_enabled=bool(
+                        args.archive_start or args.archive_end
+                    ),
+                )
 
-            yield path
+            if (
+                progress["directories_visited"]
+                % DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES
+                == 0
+            ):
+                _log_scan_progress("backfill_scan_progress", progress, started_at)
+
+            if re.fullmatch(r"\d+\.\d{6}-\d{6}", path.name):
+                dirs.clear()
+                if args.case_name and path.parent.name != args.case_name:
+                    continue
+                if args.hpc_username and path.parent.parent.name != args.hpc_username:
+                    continue
+
+                progress["matching_executions"] += 1
+                yield path
+
+        traversal_complete = True
+    finally:
+        _log_scan_progress(
+            "backfill_scan_completed",
+            {**progress, "traversal_complete": traversal_complete},
+            started_at,
+        )
+        if traversal_complete and progress["matching_executions"] == 0:
+            _log_scan_progress("backfill_scan_no_matches", progress, started_at)
+
+
+def _log_scan_progress(event: str, progress: dict, started_at: float) -> None:
+    _log_event(
+        event,
+        {**progress, "duration_seconds": round(time.monotonic() - started_at, 3)},
+    )
 
 
 def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
@@ -369,6 +423,11 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
 
             return 1
 
+        _log_event(
+            "backfill_page_started",
+            {"offset": offset, "records": len(records)},
+        )
+
         for record in records:
             try:
                 values = _observed_values(record, args)
@@ -405,6 +464,11 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
                         }
                     )
                 )
+
+        _log_event(
+            "backfill_page_completed",
+            {"offset": offset, "records": len(records), "failed_total": failures},
+        )
 
         if len(records) < 100:
             break
