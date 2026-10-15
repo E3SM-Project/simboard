@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.common.dependencies import get_database_session
+from app.common.utils import _normalize_hpc_username
 from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
@@ -506,6 +507,7 @@ def ingest_from_hpc_upload(
     _validate_v3_production_classification(
         simulation_type, Path(payload.case_path).name, machine.name
     )
+    classification_username = _normalize_hpc_username(payload.hpc_username)
 
     _validate_upload_file(file)
     filename = file.filename
@@ -523,9 +525,9 @@ def ingest_from_hpc_upload(
                 db=db,
                 hpc_username=payload.hpc_username,
                 production_case_identity=(
-                    (Path(payload.case_path).name, machine.id, payload.hpc_username)
+                    (Path(payload.case_path).name, machine.id, classification_username)
                     if simulation_type is CaseSimulationType.PRODUCTION
-                    and payload.hpc_username
+                    and classification_username
                     else None
                 ),
             )
@@ -544,7 +546,7 @@ def ingest_from_hpc_upload(
             db=db,
             case_simulation_type=simulation_type,
             case_name_for_simulation_type=Path(payload.case_path).name,
-            hpc_username_for_simulation_type=payload.hpc_username,
+            hpc_username_for_simulation_type=classification_username,
             source_directories=directories,
         )
     finally:

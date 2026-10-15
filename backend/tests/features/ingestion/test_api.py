@@ -162,7 +162,9 @@ def test_ingested_case_defaults_preserve_existing_types(
         )
 
 
-@pytest.mark.parametrize("username", ["ac.kai.zhang", "other-user", None])
+@pytest.mark.parametrize(
+    "username", ["ac.kai.zhang", " ac.kai.zhang ", "other-user", None]
+)
 def test_new_v3_upload_classifies_only_matching_identity(
     client, db, tmp_path, username
 ):
@@ -186,7 +188,9 @@ def test_new_v3_upload_classifies_only_matching_identity(
     assert response.status_code == 201, response.text
     case = db.query(Case).filter_by(name=CASE_NAME, hpc_username="ac.kai.zhang").one()
     assert case.simulation_type == (
-        "production" if username == "ac.kai.zhang" else "development"
+        "production"
+        if username and username.strip() == "ac.kai.zhang"
+        else "development"
     )
 
 
@@ -2547,8 +2551,9 @@ class TestIngestFromHpcUploadEndpoint:
         assert len(ingestion.archive_sha256) == 64
         assert ingestion.processed_execution_ids == ["100.1-1", "101.1-1"]
 
+    @pytest.mark.parametrize("username", ["test-user", " test-user "])
     def test_endpoint_classifies_hpc_upload_case_when_requested(
-        self, client, db: Session
+        self, client, db: Session, username
     ):
         machine = db.query(Machine).filter(Machine.name == "chrysalis").one()
         assert machine is not None
@@ -2565,7 +2570,7 @@ class TestIngestFromHpcUploadEndpoint:
                 data={
                     "machine_name": machine.name,
                     "case_path": "/archive/v3.LR.piControl",
-                    "hpc_username": "test-user",
+                    "hpc_username": username,
                     "processed_execution_ids": ["100.1-1"],
                     "simulation_type": "production",
                 },
