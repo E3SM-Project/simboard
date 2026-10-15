@@ -380,6 +380,21 @@ Configure `MACHINE_NAME` and the active root explicitly in each Spin secret:
 root is not required. Unset or blank required values fail before scanning. Use
 the container mount paths shown above, not NERSC host-side site configuration.
 
+For full filesystem paths in Performance Source Directories, set `PERF_SOURCE_ROOT`
+in the staging secret to `/global/cfs/cdirs/e3sm/performance_archive`. Set
+`OLD_PERF_SOURCE_ROOT` in the archive secret to the canonical host path for its
+mount. Confirm whether the deployment uses `/global/cfs/cdirs/e3sm/OLD_PERF` or
+`/global/cfs/projectdirs/e3sm/OLD_PERF` before configuring it.
+
+These optional settings must be absolute paths. They only replace the mounted
+root prefix in recorded case and execution source directories; scanning, uploads,
+state keys, and checkpoints still use container paths. The host roots need not
+exist inside the container and are not resolved there. Without these settings,
+ingestion records observed paths unchanged, as appropriate for native HPC runs.
+After rollout, inspect newly visited staging and archive cases and executions in
+the detail API or UI. Existing mount-path records are not rewritten, and completed
+archive snapshots remain skipped. Dry runs do not write source directories.
+
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
    - Configure secret-backed environment variables from `nersc-staging-ingestor-env`.

@@ -17,6 +17,8 @@ def site_environment(monkeypatch, tmp_path: Path) -> None:
         "ARCHIVE_YEAR_END",
         "PERF_ARCHIVE_ROOT",
         "OLD_PERF_ARCHIVE_ROOT",
+        "PERF_SOURCE_ROOT",
+        "OLD_PERF_SOURCE_ROOT",
         "MACHINE_NAME",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -101,6 +103,24 @@ def test_spin_paths_are_explicit_and_independent_of_host_config(monkeypatch) -> 
     assert config.archive_root == Path("/OLD_PERF")
     assert config.machine_name == "perlmutter"
     assert config.archive_year_start == "2025-01"
+
+
+@pytest.mark.parametrize("mode", ["staging", "archive"])
+@pytest.mark.parametrize("value", [None, "", "/host/performance", "relative/path"])
+def test_source_root_configuration(monkeypatch, tmp_path, mode, value):
+    monkeypatch.setenv("SCAN_MODE", mode)
+    monkeypatch.setenv("PERF_ARCHIVE_ROOT", str(tmp_path))
+    active = "PERF_SOURCE_ROOT" if mode == "staging" else "OLD_PERF_SOURCE_ROOT"
+    inactive = "OLD_PERF_SOURCE_ROOT" if mode == "staging" else "PERF_SOURCE_ROOT"
+    monkeypatch.setenv(inactive, "ignored-relative-root")
+    if value is not None:
+        monkeypatch.setenv(active, value)
+    if value == "relative/path":
+        with pytest.raises(ValueError, match=f"{active} must be an absolute path"):
+            _build_config_from_env()
+    else:
+        config = _build_config_from_env()
+        assert config.source_root == (Path(value) if value else None)
 
 
 def test_v3_supplies_site_values_before_shared_validation(monkeypatch) -> None:

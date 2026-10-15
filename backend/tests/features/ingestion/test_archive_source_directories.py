@@ -4,6 +4,7 @@ import gzip
 import json
 from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -60,12 +61,14 @@ def parsed_metadata(monkeypatch):
     "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
 )
 @pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("source_root", [None, Path("/host/performance_archive")])
 def test_duplicate_only_scan_records_paths_without_upload(
     tmp_path,
     monkeypatch,
     parsed_metadata,
     runner,
     dry_run,
+    source_root,
 ):
     root = tmp_path / "performance_archive"
     case_path = root / "user" / "not-the-case-name"
@@ -83,7 +86,7 @@ def test_duplicate_only_scan_records_paths_without_upload(
 
     assert (
         runner._run_ingestor(
-            _config(root, dry_run=dry_run),
+            replace(_config(root, dry_run=dry_run), source_root=source_root),
             post_request_fn=upload,
             source_directory_post_request_fn=record,
         )
@@ -93,8 +96,9 @@ def test_duplicate_only_scan_records_paths_without_upload(
     if calls:
         assert calls[0].case_name == "actual-case"
         assert calls[0].hpc_username == "actual-user"
-        assert calls[0].case_path == str(case_path)
-        assert calls[0].execution_path == str(case_path / "100.1-1")
+        expected = (source_root or root) / case_path.relative_to(root)
+        assert calls[0].case_path == str(expected)
+        assert calls[0].execution_path == str(expected / "100.1-1")
         assert calls[0].kind == "staging"
 
 
@@ -102,12 +106,14 @@ def test_duplicate_only_scan_records_paths_without_upload(
     "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
 )
 @pytest.mark.parametrize("fail_mapping", [False, True])
+@pytest.mark.parametrize("source_root", [None, Path("/host/OLD_PERF")])
 def test_archive_mappings_precede_checkpoints(
     tmp_path,
     monkeypatch,
     parsed_metadata,
     runner,
     fail_mapping,
+    source_root,
 ):
     root = tmp_path / "OLD_PERF"
     snapshot_names = [
@@ -138,16 +144,26 @@ def test_archive_mappings_precede_checkpoints(
         return {"status_code": 200, "body": {}}
 
     assert runner._run_ingestor(
-        _config(root, scan_mode="archive"),
+        replace(_config(root, scan_mode="archive"), source_root=source_root),
         source_directory_post_request_fn=record,
         checkpoint_post_request_fn=checkpoint,
     ) == int(fail_mapping)
     assert events == (["mappings"] if fail_mapping else ["mappings", "checkpoint"])
     if not fail_mapping:
         assert {entry.case_path for entry in mappings} == {
-            str(path) for path in case_paths
+            str((source_root or root) / path.relative_to(root)) for path in case_paths
         }
         assert all(entry.kind == "archive" for entry in mappings)
+
+
+@pytest.mark.parametrize(
+    "tail", ["../outside/case", "../performance_archive-other/case"]
+)
+def test_source_mapping_rejects_paths_outside_root(tmp_path, parsed_metadata, tail):
+    root = tmp_path / "performance_archive"
+    config = replace(_config(root), source_root=Path("/host/performance_archive"))
+    with pytest.raises(ValueError):
+        source_module._observe_source_directory(root / tail, "100.1-1", config)
 
 
 def test_checkpointed_directories_are_not_observed(tmp_path):
