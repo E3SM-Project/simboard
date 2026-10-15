@@ -190,6 +190,15 @@ def test_source_directory_submission_does_not_cross_machines(db):
     assert db.query(SourceDirectory).count() == 0
 
 
+def test_source_directory_submission_rejects_unknown_machine(db):
+    user, _, _, _ = _owners(db)
+    user.role = UserRole.SERVICE_ACCOUNT
+    with pytest.raises(HTTPException) as exc:
+        record_source_directories(_request("unknown-machine"), db, user)
+    assert exc.value.status_code == 404
+    assert db.query(SourceDirectory).count() == 0
+
+
 def test_explicit_ingestion_mapping_failure_rolls_back_audit(db):
     from app.features.ingestion.models import Ingestion
 

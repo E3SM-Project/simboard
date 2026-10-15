@@ -6,7 +6,7 @@ from app.scripts.ingestion import archive_source_directories as source_module
 
 def stub_source_directory_persistence(monkeypatch):
     def observe(case_path, execution_dirname, config, hpc_username=None):
-        return SourceDirectoryObservation(
+        return config.machine_name, SourceDirectoryObservation(
             case_name="parsed-case",
             hpc_username=hpc_username or "test-user",
             execution_id=execution_dirname,

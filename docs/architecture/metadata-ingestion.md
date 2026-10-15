@@ -364,6 +364,14 @@ configuration; direct Python invocation must receive them explicitly from its
 deployment environment. NERSC Spin uses container-mounted paths, not host paths.
 Missing or blank required values fail configuration validation before scanning.
 
+For the NERSC runner, `MACHINE_NAME` scopes ingestion audit state, discovery
+results, and archive checkpoints; it does not filter simulation machines in the
+mounted archive. Executions retain the canonical machine derived from `MACH` in
+their metadata. Source-directory observations are grouped by that metadata machine
+so each path resolves against the correct catalog case and execution. The API
+rejects machines absent from its machine catalog; missing machine metadata is not
+replaced with the scanner's configured machine.
+
 The targeted Chrysalis v3 runner supplies its site-specific configuration before
 shared validation: it fixes the machine identity to `chrysalis` and uses
 `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF` when `OLD_PERF_ARCHIVE_ROOT` is unset.
