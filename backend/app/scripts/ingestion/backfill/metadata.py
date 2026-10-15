@@ -37,6 +37,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
 )
 from app.scripts.ingestion.archive_ingestor_core import logger as ingestion_logger
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
+from app.scripts.ingestion.nersc_archive_ingestor import _prune_staging_walk_dirnames
 
 FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
@@ -217,7 +218,9 @@ def _execution_paths(root: Path, kind: str, args: argparse.Namespace):
             progress["directories_visited"] += 1
             dirs[:] = sorted(name for name in dirs if not (path / name).is_symlink())
 
-            if kind == "archive":
+            if kind == "staging":
+                _prune_staging_walk_dirnames(current, dirs, archive_root=root)
+            elif kind == "archive":
                 _filter_archive_walk_dirnames(
                     current,
                     dirs,

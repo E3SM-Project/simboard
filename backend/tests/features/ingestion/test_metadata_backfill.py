@@ -77,6 +77,45 @@ def test_both_layouts_and_archive_bounds(tmp_path):
     assert list(_execution_paths(staging, "staging", args)) == []
 
 
+@pytest.mark.parametrize(
+    "excluded_layout",
+    [
+        "performance_archive_2026_10_15_10_03_11/COMPLETED/alice/case",
+        "performance_archive_2026_10_15_10_03_11/FAILED/alice/case",
+        "pace-exps-test/exp1",
+        "alice/case/extra",
+        "alice",
+        "",
+    ],
+)
+def test_staging_scan_only_visits_user_case_execution_layout(
+    tmp_path, monkeypatch, excluded_layout
+):
+    lid = "123.250101-000000"
+    execution = tmp_path / "alice" / "case" / lid
+    execution.mkdir(parents=True)
+    (execution / "CaseDocs" / lid).mkdir(parents=True)
+    excluded = tmp_path / excluded_layout / lid
+    excluded.mkdir(parents=True)
+    args = _source_args(case_name=None, hpc_username=None)
+    events = []
+    monkeypatch.setattr(metadata, "_log_event", partial(_capture_log, events))
+    monkeypatch.setattr(metadata, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 1)
+
+    assert list(_execution_paths(tmp_path, "staging", args)) == [execution]
+    visited = [
+        fields["current_dir"]
+        for event, fields in events
+        if event == "backfill_scan_progress"
+    ]
+    assert visited == [
+        str(tmp_path),
+        str(tmp_path / "alice"),
+        str(tmp_path / "alice" / "case"),
+        str(execution),
+    ]
+
+
 def test_missing_identity_fails_without_guessing(tmp_path):
     with pytest.raises(ValueError, match="Missing identity"):
         _read_execution(tmp_path, "perlmutter", [])

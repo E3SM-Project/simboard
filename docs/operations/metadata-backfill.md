@@ -31,6 +31,8 @@ make metadata-backfill machine=perlmutter env=dev \
 
 The command reads identity metadata and maps staging/archive directories to **matching existing records**. It ignores ingestion checkpoints and processed-execution skips. It does not upload data, create catalog records, or change ingestion state.
 
+Staging scans follow ingestion's `root/hpc-username/case/execution` layout. They skip top-level `performance_archive_*` batches and `pace-exps-*` trees and do not descend into execution contents. Use archive scans for historical archive layouts.
+
 ### Review the scan scope
 
 | Setting       | Default                                                                          | CLI override      |
