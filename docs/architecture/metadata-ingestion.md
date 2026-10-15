@@ -80,6 +80,18 @@ Normal ingestion records original case and execution directories as `staging`
 or `archive` mappings. Multiple paths are retained, including paths from
 different archive snapshots. Case and execution detail APIs return
 `sourceDirectories`, preserving all observations regardless of UI selection.
+By default, scanners record paths as observed. When `PERF_SOURCE_ROOT` (staging)
+or `OLD_PERF_SOURCE_ROOT` (archive) is configured, scanners replace the mounted
+scan-root prefix with that absolute host filesystem prefix for source mappings
+only. Scanning, uploads, state keys, and checkpoints keep their container paths.
+
+New cases created by ingestion default to the `development` simulation type.
+Trusted Chrysalis v3 uploads that request production classification assign
+`production` only to the matching case identity before applying the development
+fallback. Re-ingestion preserves existing non-null classifications, including
+user-selected values. Existing null cases remain unchanged by ordinary ingestion;
+the specialized v3 flow can still classify matching null cases as production,
+including duplicate-only submissions. No historical bulk update is performed.
 
 Case Metadata displays **Performance Source Directories**: all distinct archive
 paths when any exist, otherwise all distinct staging paths, sorted alphabetically.
@@ -361,7 +373,9 @@ machine identity. Staging mode requires a nonblank `PERF_ARCHIVE_ROOT`; archive
 mode requires a nonblank `OLD_PERF_ARCHIVE_ROOT`. Both require `MACHINE_NAME`. Only the active
 mode's root is required. Host launchers supply these values from site
 configuration; direct Python invocation must receive them explicitly from its
-deployment environment. NERSC Spin uses container-mounted paths, not host paths.
+deployment environment. NERSC Spin uses container-mounted paths for scanning;
+optional source-root settings translate only recorded source directory mappings
+to host filesystem paths.
 Missing or blank required values fail configuration validation before scanning.
 
 For the NERSC runner, `MACHINE_NAME` scopes ingestion audit state, discovery

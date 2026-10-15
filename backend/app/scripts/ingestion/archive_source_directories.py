@@ -59,9 +59,21 @@ def _observe_source_directory(
         or "",
         execution_id=parsed.execution_id,
         kind=SourceDirectoryKind(config.scan_mode),
-        case_path=str(case_path),
-        execution_path=str(execution_path),
+        case_path=_source_directory_path(case_path, config),
+        execution_path=_source_directory_path(execution_path, config),
     )
+
+
+def _source_directory_path(path: Path, config: IngestorConfig) -> str:
+    """Translate an observed mount path without resolving host filesystem paths."""
+    if config.source_root is None:
+        return str(path)
+
+    relative = path.relative_to(config.archive_root)
+    if ".." in relative.parts:
+        raise ValueError(f"Source directory is outside scan root: {path}")
+
+    return str(config.source_root / relative)
 
 
 def _persist_visited_source_directories(

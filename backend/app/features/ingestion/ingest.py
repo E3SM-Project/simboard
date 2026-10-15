@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
-from app.features.catalog.enums import ArtifactKind, ExecutionStatus
+from app.features.catalog.enums import ArtifactKind, CaseSimulationType, ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ArtifactCreate, ExecutionCreate
 from app.features.ingestion.parsers.parser import main_parser
@@ -54,6 +54,8 @@ class IngestArchiveResult:
     duplicate_count: int
     skipped_count: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+    # Identities confirmed by successful processing, including duplicate executions.
+    case_identities: set[CaseIdentity] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ def ingest_archive(
     *,
     strict_validation: bool = False,
     hpc_username: str | None = None,
+    production_case_identity: CaseIdentity | None = None,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
@@ -107,6 +110,10 @@ def ingest_archive(
         Directory where extracted files will be stored.
     db : Session
         SQLAlchemy database session for machine and execution lookups.
+    production_case_identity : CaseIdentity | None
+        Trusted production classification target (name, machine ID, HPC username).
+        Only matching new cases use production; other new cases use development.
+        Existing classifications are not changed here.
     Returns
     -------
     IngestArchiveResult
@@ -141,6 +148,7 @@ def ingest_archive(
     errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
+    case_identities: set[CaseIdentity] = set()
 
     for parsed_execution in parsed_executions:
         try:
@@ -150,6 +158,8 @@ def ingest_archive(
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
                 request_hpc_username=hpc_username,
+                production_case_identity=production_case_identity,
+                case_identities=case_identities,
             )
 
             if is_duplicate:
@@ -181,6 +191,7 @@ def ingest_archive(
         duplicate_count=duplicate_count,
         skipped_count=skipped_count,
         errors=errors,
+        case_identities=case_identities,
     )
 
     return result
@@ -192,6 +203,8 @@ def _process_execution_for_ingest(
     case_hash_cache: dict[CaseIdentity, str],
     persisted_case_hash_cache: dict[UUID, str | None],
     request_hpc_username: str | None = None,
+    production_case_identity: CaseIdentity | None = None,
+    case_identities: set[CaseIdentity] | None = None,
 ) -> tuple[ExecutionCreate | None, bool]:
     """Process one parsed execution entry.
 
@@ -228,6 +241,8 @@ def _process_execution_for_ingest(
         execution_dir=parsed_execution.execution_dir,
         db=db,
     ):
+        if case_identities is not None:
+            case_identities.add(_case_identity_key(existing_case))
         return None, True
 
     prevalidated_draft = _prevalidate_execution_create(
@@ -239,6 +254,12 @@ def _process_execution_for_ingest(
         machine_id,
         resolved_hpc_username,
         db,
+        simulation_type=(
+            CaseSimulationType.PRODUCTION
+            if (case_name, machine_id, resolved_hpc_username)
+            == production_case_identity
+            else CaseSimulationType.DEVELOPMENT
+        ),
     )
     _track_case_hash_grouping(
         parsed_execution=parsed_execution,
@@ -252,6 +273,8 @@ def _process_execution_for_ingest(
         prevalidated_draft=prevalidated_draft,
         case=case,
     )
+    if case_identities is not None:
+        case_identities.add(_case_identity_key(case))
 
     return execution, False
 
@@ -340,6 +363,7 @@ def _resolve_case(
     machine_id: UUID,
     hpc_username: str,
     db: Session,
+    simulation_type: CaseSimulationType = CaseSimulationType.DEVELOPMENT,
 ) -> Case:
     """Resolve or create the Case for the current metadata row."""
     case_group = parsed_execution.case_group
@@ -350,6 +374,7 @@ def _resolve_case(
         machine_id=machine_id,
         hpc_username=hpc_username,
         case_group=case_group,
+        simulation_type=simulation_type,
     )
 
     return result
@@ -524,6 +549,7 @@ def _get_or_create_case(
     machine_id: UUID,
     hpc_username: str,
     case_group: str | None = None,
+    simulation_type: CaseSimulationType = CaseSimulationType.DEVELOPMENT,
 ) -> Case:
     """Get or create a Case record by normalized identity.
 
@@ -542,6 +568,8 @@ def _get_or_create_case(
         if present.  An existing non-null value is never overwritten
         with null; a conflicting non-null value logs a warning and
         keeps the original.
+    simulation_type : CaseSimulationType
+        Classification for new cases only; defaults to development.
 
     Returns
     -------
@@ -561,6 +589,7 @@ def _get_or_create_case(
             machine_id=machine_id,
             hpc_username=hpc_username,
             case_group=case_group,
+            simulation_type=simulation_type,
         )
         db.add(case)
         db.flush()

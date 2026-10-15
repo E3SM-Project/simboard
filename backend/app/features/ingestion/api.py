@@ -22,11 +22,16 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.common.dependencies import get_database_session
+from app.common.utils import _normalize_hpc_username
 from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import ExecutionCreate
-from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
+from app.features.ingestion.ingest import (
+    CaseIdentity,
+    IngestArchiveResult,
+    ingest_archive,
+)
 from app.features.ingestion.models import (
     ArchiveScanCheckpoint,
     ExecutionDiscoveryResult,
@@ -502,6 +507,7 @@ def ingest_from_hpc_upload(
     _validate_v3_production_classification(
         simulation_type, Path(payload.case_path).name, machine.name
     )
+    classification_username = _normalize_hpc_username(payload.hpc_username)
 
     _validate_upload_file(file)
     filename = file.filename
@@ -518,6 +524,12 @@ def ingest_from_hpc_upload(
                 output_dir=tmpdir,
                 db=db,
                 hpc_username=payload.hpc_username,
+                production_case_identity=(
+                    (Path(payload.case_path).name, machine.id, classification_username)
+                    if simulation_type is CaseSimulationType.PRODUCTION
+                    and classification_username
+                    else None
+                ),
             )
 
         _validate_single_case_upload_ingest_result(ingest_result, payload.case_path)
@@ -534,7 +546,7 @@ def ingest_from_hpc_upload(
             db=db,
             case_simulation_type=simulation_type,
             case_name_for_simulation_type=Path(payload.case_path).name,
-            hpc_username_for_simulation_type=payload.hpc_username,
+            hpc_username_for_simulation_type=classification_username,
             source_directories=directories,
         )
     finally:
@@ -779,6 +791,7 @@ def _run_ingest_archive(
     *,
     strict_validation: bool = False,
     hpc_username: str | None = None,
+    production_case_identity: CaseIdentity | None = None,
 ) -> IngestArchiveResult:
     try:
         return ingest_archive(
@@ -787,6 +800,7 @@ def _run_ingest_archive(
             db=db,
             strict_validation=strict_validation,
             hpc_username=hpc_username,
+            production_case_identity=production_case_identity,
         )
     except ArchiveValidationError as exc:
         _raise_archive_validation_error(exc.errors)
@@ -920,7 +934,15 @@ def _process_ingestion(
                 persist_observed_directories(db, machine_id, source_directories)
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if case_simulation_type is not None:
+        if (
+            case_simulation_type is not None
+            and (
+                case_name_for_simulation_type,
+                machine_id,
+                hpc_username_for_simulation_type,
+            )
+            in ingest_result.case_identities
+        ):
             _set_ingested_case_simulation_type(
                 machine_id,
                 case_name_for_simulation_type,

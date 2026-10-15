@@ -4,6 +4,7 @@ This test module provides comprehensive coverage for the ingestion API,
 including path-based and upload-based ingestion endpoints.
 """
 
+import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -58,6 +59,11 @@ from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
 from tests.features.site.utils import get_or_create_site
+from tests.fixtures.continuation_case import (
+    CASE_NAME,
+    EXECUTIONS,
+    stage_continuation_case,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -111,6 +117,105 @@ def _create_case(
     db.add(case)
     db.flush()
     return case
+
+
+@pytest.mark.parametrize("transport", ["path", "hpc-upload", "upload"])
+@pytest.mark.parametrize("existing_type", ["new", None, "development", "production"])
+def test_ingested_case_defaults_preserve_existing_types(
+    client, db, tmp_path, transport, existing_type
+):
+    case_path = stage_continuation_case(tmp_path)
+    machine = db.query(Machine).filter_by(name="chrysalis").one()
+    if existing_type != "new":
+        case = _create_case(db, CASE_NAME, machine=machine, hpc_username="ac.kai.zhang")
+        case.simulation_type = existing_type
+        db.flush()
+
+    payload = {"machine_name": machine.name, "hpc_username": "ac.kai.zhang"}
+    archive = BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as stream:
+        stream.add(case_path, arcname=case_path.name)
+    for attempt in range(2):
+        if transport == "path":
+            response = client.post(
+                f"{API_BASE}/ingestions/from-path",
+                json={**payload, "archive_path": str(case_path)},
+            )
+        else:
+            if transport == "hpc-upload":
+                payload.update(
+                    case_path=str(case_path), processed_execution_ids=list(EXECUTIONS)
+                )
+            response = client.post(
+                f"{API_BASE}/ingestions/from-{transport}",
+                data=payload,
+                files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+            )
+        assert response.status_code == 201, response.text
+        assert response.json()["created_count"] == (
+            len(EXECUTIONS) if attempt == 0 else 0
+        )
+        case = db.query(Case).filter_by(name=CASE_NAME, machine_id=machine.id).one()
+        db.refresh(case)
+        assert case.simulation_type == (
+            "development" if existing_type == "new" else existing_type
+        )
+
+
+@pytest.mark.parametrize(
+    "username", ["ac.kai.zhang", " ac.kai.zhang ", "other-user", None]
+)
+def test_new_v3_upload_classifies_only_matching_identity(
+    client, db, tmp_path, username
+):
+    case_path = stage_continuation_case(tmp_path)
+    machine = db.query(Machine).filter_by(name="chrysalis").one()
+    unrelated_case = _create_case(
+        db, CASE_NAME, machine=machine, hpc_username="other-user"
+    )
+    archive = BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as stream:
+        stream.add(case_path, arcname=case_path.name)
+    payload = {
+        "machine_name": "chrysalis",
+        "case_path": str(case_path),
+        "processed_execution_ids": list(EXECUTIONS),
+        "simulation_type": "production",
+    }
+    if username is not None:
+        payload["hpc_username"] = username
+    response = client.post(
+        f"{API_BASE}/ingestions/from-hpc-upload",
+        data=payload,
+        files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+    )
+    assert response.status_code == 201, response.text
+    case = db.query(Case).filter_by(name=CASE_NAME, hpc_username="ac.kai.zhang").one()
+    assert case.simulation_type == (
+        "production"
+        if username and username.strip() == "ac.kai.zhang"
+        else "development"
+    )
+    db.refresh(unrelated_case)
+    assert unrelated_case.simulation_type is None
+
+    # Simulate a historical unclassified case, then exercise duplicate-only parsing.
+    case.simulation_type = None
+    db.flush()
+    response = client.post(
+        f"{API_BASE}/ingestions/from-hpc-upload",
+        data=payload,
+        files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 0
+    assert response.json()["duplicate_count"] == len(EXECUTIONS)
+    db.refresh(case)
+    assert case.simulation_type == (
+        "production" if username and username.strip() == "ac.kai.zhang" else None
+    )
+    db.refresh(unrelated_case)
+    assert unrelated_case.simulation_type is None
 
 
 class TestExecutionDiscoveryResultsEndpoint:
@@ -2470,8 +2575,9 @@ class TestIngestFromHpcUploadEndpoint:
         assert len(ingestion.archive_sha256) == 64
         assert ingestion.processed_execution_ids == ["100.1-1", "101.1-1"]
 
+    @pytest.mark.parametrize("username", ["test-user", " test-user "])
     def test_endpoint_classifies_hpc_upload_case_when_requested(
-        self, client, db: Session
+        self, client, db: Session, username
     ):
         machine = db.query(Machine).filter(Machine.name == "chrysalis").one()
         assert machine is not None
@@ -2480,7 +2586,11 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=[], created_count=0, duplicate_count=1, errors=[]
+                executions=[],
+                created_count=0,
+                duplicate_count=1,
+                errors=[],
+                case_identities={(case.name, machine.id, case.hpc_username)},
             ),
         ):
             res = client.post(
@@ -2488,7 +2598,7 @@ class TestIngestFromHpcUploadEndpoint:
                 data={
                     "machine_name": machine.name,
                     "case_path": "/archive/v3.LR.piControl",
-                    "hpc_username": "test-user",
+                    "hpc_username": username,
                     "processed_execution_ids": ["100.1-1"],
                     "simulation_type": "production",
                 },
@@ -2558,7 +2668,11 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=[], created_count=0, duplicate_count=1, errors=[]
+                executions=[],
+                created_count=0,
+                duplicate_count=1,
+                errors=[],
+                case_identities={(target.name, machine.id, target.hpc_username)},
             ),
         ):
             res = client.post(
@@ -2799,6 +2913,7 @@ class TestIngestionApiCoverage:
             db=db,
             strict_validation=True,
             hpc_username="request-user",
+            production_case_identity=None,
         )
 
     def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):

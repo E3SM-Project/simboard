@@ -231,6 +231,8 @@ class IngestorConfig:
     archive_year_end: str | None = None
     # Whether a dry run reads existing state and archive checkpoints from SimBoard.
     dry_run_use_remote_state: bool = True
+    # Optional host filesystem root used only for source directory observations.
+    source_root: Path | None = None
 
 
 class IngestionRequestError(Exception):
@@ -442,6 +444,15 @@ def _required_config_value(env_name: str, override: str | None = None) -> str:
     return value
 
 
+def _optional_source_root(env_name: str) -> Path | None:
+    value = os.getenv(env_name, "").strip()
+    root = Path(value) if value else None
+    if root is not None and not root.is_absolute():
+        raise ValueError(f"{env_name} must be an absolute path")
+
+    return root
+
+
 def _build_config_from_env(
     *,
     scan_mode_override: Literal["staging", "archive"] | None = None,
@@ -484,6 +495,10 @@ def _build_config_from_env(
         archive_root_override if scan_mode == "archive" else None,
     )
     archive_root = Path(root_value).resolve()
+    source_root_env_name = (
+        "OLD_PERF_SOURCE_ROOT" if scan_mode == "archive" else "PERF_SOURCE_ROOT"
+    )
+    source_root = _optional_source_root(source_root_env_name)
 
     machine_name = _required_config_value("MACHINE_NAME", machine_name_override)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=True)
@@ -545,6 +560,7 @@ def _build_config_from_env(
         api_base_url=api_base_url,
         api_token=api_token,
         archive_root=archive_root,
+        source_root=source_root,
         machine_name=machine_name,
         scan_mode=cast(Literal["staging", "archive"], scan_mode),
         dry_run=dry_run,

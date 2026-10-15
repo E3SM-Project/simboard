@@ -31,6 +31,8 @@ For runs inside Spin, set:
 ```bash
 export PERF_ARCHIVE_ROOT=/performance_archive
 export OLD_PERF_ARCHIVE_ROOT=/OLD_PERF
+export PERF_SOURCE_ROOT=/global/cfs/cdirs/e3sm/performance_archive
+export OLD_PERF_SOURCE_ROOT=/global/cfs/cdirs/e3sm/OLD_PERF
 ```
 
 Create these resources before configuring workloads in Rancher.
@@ -344,6 +346,7 @@ Key table for `nersc-staging-ingestor-env`:
 | `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-staging-ingestor` |
 | `SCAN_MODE`             | Yes      | `staging`                                                  | `nersc-staging-ingestor` |
 | `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-staging-ingestor` |
+| `PERF_SOURCE_ROOT`      | Yes | `/global/cfs/cdirs/e3sm/performance_archive`; absolute host prefix for recorded source directories only | `nersc-staging-ingestor` |
 | `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-staging-ingestor` |
 | `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-staging-ingestor` |
 
@@ -355,6 +358,7 @@ Key table for `nersc-archive-ingestor-env`:
 | `SIMBOARD_API_BASE_URL` | Yes                       | `http://backend:8000`                                      | `nersc-archive-ingestor` |
 | `SCAN_MODE`             | Yes                       | `archive`                                                  | `nersc-archive-ingestor` |
 | `OLD_PERF_ARCHIVE_ROOT` | Yes                       | `/OLD_PERF`                                                | `nersc-archive-ingestor` |
+| `OLD_PERF_SOURCE_ROOT`  | Yes | `/global/cfs/cdirs/e3sm/OLD_PERF`; canonical absolute host prefix for recorded source directories only (`projectdirs` is an alias) | `nersc-archive-ingestor` |
 | `MACHINE_NAME`          | Yes                       | `perlmutter`                                               | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No                        | `true` or `false`                                          | `nersc-archive-ingestor` |
 | `ARCHIVE_YEAR_START`    | No, defaults to `2025-01` | `2025-01`; explicit earlier bounds for backfills            | `nersc-archive-ingestor` |
@@ -379,6 +383,15 @@ Configure `MACHINE_NAME` and the active root explicitly in each Spin secret:
 `PERF_ARCHIVE_ROOT` for staging, `OLD_PERF_ARCHIVE_ROOT` for archive. The inactive
 root is not required. Unset or blank required values fail before scanning. Use
 the container mount paths shown above, not NERSC host-side site configuration.
+Spin deployments must configure the source roots in the tables to record host
+filesystem paths. These settings affect only recorded case and execution
+paths; scanning, uploads, state keys, and checkpoints still use container paths.
+Host roots must be absolute but need not exist inside the container and are not
+resolved there. Only the active scan mode's source root is needed. The shared
+ingestor keeps these settings optional for native HPC runs, which already use
+absolute host paths through `PERF_ARCHIVE_ROOT` and `OLD_PERF_ARCHIVE_ROOT`.
+Without a source-root override, it records observed paths unchanged. Existing records are not rewritten,
+completed archive snapshots remain skipped, and dry runs do not write source paths.
 
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
@@ -536,7 +549,7 @@ still prevents already processed executions from being submitted again.
 | ---------------------------- | --------------------------------------- |
 | Volume type                  | `Bind-Mount`                            |
 | Volume name                  | `archive`                               |
-| Path on node                 | `/global/cfs/projectdirs/e3sm/OLD_PERF` |
+| Path on node                 | `/global/cfs/cdirs/e3sm/OLD_PERF` |
 | The Path on the Node must be | `An existing directory`                 |
 
 ##### 3. Container tab
@@ -584,7 +597,7 @@ clarity and to highlight security context requirements.
 
 | Field                   | Staging value                                | Archive value                           |
 | ----------------------- | -------------------------------------------- | --------------------------------------- |
-| Path on node            | `/global/cfs/cdirs/e3sm/performance_archive` | `/global/cfs/projectdirs/e3sm/OLD_PERF` |
+| Path on node            | `/global/cfs/cdirs/e3sm/performance_archive` | `/global/cfs/cdirs/e3sm/OLD_PERF` |
 | Volume name             | `staging`                                    | `archive`                               |
 | In-container mount path | `/performance_archive`                       | `/OLD_PERF`                             |
 | Read only               | `true` (recommended)                         | `true` (recommended)                    |
