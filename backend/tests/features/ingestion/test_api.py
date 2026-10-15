@@ -169,6 +169,10 @@ def test_new_v3_upload_classifies_only_matching_identity(
     client, db, tmp_path, username
 ):
     case_path = stage_continuation_case(tmp_path)
+    machine = db.query(Machine).filter_by(name="chrysalis").one()
+    unrelated_case = _create_case(
+        db, CASE_NAME, machine=machine, hpc_username="other-user"
+    )
     archive = BytesIO()
     with tarfile.open(fileobj=archive, mode="w:gz") as stream:
         stream.add(case_path, arcname=case_path.name)
@@ -192,6 +196,26 @@ def test_new_v3_upload_classifies_only_matching_identity(
         if username and username.strip() == "ac.kai.zhang"
         else "development"
     )
+    db.refresh(unrelated_case)
+    assert unrelated_case.simulation_type is None
+
+    # Simulate a historical unclassified case, then exercise duplicate-only parsing.
+    case.simulation_type = None
+    db.flush()
+    response = client.post(
+        f"{API_BASE}/ingestions/from-hpc-upload",
+        data=payload,
+        files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 0
+    assert response.json()["duplicate_count"] == len(EXECUTIONS)
+    db.refresh(case)
+    assert case.simulation_type == (
+        "production" if username and username.strip() == "ac.kai.zhang" else None
+    )
+    db.refresh(unrelated_case)
+    assert unrelated_case.simulation_type is None
 
 
 class TestExecutionDiscoveryResultsEndpoint:
@@ -2562,7 +2586,11 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=[], created_count=0, duplicate_count=1, errors=[]
+                executions=[],
+                created_count=0,
+                duplicate_count=1,
+                errors=[],
+                case_identities={(case.name, machine.id, case.hpc_username)},
             ),
         ):
             res = client.post(
@@ -2640,7 +2668,11 @@ class TestIngestFromHpcUploadEndpoint:
         with patch(
             "app.features.ingestion.api.ingest_archive",
             return_value=IngestArchiveResult(
-                executions=[], created_count=0, duplicate_count=1, errors=[]
+                executions=[],
+                created_count=0,
+                duplicate_count=1,
+                errors=[],
+                case_identities={(target.name, machine.id, target.hpc_username)},
             ),
         ):
             res = client.post(

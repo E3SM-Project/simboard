@@ -54,6 +54,8 @@ class IngestArchiveResult:
     duplicate_count: int
     skipped_count: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+    # Identities confirmed by successful processing, including duplicate executions.
+    case_identities: set[CaseIdentity] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,7 @@ def ingest_archive(
     errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
+    case_identities: set[CaseIdentity] = set()
 
     for parsed_execution in parsed_executions:
         try:
@@ -156,6 +159,7 @@ def ingest_archive(
                 persisted_case_hash_cache=persisted_case_hash_cache,
                 request_hpc_username=hpc_username,
                 production_case_identity=production_case_identity,
+                case_identities=case_identities,
             )
 
             if is_duplicate:
@@ -187,6 +191,7 @@ def ingest_archive(
         duplicate_count=duplicate_count,
         skipped_count=skipped_count,
         errors=errors,
+        case_identities=case_identities,
     )
 
     return result
@@ -199,6 +204,7 @@ def _process_execution_for_ingest(
     persisted_case_hash_cache: dict[UUID, str | None],
     request_hpc_username: str | None = None,
     production_case_identity: CaseIdentity | None = None,
+    case_identities: set[CaseIdentity] | None = None,
 ) -> tuple[ExecutionCreate | None, bool]:
     """Process one parsed execution entry.
 
@@ -235,6 +241,8 @@ def _process_execution_for_ingest(
         execution_dir=parsed_execution.execution_dir,
         db=db,
     ):
+        if case_identities is not None:
+            case_identities.add(_case_identity_key(existing_case))
         return None, True
 
     prevalidated_draft = _prevalidate_execution_create(
@@ -265,6 +273,8 @@ def _process_execution_for_ingest(
         prevalidated_draft=prevalidated_draft,
         case=case,
     )
+    if case_identities is not None:
+        case_identities.add(_case_identity_key(case))
 
     return execution, False
 

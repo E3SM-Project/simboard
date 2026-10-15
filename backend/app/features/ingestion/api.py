@@ -934,7 +934,15 @@ def _process_ingestion(
                 persist_observed_directories(db, machine_id, source_directories)
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if case_simulation_type is not None:
+        if (
+            case_simulation_type is not None
+            and (
+                case_name_for_simulation_type,
+                machine_id,
+                hpc_username_for_simulation_type,
+            )
+            in ingest_result.case_identities
+        ):
             _set_ingested_case_simulation_type(
                 machine_id,
                 case_name_for_simulation_type,
