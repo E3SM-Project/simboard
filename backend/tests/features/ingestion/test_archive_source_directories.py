@@ -209,6 +209,99 @@ def test_source_submission_retries_same_batch(tmp_path, parsed_metadata):
     assert sleeps == [1]
 
 
+@pytest.mark.parametrize("error_type", [FileNotFoundError, PermissionError])
+def test_source_file_errors_preserve_other_observations(
+    tmp_path, monkeypatch, parsed_metadata, error_type
+):
+    case_path = tmp_path / "case"
+    execution_ids = ["100.1-1", "100.1-2"]
+    state = {"cases": {str(case_path): {"processed_execution_ids": execution_ids}}}
+    events = []
+    monkeypatch.setattr(
+        source_module,
+        "_log_event",
+        lambda event, fields: events.append((event, fields)),
+    )
+
+    def locate(path):
+        if path == str(case_path / execution_ids[0]):
+            raise error_type("source metadata unavailable")
+        return {}
+
+    monkeypatch.setattr(source_module, "_locate_metadata_files", locate)
+    observations = []
+
+    def record(*args, directories, **kwargs):
+        observations.extend(directories)
+        return {"status_code": 200, "body": {}}
+
+    result = source_module._persist_visited_source_directories(
+        [(case_path, execution_id) for execution_id in execution_ids],
+        state,
+        _config(tmp_path),
+        lambda _: None,
+        record,
+    )
+
+    assert result is (error_type is FileNotFoundError)
+    assert [entry.execution_path for entry in observations] == (
+        [str(case_path / execution_ids[1])] if result else []
+    )
+    assert events == [
+        (
+            "source_directory_unresolved",
+            {
+                "execution_path": str(case_path / execution_ids[0]),
+                "error": "source metadata unavailable",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
+)
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+def test_processed_incomplete_metadata_does_not_fail_run(
+    tmp_path, monkeypatch, runner, scan_mode
+):
+    root = tmp_path / "performance_archive"
+    case_path = root / "case"
+    if scan_mode == "archive":
+        root = tmp_path / "OLD_PERF"
+        case_path = (
+            root / "2025-01" / "performance_archive_2025_01_01_00_00_00" / "case"
+        )
+    (case_path / "100.1-1").mkdir(parents=True)
+    state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    monkeypatch.setattr(runner, "_fetch_archive_checkpoints", lambda *a, **kw: set())
+    events = []
+    monkeypatch.setattr(
+        source_module, "_log_event", lambda event, fields: events.append(event)
+    )
+
+    def unexpected_request(*args, **kwargs):
+        pytest.fail("processed incomplete execution must not upload or record a source")
+
+    def checkpoint(*args, **kwargs):
+        events.append("checkpoint")
+        return {"status_code": 200, "body": {}}
+
+    assert (
+        runner._run_ingestor(
+            _config(root, scan_mode=scan_mode),
+            post_request_fn=unexpected_request,
+            source_directory_post_request_fn=unexpected_request,
+            checkpoint_post_request_fn=checkpoint,
+        )
+        == 0
+    )
+    assert events == ["source_directory_unresolved"] + (
+        ["checkpoint"] if scan_mode == "archive" else []
+    )
+
+
 @pytest.mark.parametrize(
     "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
 )
