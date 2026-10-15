@@ -56,7 +56,7 @@ Dry runs resolve owners through the API without writing mappings. **`matched` me
 2. Review the dry-run results and obtain explicit authorization.
 3. Replace `--dry-run` with `--apply`.
 
-Reruns retain existing mappings without duplicates. Failures and unresolved owners produce a nonzero exit status. Missing files are never guessed.
+Reruns retain existing mappings without duplicates. Missing required identity files (`skipped_incomplete`) and unresolved owners (`skipped_no_owner`) are expected skips, not failures. Actual read, parse, API, and scan errors produce a nonzero exit status. Missing files are never guessed.
 
 Stored paths record observations; they do not guarantee current availability.
 
@@ -86,21 +86,21 @@ INFO event=backfill_scan_started source=archive root=/path/to/OLD_PERF directori
 INFO event=backfill_scan_progress source=archive current_dir=/path/to/OLD_PERF/2025-01 directories_visited=250 matching_executions=0 duration_seconds=12.4
 INFO event=backfill_scan_completed source=archive directories_visited=310 matching_executions=0 duration_seconds=15.1 traversal_complete=true
 INFO event=backfill_scan_no_matches source=archive directories_visited=310 matching_executions=0
-{"matched": 0, "failed": 0}
+{"matched": 0, "skipped_no_owner": 0, "skipped_incomplete": 0, "failed": 0}
 ```
 
 This scan finished without finding a path-level match. Replace placeholders such as `exact-case-name` and `exact-user` with real values, and check the configured roots and archive bounds.
 
-**Directory matches are not successful updates.** Source metadata can still fail identity validation after a directory matches. An `unresolved` JSON outcome means the API could not find the existing database owner:
+**Directory matches are not successful updates.** Source metadata can still fail identity validation after a directory matches. A `skipped_no_owner` JSON outcome means the API could not find the existing database owner:
 
 ```json
-{"path": "/path/to/performance_archive/alice/my-case/123.250101-000000", "outcome": "unresolved", "dry_run": true}
+{"path": "/path/to/performance_archive/alice/my-case/123.250101-000000", "outcome": "skipped_no_owner", "dry_run": true}
 ```
 
 #### Output streams and pauses
 
 - Progress logs go to **stderr**. Existing configuration, per-record JSON, and final summaries remain on **stdout**.
-- A readable `RUN_SUMMARY` block also goes to **stderr** after the JSON totals. It distinguishes unresolved database owners from read/parse/API/scan failures.
+- A readable `RUN_SUMMARY` block also goes to **stderr** after the JSON totals. It distinguishes incomplete executions and unresolved database owners from read/parse/API/scan failures.
 - No persistent log file is created.
 - Directory progress is not a timed heartbeat. A blocked filesystem operation or in-flight API request can still pause output.
 - Retry events make subsequent API waits visible:
@@ -111,15 +111,16 @@ INFO event=backfill_api_retry attempt=1 delay_seconds=1 status_code=503
 
 #### Readable final summary
 
-For example, a dry run with one resolved owner, one unresolved owner, and one
-source-read failure ends with the following block (timestamps and logger prefixes
+For example, a dry run with one resolved owner, one unresolved owner, one
+incomplete execution, and one source-read failure ends with the following block (timestamps and logger prefixes
 omitted):
 
 ```text
 INFO RUN_SUMMARY Metadata backfill
 INFO RUN_SUMMARY Mode: dry run
 INFO RUN_SUMMARY Existing owners matched: 1
-INFO RUN_SUMMARY Unresolved owners: 1
+INFO RUN_SUMMARY Skipped without existing owner: 1
+INFO RUN_SUMMARY Skipped incomplete executions: 1
 INFO RUN_SUMMARY Read/parse/API/scan failures: 1
 INFO RUN_SUMMARY Database writes: disabled (dry run)
 INFO RUN_SUMMARY Status: failure
@@ -127,15 +128,25 @@ INFO RUN_SUMMARY Exit code: 1
 INFO RUN_SUMMARY Elapsed seconds: 12.345
 ```
 
-The existing JSON `failed` total includes unresolved owners as well as failures.
-Readable totals separate them without changing the exit status. An unresolved
-owner is not an API outage; it means no exact match exists in the selected
-database for machine, case name, HPC username, and execution ID.
+JSON totals report `matched`, `skipped_no_owner`, `skipped_incomplete`, and `failed`
+separately. The `failed` count excludes expected skips. Source-directory backfill
+returns exit code `0` when no actual errors occur, including runs where every
+candidate is skipped. Success does not imply any owner matched or any mapping
+was written. This replaces the previous `unresolved` outcome and its inclusion
+in `failed`.
+
+An unresolved owner is not an API outage; it means no exact match exists in the
+selected database for machine, case name, HPC username, and execution ID. Backfill
+skips it without creating records; normal ingestion handles eligible new executions.
 
 `Missing identity file case_docs_env_case` means no file matched the supported
 `CaseDocs*/env_case.xml.<suffix>.gz` pattern. The file may be absent, uncompressed,
 or named differently. Inspect the actual source filenames before changing parser
-rules; backfill never infers missing identity from directory names.
+rules; backfill never infers missing identity from directory names. Missing either
+required identity file (`case_docs_env_case` or `e3sm_timing`) produces a
+`skipped_incomplete` outcome with the reason. This means incomplete for backfill,
+not proof that the simulation failed. Machine mismatches, ambiguous or malformed
+metadata, and permission errors remain failures.
 
 For database-first updates, the summary shows records with **planned changes**
 in dry-run mode, **records changed** in apply mode, unchanged records, and

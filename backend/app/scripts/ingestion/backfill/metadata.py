@@ -45,6 +45,10 @@ FIELD_NAMES = {
 }
 
 
+class _IncompleteExecutionError(ValueError):
+    """An execution lacks a required identity file for backfill."""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--machine", required=True)
@@ -127,7 +131,7 @@ def _read_execution(path: Path, machine: str, fields: list[str]):
         if len(matches) > 1:
             raise ValueError(f"Ambiguous {key}: {path}")
         if not matches and key in ("case_docs_env_case", "e3sm_timing"):
-            raise ValueError(f"Missing identity file {key}: {path}")
+            raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
         files[key] = matches[0] if matches else None
 
     timing_identity = FILE_SPECS["e3sm_timing"]["parser"](files["e3sm_timing"])
@@ -271,7 +275,8 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
     started_at = time.monotonic()
     failures = 0
     matched = 0
-    unresolved_owners = 0
+    skipped_no_owner = 0
+    skipped_incomplete = 0
 
     for kind in ("staging", "archive"):
         if args.sources not in (kind, "both"):
@@ -285,26 +290,9 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
         try:
             for path in _execution_paths(root.resolve(), kind, args):
                 try:
-                    parsed = _read_execution(path, args.machine, [])
-
-                    if args.case_name and parsed.case_name != args.case_name:
+                    observation = _bootstrap_observation(path, kind, args)
+                    if observation is None:
                         continue
-
-                    username = _normalize_hpc_username(parsed.hpc_username)
-
-                    if username is None:
-                        raise ValueError(f"Missing HPC username: {path}")
-                    if args.hpc_username and username != args.hpc_username:
-                        continue
-
-                    observation = SourceDirectoryObservation(
-                        case_name=parsed.case_name,
-                        hpc_username=username,
-                        execution_id=parsed.execution_id,
-                        kind=kind,
-                        case_path=str(path.parent),
-                        execution_path=str(path),
-                    )
 
                     result = _request(
                         api,
@@ -317,16 +305,29 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
                         },
                     )
                     unresolved = bool(result["unresolved"])
-                    failures += unresolved
                     matched += not unresolved
-                    unresolved_owners += unresolved
+                    skipped_no_owner += unresolved
 
                     print(
                         json.dumps(
                             {
                                 "path": str(path),
-                                "outcome": "unresolved" if unresolved else "matched",
+                                "outcome": "skipped_no_owner"
+                                if unresolved
+                                else "matched",
                                 "dry_run": not args.apply,
+                            }
+                        )
+                    )
+                except _IncompleteExecutionError as exc:
+                    skipped_incomplete += 1
+                    print(
+                        json.dumps(
+                            {
+                                "path": str(path),
+                                "outcome": "skipped_incomplete",
+                                "dry_run": not args.apply,
+                                "error": str(exc),
                             }
                         )
                     )
@@ -343,19 +344,54 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
                 json.dumps({"root": str(root), "outcome": "failed", "error": str(exc)})
             )
 
-    print(json.dumps({"matched": matched, "failed": failures}))
+    print(
+        json.dumps(
+            {
+                "matched": matched,
+                "skipped_no_owner": skipped_no_owner,
+                "skipped_incomplete": skipped_incomplete,
+                "failed": failures,
+            }
+        )
+    )
     _log_backfill_summary(
         args,
         [
             ("Existing owners matched", matched),
-            ("Unresolved owners", unresolved_owners),
-            ("Read/parse/API/scan failures", failures - unresolved_owners),
+            ("Skipped without existing owner", skipped_no_owner),
+            ("Skipped incomplete executions", skipped_incomplete),
+            ("Read/parse/API/scan failures", failures),
         ],
         failures,
         started_at,
     )
 
     return int(bool(failures))
+
+
+def _bootstrap_observation(
+    path: Path, kind: str, args: argparse.Namespace
+) -> SourceDirectoryObservation | None:
+    parsed = _read_execution(path, args.machine, [])
+
+    if args.case_name and parsed.case_name != args.case_name:
+        return None
+
+    username = _normalize_hpc_username(parsed.hpc_username)
+
+    if username is None:
+        raise ValueError(f"Missing HPC username: {path}")
+    if args.hpc_username and username != args.hpc_username:
+        return None
+
+    return SourceDirectoryObservation(
+        case_name=parsed.case_name,
+        hpc_username=username,
+        execution_id=parsed.execution_id,
+        kind=kind,
+        case_path=str(path.parent),
+        execution_path=str(path),
+    )
 
 
 def _observed_values(record: dict, args: argparse.Namespace) -> dict:

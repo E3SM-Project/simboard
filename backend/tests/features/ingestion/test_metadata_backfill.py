@@ -2,6 +2,7 @@
 
 import argparse
 import gzip
+import json
 import urllib.error
 from argparse import Namespace
 from datetime import date
@@ -116,9 +117,33 @@ def test_staging_scan_only_visits_user_case_execution_layout(
     ]
 
 
-def test_missing_identity_fails_without_guessing(tmp_path):
-    with pytest.raises(ValueError, match="Missing identity"):
-        _read_execution(tmp_path, "perlmutter", [])
+@pytest.mark.parametrize("missing", ["case_docs_env_case", "e3sm_timing"])
+def test_missing_identity_is_incomplete_without_guessing(tmp_path, capsys, missing):
+    execution = tmp_path / "alice" / "case" / "123.250101-000000"
+    execution.mkdir(parents=True)
+    if missing == "e3sm_timing":
+        docs = execution / "CaseDocs.123.250101-000000"
+        docs.mkdir()
+        with gzip.open(docs / "env_case.xml.123.250101-000000.gz", "wt") as stream:
+            stream.write("<config/>")
+
+    with pytest.raises(metadata._IncompleteExecutionError, match=missing):
+        _read_execution(execution, "perlmutter", [])
+
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 0
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[0]["outcome"] == "skipped_incomplete"
+    assert missing in output[0]["error"]
+    assert output[-1]["skipped_incomplete"] == 1
+    assert output[-1]["failed"] == 0
 
 
 def test_targeted_parsing_does_not_require_full_ingestion(tmp_path):
@@ -247,6 +272,30 @@ def test_unreadable_mapping_prevents_update(monkeypatch):
     args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
     with pytest.raises(ValueError, match="Cannot safely backfill"):
         metadata._observed_values(record, args)
+
+
+def test_database_first_missing_identity_remains_failure(tmp_path, monkeypatch, capsys):
+    record = {
+        "record_id": str(uuid4()),
+        "error": None,
+        "directories": [{"kind": "staging", "path": str(tmp_path)}],
+    }
+    calls = []
+    args = _source_args(
+        sources="staging",
+        machine="perlmutter",
+        fields=["simulation-dates"],
+        case_name=None,
+        hpc_username=None,
+    )
+    monkeypatch.setattr(metadata, "_request", partial(_request_stub, record, calls))
+
+    assert metadata._backfill_metadata(args, "https://example.test", "token") == 1
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[0]["outcome"] == "failed"
+    assert "Missing identity file" in output[0]["error"]
+    assert output[-1] == {"failed": 1}
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("sources", ["staging", "archive", "both"])
@@ -432,7 +481,7 @@ def test_filesystem_matches_are_distinct_from_unresolved_owners(
     )
     monkeypatch.setattr(metadata, "_request", _unresolved_request)
 
-    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    assert metadata._bootstrap(args, "https://example.test", "token") == 0
     assert not any(event == "backfill_scan_no_matches" for event, _ in events)
     assert (
         next(fields for event, fields in events if event == "backfill_scan_completed")[
@@ -441,8 +490,13 @@ def test_filesystem_matches_are_distinct_from_unresolved_owners(
         == 1
     )
     output = capsys.readouterr().out
-    assert '"outcome": "unresolved"' in output
-    assert '"matched": 0, "failed": 1' in output
+    assert '"outcome": "skipped_no_owner"' in output
+    assert json.loads(output.splitlines()[-1]) == {
+        "matched": 0,
+        "skipped_no_owner": 1,
+        "skipped_incomplete": 0,
+        "failed": 0,
+    }
 
 
 def test_retry_log_is_sanitized_and_does_not_include_payload(monkeypatch, caplog):
@@ -522,7 +576,7 @@ def test_page_logs_identify_cumulative_failures(monkeypatch, capsys):
 def test_readable_directory_summary_separates_unresolved_and_failures(
     tmp_path, monkeypatch, capsys, caplog, apply
 ):
-    for number in (123, 124, 125):
+    for number in (123, 124, 125, 126):
         (tmp_path / "alice" / "case" / f"{number}.250101-000000").mkdir(parents=True)
     args = _source_args(
         sources="staging",
@@ -536,14 +590,121 @@ def test_readable_directory_summary_separates_unresolved_and_failures(
     monkeypatch.setattr(metadata, "_request", _summary_request_stub)
 
     assert metadata._bootstrap(args, "https://example.test", "token") == 1
-    assert '"matched": 1, "failed": 2' in capsys.readouterr().out
+    assert json.loads(capsys.readouterr().out.splitlines()[-1]) == {
+        "matched": 1,
+        "skipped_no_owner": 1,
+        "skipped_incomplete": 1,
+        "failed": 1,
+    }
     assert "RUN_SUMMARY Metadata backfill" in caplog.text
     assert "RUN_SUMMARY Existing owners matched: 1" in caplog.text
-    assert "RUN_SUMMARY Unresolved owners: 1" in caplog.text
+    assert "RUN_SUMMARY Skipped without existing owner: 1" in caplog.text
+    assert "RUN_SUMMARY Skipped incomplete executions: 1" in caplog.text
     assert "RUN_SUMMARY Read/parse/API/scan failures: 1" in caplog.text
     assert "RUN_SUMMARY Status: failure" in caplog.text
     assert "RUN_SUMMARY Exit code: 1" in caplog.text
     assert ("Database writes: disabled (dry run)" in caplog.text) == (not apply)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("source", ["staging", "archive"])
+@pytest.mark.parametrize("numbers", [(123,), (124,), (123, 124), (123, 124, 125)])
+def test_expected_bootstrap_skips_succeed(
+    tmp_path, monkeypatch, capsys, caplog, apply, source, numbers
+):
+    case = tmp_path / "alice" / "case"
+    if source == "archive":
+        case = (
+            tmp_path
+            / "2025-01"
+            / "performance_archive_2025_01_01_00_00_00"
+            / "COMPLETED"
+            / "alice"
+            / "case"
+        )
+    for number in numbers:
+        (case / f"{number}.250101-000000").mkdir(parents=True)
+    args = _source_args(
+        sources=source,
+        staging_root=tmp_path,
+        archive_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+        apply=apply,
+    )
+    calls = []
+    monkeypatch.setattr(metadata, "_read_execution", _summary_read_stub)
+    monkeypatch.setattr(metadata, "_request", partial(_capture_summary_request, calls))
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 0
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[-1] == {
+        "matched": int(125 in numbers),
+        "skipped_no_owner": int(124 in numbers),
+        "skipped_incomplete": int(123 in numbers),
+        "failed": 0,
+    }
+    assert [item["outcome"] for item in output[:-1]] == [
+        {123: "skipped_incomplete", 124: "skipped_no_owner", 125: "matched"}[number]
+        for number in numbers
+    ]
+    assert all(item["dry_run"] == (not apply) for item in output[:-1])
+    assert len(calls) == len(numbers) - int(123 in numbers)
+    assert all(payload["dry_run"] == (not apply) for payload in calls)
+    assert "RUN_SUMMARY Status: success" in caplog.text
+    assert "RUN_SUMMARY Exit code: 0" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ValueError("Missing identity file from another validation"),
+        ValueError("Machine mismatch"),
+        ValueError("Malformed metadata"),
+        ValueError("Ambiguous identity"),
+        PermissionError("Permission denied"),
+        metadata.IngestionRequestError(
+            "API unavailable", status_code=503, transient=False
+        ),
+    ],
+)
+@pytest.mark.parametrize("phase", ["read", "request"])
+def test_bootstrap_actual_errors_still_fail(
+    tmp_path, monkeypatch, capsys, error, phase
+):
+    (tmp_path / "alice" / "case" / "125.250101-000000").mkdir(parents=True)
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+    monkeypatch.setattr(metadata, "_read_execution", _summary_read_stub)
+    monkeypatch.setattr(
+        metadata,
+        "_read_execution" if phase == "read" else "_request",
+        partial(_raise_bootstrap_error, error),
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[0]["outcome"] == "failed"
+    assert output[-1]["failed"] == 1
+    assert output[-1]["skipped_incomplete"] == 0
+
+
+def test_bootstrap_traversal_error_still_fails(tmp_path, capsys):
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path / "missing",
+        case_name=None,
+        hpc_username=None,
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["failed"] == 1
 
 
 @pytest.mark.parametrize(
@@ -574,7 +735,11 @@ def test_metadata_fetch_failure_still_has_readable_summary(monkeypatch, caplog):
 
 def _summary_read_stub(path, machine, fields):
     if path.name.startswith("123."):
-        raise ValueError(f"Missing identity file case_docs_env_case: {path}")
+        raise metadata._IncompleteExecutionError(
+            f"Missing identity file case_docs_env_case: {path}"
+        )
+    if path.name.startswith("126."):
+        raise ValueError(f"Malformed metadata: {path}")
 
     return Namespace(case_name="case", hpc_username="alice", execution_id=path.name)
 
@@ -587,6 +752,16 @@ def _summary_request_stub(api, token, route, payload):
         if directory["execution_id"].startswith("124.")
         else []
     }
+
+
+def _capture_summary_request(calls, api, token, route, payload):
+    calls.append(payload)
+
+    return _summary_request_stub(api, token, route, payload)
+
+
+def _raise_bootstrap_error(error, *args):
+    raise error
 
 
 def _terminal_request_failure(*args, **kwargs):
