@@ -372,6 +372,13 @@ so each path resolves against the correct catalog case and execution. The API
 rejects machines absent from its machine catalog; missing machine metadata is not
 replaced with the scanner's configured machine.
 
+NERSC staging scans only discover `<root>/<username>/<case>/<execution_id>`.
+They exclude top-level `performance_archive_*` batches and `pace-exps-*`
+directories and do not recurse into other layouts below a case directory.
+Processed batches temporarily remaining under the staging root are ignored;
+archive scans discover them after they move to `OLD_PERF_ARCHIVE_ROOT/YYYY-MM/`,
+subject to the existing archive range and status rules.
+
 The targeted Chrysalis v3 runner supplies its site-specific configuration before
 shared validation: it fixes the machine identity to `chrysalis` and uses
 `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF` when `OLD_PERF_ARCHIVE_ROOT` is unset.

@@ -2,6 +2,7 @@
 
 import logging
 import runpy
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -68,8 +69,8 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "archive"
-    case_a = archive_root / "case_a"
-    case_b = archive_root / "case_b"
+    case_a = archive_root / "user" / "case_a"
+    case_b = archive_root / "user" / "case_b"
     (case_a / "100.1-1").mkdir(parents=True)
     (case_a / "101.1-1").mkdir(parents=True)
     (case_b / "200.1-1").mkdir(parents=True)
@@ -127,7 +128,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "decision": "rejected",
                 "execution_id": "100.1-1",
                 "reason": "already_processed",
@@ -136,7 +137,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "decision": "accepted",
                 "execution_id": "101.1-1",
                 "reason": "new_execution",
@@ -145,7 +146,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_summary",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "accepted": 1,
                 "rejected_existing": 1,
                 "rejected_incomplete": 0,
@@ -157,7 +158,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case": "case_b",
+                "case": "user/case_b",
                 "decision": "deferred",
                 "execution_id": "200.1-1",
                 "reason": "max_cases_per_run",
@@ -166,7 +167,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_summary",
             {
-                "case": "case_b",
+                "case": "user/case_b",
                 "accepted": 0,
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
@@ -178,19 +179,19 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     ]
     assert decisions == [
         {
-            "case": "case_a",
+            "case": "user/case_a",
             "decision": "rejected",
             "execution_id": "100.1-1",
             "reason": "already_processed",
         },
         {
-            "case": "case_a",
+            "case": "user/case_a",
             "decision": "accepted",
             "execution_id": "101.1-1",
             "reason": "new_execution",
         },
         {
-            "case": "case_b",
+            "case": "user/case_b",
             "decision": "deferred",
             "execution_id": "200.1-1",
             "reason": "max_cases_per_run",
@@ -211,7 +212,7 @@ def test_run_ingestor_uses_remote_state_and_builds_expected_payload(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    case_dir = archive_root / "case_a"
+    case_dir = archive_root / "user" / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
 
     captured_calls: list[dict[str, str]] = []
@@ -299,7 +300,7 @@ def test_run_ingestor_submits_only_new_execution_ids_for_mixed_state(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    case_dir = archive_root / "case_a"
+    case_dir = archive_root / "user" / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "101.1-1").mkdir(parents=True)
 
@@ -364,14 +365,14 @@ def test_run_ingestor_submits_only_new_ids_when_state_uses_mount_path(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    case_dir = archive_root / "case_a"
+    case_dir = archive_root / "user" / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "101.1-1").mkdir(parents=True)
 
     captured_processed_execution_ids: list[list[str]] = []
     remote_state = {
         "cases": {
-            "/performance_archive/case_a": {
+            "/performance_archive/user/case_a": {
                 "processed_execution_ids": ["100.1-1"],
             },
         }
@@ -1082,7 +1083,7 @@ def test_discovery_persistence_failure_prevents_ingestion(
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    (archive_root / "user" / "case_a" / "100.1-1").mkdir(parents=True)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -1123,8 +1124,8 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    case_a = archive_root / "case_a"
-    case_b = archive_root / "case_b"
+    case_a = archive_root / "user" / "case_a"
+    case_b = archive_root / "user" / "case_b"
     (case_a / "100.1-1").mkdir(parents=True)
     (case_b / "200.1-1").mkdir(parents=True)
     state = _fresh_state()
@@ -1179,8 +1180,8 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     )
     first_results = persisted_batches[0]
     assert {(result.case_identity, result.outcome) for result in first_results} == {
-        ("case_a", "accepted"),
-        ("case_b", "accepted"),
+        ("user/case_a", "accepted"),
+        ("user/case_b", "accepted"),
     }
     assert len(ingested_paths) == 1
 
@@ -1214,8 +1215,8 @@ def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    rejected_case = archive_root / "case_a"
-    mixed_case = archive_root / "case_b"
+    rejected_case = archive_root / "user" / "case_a"
+    mixed_case = archive_root / "user" / "case_b"
     (rejected_case / "100.1-1").mkdir(parents=True)
     (mixed_case / "200.1-1").mkdir(parents=True)
     (mixed_case / "201.1-1").mkdir(parents=True)
@@ -1272,7 +1273,7 @@ def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
 
 def test_dry_run_never_persists_discovery_results(tmp_path: Path, monkeypatch) -> None:
     archive_root = tmp_path / "performance_archive"
-    (archive_root / "case_a" / "100.1-1").mkdir(parents=True)
+    (archive_root / "user" / "case_a" / "100.1-1").mkdir(parents=True)
     monkeypatch.setattr(
         ingestor_module,
         "_fetch_ingestion_state",
@@ -1305,7 +1306,7 @@ def test_failed_ingestion_keeps_accepted_execution_unprocessed(
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
-    case_dir = archive_root / "case_a"
+    case_dir = archive_root / "user" / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     state = _fresh_state()
     persisted: list[core_module.ExecutionDiscoveryResult] = []
@@ -1354,8 +1355,8 @@ def test_run_ingestor_logs_rejected_only_case_block(
 ) -> None:
     logged_events: list[tuple[str, dict[str, Any]]] = []
     archive_root = tmp_path / "archive"
-    case_a = archive_root / "case_a"
-    case_b = archive_root / "case_b"
+    case_a = archive_root / "user" / "case_a"
+    case_b = archive_root / "user" / "case_b"
     (case_a / "100.1-1").mkdir(parents=True)
     (case_a / "101.1-1").mkdir(parents=True)
     (case_b / "200.1-1").mkdir(parents=True)
@@ -1406,7 +1407,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "decision": "rejected",
                 "execution_id": "100.1-1",
                 "reason": "incomplete",
@@ -1416,7 +1417,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "decision": "rejected",
                 "execution_id": "101.1-1",
                 "reason": "invalid",
@@ -1426,7 +1427,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_summary",
             {
-                "case": "case_a",
+                "case": "user/case_a",
                 "accepted": 0,
                 "rejected_existing": 0,
                 "rejected_incomplete": 1,
@@ -1438,7 +1439,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case": "case_b",
+                "case": "user/case_b",
                 "decision": "accepted",
                 "execution_id": "200.1-1",
                 "reason": "new_execution",
@@ -1447,7 +1448,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_summary",
             {
-                "case": "case_b",
+                "case": "user/case_b",
                 "accepted": 1,
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
@@ -1468,8 +1469,8 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "archive"
-    case_b = archive_root / "case_b"
-    case_a = archive_root / "case_a"
+    case_b = archive_root / "user" / "case_b"
+    case_a = archive_root / "user" / "case_a"
     (case_b / "200.1-1").mkdir(parents=True)
     (case_b / "201.1-1").mkdir(parents=True)
     (case_a / "100.1-1").mkdir(parents=True)
@@ -1504,8 +1505,8 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
 
     assert exit_code == 0
     assert case_block_markers == [
-        ("case_collection_summary", "case_a"),
-        ("case_collection_summary", "case_b"),
+        ("case_collection_summary", "user/case_a"),
+        ("case_collection_summary", "user/case_b"),
     ]
 
 
@@ -1621,3 +1622,175 @@ def test_snapshot_enumeration_finds_late_snapshot_in_old_month(tmp_path: Path) -
     assert layout_module._enumerate_archive_snapshot_keys(config) - {old_key} == {
         late_key
     }
+
+
+@pytest.mark.parametrize("known_state", ["fresh", "processed", "cached"])
+@pytest.mark.parametrize("symlink_root", [False, True])
+def test_staging_scan_excludes_batches_and_unrelated_layouts(
+    tmp_path, monkeypatch, known_state, symlink_root
+):
+    root = tmp_path / "custom-staging-root"
+    root.mkdir()
+    if symlink_root:
+        alias = tmp_path / "mounted-root"
+        alias.symlink_to(root, target_is_directory=True)
+        root = alias
+    execution_id = "1457968.261014-145239"
+    case_paths = [
+        root / "ndk" / "normal-case",
+        root / "ndk" / "performance_archive_case-name",
+        root / "ndk" / "pace-exps-case-name",
+    ]
+    identities = {
+        case: str(case.resolve()) if symlink_root else str(case.relative_to(root))
+        for case in case_paths
+    }
+    batch = root / "performance_archive_2026_10_15_10_03_11"
+    excluded_roots = [batch, root / "pace-exps-test"]
+    excluded_cases = [
+        batch / status / "ndk" / "archived-case"
+        for status in ("COMPLETED", "FAILED", "NODE_FAIL", "TIMEOUT", "UNKNOWN")
+    ] + [root / "pace-exps-test" / "experiment-case"]
+    for case in case_paths + excluded_cases:
+        (case / execution_id).mkdir(parents=True)
+    nested = case_paths[0] / "unrelated" / "nested-case"
+    (nested / execution_id).mkdir(parents=True)
+    (root / execution_id).mkdir()
+    (root / "ndk" / execution_id).mkdir()
+
+    state = _fresh_state()
+    state["cases"] = {
+        str(case.resolve()): {"processed_execution_ids": [execution_id]}
+        for case in excluded_cases + (case_paths if known_state == "processed" else [])
+    }
+    if known_state == "cached":
+        state["discovery_results"] = {
+            identities[case]: [
+                {
+                    "case_identity": identities[case],
+                    "execution_id": execution_id,
+                    "outcome": "accepted",
+                }
+            ]
+            for case in case_paths
+        }
+    monkeypatch.setattr(
+        ingestor_module, "_fetch_ingestion_state", lambda *a, **kw: state
+    )
+    walked = []
+    walk = discovery_module.os.walk
+
+    def record_walk(*args, **kwargs):
+        for entry in walk(*args, **kwargs):
+            walked.append(Path(entry[0]))
+            yield entry
+
+    monkeypatch.setattr(discovery_module.os, "walk", record_walk)
+    events = []
+    monkeypatch.setattr(
+        discovery_module,
+        "_log_event",
+        lambda event, fields: events.append((event, fields)),
+    )
+    validated, ingested, discovered, sources = [], [], [], []
+
+    def locate(path):
+        validated.append(path)
+        return {}
+
+    def ingest(endpoint, token, case_path, machine, **kwargs):
+        ingested.append(case_path)
+        return {"status_code": 201, "body": {}}
+
+    def persist_discovery(*args, results, **kwargs):
+        discovered.extend(results)
+        return {"status_code": 200, "body": {}}
+
+    def persist_sources(*args, directories, **kwargs):
+        sources.extend(directories)
+        return {"status_code": 200, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    assert (
+        _run_ingestor(
+            config,
+            metadata_locator=locate,
+            post_request_fn=ingest,
+            discovery_post_request_fn=persist_discovery,
+            source_directory_post_request_fn=persist_sources,
+        )
+        == 0
+    )
+    assert set(validated) == (
+        {str(case / execution_id) for case in case_paths}
+        if known_state == "fresh"
+        else set()
+    )
+    assert set(ingested) == (
+        {str(case.resolve()) for case in case_paths}
+        if known_state != "processed"
+        else set()
+    )
+    assert {result.case_identity for result in discovered} == (
+        set(identities.values()) if known_state == "fresh" else set()
+    )
+    assert {entry.execution_path for entry in sources} == {
+        str(case / execution_id) for case in case_paths
+    }
+    assert {
+        fields["case"] for event, fields in events if event == "case_collection_summary"
+    } == set(identities.values())
+    assert not any(
+        path.is_relative_to(excluded) for path in walked for excluded in excluded_roots
+    )
+    assert case_paths[0] / "unrelated" not in walked
+    assert root / execution_id not in walked
+    assert root / "ndk" / execution_id not in walked
+
+
+@pytest.mark.parametrize("archive_end", ["2026-09", "2026-10"])
+def test_archive_scan_discovers_batch_after_move_from_staging(tmp_path, archive_end):
+    staging_root = tmp_path / "performance_archive"
+    snapshot_name = "performance_archive_2026_10_15_10_03_11"
+    batch = staging_root / snapshot_name
+    execution_id = "1457968.261014-145239"
+    for status in ("COMPLETED", "FAILED", "NODE_FAIL", "TIMEOUT", "UNKNOWN"):
+        (batch / status / "ndk" / "case" / execution_id).mkdir(parents=True)
+    config = IngestorConfig(
+        api_base_url="",
+        api_token="",
+        archive_root=staging_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        dry_run_use_remote_state=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    validated = []
+    assert _run_ingestor(config, metadata_locator=validated.append) == 0
+    assert validated == []
+
+    archive_root = tmp_path / "OLD_PERF"
+    month = archive_root / "2026-10"
+    month.mkdir(parents=True)
+    batch.rename(month / snapshot_name)
+    archive_config = replace(
+        config,
+        archive_root=archive_root,
+        scan_mode="archive",
+        archive_year_start="2026-01",
+        archive_year_end=archive_end,
+    )
+    assert _run_ingestor(archive_config, metadata_locator=validated.append) == 0
+    expected = month / snapshot_name / "COMPLETED" / "ndk" / "case" / execution_id
+    assert validated == ([str(expected)] if archive_end == "2026-10" else [])

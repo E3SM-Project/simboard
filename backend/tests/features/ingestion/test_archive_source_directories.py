@@ -67,7 +67,8 @@ def test_duplicate_only_scan_records_paths_without_upload(
     runner,
     dry_run,
 ):
-    case_path = tmp_path / "performance_archive" / "not-the-case-name"
+    root = tmp_path / "performance_archive"
+    case_path = root / "user" / "not-the-case-name"
     (case_path / "100.1-1").mkdir(parents=True)
     state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
     monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
@@ -82,7 +83,7 @@ def test_duplicate_only_scan_records_paths_without_upload(
 
     assert (
         runner._run_ingestor(
-            _config(case_path.parent, dry_run=dry_run),
+            _config(root, dry_run=dry_run),
             post_request_fn=upload,
             source_directory_post_request_fn=record,
         )
@@ -287,7 +288,7 @@ def test_processed_incomplete_metadata_does_not_fail_run(
     tmp_path, monkeypatch, runner, scan_mode
 ):
     root = tmp_path / "performance_archive"
-    case_path = root / "case"
+    case_path = root / "user" / "case"
     if scan_mode == "archive":
         root = tmp_path / "OLD_PERF"
         case_path = (
@@ -453,7 +454,10 @@ def test_nersc_mixed_machine_scan_preserves_state_and_source_identity(
         ("muller", "muller-gpu"),
         ("alvarez", "alvarez-cpu"),
     ):
-        case_path = stage_continuation_case(scan_root / "UNKNOWN" / machine_name)
+        case_root = scan_root / machine_name
+        if scan_mode == "archive":
+            case_root = scan_root / "UNKNOWN" / machine_name
+        case_path = stage_continuation_case(case_root)
         case_paths[machine_name] = case_path
         for path in case_path.glob("*/CaseDocs.*/env_case.xml.*.gz"):
             with gzip.open(path, "rt") as stream:

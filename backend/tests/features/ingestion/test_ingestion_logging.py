@@ -386,11 +386,13 @@ def test_real_discovery_partitions_and_submission_results(
         "f": ["600.1-1"],
     }.items():
         for execution in ids:
-            (root / case / execution).mkdir(parents=True)
+            (root / "user" / case / execution).mkdir(parents=True)
     config = IngestorConfig(
         "https://example.test", "token", root, "chrysalis", dry_run, 1, 1, 30
     )
-    state = {"cases": {str(root / "a"): {"processed_execution_ids": ["100.1-1"]}}}
+    state = {
+        "cases": {str(root / "user" / "a"): {"processed_execution_ids": ["100.1-1"]}}
+    }
     monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", level)
     monkeypatch.setattr(runner, "_build_config_from_env", lambda: config)
     monkeypatch.setattr(
