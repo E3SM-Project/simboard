@@ -81,6 +81,14 @@ or `archive` mappings. Multiple paths are retained, including paths from
 different archive snapshots. Case and execution detail APIs return
 `sourceDirectories`, preserving all observations regardless of UI selection.
 
+New cases created by ingestion default to the `development` simulation type.
+Trusted Chrysalis v3 uploads that request production classification assign
+`production` only to the matching case identity before applying the development
+fallback. Re-ingestion preserves existing non-null classifications, including
+user-selected values. Existing null cases remain unchanged by ordinary ingestion;
+the specialized v3 flow can still classify matching null cases as production,
+including duplicate-only submissions. No historical bulk update is performed.
+
 Case Metadata displays **Performance Source Directories**: all distinct archive
 paths when any exist, otherwise all distinct staging paths, sorted alphabetically.
 Execution metadata displays one **Performance Source Directory** using the API's

@@ -26,7 +26,11 @@ from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import ExecutionCreate
-from app.features.ingestion.ingest import IngestArchiveResult, ingest_archive
+from app.features.ingestion.ingest import (
+    CaseIdentity,
+    IngestArchiveResult,
+    ingest_archive,
+)
 from app.features.ingestion.models import (
     ArchiveScanCheckpoint,
     ExecutionDiscoveryResult,
@@ -518,6 +522,12 @@ def ingest_from_hpc_upload(
                 output_dir=tmpdir,
                 db=db,
                 hpc_username=payload.hpc_username,
+                production_case_identity=(
+                    (Path(payload.case_path).name, machine.id, payload.hpc_username)
+                    if simulation_type is CaseSimulationType.PRODUCTION
+                    and payload.hpc_username
+                    else None
+                ),
             )
 
         _validate_single_case_upload_ingest_result(ingest_result, payload.case_path)
@@ -779,6 +789,7 @@ def _run_ingest_archive(
     *,
     strict_validation: bool = False,
     hpc_username: str | None = None,
+    production_case_identity: CaseIdentity | None = None,
 ) -> IngestArchiveResult:
     try:
         return ingest_archive(
@@ -787,6 +798,7 @@ def _run_ingest_archive(
             db=db,
             strict_validation=strict_validation,
             hpc_username=hpc_username,
+            production_case_identity=production_case_identity,
         )
     except ArchiveValidationError as exc:
         _raise_archive_validation_error(exc.errors)
