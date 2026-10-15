@@ -91,9 +91,8 @@ def _persist_visited_source_directories(
             # Deferred, failed, or rejected-only discoveries have no owner yet.
             continue
         try:
-            hpc_username = None
-            if hpc_username_resolver is not None:
-                hpc_username = hpc_username_resolver(
+            hpc_username = (
+                hpc_username_resolver(
                     IngestionCandidate(
                         case_path=str(case_path),
                         execution_ids=[execution_dirname],
@@ -101,6 +100,9 @@ def _persist_visited_source_directories(
                         fingerprint="",
                     )
                 )
+                if hpc_username_resolver is not None
+                else None
+            )
             observations.append(
                 _observe_source_directory(
                     case_path, execution_dirname, config, hpc_username
@@ -114,7 +116,9 @@ def _persist_visited_source_directories(
                     "error": str(exc),
                 },
             )
-            return False
+            # Processed staging files may disappear before source tracking runs.
+            if not isinstance(exc, FileNotFoundError):
+                return False
 
     post_request_fn = post_request_fn or _post_source_directories_request
     endpoint = (
