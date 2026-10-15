@@ -108,8 +108,11 @@ def main() -> int:
     )
 
 
-def _read_execution(path: Path, machine: str, fields: list[str]):
-    """Read only identity files and requested metadata, not full ingestion input."""
+def _read_execution(path: Path, machine: str | None, fields: list[str]):
+    """Read only identity files and requested metadata, not full ingestion input.
+
+    Enforce the expected machine when provided; bootstrap accepts any source machine.
+    """
     keys = ["case_docs_env_case", "e3sm_timing"]
 
     if "simulation-dates" in fields:
@@ -142,10 +145,10 @@ def _read_execution(path: Path, machine: str, fields: list[str]):
 
     if before != [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]:
         raise ValueError(f"Source changed while reading: {path}")
-    if (
-        not parsed.machine
-        or parse_machine_name(parsed.machine)[0] != parse_machine_name(machine)[0]
-    ):
+    source_machine, _ = parse_machine_name(parsed.machine or "")
+    if not source_machine:
+        raise ValueError(f"Source machine is missing: {path}")
+    if machine is not None and source_machine != parse_machine_name(machine)[0]:
         raise ValueError(f"Machine mismatch: {path}")
     if not parsed.case_name or not _normalize_hpc_username(parsed.hpc_username):
         raise ValueError(f"Missing case identity: {path}")
@@ -290,16 +293,17 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
         try:
             for path in _execution_paths(root.resolve(), kind, args):
                 try:
-                    observation = _bootstrap_observation(path, kind, args)
-                    if observation is None:
+                    source = _bootstrap_observation(path, kind, args)
+                    if source is None:
                         continue
 
+                    machine_name, observation = source
                     result = _request(
                         api,
                         token,
                         "ingestions/source-directories",
                         {
-                            "machine_name": args.machine,
+                            "machine_name": machine_name,
                             "dry_run": not args.apply,
                             "directories": [observation.model_dump(mode="json")],
                         },
@@ -371,8 +375,8 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
 
 def _bootstrap_observation(
     path: Path, kind: str, args: argparse.Namespace
-) -> SourceDirectoryObservation | None:
-    parsed = _read_execution(path, args.machine, [])
+) -> tuple[str, SourceDirectoryObservation] | None:
+    parsed = _read_execution(path, None, [])
 
     if args.case_name and parsed.case_name != args.case_name:
         return None
@@ -384,7 +388,9 @@ def _bootstrap_observation(
     if args.hpc_username and username != args.hpc_username:
         return None
 
-    return SourceDirectoryObservation(
+    machine_name, _ = parse_machine_name(parsed.machine)
+
+    return machine_name, SourceDirectoryObservation(
         case_name=parsed.case_name,
         hpc_username=username,
         execution_id=parsed.execution_id,

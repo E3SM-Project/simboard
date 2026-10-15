@@ -27,6 +27,7 @@ def _request_stub(record, calls, api, token, route, payload=None):
 
 def _read_execution_stub(record, path, machine, fields):
     return Namespace(
+        machine="pm-cpu",
         case_name="case",
         hpc_username="alice",
         execution_id=record["execution_id"],
@@ -165,6 +166,110 @@ def test_targeted_parsing_does_not_require_full_ingestion(tmp_path):
     )
     with pytest.raises(ValueError, match="Machine mismatch"):
         _read_execution(tmp_path, "chrysalis", [])
+
+
+@pytest.mark.parametrize("source", ["staging", "archive"])
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("unmatched_machine", [None, "muller"])
+def test_bootstrap_routes_mixed_machine_sources(
+    tmp_path, monkeypatch, capsys, source, apply, unmatched_machine
+):
+    root = tmp_path
+    if source == "archive":
+        root = root / "2025-01" / "performance_archive_2025_01_01_00_00_00"
+    paths = {}
+    for name, alias in (
+        ("perlmutter", "pm-gpu"),
+        ("muller", "muller-gpu"),
+        ("alvarez", "alvarez-cpu"),
+    ):
+        execution = root / "alice" / f"case_{name}" / "123.250101-000000"
+        _write_backfill_identity(execution, alias)
+        paths[name] = str(execution)
+    args = _source_args(
+        sources=source,
+        staging_root=tmp_path,
+        archive_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+        apply=apply,
+    )
+    calls = []
+    monkeypatch.setattr(
+        metadata, "_request", partial(_machine_request_stub, calls, unmatched_machine)
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 0
+    assert {payload["machine_name"] for payload in calls} == set(paths)
+    for payload in calls:
+        assert payload["dry_run"] == (not apply)
+        assert (
+            payload["directories"][0]["execution_path"]
+            == paths[payload["machine_name"]]
+        )
+        assert payload["directories"][0]["kind"] == source
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[-1] == {
+        "matched": 3 - int(unmatched_machine is not None),
+        "skipped_no_owner": int(unmatched_machine is not None),
+        "skipped_incomplete": 0,
+        "failed": 0,
+    }
+    if unmatched_machine:
+        skipped = [
+            item for item in output[:-1] if item["outcome"] == "skipped_no_owner"
+        ]
+        assert [item["path"] for item in skipped] == [paths[unmatched_machine]]
+
+
+@pytest.mark.parametrize("machine", [None, "", "   "])
+def test_bootstrap_missing_machine_remains_failure(
+    tmp_path, monkeypatch, capsys, machine
+):
+    execution = tmp_path / "alice" / "case" / "123.250101-000000"
+    _write_backfill_identity(execution, machine)
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+    calls = []
+    monkeypatch.setattr(
+        metadata, "_request", partial(_machine_request_stub, calls, None)
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert "Source machine is missing" in output[0]["error"]
+    assert output[-1]["failed"] == 1
+    assert output[-1]["skipped_incomplete"] == 0
+    assert calls == []
+
+
+def test_bootstrap_unknown_machine_api_error_is_not_a_skip(
+    tmp_path, monkeypatch, capsys
+):
+    execution = tmp_path / "alice" / "case" / "123.250101-000000"
+    _write_backfill_identity(execution, "unknown-machine")
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+    calls = []
+    monkeypatch.setattr(metadata, "_request", partial(_unknown_machine_request, calls))
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    assert calls[0]["machine_name"] == "unknown-machine"
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[0]["outcome"] == "failed"
+    assert output[-1]["failed"] == 1
+    assert output[-1]["skipped_no_owner"] == 0
 
 
 def _update_payload(row, **kwargs):
@@ -733,6 +838,37 @@ def test_metadata_fetch_failure_still_has_readable_summary(monkeypatch, caplog):
     assert "RUN_SUMMARY Status: failure" in caplog.text
 
 
+def _write_backfill_identity(execution, machine):
+    docs = execution / f"CaseDocs.{execution.name}"
+    docs.mkdir(parents=True)
+    machine_entry = (
+        f'<entry id="MACH" value="{machine}"/>' if machine is not None else ""
+    )
+    with gzip.open(docs / f"env_case.xml.{execution.name}.gz", "wt") as stream:
+        stream.write(
+            f'<config><entry id="CASE" value="{execution.parent.name}"/>'
+            f'{machine_entry}<entry id="REALUSER" value="alice"/></config>'
+        )
+    (execution / f"e3sm_timing.{execution.name}").write_text(f"LID: {execution.name}\n")
+
+
+def _machine_request_stub(calls, unmatched_machine, api, token, route, payload):
+    calls.append(payload)
+
+    return {
+        "unresolved": payload["directories"]
+        if payload["machine_name"] == unmatched_machine
+        else []
+    }
+
+
+def _unknown_machine_request(calls, api, token, route, payload):
+    calls.append(payload)
+    raise metadata.IngestionRequestError(
+        "Machine not found.", status_code=404, transient=False
+    )
+
+
 def _summary_read_stub(path, machine, fields):
     if path.name.startswith("123."):
         raise metadata._IncompleteExecutionError(
@@ -741,7 +877,9 @@ def _summary_read_stub(path, machine, fields):
     if path.name.startswith("126."):
         raise ValueError(f"Malformed metadata: {path}")
 
-    return Namespace(case_name="case", hpc_username="alice", execution_id=path.name)
+    return Namespace(
+        machine="pm-cpu", case_name="case", hpc_username="alice", execution_id=path.name
+    )
 
 
 def _summary_request_stub(api, token, route, payload):

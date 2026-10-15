@@ -33,6 +33,8 @@ The command reads identity metadata and maps staging/archive directories to **ma
 
 Staging scans follow ingestion's `root/hpc-username/case/execution` layout. They skip top-level `performance_archive_*` batches and `pace-exps-*` trees and do not descend into execution contents. Use archive scans for historical archive layouts.
 
+For source-directory bootstrap, `machine=perlmutter` selects the scan configuration, not a required execution machine. Like general ingestion, backfill reads each execution's machine from its metadata and uses its canonical name for owner lookup and mapping writes. A NERSC scan can therefore map Perlmutter, Muller, and Alvarez executions. Missing machine metadata and API errors for unknown machines remain failures; backfill never substitutes the scanner's machine.
+
 ### Review the scan scope
 
 | Setting       | Default                                                                          | CLI override      |
@@ -145,8 +147,8 @@ or named differently. Inspect the actual source filenames before changing parser
 rules; backfill never infers missing identity from directory names. Missing either
 required identity file (`case_docs_env_case` or `e3sm_timing`) produces a
 `skipped_incomplete` outcome with the reason. This means incomplete for backfill,
-not proof that the simulation failed. Machine mismatches, ambiguous or malformed
-metadata, and permission errors remain failures.
+not proof that the simulation failed. Missing machine metadata, ambiguous or
+malformed metadata, and permission errors remain failures.
 
 For database-first updates, the summary shows records with **planned changes**
 in dry-run mode, **records changed** in apply mode, unchanged records, and
@@ -156,6 +158,8 @@ occurred during a dry run.
 ## 2. Backfill execution metadata
 
 Once mappings exist, select database records and read their mapped directories. This step requires no archive-wide scan or filesystem roots.
+
+Database-first updates remain scoped to the selected `machine`. Mapped source metadata must match that machine and the selected database owner's identity; a different source machine remains a failure in this step.
 
 ```bash
 make metadata-backfill machine=perlmutter env=dev \
