@@ -2,6 +2,7 @@
 
 import urllib.error
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
 
@@ -42,19 +43,16 @@ def _observe_source_directory(
     execution_dirname: str,
     config: IngestorConfig,
     hpc_username: str | None = None,
-) -> SourceDirectoryObservation:
+) -> tuple[str, SourceDirectoryObservation]:
     """Read actual execution metadata rather than infer identity from paths."""
     execution_path = case_path / execution_dirname
     parsed = _parse_all_files(
         str(execution_path), _locate_metadata_files(str(execution_path))
     )
     parsed_machine, _ = parse_machine_name(parsed.machine or "")
-    configured_machine, _ = parse_machine_name(config.machine_name)
-    if parsed_machine != configured_machine:
-        raise ValueError(
-            f"Source machine does not match configured machine: {execution_path}"
-        )
-    return SourceDirectoryObservation(
+    if not parsed_machine:
+        raise ValueError(f"Source machine is missing: {execution_path}")
+    return parsed_machine, SourceDirectoryObservation(
         case_name=parsed.case_name or "",
         hpc_username=_normalize_hpc_username(parsed.hpc_username)
         or _normalize_hpc_username(hpc_username)
@@ -80,7 +78,7 @@ def _persist_visited_source_directories(
         scan_mode=config.scan_mode,
         staging_root_basename=config.archive_root.name,
     )
-    observations = []
+    observations: dict[str, list[SourceDirectoryObservation]] = defaultdict(list)
     for case_path, execution_dirname in sorted(set(visited)):
         identity = _case_identity_key(
             str(case_path.resolve()),
@@ -103,11 +101,10 @@ def _persist_visited_source_directories(
                 if hpc_username_resolver is not None
                 else None
             )
-            observations.append(
-                _observe_source_directory(
-                    case_path, execution_dirname, config, hpc_username
-                )
+            machine_name, observation = _observe_source_directory(
+                case_path, execution_dirname, config, hpc_username
             )
+            observations[machine_name].append(observation)
         except (ValueError, OSError) as exc:
             _log_event(
                 "source_directory_unresolved",
@@ -124,14 +121,18 @@ def _persist_visited_source_directories(
     endpoint = (
         f"{_normalized_api_base_url(config.api_base_url)}/ingestions/source-directories"
     )
-    for offset in range(0, len(observations), DISCOVERY_RESULT_BATCH_SIZE):
-        batch = observations[offset : offset + DISCOVERY_RESULT_BATCH_SIZE]
+    batches = (
+        (machine_name, directories[offset : offset + DISCOVERY_RESULT_BATCH_SIZE])
+        for machine_name, directories in observations.items()
+        for offset in range(0, len(directories), DISCOVERY_RESULT_BATCH_SIZE)
+    )
+    for machine_name, batch in batches:
         for attempt in range(1, config.max_attempts + 1):
             try:
                 response = post_request_fn(
                     endpoint,
                     config.api_token,
-                    config.machine_name,
+                    machine_name,
                     directories=batch,
                     timeout_seconds=config.request_timeout_seconds,
                 )

@@ -1,16 +1,31 @@
 """Source mappings from normal scans, without revisiting checkpointed snapshots."""
 
+import gzip
 import json
+from contextlib import contextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
+from app.features.catalog.models import Case, Execution, SourceDirectory
+from app.features.ingestion.models import Ingestion
+from app.features.machine.models import Machine
+from app.features.user.manager import current_active_user
+from app.features.user.models import UserRole
+from app.main import app
 from app.scripts.ingestion import archive_source_directories as source_module
 from app.scripts.ingestion import hpc_upload_archive_ingestor, nersc_archive_ingestor
 from app.scripts.ingestion.archive_discovery import _scan_archive
 from app.scripts.ingestion.archive_ingestor_core import (
     IngestionRequestError,
     IngestorConfig,
+)
+from tests.features.catalog.test_models import _create_dependencies
+from tests.fixtures.continuation_case import (
+    CASE_NAME,
+    EXECUTIONS,
+    stage_continuation_case,
 )
 
 
@@ -165,7 +180,13 @@ def test_rejected_or_deferred_execution_needs_no_mapping(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     "field,value",
-    [("case_name", None), ("hpc_username", None), ("machine", "chrysalis")],
+    [
+        ("case_name", None),
+        ("hpc_username", None),
+        ("machine", None),
+        ("machine", ""),
+        ("machine", "  "),
+    ],
 )
 def test_invalid_identity_is_reported(
     tmp_path, monkeypatch, parsed_metadata, field, value
@@ -373,7 +394,7 @@ def test_observed_paths_preserve_symlink_spelling(
 
 
 def test_source_submission_http_payload(tmp_path, monkeypatch, parsed_metadata):
-    directory = source_module._observe_source_directory(
+    machine_name, directory = source_module._observe_source_directory(
         tmp_path / "case", "100.1-1", _config(tmp_path)
     )
     requests = []
@@ -399,7 +420,7 @@ def test_source_submission_http_payload(tmp_path, monkeypatch, parsed_metadata):
     source_module._post_source_directories_request(
         "https://simboard.example/api/v1/ingestions/source-directories",
         "token",
-        "perlmutter",
+        machine_name,
         directories=[directory],
         timeout_seconds=30,
     )
@@ -407,3 +428,138 @@ def test_source_submission_http_payload(tmp_path, monkeypatch, parsed_metadata):
     assert json.loads(requests[0].data)["directories"] == [
         directory.model_dump(mode="json")
     ]
+
+
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+def test_nersc_mixed_machine_scan_preserves_state_and_source_identity(
+    tmp_path, monkeypatch, db, client, scan_mode
+):
+    user, _, _ = _create_dependencies(db)
+    user.role = UserRole.SERVICE_ACCOUNT
+    machines = {
+        name: db.query(Machine).filter_by(name=name).one()
+        for name in ("perlmutter", "muller", "alvarez")
+    }
+    scanner_machine = machines["perlmutter"]
+    db.flush()
+    monkeypatch.setitem(app.dependency_overrides, current_active_user, lambda: user)
+
+    root = tmp_path / ("performance_archive" if scan_mode == "staging" else "OLD_PERF")
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    scan_root = root if scan_mode == "staging" else root / snapshot_key
+    case_paths = {}
+    for machine_name, alias in (
+        ("perlmutter", "pm-gpu"),
+        ("muller", "muller-gpu"),
+        ("alvarez", "alvarez-cpu"),
+    ):
+        case_path = stage_continuation_case(scan_root / "UNKNOWN" / machine_name)
+        case_paths[machine_name] = case_path
+        for path in case_path.glob("*/CaseDocs.*/env_case.xml.*.gz"):
+            with gzip.open(path, "rt") as stream:
+                xml = stream.read()
+            with gzip.open(path, "wt") as stream:
+                stream.write(xml.replace('value="chrysalis"', f'value="{alias}"'))
+
+    requests = []
+
+    @contextmanager
+    def urlopen(request, timeout):
+        payload = json.loads(request.data) if request.data else None
+        requests.append((request.get_method(), request.full_url, payload))
+        response = client.request(request.get_method(), request.full_url, json=payload)
+        assert response.is_success, response.text
+        yield SimpleNamespace(
+            status=response.status_code, read=lambda: response.content
+        )
+
+    monkeypatch.setattr(source_module.urllib.request, "urlopen", urlopen)
+    config = replace(
+        _config(root, scan_mode=scan_mode), api_base_url="http://testserver"
+    )
+    for _ in range(2):
+        assert nersc_archive_ingestor._run_ingestor(config) == 0
+
+    submissions = [
+        payload for method, url, payload in requests if url.endswith("/from-path")
+    ]
+    assert len(submissions) == len(machines)
+    assert all(payload["machine_name"] == "perlmutter" for payload in submissions)
+    source_requests = [
+        payload
+        for method, url, payload in requests
+        if url.endswith("/source-directories")
+    ]
+    assert len(source_requests) == len(machines) * (2 if scan_mode == "staging" else 1)
+    for payload in source_requests:
+        machine_name = payload["machine_name"]
+        assert {entry["case_path"] for entry in payload["directories"]} == {
+            str(case_paths[machine_name])
+        }
+        assert {entry["execution_id"] for entry in payload["directories"]} == set(
+            EXECUTIONS
+        )
+
+    assert db.query(Execution).count() == len(machines) * len(EXECUTIONS)
+    assert db.query(SourceDirectory).count() == len(machines) * (1 + len(EXECUTIONS))
+    for machine_name, machine in machines.items():
+        case = db.query(Case).filter_by(machine_id=machine.id, name=CASE_NAME).one()
+        assert {entry.path for entry in case.source_directories} == {
+            str(case_paths[machine_name])
+        }
+        for execution in case.executions:
+            assert {entry.path for entry in execution.source_directories} == {
+                str(case_paths[machine_name] / execution.execution_id)
+            }
+    ingestions = (
+        db.query(Ingestion)
+        .filter(Ingestion.source_reference.in_(map(str, case_paths.values())))
+        .all()
+    )
+    assert len(ingestions) == len(machines)
+    assert all(ingestion.machine_id == scanner_machine.id for ingestion in ingestions)
+    state_requests = [url for method, url, payload in requests if "/state?" in url]
+    assert len(state_requests) == 2
+    assert all("machine_name=perlmutter" in url for url in state_requests)
+    checkpoint_requests = [
+        payload
+        for method, url, payload in requests
+        if method == "POST" and url.endswith("/archive-checkpoints")
+    ]
+    assert checkpoint_requests == (
+        [
+            {
+                "machine_name": "perlmutter",
+                "archive_name": root.name,
+                "snapshots": [
+                    {
+                        "archive_month": "2025-01",
+                        "snapshot_name": "performance_archive_2025_01_01_00_00_00",
+                    }
+                ],
+            }
+        ]
+        if scan_mode == "archive"
+        else []
+    )
+
+
+@pytest.mark.parametrize("machine_name", ["unknown-machine", "UNKNOWN", "muller-typo"])
+def test_unknown_source_machine_is_not_reassigned(
+    tmp_path, monkeypatch, parsed_metadata, machine_name
+):
+    parsed_metadata.machine = machine_name
+    case_path = tmp_path / "case"
+    state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
+    calls = []
+
+    def record(endpoint, token, machine, **kwargs):
+        calls.append(machine)
+        raise IngestionRequestError(
+            "Machine not found.", status_code=404, transient=False
+        )
+
+    assert not source_module._persist_visited_source_directories(
+        [(case_path, "100.1-1")], state, _config(tmp_path), lambda _: None, record
+    )
+    assert calls == [machine_name.lower()]
