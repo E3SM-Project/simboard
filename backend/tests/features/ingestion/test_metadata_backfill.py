@@ -8,6 +8,7 @@ import urllib.error
 from argparse import Namespace
 from datetime import date
 from functools import partial
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -392,6 +393,71 @@ def test_unreadable_mapping_prevents_update(monkeypatch):
     args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
     with pytest.raises(ValueError, match="Cannot safely backfill"):
         metadata._observed_values(record, args)
+
+
+@pytest.mark.parametrize(
+    "mount,variable,kind,layout",
+    [
+        (
+            "/performance_archive",
+            "PERF_SOURCE_ROOT",
+            "staging",
+            "performance_archive_2026_10_15_10_03_11/COMPLETED",
+        ),
+        ("/OLD_PERF", "OLD_PERF_SOURCE_ROOT", "archive", "2026-10/snapshot"),
+    ],
+)
+def test_database_first_reads_legacy_mount_from_host_root(
+    tmp_path, monkeypatch, mount, variable, kind, layout
+):
+    relative = Path(layout) / "alice" / "case" / "123.250101-000000"
+    execution = tmp_path / relative
+    _write_backfill_identity(execution, "pm-cpu")
+    docs = execution / f"CaseDocs.{execution.name}"
+    with gzip.open(docs / f"env_run.xml.{execution.name}.gz", "wt") as stream:
+        stream.write('<config><entry id="RUN_STARTDATE" value="2020-01-01"/></config>')
+    monkeypatch.setenv(variable, str(tmp_path))
+    record = {
+        "case_name": "case",
+        "hpc_username": "alice",
+        "execution_id": execution.name,
+        "error": None,
+        "directories": [{"kind": kind, "path": str(Path(mount) / relative)}],
+    }
+    args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
+
+    assert metadata._observed_values(record, args) == {
+        "simulation_start_date": "2020-01-01"
+    }
+    record["case_name"] = "wrong-owner"
+    with pytest.raises(
+        ValueError, match="Source identity does not match database owner"
+    ):
+        metadata._observed_values(record, args)
+
+
+@pytest.mark.parametrize(
+    "mount,variable",
+    [
+        ("/performance_archive", "PERF_SOURCE_ROOT"),
+        ("/OLD_PERF", "OLD_PERF_SOURCE_ROOT"),
+    ],
+)
+def test_source_path_requires_absolute_root_and_preserves_prefix_boundary(
+    monkeypatch, mount, variable
+):
+    path = f"{mount}/alice/case/execution"
+    monkeypatch.delenv(variable, raising=False)
+    assert metadata._source_path(path) == Path(path)
+    monkeypatch.setenv(variable, "relative/root")
+    with pytest.raises(ValueError, match=f"{variable} must be an absolute path"):
+        metadata._source_path(path)
+    monkeypatch.setenv(variable, "/host/root")
+    assert metadata._source_path(path) == Path("/host/root/alice/case/execution")
+    for unchanged in ("/host/root/alice/case/execution", f"{mount}_other/execution"):
+        assert metadata._source_path(unchanged) == Path(unchanged)
+    with pytest.raises(ValueError, match="escapes configured root"):
+        metadata._source_path(f"{mount}/../outside")
 
 
 def test_database_first_missing_identity_remains_failure(tmp_path, monkeypatch, capsys):

@@ -53,6 +53,8 @@ def test_make_loads_operations_environment_and_site_config(tmp_path, machine, ap
         "/configured/staging",
         "/configured/archive",
         "2025-01",
+        "/global/cfs/cdirs/e3sm/performance_archive" if machine == "perlmutter" else "",
+        "/global/cfs/cdirs/e3sm/OLD_PERF" if machine == "perlmutter" else "",
     ]
     assert "hidden-token" not in result.stdout + result.stderr
 
@@ -154,12 +156,16 @@ def test_exported_source_settings_override_site_defaults(tmp_path):
         {
             "PERF_ARCHIVE_ROOT": "/exported/staging",
             "OLD_PERF_ARCHIVE_ROOT": "/exported/archive",
+            "PERF_SOURCE_ROOT": "/exported/source-staging",
+            "OLD_PERF_SOURCE_ROOT": "/exported/source-archive",
         },
     )
 
     assert result.returncode == 0, result.stderr
     assert "/exported/staging" in result.stdout
     assert "/exported/archive" in result.stdout
+    assert "/exported/source-staging" in result.stdout
+    assert "/exported/source-archive" in result.stdout
 
 
 def _run_make(arguments, python, overrides=None):
@@ -171,6 +177,8 @@ def _run_make(arguments, python, overrides=None):
         not in (
             "PERF_ARCHIVE_ROOT",
             "OLD_PERF_ARCHIVE_ROOT",
+            "PERF_SOURCE_ROOT",
+            "OLD_PERF_SOURCE_ROOT",
             "MACHINE_NAME",
             "ARCHIVE_YEAR_START",
             "ARCHIVE_YEAR_END",
@@ -203,7 +211,8 @@ def _fake_python(tmp_path, exit_code=0):
     python.write_text(
         '#!/bin/bash\nprintf "%s\\n" "$@" "$MACHINE_NAME" '
         '"$SIMBOARD_API_BASE_URL" "$PERF_ARCHIVE_ROOT" "$OLD_PERF_ARCHIVE_ROOT" '
-        '"$SIMBOARD_DEFAULT_ARCHIVE_YEAR_START"\n'
+        '"$SIMBOARD_DEFAULT_ARCHIVE_YEAR_START" '
+        '"${PERF_SOURCE_ROOT:-}" "${OLD_PERF_SOURCE_ROOT:-}"\n'
         f"exit {exit_code}\n"
     )
     python.chmod(0o755)
