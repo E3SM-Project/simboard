@@ -20,6 +20,10 @@ from app.features.ingestion.parsers.parser import (
     _parse_all_files,
 )
 from app.features.ingestion.schemas import SourceDirectoryObservation
+from app.features.ingestion.v3_classification import (
+    CHRYSALIS_MACHINE_NAME,
+    V3_CASE_NAMES,
+)
 from app.features.machine.utils import parse_machine_name
 from app.scripts.ingestion.archive_client import (
     _build_json_request,
@@ -38,6 +42,10 @@ from app.scripts.ingestion.archive_ingestor_core import (
 from app.scripts.ingestion.archive_ingestor_core import logger as ingestion_logger
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
 from app.scripts.ingestion.nersc_archive_ingestor import _prune_staging_walk_dirnames
+from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import (
+    CHRYSALIS_ARCHIVE_ROOT,
+    V3_ARCHIVE_YEAR_START,
+)
 
 FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
@@ -52,6 +60,11 @@ class _IncompleteExecutionError(ValueError):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--machine", required=True)
+    parser.add_argument(
+        "--v3",
+        action="store_true",
+        help="Limit backfill to Chrysalis v3 production cases",
+    )
     parser.add_argument(
         "--fields",
         nargs="+",
@@ -92,6 +105,8 @@ def main() -> int:
         parser.error("API_BASE_URL must be an HTTP(S) URL")
 
     scope = {"api": api, "sources": args.sources, "dry_run": not args.apply}
+    if args.v3:
+        scope["v3"] = True
     if args.fields == ["source-directories"]:
         scope.update(
             staging_root=str(args.staging_root) if args.staging_root else None,
@@ -248,7 +263,9 @@ def _execution_paths(root: Path, kind: str, args: argparse.Namespace):
 
             if re.fullmatch(r"\d+\.\d{6}-\d{6}", path.name):
                 dirs.clear()
-                if args.case_name and path.parent.name != args.case_name:
+                if (args.v3 and path.parent.name not in V3_CASE_NAMES) or (
+                    args.case_name and path.parent.name != args.case_name
+                ):
                     continue
                 if args.hpc_username and path.parent.parent.name != args.hpc_username:
                     continue
@@ -376,7 +393,10 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
 def _bootstrap_observation(
     path: Path, kind: str, args: argparse.Namespace
 ) -> tuple[str, SourceDirectoryObservation] | None:
-    parsed = _read_execution(path, None, [])
+    parsed = _read_execution(path, args.machine if args.v3 else None, [])
+
+    if args.v3 and parsed.case_name not in V3_CASE_NAMES:
+        return None
 
     if args.case_name and parsed.case_name != args.case_name:
         return None
@@ -490,6 +510,8 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
         )
 
         for record in records:
+            if args.v3 and record["case_name"] not in V3_CASE_NAMES:
+                continue
             try:
                 values = _observed_values(record, args)
                 payload = {
@@ -585,6 +607,7 @@ def _log_backfill_summary(
 def _validate_sources(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
+    _validate_v3_scope(parser, args)
     if "source-directories" in args.fields and len(args.fields) != 1:
         parser.error("Run source-directories separately before other metadata fields")
 
@@ -611,6 +634,17 @@ def _validate_sources(
         )
 
 
+def _validate_v3_scope(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if not args.v3:
+        return
+    if args.machine != CHRYSALIS_MACHINE_NAME:
+        parser.error("--v3 requires --machine chrysalis")
+    if args.case_name and args.case_name not in V3_CASE_NAMES:
+        parser.error("--case-name must be a documented v3 case when using --v3")
+
+
 def _resolve_source_defaults(args: argparse.Namespace) -> None:
     """Use site defaults only for selected directory-bootstrap sources."""
     if args.fields != ["source-directories"]:
@@ -623,11 +657,19 @@ def _resolve_source_defaults(args: argparse.Namespace) -> None:
     if args.sources in ("archive", "both"):
         if args.archive_root is None:
             root = os.environ.get("OLD_PERF_ARCHIVE_ROOT", "").strip()
+            if not root and args.v3:
+                root = CHRYSALIS_ARCHIVE_ROOT
             args.archive_root = Path(root) if root else None
         if args.archive_start is None:
             args.archive_start = (
                 os.environ.get("ARCHIVE_YEAR_START", "").strip()
-                or os.environ.get("SIMBOARD_DEFAULT_ARCHIVE_YEAR_START", "").strip()
+                or (
+                    V3_ARCHIVE_YEAR_START
+                    if args.v3
+                    else os.environ.get(
+                        "SIMBOARD_DEFAULT_ARCHIVE_YEAR_START", ""
+                    ).strip()
+                )
                 or None
             )
         if args.archive_end is None:

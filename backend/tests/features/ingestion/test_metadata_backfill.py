@@ -15,6 +15,7 @@ import app.models  # noqa: F401 -- register ORM relationship targets for isolate
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.models import Artifact, Execution
 from app.features.ingestion.metadata_backfill import MetadataUpdate, update_metadata
+from app.features.ingestion.v3_classification import V3_SIMULATIONS
 from app.scripts.ingestion.backfill import metadata
 from app.scripts.ingestion.backfill.metadata import _execution_paths, _read_execution
 
@@ -67,6 +68,7 @@ def test_both_layouts_and_archive_bounds(tmp_path):
     )
     recent.mkdir(parents=True)
     args = Namespace(
+        v3=False,
         archive_start="2025-02",
         archive_end="2025-02",
         case_name="case",
@@ -339,6 +341,7 @@ def test_database_first_uses_mappings_and_detects_conflicts(monkeypatch):
         metadata, "_read_execution", partial(_read_execution_stub, record)
     )
     args = Namespace(
+        v3=False,
         machine="perlmutter",
         case_name="case",
         hpc_username="alice",
@@ -460,6 +463,160 @@ def test_database_first_does_not_inherit_filesystem_settings(monkeypatch):
     assert args.archive_root is None
     assert args.archive_start is None
     assert args.archive_end is None
+
+
+def test_v3_defaults_reuse_archive_scope(monkeypatch):
+    _set_source_environment(monkeypatch)
+    monkeypatch.delenv("OLD_PERF_ARCHIVE_ROOT")
+    monkeypatch.delenv("ARCHIVE_YEAR_START")
+    args = _source_args(v3=True, machine="chrysalis", sources="archive")
+
+    metadata._resolve_source_defaults(args)
+
+    assert str(args.archive_root) == metadata.CHRYSALIS_ARCHIVE_ROOT
+    assert args.archive_start == metadata.V3_ARCHIVE_YEAR_START
+    assert args.archive_end == "2024-12"
+
+
+def test_v3_defaults_preserve_environment_and_cli_overrides(monkeypatch, tmp_path):
+    _set_source_environment(monkeypatch)
+    monkeypatch.setenv("ARCHIVE_YEAR_START", "2023-01")
+    args = _source_args(v3=True, machine="chrysalis", sources="archive")
+
+    metadata._resolve_source_defaults(args)
+
+    assert str(args.archive_root) == "/configured/archive"
+    assert args.archive_start == "2023-01"
+    args.archive_root = tmp_path
+    args.archive_start = "2022-01"
+    args.archive_end = "2022-12"
+    metadata._resolve_source_defaults(args)
+
+    assert args.archive_root == tmp_path
+    assert (args.archive_start, args.archive_end) == ("2022-01", "2022-12")
+
+
+@pytest.mark.parametrize("sources", ["staging", "archive"])
+def test_v3_discovery_filters_cases_and_preserves_case_user_bounds(tmp_path, sources):
+    case_name = V3_SIMULATIONS[0]
+    paths = {}
+    for month in ("2023-12", "2024-01", "2025-01"):
+        root = tmp_path
+        if sources == "archive":
+            snapshot = f"performance_archive_{month.replace('-', '_')}_01_00_00_00"
+            root = root / month / snapshot / "COMPLETED"
+        for username in ("alice", "bob"):
+            for name in (case_name, V3_SIMULATIONS[1], "unrelated"):
+                execution = root / username / name / "123.250101-000000"
+                execution.mkdir(parents=True, exist_ok=True)
+                paths[month, username, name] = execution
+    args = _source_args(
+        v3=True,
+        archive_start=metadata.V3_ARCHIVE_YEAR_START,
+        archive_end="2024-12",
+        case_name=None,
+        hpc_username="alice",
+    )
+
+    found = list(_execution_paths(tmp_path, sources, args))
+    assert set(found) == {
+        paths["2024-01", "alice", name] for name in V3_SIMULATIONS[:2]
+    }
+    args.case_name = case_name
+    assert list(_execution_paths(tmp_path, sources, args)) == [
+        paths["2024-01", "alice", case_name]
+    ]
+
+
+@pytest.mark.parametrize(
+    "machine,case_name,message",
+    [
+        ("perlmutter", None, "--v3 requires --machine chrysalis"),
+        ("chrysalis", "unrelated", "must be a documented v3 case"),
+    ],
+)
+def test_v3_rejects_invalid_scope(capsys, machine, case_name, message):
+    args = _source_args(v3=True, machine=machine, case_name=case_name)
+
+    with pytest.raises(SystemExit):
+        metadata._validate_sources(argparse.ArgumentParser(), args)
+
+    assert message in capsys.readouterr().err
+
+
+def test_v3_bootstrap_keeps_machine_identity_check(tmp_path):
+    execution = tmp_path / "alice" / V3_SIMULATIONS[0] / "123.250101-000000"
+    _write_backfill_identity(execution, "pm-cpu")
+    args = _source_args(v3=True, machine="chrysalis")
+
+    with pytest.raises(ValueError, match="Machine mismatch"):
+        metadata._bootstrap_observation(execution, "archive", args)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_v3_database_first_filters_pages_and_uses_mapped_paths(
+    monkeypatch, tmp_path, apply
+):
+    record = {
+        "record_id": str(uuid4()),
+        "case_name": V3_SIMULATIONS[0],
+        "hpc_username": "alice",
+        "execution_id": "123.250101-000000",
+        "values": {},
+        "error": None,
+        "directories": [{"kind": "archive", "path": str(tmp_path)}],
+    }
+    pages = iter([[{"case_name": "unrelated"}] * 100, [record]])
+    calls = []
+    reads = []
+    args = _source_args(
+        v3=True,
+        machine="chrysalis",
+        fields=["simulation-dates"],
+        case_name=None,
+        hpc_username=None,
+        overwrite=False,
+        apply=apply,
+    )
+    monkeypatch.setattr(metadata, "_request", partial(_v3_request_stub, pages, calls))
+    monkeypatch.setattr(
+        metadata, "_read_execution", partial(_v3_read_stub, record, reads)
+    )
+
+    assert metadata._backfill_metadata(args, "https://example.test", "token") == 0
+    assert "offset=0" in calls[0][0]
+    assert "offset=100" in calls[1][0]
+    assert len(calls) == 3
+    assert calls[-1][1]["case_name"] == record["case_name"]
+    assert calls[-1][1]["dry_run"] == (not apply)
+    assert reads == [(tmp_path, "chrysalis", ["simulation-dates"])]
+
+
+def test_main_accepts_v3_and_reports_scope(monkeypatch, capsys):
+    _set_source_environment(monkeypatch)
+    monkeypatch.delenv("ARCHIVE_YEAR_START")
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://example.test")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "hidden-token")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "metadata",
+            "--machine",
+            "chrysalis",
+            "--v3",
+            "--fields",
+            "source-directories",
+        ],
+    )
+    captured = []
+    monkeypatch.setattr(metadata, "_bootstrap", partial(_capture_command, captured))
+
+    assert metadata.main() == 0
+    scope = json.loads(capsys.readouterr().out)
+    assert scope["v3"] is True
+    assert scope["archive_start"] == metadata.V3_ARCHIVE_YEAR_START
+    assert scope["dry_run"] is True
+    assert captured[0].v3 is True
 
 
 @pytest.mark.parametrize("root", ["", "   "])
@@ -926,6 +1083,7 @@ def _transient_request_failure(*args, **kwargs):
 
 def _source_args(**overrides):
     values = {
+        "v3": False,
         "fields": ["source-directories"],
         "apply": False,
         "sources": "both",
@@ -951,3 +1109,23 @@ def _capture_command(captured, args, api, token):
     captured.append(args)
 
     return 0
+
+
+def _v3_request_stub(pages, calls, api, token, route, payload=None):
+    calls.append((route, payload))
+
+    return {"records": next(pages)} if payload is None else {"outcome": "changed"}
+
+
+def _v3_read_stub(record, reads, path, machine, fields):
+    reads.append((path, machine, fields))
+
+    return Namespace(
+        machine="chrysalis",
+        case_name=record["case_name"],
+        hpc_username=record["hpc_username"],
+        execution_id=record["execution_id"],
+        simulation_start_date="1850-01-01",
+        simulation_end_date=None,
+        run_script_path=None,
+    )

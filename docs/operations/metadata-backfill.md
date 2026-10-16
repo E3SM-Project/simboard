@@ -50,6 +50,43 @@ Site configs supply root defaults only when variables are unset. Exported shell 
 
 Case/user filters are optional. Keep them for validation runs and focused retries; omit them to select the full configured scope. Set the machine through Make's `machine` argument, not `--machine` inside `args`.
 
+### Chrysalis v3 production cases
+
+Add `--v3` with `machine=chrysalis` to limit both source-directory bootstrap and
+metadata updates to the documented v3 production case names. This reuses the
+existing v3 case identities, not a separate case list or guessed filesystem paths.
+“Production” describes the simulations; `env` still selects the API deployment.
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--v3 --fields source-directories --sources archive --dry-run'
+```
+
+The archive root defaults to `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF` on LCRC.
+In v3 mode, the archive start defaults to the existing v3 ingestor's `2024-01`
+lower bound rather than the general Chrysalis `2025-01` default. An explicit
+`--archive-start` or `ARCHIVE_YEAR_START` still takes precedence. Root overrides
+and archive-end bounds retain their normal behavior. Review the printed scope
+before applying; an existing environment override can exclude older archives.
+
+V3 mode supports both staging and archive sources and preserves optional exact
+case/user filters. A case filter must name a documented v3 case. Source identity
+must identify Chrysalis; v3 mode does not substitute the machine from the path.
+
+After reviewing and applying the source-directory mappings with separate
+authorization, preview the metadata update:
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--v3 --fields simulation-dates run-script --sources archive --dry-run'
+```
+
+Metadata updates reuse the stored execution-to-directory mappings. They do not
+rescan archives or infer missing paths. Add `--overwrite` only when correcting
+existing values is intended; apply still requires separate authorization.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.
