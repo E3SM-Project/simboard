@@ -63,6 +63,7 @@ class SourceDirectoryObservation(BaseModel):
 
 class SourceDirectoriesRequest(BaseModel):
     machine_name: Annotated[str, Field(min_length=1)]
+    dry_run: bool = False
     directories: Annotated[
         list[SourceDirectoryObservation], Field(min_length=1, max_length=500)
     ]

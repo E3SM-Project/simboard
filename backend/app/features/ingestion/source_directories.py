@@ -15,6 +15,7 @@ def persist_observed_directories(
     directories: list[SourceDirectoryObservation],
     *,
     strict: bool = True,
+    dry_run: bool = False,
 ) -> list[SourceDirectoryObservation]:
     """Resolve before writing; report missing owners without creating them."""
     resolved: list[tuple[SourceDirectoryObservation, Case, Execution]] = []
@@ -43,9 +44,13 @@ def persist_observed_directories(
         case, execution = pair
         resolved.append((directory, case, execution))
 
+    if dry_run:
+        return unresolved
+
     for directory, case, execution in resolved:
         persist_source_directory(db, case, directory.kind, directory.case_path)
         persist_source_directory(
             db, execution, directory.kind, directory.execution_path
         )
+
     return unresolved
