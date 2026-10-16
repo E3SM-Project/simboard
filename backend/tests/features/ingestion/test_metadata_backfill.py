@@ -3,6 +3,7 @@
 import argparse
 import gzip
 import json
+import logging
 import urllib.error
 from argparse import Namespace
 from datetime import date
@@ -18,6 +19,17 @@ from app.features.ingestion.metadata_backfill import MetadataUpdate, update_meta
 from app.features.ingestion.v3_classification import V3_SIMULATIONS
 from app.scripts.ingestion.backfill import metadata
 from app.scripts.ingestion.backfill.metadata import _execution_paths, _read_execution
+
+
+@pytest.fixture
+def caplog(caplog, monkeypatch):
+    """Capture backfill logs despite Alembic disabling existing loggers."""
+    logger = metadata.ingestion_logger
+    monkeypatch.setattr(logger, "disabled", False)
+    monkeypatch.setattr(logger, "propagate", True)
+    caplog.set_level(logging.INFO, logger=logger.name)
+
+    return caplog
 
 
 def _request_stub(record, calls, api, token, route, payload=None):
