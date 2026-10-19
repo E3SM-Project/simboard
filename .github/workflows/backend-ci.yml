@@ -21,24 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    services:
-      postgres:
-        image: postgres:16
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_USER: simboard
-          POSTGRES_PASSWORD: simboard
-          POSTGRES_DB: simboard
-        options: >-
-          --health-cmd="pg_isready -U simboard -d simboard"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=5
-
     env:
       # --------------------------------------------------
       # General
@@ -95,6 +77,22 @@ jobs:
       # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up PostgreSQL
+        env:
+          PGPASSWORD: simboard
+        run: |
+          # Match local Compose and the deployed PostgreSQL major version.
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get update
+          sudo apt-get install -y postgresql-17
+          # Stop other clusters before assigning the standard port to PostgreSQL 17.
+          sudo systemctl stop postgresql
+          sudo pg_conftool 17 main set port 5432
+          sudo pg_ctlcluster 17 main start
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE simboard WITH LOGIN PASSWORD 'simboard' CREATEDB;"
+          sudo -u postgres createdb --owner=simboard simboard
+          test "$(psql -h localhost -p 5432 -U simboard -d simboard -Atc "SELECT current_setting('server_version_num')::int / 10000")" = 17
 
       # -------------------------
       # Python
