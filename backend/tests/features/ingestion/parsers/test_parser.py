@@ -103,8 +103,9 @@ class TestMainParser:
         "case_name", ["v3.LR.piClim-histGHG_0201", "v3.HR.control-1950"]
     )
     @pytest.mark.parametrize("suffix", ["", "_0061"])
+    @pytest.mark.parametrize("prefix", ["", "run."])
     def test_resolves_original_hpc_run_script_provenance(
-        self, tmp_path, compressed, case_name, suffix
+        self, tmp_path, compressed, case_name, suffix, prefix
     ):
         lid = "729179.250417-002844"
         case_root = "/lcrc/group/e3sm2/user/E3SMv3/case/case_scripts"
@@ -114,7 +115,7 @@ class TestMainParser:
         casedocs = execution_dir / "CaseDocs"
         casedocs.rename(execution_dir / f"CaseDocs.{lid}")
         casedocs = execution_dir / f"CaseDocs.{lid}"
-        provenance = f"run.{case_name}{suffix}.sh.20250306-102912"
+        provenance = f"{prefix}{case_name}{suffix}.sh.20250306-102912"
         script = casedocs / f"{provenance}.{lid}{'.gz' if compressed else ''}"
         if compressed:
             with gzip.open(script, "wt") as stream:
@@ -134,6 +135,21 @@ class TestMainParser:
         assert len(results) == 1
         assert results[0].run_script_path == (
             f"{case_root}/run_script_provenance/{provenance}"
+        )
+
+    def test_resolves_unprefixed_mwu_run_script_provenance(self, tmp_path):
+        lid = "1308519.261014-152657"
+        case_name = "20261013.v3.LR.amip.CMIP6.1850aer.SPA_SPC_for_EAMxx.chrysalis"
+        provenance = f"{case_name}.sh.20261014-132849"
+        docs = tmp_path / f"CaseDocs.{lid}"
+        docs.mkdir()
+        (docs / f"{provenance}.{lid}.gz").touch()
+
+        assert (
+            parser._resolve_run_script_path(
+                str(tmp_path), lid, case_name, "/remote/case_scripts"
+            )
+            == f"/remote/case_scripts/run_script_provenance/{provenance}"
         )
 
     @pytest.mark.parametrize("separate_directories", [False, True])
@@ -181,6 +197,15 @@ class TestMainParser:
             ["run.case_0061_0062.sh.20250306-102912.729179.250417-002844"],
             ["run.case_0061.sh.20250306-102912.729278.250417-112829"],
             ["run.case_0061.sh.20250306-102912.729179.250417-002844.extra"],
+            ["other.sh.20250306-102912.729179.250417-002844"],
+            ["case.sh.20250306-102912.729278.250417-112829"],
+            ["case_.sh.20250306-102912.729179.250417-002844"],
+            ["case_0061a.sh.20250306-102912.729179.250417-002844"],
+            ["case.sh.20250306-102912.729179.250417-002844.extra"],
+            [
+                "run.case.sh.20250306-102912.729179.250417-002844",
+                "case.sh.20250306-102912.729179.250417-002844.gz",
+            ],
             [
                 "run.case.sh.20250306-102912.729179.250417-002844",
                 "run.case_0061.sh.20250306-102912.729179.250417-002844.gz",
