@@ -87,6 +87,20 @@ Metadata updates reuse the stored execution-to-directory mappings. They do not
 rescan archives or infer missing paths. Add `--overwrite` only when correcting
 existing values is intended; apply still requires separate authorization.
 
+For metadata updates, `--sources both` prefers existing mapped archive directories
+and reads staging only when no mapped archive directory remains. Missing directories
+are ignored during selection; the record fails if neither source is available.
+All directories of the selected kind retain identity and conflict checks. Staging
+is not inspected when archive directories are selected, so cross-kind conflicts
+are not checked.
+
+Permission errors, non-directory paths, and other filesystem errors fail selection.
+Once a source kind is selected, read, parse, and identity errors fail the record
+without fallback, as does finding no requested metadata. A directory disappearing
+after selection also fails the record. Explicit `--sources archive` and
+`--sources staging` remain strict: every selected mapping must be readable.
+These rules do not change source-directory bootstrap.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.

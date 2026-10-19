@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import time
 import urllib.error
 import urllib.request
@@ -426,13 +427,12 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
         raise ValueError(record["error"])
 
     observations = []
-    paths = sorted(
-        {
-            d["path"]
-            for d in record["directories"]
-            if args.sources in (d["kind"], "both")
-        }
-    )
+    if args.sources == "both":
+        paths = _preferred_metadata_paths(record["directories"])
+    else:
+        paths = sorted(
+            {d["path"] for d in record["directories"] if d["kind"] == args.sources}
+        )
 
     for path in paths:
         try:
@@ -471,6 +471,26 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
         raise ValueError("No requested metadata from available mapped directories")
 
     return values
+
+
+def _preferred_metadata_paths(directories: list[dict]) -> list[str]:
+    """Prefer available archive directories; only absence permits staging fallback."""
+    for kind in ("archive", "staging"):
+        available = []
+        for path in sorted({d["path"] for d in directories if d["kind"] == kind}):
+            try:
+                mode = _source_path(path).stat().st_mode
+                if not stat.S_ISDIR(mode):
+                    raise ValueError("Mapped source is not a directory")
+            except FileNotFoundError:
+                continue
+            except (ValueError, OSError) as exc:
+                raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
+            available.append(path)
+        if available:
+            return available
+
+    raise ValueError("No available mapped source directories")
 
 
 def _source_path(value: str) -> Path:

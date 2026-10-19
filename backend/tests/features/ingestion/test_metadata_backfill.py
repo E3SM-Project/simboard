@@ -45,7 +45,7 @@ def _read_execution_stub(record, path, machine, fields):
         case_name="case",
         hpc_username="alice",
         execution_id=record["execution_id"],
-        simulation_start_date="2020-01-01" if str(path) == "/stage" else "2021-01-01",
+        simulation_start_date="2020-01-01" if path.name == "stage" else "2021-01-01",
         simulation_end_date=None,
         run_script_path=None,
     )
@@ -334,7 +334,11 @@ def test_stale_update_rejected_before_any_write():
     assert row.simulation_start_date == date(1900, 1, 1)
 
 
-def test_database_first_uses_mappings_and_detects_conflicts(monkeypatch):
+def test_database_first_uses_mappings_and_detects_conflicts(tmp_path, monkeypatch):
+    stage = tmp_path / "stage"
+    archive = tmp_path / "archive"
+    stage.mkdir()
+    archive.mkdir()
     record = {
         "record_id": str(uuid4()),
         "case_name": "case",
@@ -343,8 +347,8 @@ def test_database_first_uses_mappings_and_detects_conflicts(monkeypatch):
         "values": {},
         "error": None,
         "directories": [
-            {"kind": "staging", "path": "/stage"},
-            {"kind": "archive", "path": "/archive"},
+            {"kind": "archive", "path": str(stage)},
+            {"kind": "archive", "path": str(archive)},
         ],
     }
     calls = []
@@ -387,12 +391,180 @@ def test_fill_dates_cannot_mix_intervals():
         update_metadata(None, row, request, uuid4())
 
 
-def test_unreadable_mapping_prevents_update(monkeypatch):
-    record = {"error": None, "directories": [{"kind": "staging", "path": "/missing"}]}
+def test_unreadable_mapping_prevents_update(tmp_path, monkeypatch):
+    record = {
+        "error": None,
+        "directories": [{"kind": "staging", "path": str(tmp_path)}],
+    }
     monkeypatch.setattr(metadata, "_read_execution", _unreadable_execution)
     args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
     with pytest.raises(ValueError, match="Cannot safely backfill"):
         metadata._observed_values(record, args)
+
+
+@pytest.mark.parametrize("archive_exists", [False, True])
+@pytest.mark.parametrize("staging_exists", [False, True])
+def test_both_selects_archive_before_staging(
+    tmp_path, monkeypatch, archive_exists, staging_exists
+):
+    archive = tmp_path / "archive"
+    staging = tmp_path / "stage"
+    for path, exists in ((archive, archive_exists), (staging, staging_exists)):
+        if exists:
+            path.mkdir()
+    record = {
+        "error": None,
+        "case_name": "case",
+        "hpc_username": "alice",
+        "execution_id": "123.250101-000000",
+        "directories": [
+            {"kind": "staging", "path": str(staging)},
+            {"kind": "archive", "path": str(archive)},
+            {"kind": "archive", "path": str(tmp_path / "missing-archive")},
+        ],
+    }
+    reads = []
+
+    def read(path, machine, fields):
+        reads.append(path)
+        return _read_execution_stub(record, path, machine, fields)
+
+    monkeypatch.setattr(metadata, "_read_execution", read)
+    args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
+
+    if not archive_exists and not staging_exists:
+        with pytest.raises(ValueError, match="No available mapped source directories"):
+            metadata._observed_values(record, args)
+        assert reads == []
+    else:
+        expected = "2021-01-01" if archive_exists else "2020-01-01"
+        assert metadata._observed_values(record, args) == {
+            "simulation_start_date": expected
+        }
+        assert reads == [archive if archive_exists else staging]
+
+
+@pytest.mark.parametrize("sources", ["archive", "staging"])
+def test_explicit_metadata_source_does_not_fallback(tmp_path, monkeypatch, sources):
+    selected = tmp_path / sources
+    other = tmp_path / ("staging" if sources == "archive" else "archive")
+    other.mkdir()
+    record = {
+        "error": None,
+        "directories": [
+            {"kind": sources, "path": str(selected)},
+            {
+                "kind": "staging" if sources == "archive" else "archive",
+                "path": str(other),
+            },
+        ],
+    }
+    reads = []
+
+    def read(path, machine, fields):
+        reads.append(path)
+        raise FileNotFoundError(str(path))
+
+    monkeypatch.setattr(metadata, "_read_execution", read)
+    args = Namespace(sources=sources, machine="perlmutter", fields=["run-script"])
+    with pytest.raises(ValueError, match="Cannot safely backfill"):
+        metadata._observed_values(record, args)
+    assert reads == [selected]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "permission",
+        "parse",
+        "identity",
+        "missing-identity",
+        "disappeared",
+        "no-metadata",
+    ],
+)
+def test_selected_archive_failure_does_not_fallback(tmp_path, monkeypatch, failure):
+    archive = tmp_path / "archive"
+    staging = tmp_path / "stage"
+    archive.mkdir()
+    staging.mkdir()
+    record = {
+        "error": None,
+        "case_name": "case",
+        "hpc_username": "alice",
+        "execution_id": "123.250101-000000",
+        "directories": [
+            {"kind": "archive", "path": str(archive)},
+            {"kind": "staging", "path": str(staging)},
+        ],
+    }
+    reads = []
+
+    def read(path, machine, fields):
+        reads.append(path)
+        if failure == "permission":
+            raise PermissionError("denied")
+        if failure == "parse":
+            raise ValueError("invalid metadata")
+        if failure == "missing-identity":
+            raise metadata._IncompleteExecutionError("Missing identity file")
+        if failure == "disappeared":
+            raise FileNotFoundError(str(path))
+        parsed = _read_execution_stub(record, path, machine, fields)
+        if failure == "identity":
+            parsed.case_name = "wrong"
+        if failure == "no-metadata":
+            parsed.simulation_start_date = None
+        return parsed
+
+    monkeypatch.setattr(metadata, "_read_execution", read)
+    args = Namespace(sources="both", machine="perlmutter", fields=["simulation-dates"])
+    message = (
+        "No requested metadata"
+        if failure == "no-metadata"
+        else "Cannot safely backfill"
+    )
+    with pytest.raises(ValueError, match=message):
+        metadata._observed_values(record, args)
+    assert reads == [archive]
+
+
+@pytest.mark.parametrize("failure", ["permission", "not-directory", "other-os-error"])
+def test_archive_selection_errors_do_not_fallback(tmp_path, monkeypatch, failure):
+    archive = tmp_path / "archive"
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    if failure == "not-directory":
+        archive.touch()
+    else:
+        original_stat = Path.stat
+
+        def checked_stat(path, *args, **kwargs):
+            if path == archive:
+                if failure == "permission":
+                    raise PermissionError("denied")
+                raise OSError("storage unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", checked_stat)
+
+    directories = [
+        {"kind": "archive", "path": str(archive)},
+        {"kind": "staging", "path": str(staging)},
+    ]
+    with pytest.raises(ValueError, match="Cannot safely backfill"):
+        metadata._preferred_metadata_paths(directories)
+
+
+def test_archive_selection_rejects_mount_escape(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLD_PERF_SOURCE_ROOT", str(tmp_path))
+    directories = [
+        {"kind": "archive", "path": "/OLD_PERF/../outside"},
+        {"kind": "staging", "path": str(tmp_path)},
+    ]
+
+    with pytest.raises(ValueError, match="escapes configured root"):
+        metadata._preferred_metadata_paths(directories)
 
 
 @pytest.mark.parametrize(
