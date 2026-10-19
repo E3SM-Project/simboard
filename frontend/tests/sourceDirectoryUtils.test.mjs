@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { preferredCaseDirectoryPaths } from '../src/features/catalog/sourceDirectoryUtils.ts';
+import {
+  filterSourceDirectoryPaths,
+  preferredCaseDirectoryPaths,
+} from '../src/features/catalog/sourceDirectoryUtils.ts';
 
 const directory = (kind, path) => ({ id: `${kind}:${path}`, kind, path });
 
@@ -46,4 +49,19 @@ test('a single archive hides staging paths', () => {
     ]),
     ['/archive/case'],
   );
+});
+
+test('directory filtering matches full paths without changing values or order', () => {
+  const paths = ['/Archive/Day-1/Case', '/archive/day-2/case', '/archive/day-3/other'];
+  assert.deepEqual(filterSourceDirectoryPaths(paths, '  DAY-1/case  '), [paths[0]]);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, 'CASE'), paths.slice(0, 2));
+  assert.deepEqual(paths, ['/Archive/Day-1/Case', '/archive/day-2/case', '/archive/day-3/other']);
+});
+
+test('empty filters show all paths and unmatched filters show none', () => {
+  const paths = ['/archive/a', '/archive/b'];
+  assert.deepEqual(filterSourceDirectoryPaths(paths, ''), paths);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, '   '), paths);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, 'missing'), []);
+  assert.deepEqual(filterSourceDirectoryPaths([], 'archive'), []);
 });

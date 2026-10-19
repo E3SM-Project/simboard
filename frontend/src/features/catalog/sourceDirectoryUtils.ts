@@ -7,3 +7,8 @@ export const preferredCaseDirectoryPaths = (directories: SourceDirectoryOut[] = 
     : directories.filter(({ kind }) => kind === 'staging');
   return [...new Set(preferred.map(({ path }) => path))].sort();
 };
+
+export const filterSourceDirectoryPaths = (paths: string[], query: string): string[] => {
+  const normalizedQuery = query.trim().toLowerCase();
+  return paths.filter((path) => path.toLowerCase().includes(normalizedQuery));
+};
