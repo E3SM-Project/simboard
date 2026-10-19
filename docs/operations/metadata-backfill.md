@@ -215,6 +215,13 @@ Simulation end dates use the current parser's initial driver `Stop Time`, not ac
 
 This database-first step does not inherit filesystem roots or archive bounds from the environment.
 
+Legacy Spin mappings under `/performance_archive` and `/OLD_PERF` are read through
+`PERF_SOURCE_ROOT` and `OLD_PERF_SOURCE_ROOT`, respectively, when configured.
+Perlmutter's site config defaults these variables to absolute NERSC host paths.
+Exported values or the protected environment file can override these defaults;
+configured source roots must be absolute. Other stored paths remain unchanged.
+This translation affects reads only, not stored mappings or owner identity checks.
+
 ### Review and apply
 
 1. Review the dry-run results and obtain authorization.

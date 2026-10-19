@@ -38,6 +38,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
     IngestionRequestError,
     _log_event,
+    _optional_source_root,
 )
 from app.scripts.ingestion.archive_ingestor_core import logger as ingestion_logger
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
@@ -435,7 +436,7 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
 
     for path in paths:
         try:
-            parsed = _read_execution(Path(path), args.machine, args.fields)
+            parsed = _read_execution(_source_path(path), args.machine, args.fields)
 
             if (
                 parsed.case_name,
@@ -470,6 +471,27 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
         raise ValueError("No requested metadata from available mapped directories")
 
     return values
+
+
+def _source_path(value: str) -> Path:
+    """Translate legacy Spin mount prefixes to configured host source roots."""
+    path = Path(value)
+    for mount, env_name in (
+        ("/performance_archive", "PERF_SOURCE_ROOT"),
+        ("/OLD_PERF", "OLD_PERF_SOURCE_ROOT"),
+    ):
+        if not path.is_relative_to(mount):
+            continue
+
+        root = _optional_source_root(env_name)
+        if root is not None:
+            relative = path.relative_to(mount)
+            if ".." in relative.parts:
+                raise ValueError(f"Source path escapes configured root: {path}")
+
+            return root / relative
+
+    return path
 
 
 def _normalized_date(value: str | None) -> str | None:
