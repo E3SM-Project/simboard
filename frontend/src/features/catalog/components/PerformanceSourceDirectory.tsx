@@ -118,6 +118,10 @@ export const PerformanceSourceDirectories = ({
   const paths = preferredCaseDirectoryPaths(directories);
   const filteredPaths = filterSourceDirectoryPaths(paths, query);
 
+  if (paths.length === 1) {
+    return <SourceDirectoryField paths={paths} />;
+  }
+
   return (
     <div className="min-w-0 space-y-2">
       <Label className="block text-xs text-muted-foreground">Performance Source Directories</Label>

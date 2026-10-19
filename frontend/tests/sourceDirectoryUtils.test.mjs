@@ -19,6 +19,28 @@ test('a single staging path is displayed', () => {
   ]);
 });
 
+test('executions sharing one staging directory produce one preferred path', () => {
+  assert.deepEqual(
+    preferredCaseDirectoryPaths([
+      { ...directory('staging', '/staging/case'), id: 'execution-1' },
+      { ...directory('staging', '/staging/case'), id: 'execution-2' },
+    ]),
+    ['/staging/case'],
+  );
+});
+
+test('executions sharing one archive directory produce one preferred path despite staging paths', () => {
+  assert.deepEqual(
+    preferredCaseDirectoryPaths([
+      directory('staging', '/staging/execution-1'),
+      directory('staging', '/staging/execution-2'),
+      { ...directory('archive', '/archive/case'), id: 'execution-1' },
+      { ...directory('archive', '/archive/case'), id: 'execution-2' },
+    ]),
+    ['/archive/case'],
+  );
+});
+
 test('all staging paths are sorted and deduplicated without archive mappings', () => {
   const mappings = [
     directory('staging', '/staging/b'),
