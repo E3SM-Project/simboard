@@ -130,15 +130,15 @@ def test_single_execution_rejects_excluded_archive_month(tmp_path) -> None:
             "102.1-1",
             "rejected_incomplete",
             None,
-            set(),
-            {"skipped_incomplete": 1, "rejected_incomplete_execution_ids": 1},
+            {"102.1-1"},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "103.1-1",
             "rejected_invalid",
             None,
-            set(),
-            {"skipped_invalid": 1, "rejected_invalid_execution_ids": 1},
+            {"103.1-1"},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "104.1-1",
@@ -201,7 +201,7 @@ def test_collect_case_execution_records_each_decision_source(
         processed[str(case_dir.resolve())].add(execution_id)
 
     def metadata_locator(_: str) -> object:
-        if stored_outcome is not None:
+        if stored_outcome == "accepted":
             pytest.fail("stored discovery outcomes must bypass validation")
         if error is not None:
             raise error
@@ -229,6 +229,8 @@ def test_collect_case_execution_records_each_decision_source(
     assert stats == {key: expected.get(key, 0) for key in stats}
 
     expected_results = {
+        "102.1-1": [(execution_id, "accepted")],
+        "103.1-1": [(execution_id, "accepted")],
         "104.1-1": [(execution_id, "accepted")],
         "105.1-1": [(execution_id, "rejected_incomplete")],
         "106.1-1": [(execution_id, "rejected_invalid")],
@@ -240,8 +242,6 @@ def test_collect_case_execution_records_each_decision_source(
     assert log_data.valid_execution_ids == expected_grouped
     expected_rejection_reason = {
         "100.1-1": "already_processed",
-        "102.1-1": "incomplete",
-        "103.1-1": "invalid",
         "105.1-1": "incomplete",
         "106.1-1": "invalid",
         "107.1-1": "transient",
@@ -1437,26 +1437,100 @@ def test_transient_os_errors_are_counted_but_not_persisted(
     assert results == []
 
 
-def test_stored_rejected_results_bypass_validation_and_candidacy(
+@pytest.mark.parametrize("fresh_outcome", ["accepted", "incomplete", "invalid"])
+def test_stored_rejected_results_are_revalidated(
     tmp_path: Path,
+    fresh_outcome: str,
 ) -> None:
     archive_root = tmp_path / "archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "101.1-1").mkdir(parents=True)
 
+    reads = []
+    results = []
+
+    def locator(path):
+        reads.append(path)
+        if fresh_outcome == "incomplete":
+            raise IncompleteArchiveError([])
+        if fresh_outcome == "invalid":
+            raise ArchiveValidationError([])
+        return {}
+
     grouped = _discover_case_executions(
         archive_root,
-        metadata_locator=lambda *_: pytest.fail(
-            "stored rejection must bypass validation"
-        ),
+        metadata_locator=locator,
+        discovery_results=results,
         discovery_results_by_key={
             (str(case_dir.resolve()), "100.1-1"): "rejected_incomplete",
             (str(case_dir.resolve()), "101.1-1"): "rejected_invalid",
         },
     )
 
-    assert grouped == {}
+    assert set(reads) == {str(case_dir / "100.1-1"), str(case_dir / "101.1-1")}
+    assert grouped == (
+        {str(case_dir): ["100.1-1", "101.1-1"]} if fresh_outcome == "accepted" else {}
+    )
+    expected = (
+        "accepted" if fresh_outcome == "accepted" else f"rejected_{fresh_outcome}"
+    )
+    assert len(results) == 2
+    assert all(result.outcome == expected for result in results)
+
+
+@pytest.mark.parametrize("accepted_first", [False, True])
+def test_fresh_acceptance_wins_across_archive_snapshots(tmp_path, accepted_first):
+    root = tmp_path / "OLD_PERF"
+    cases = [
+        root
+        / "2026-10"
+        / f"performance_archive_2026_10_{day:02}_10_00_00"
+        / "COMPLETED"
+        / "user"
+        / "case"
+        for day in (1, 2)
+    ]
+    for case in cases:
+        (case / "100.1-1").mkdir(parents=True)
+    accepted_case = cases[0 if accepted_first else 1]
+
+    def locate(path):
+        if Path(path).parent != accepted_case:
+            raise IncompleteArchiveError([])
+        return {}
+
+    state = _fresh_state()
+    state["discovery_results"]["user/case"] = [
+        {
+            "case_identity": "user/case",
+            "execution_id": "100.1-1",
+            "outcome": "rejected_invalid",
+        }
+    ]
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="perlmutter",
+        scan_mode="archive",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    results = []
+
+    _, candidates, _, _, _ = discovery_module._scan_archive(
+        config, state, locate, discovery_results=results
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path == str(accepted_case)
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+    assert [
+        result.outcome for result in core_module._deduplicate_discovery_results(results)
+    ] == ["accepted"]
 
 
 def test_validate_execution_dir_compacts_incomplete_archive_errors(

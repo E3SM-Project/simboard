@@ -562,32 +562,12 @@ def _record_stored_discovery_outcome(
     log_data: CaseCollectionLogData | None,
     stats: DiscoveryStats | None,
 ) -> bool:
-    """Record immutable stored discovery outcome, returning whether handled."""
+    """Reuse accepted validation only; cached rejections require a fresh check."""
     if stored_outcome == "accepted":
         _record_accepted_execution(grouped, case_path, execution_id, log_data, stats)
         return True
-    if stored_outcome not in {"rejected_incomplete", "rejected_invalid"}:
-        return False
 
-    reason = "incomplete" if stored_outcome == "rejected_incomplete" else "invalid"
-    if stats is not None:
-        if reason == "incomplete":
-            stats["skipped_incomplete"] += 1
-            stats["rejected_incomplete_execution_ids"] += 1
-        else:
-            stats["skipped_invalid"] += 1
-            stats["rejected_invalid_execution_ids"] += 1
-    if log_data is not None:
-        log_data.rejected_decisions.append(
-            ExecutionCollectionDecision(
-                case_path=case_path,
-                execution_id=execution_id,
-                decision="rejected",
-                reason=reason,
-                detail="stored_discovery_result",
-            )
-        )
-    return True
+    return False
 
 
 def _collect_fresh_execution(
@@ -602,7 +582,7 @@ def _collect_fresh_execution(
     log_data: CaseCollectionLogData | None,
     discovery_results: list[ExecutionDiscoveryResult] | None,
 ) -> None:
-    """Validate and record one execution without a stored outcome."""
+    """Validate a new execution or revalidate a previously rejected execution."""
     if stats is not None:
         stats["execution_dirs_scanned"] += 1
 
@@ -641,7 +621,7 @@ def _record_rejected_discovery_result(
     execution_id: str,
     rejection_decision: ExecutionCollectionDecision,
 ) -> None:
-    """Persist an immutable fresh rejection in the pending result list."""
+    """Record current rejection diagnostics without making future scans skip validation."""
     if discovery_results is None or rejection_decision.reason not in {
         "incomplete",
         "invalid",

@@ -192,6 +192,118 @@ def test_single_execution_rejects_normal_scan_exclusions(
     )
 
 
+@pytest.mark.parametrize("runner", [ingestor_module, upload_module])
+@pytest.mark.parametrize("rejection", [IncompleteArchiveError, ArchiveValidationError])
+@pytest.mark.parametrize("move_to_archive", [False, True])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_rejected_staging_execution_recovers_when_files_become_valid(
+    tmp_path, monkeypatch, runner, rejection, move_to_archive, dry_run
+):
+    staging = tmp_path / "performance_archive"
+    execution = staging / "user" / "case" / "100.1-1"
+    execution.mkdir(parents=True)
+    state = _fresh_state()
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    persisted = []
+    submitted = []
+    reads = []
+    ready = False
+
+    def locate(path):
+        reads.append(path)
+        if not ready:
+            raise rejection([])
+        return {}
+
+    def persist(*args, results, **kwargs):
+        persisted.extend(results)
+        for result in results:
+            state["discovery_results"][result.case_identity] = [
+                {
+                    "case_identity": result.case_identity,
+                    "execution_id": result.execution_id,
+                    "outcome": result.outcome,
+                }
+            ]
+        return {"status_code": 201, "body": {}}
+
+    def submit(endpoint, token, path, machine, **kwargs):
+        submitted.append((path, kwargs["processed_execution_ids"]))
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=staging,
+        machine_name="chrysalis" if runner is upload_module else "perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    assert (
+        runner._run_ingestor(
+            config,
+            metadata_locator=locate,
+            post_request_fn=submit,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert len(persisted) == 1
+    assert persisted[0].outcome == (
+        "rejected_incomplete"
+        if rejection is IncompleteArchiveError
+        else "rejected_invalid"
+    )
+    assert submitted == []
+    ready = True
+    if move_to_archive:
+        archive = tmp_path / "OLD_PERF"
+        destination = (
+            archive
+            / "2026-10"
+            / "performance_archive_2026_10_12_10_02_55"
+            / "COMPLETED"
+            / "user"
+            / "case"
+            / execution.name
+        )
+        destination.parent.mkdir(parents=True)
+        execution.rename(destination)
+        execution = destination
+        config = replace(
+            config, archive_root=archive, scan_mode="archive", execution_dir=execution
+        )
+    config = replace(config, dry_run=dry_run)
+
+    assert (
+        runner._run_ingestor(
+            config,
+            metadata_locator=locate,
+            post_request_fn=submit,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert reads == [str(staging / "user/case/100.1-1"), str(execution)]
+    assert len(persisted) == (1 if dry_run else 2)
+    assert submitted == ([] if dry_run else [(str(execution.parent), [execution.name])])
+    if not dry_run:
+        assert persisted[-1].outcome == "accepted"
+        assert (
+            runner._run_ingestor(
+                config,
+                metadata_locator=locate,
+                post_request_fn=submit,
+                discovery_post_request_fn=persist,
+            )
+            == 0
+        )
+        assert len(reads) == 2
+        assert len(submitted) == 1
+
+
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     tmp_path: Path,
     monkeypatch,

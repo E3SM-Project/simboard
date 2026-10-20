@@ -673,7 +673,7 @@ def _parse_optional_archive_bound(
     return f"{year}-{month}"
 
 
-# Immutable Discovery Results
+# Discovery Result Precedence
 # ---------------------------
 
 
@@ -813,7 +813,7 @@ def _case_state_processed_ids(case_state: dict[str, Any]) -> set[str]:
 def _build_discovery_results_by_key(
     state: dict[str, Any],
 ) -> dict[tuple[str, str], str]:
-    """Build immutable-result lookup from normalized remote state."""
+    """Build the stored discovery-result lookup from normalized remote state."""
     raw_results = state.get("discovery_results", {})
     if not isinstance(raw_results, dict):
         return {}

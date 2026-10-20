@@ -169,7 +169,7 @@ class IngestionStateCase(BaseModel):
 
 
 class ExecutionDiscoveryResultEntry(BaseModel):
-    """One immutable execution discovery result."""
+    """One execution discovery result; rejections can change after revalidation."""
 
     case_identity: Annotated[str, Field(..., min_length=1)]
     execution_id: Annotated[str, Field(..., min_length=1)]
@@ -185,7 +185,7 @@ class ExecutionDiscoveryResultEntry(BaseModel):
 
 
 class ExecutionDiscoveryResultsRequest(BaseModel):
-    """Batch of immutable discovery results for one machine."""
+    """Batch of discovery results for one machine."""
 
     machine_name: Annotated[str, Field(..., min_length=1)]
     results: Annotated[list[ExecutionDiscoveryResultEntry], Field(..., min_length=1)]
@@ -212,7 +212,7 @@ class ExecutionDiscoveryResultsRequest(BaseModel):
 
 
 class ExecutionDiscoveryResultsResponse(BaseModel):
-    """Persistence summary for a discovery-result batch."""
+    """Persistence summary; existing_count includes refreshed rejected rows."""
 
     inserted_count: int
     existing_count: int
@@ -277,7 +277,7 @@ class IngestionStateResponse(BaseModel):
         dict[str, list[ExecutionDiscoveryResultEntry]],
         Field(
             default_factory=dict,
-            description="Normalized case identity to immutable discovery results",
+            description="Normalized case identity to discovery results",
         ),
     ]
 

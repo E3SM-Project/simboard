@@ -93,7 +93,7 @@ class Ingestion(Base):
 
 
 class ExecutionDiscoveryResult(Base):
-    """Immutable validation result for one machine/case/execution identity."""
+    """Validation result for one identity; rejected results can be refreshed."""
 
     __tablename__ = "execution_discovery_results"
     __table_args__ = (
