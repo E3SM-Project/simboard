@@ -1002,13 +1002,12 @@ def _settled_archive_snapshot_keys(
         return set()
 
     processed_ids = _build_processed_ids_by_key(state, scan_mode="archive")
-    outcomes = _build_discovery_results_by_key(state)
-    outcomes.update(
-        {
-            (result.case_identity, result.execution_id): result.outcome
-            for result in _deduplicate_discovery_results(new_discovery_results)
-        }
-    )
+    # Cached rejections cannot settle executions whose fresh validation failed
+    # transiently. Only this scan's rejection results establish resolution.
+    outcomes = {
+        (result.case_identity, result.execution_id): result.outcome
+        for result in _deduplicate_discovery_results(new_discovery_results)
+    }
     selected_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
 
     return {
