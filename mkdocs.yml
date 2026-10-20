@@ -18,6 +18,7 @@ nav:
   - User Guide:
       - Overview: user/index.md
       - Publish Diagnostics Links: user/diagnostics.md
+      - Compare Diagnostics Across Cases: user/compare-diagnostics.md
       - Ingestion Coverage: user/ingestion-coverage.md
   - Developer:
       - Developer Guide: developer/index.md
