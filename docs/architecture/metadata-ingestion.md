@@ -43,7 +43,7 @@ Case-level state is derived from execution-level state.
 | Term                      | Definition                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
-| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. This immutable content result is distinct from a transient filesystem access failure.                                                                                                                                                                                     |
+| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. Rejections are revalidated when an unprocessed execution is visited again; filesystem access failures are reported separately. |
 | Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
 | Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
@@ -251,7 +251,7 @@ Targeted v3 scans do not read or write archive snapshot checkpoints. Snapshot
 checkpoints describe completion of every execution in a snapshot, so a
 case-filtered scan must not mark a mixed snapshot complete or let prior general
 checkpoints hide targets. The runner still reads processed execution state and
-immutable discovery results, preserving submission idempotency.
+discovery results, preserving submission idempotency while revalidating rejections.
 
 ### Automated Submission-State Flow
 
@@ -267,25 +267,36 @@ archive root basename. The next run treats every eligible snapshot as
 uncheckpointed. See the NERSC Spin runbook for the operational SQL procedure.
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
-2. Read processed execution IDs and immutable discovery results from `/api/v1/ingestions/state`.
-3. Skip processed executions. For unprocessed executions, reuse stored discovery results before metadata validation: accepted results remain candidates, while rejected results remain excluded.
-4. Validate executions without stored results. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
-5. Persist all new immutable results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent; a different outcome for an existing identity returns a conflict and rolls back that batch.
+2. Read processed execution IDs and discovery results from `/api/v1/ingestions/state`.
+3. Skip processed executions. For unprocessed executions, reuse accepted validation results; revalidate cached `rejected_incomplete` and `rejected_invalid` outcomes in both staging and archive scans.
+4. Validate new and previously rejected executions. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
+5. Persist current results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent. Rejected rows can be refreshed, including promotion to `accepted`; accepted rows cannot be downgraded. A downgrade conflicts and rolls back the batch. Concurrent requests serialize changes to each stored identity. Fresh acceptance takes precedence over rejections for the same identity within one scan. `existing_count` includes refreshed rejected rows.
 6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`. Remote uploads stage a delta archive with the case root and only those selected execution directories; retries reuse that one immutable multipart payload, then remove the staging directory after either success or failure.
 7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
 8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
-9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has an immutable rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed.
+9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has a stored rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed. These checkpoint settlement rules are unchanged by rejection revalidation.
 
 Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
 scans additionally deduplicate by stable logical case identity plus
 `execution_id` so timestamped snapshot parents do not cause repeated archive
 ingestion across `OLD_PERF_ARCHIVE_DIR` snapshots. Updating files inside an
-already recorded execution directory does not make that execution eligible
-again. Completed archive snapshots are skipped before their contents are
+already successfully ingested execution directory does not make that execution eligible
+again. Previously rejected executions are checked again when visited, including
+after moving from staging into a `COMPLETED` archive directory. PACE parses and
+sorts these completed directories, so remaining missing-file errors warrant
+investigation rather than bypassing validation. Completed archive snapshots are skipped before their contents are
 walked. Dry runs compute and log proposed results but never persist discovery,
 processed state, or archive checkpoints.
 
-The targeted v3 runner is the exception to completed-snapshot pruning: it scans
+Targeted recovery of legacy rejections uses `execution_dir=<absolute-path>` with
+the normal `make ingest-dry-run` and `make ingest-apply` targets. Deploy the updated
+runner and API first. No routine discovery-row deletion is needed: a visited
+rejection is revalidated, and apply refreshes its stored result. Existing snapshot
+checkpoints are not automatically reopened or changed; single-execution runs
+bypass them without completing a whole snapshot. Already-ingested executions
+remain protected by normal processed-state and duplicate checks.
+
+The targeted v3 runner is another exception to completed-snapshot pruning: it scans
 all eligible snapshots within its fixed lower bound because checkpoint state is
 intentionally disabled for filtered reconciliation.
 

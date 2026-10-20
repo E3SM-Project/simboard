@@ -27,6 +27,7 @@ from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import ExecutionCreate
+from app.features.ingestion.enums import ExecutionDiscoveryOutcome
 from app.features.ingestion.ingest import (
     CaseIdentity,
     IngestArchiveResult,
@@ -180,7 +181,7 @@ def persist_execution_discovery_results(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> ExecutionDiscoveryResultsResponse:
-    """Persist immutable discovery results with concurrency-safe idempotency."""
+    """Refresh rejected discovery results without downgrading accepted validation."""
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -204,7 +205,7 @@ def persist_execution_discovery_results(
                         "execution_id": result.execution_id,
                         "outcome": result.outcome,
                     }
-                    for result in unique_results.values()
+                    for _, result in sorted(unique_results.items())
                 ]
             )
             .on_conflict_do_nothing(constraint="uq_execution_discovery_result_identity")
@@ -221,6 +222,12 @@ def persist_execution_discovery_results(
                     ExecutionDiscoveryResult.execution_id,
                 ).in_(unique_results),
             )
+            .order_by(
+                ExecutionDiscoveryResult.case_identity,
+                ExecutionDiscoveryResult.execution_id,
+            )
+            .populate_existing()
+            .with_for_update()
             .all()
         )
         stored_by_identity = {
@@ -229,14 +236,18 @@ def persist_execution_discovery_results(
 
         for identity, requested in unique_results.items():
             stored = stored_by_identity.get(identity)
-            if stored is None or stored.outcome != requested.outcome:
+            if stored is None or (
+                stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
+                and stored.outcome != requested.outcome
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Discovery result conflicts with immutable stored outcome "
+                        "Discovery result conflicts with accepted stored outcome "
                         f"for case_identity={identity[0]!r}, execution_id={identity[1]!r}."
                     ),
                 )
+            stored.outcome = requested.outcome
 
     return ExecutionDiscoveryResultsResponse(
         inserted_count=inserted_count,

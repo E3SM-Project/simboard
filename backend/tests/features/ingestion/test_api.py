@@ -357,6 +357,39 @@ class TestExecutionDiscoveryResultsEndpoint:
         stored = db.query(ExecutionDiscoveryResult).one()
         assert stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
 
+    @pytest.mark.parametrize("previous", ["rejected_incomplete", "rejected_invalid"])
+    @pytest.mark.parametrize(
+        "current", ["accepted", "rejected_incomplete", "rejected_invalid"]
+    )
+    def test_revalidation_refreshes_rejected_outcomes(
+        self, client, db: Session, previous, current
+    ) -> None:
+        machine = db.query(Machine).first()
+        endpoint = f"{API_BASE}/ingestions/discovery-results"
+        payload = {
+            "machine_name": machine.name,
+            "results": [
+                {
+                    "case_identity": "case-a",
+                    "execution_id": "100.1-1",
+                    "outcome": previous,
+                }
+            ],
+        }
+        assert client.post(endpoint, json=payload).status_code == 201
+        original = db.query(ExecutionDiscoveryResult).one()
+        original_id = original.id
+        payload["results"][0]["outcome"] = current
+
+        for _ in range(2):
+            response = client.post(endpoint, json=payload)
+            assert response.status_code == 201, response.text
+            assert response.json() == {"inserted_count": 0, "existing_count": 1}
+            db.refresh(original)
+            assert original.outcome == current
+            assert original.id == original_id
+        assert db.query(ExecutionDiscoveryResult).count() == 1
+
     def test_conflicting_batch_rolls_back_new_rows(self, client, db: Session) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
@@ -369,7 +402,17 @@ class TestExecutionDiscoveryResultsEndpoint:
         assert (
             client.post(
                 endpoint,
-                json={"machine_name": machine.name, "results": [existing]},
+                json={
+                    "machine_name": machine.name,
+                    "results": [
+                        existing,
+                        {
+                            **existing,
+                            "execution_id": "102.1-1",
+                            "outcome": "rejected_incomplete",
+                        },
+                    ],
+                },
             ).status_code
             == 201
         )
@@ -379,6 +422,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             json={
                 "machine_name": machine.name,
                 "results": [
+                    {**existing, "execution_id": "102.1-1"},
                     {
                         "case_identity": "case-a",
                         "execution_id": "101.1-1",
@@ -390,6 +434,13 @@ class TestExecutionDiscoveryResultsEndpoint:
         )
 
         assert response.status_code == 409
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter_by(execution_id="102.1-1")
+            .one()
+            .outcome
+            == ExecutionDiscoveryOutcome.REJECTED_INCOMPLETE
+        )
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.execution_id == "101.1-1")
@@ -424,7 +475,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             == 1
         )
 
-    def test_concurrent_differing_inserts_store_one_and_conflict_one(
+    def test_concurrent_differing_inserts_preserve_acceptance(
         self, db: Session
     ) -> None:
         machine = db.query(Machine).first()
@@ -457,12 +508,53 @@ class TestExecutionDiscoveryResultsEndpoint:
 
         results = self._persist_concurrently(db.get_bind().engine, [base, conflicting])
 
-        assert sorted(results) == ["http_409", "success"]
+        assert results[0] == "success"
+        assert results[1] in {"success", "http_409"}
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.case_identity == identity)
             .count()
             == 1
+        )
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter_by(case_identity=identity)
+            .one()
+            .outcome
+            == ExecutionDiscoveryOutcome.ACCEPTED
+        )
+
+    @pytest.mark.parametrize("rejected", ["rejected_incomplete", "rejected_invalid"])
+    def test_concurrent_revalidation_preserves_acceptance(self, db: Session, rejected):
+        machine = db.query(Machine).first()
+        identity = f"concurrent-revalidation-{uuid.uuid4()}"
+        previous = ExecutionDiscoveryResultsRequest.model_validate(
+            {
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": identity,
+                        "execution_id": "100.1-1",
+                        "outcome": rejected,
+                    }
+                ],
+            }
+        )
+        accepted = previous.model_copy(deep=True)
+        accepted.results[0].outcome = ExecutionDiscoveryOutcome.ACCEPTED
+        bind = db.get_bind().engine
+        assert self._persist_concurrently(bind, [previous]) == ["success"]
+
+        results = self._persist_concurrently(bind, [previous, accepted])
+
+        assert results[1] == "success"
+        assert results[0] in {"success", "http_409"}
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter_by(case_identity=identity)
+            .one()
+            .outcome
+            == ExecutionDiscoveryOutcome.ACCEPTED
         )
 
     def test_conflicting_batch_input_is_rejected(self) -> None:

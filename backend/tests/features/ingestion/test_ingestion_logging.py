@@ -572,7 +572,7 @@ def test_test_only_consumer_deduplicates_and_reports_coverage():
     }
 
 
-def test_cached_archive_observations_and_processed_staging_are_skipped(
+def test_archive_rejections_are_revalidated_and_processed_staging_is_skipped(
     tmp_path, monkeypatch, output
 ):
     from app.scripts.ingestion.archive_discovery import _scan_archive
@@ -607,6 +607,15 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
             ]
         },
     }
+    validated = []
+
+    def locator(path):
+        validated.append(path)
+        if path.endswith("101.1-1"):
+            raise IncompleteArchiveError([])
+        if path.endswith("102.1-1"):
+            raise ArchiveValidationError([])
+        pytest.fail("accepted or processed execution should not be revalidated")
 
     @logs.logged_main
     def main():
@@ -614,13 +623,14 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
         result = _scan_archive(
             config,
             state,
-            metadata_locator=lambda path: pytest.fail("cached result revalidated"),
+            metadata_locator=locator,
         )
         _, candidates, eligible, stats, _ = result
         _log_scan_completed(candidates, eligible, stats)
         return 0
 
     assert main() == 0
+    assert len(validated) == 4
     record = records(output)[0]
     assert record["executions"] == {
         "total": 6,
@@ -644,6 +654,7 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
         }
     }
     assert main() == 0
+    assert len(validated) == 4
     record = records(output)[1]
     assert record["executions"]["skipped"] == 1
     assert record["executions"]["selected"] == 0
