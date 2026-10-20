@@ -30,6 +30,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from enum import Enum
 from html.parser import HTMLParser
 from typing import Literal
 from urllib.parse import urljoin, urlsplit
@@ -111,10 +112,36 @@ class DiscoveryResult:
     error: str | None = None
 
 
-# A fetcher takes a URL and returns the response body as text, or ``None``
-# when the resource is unavailable for any reason. Keeping it this narrow is
-# what lets the tests stay offline.
-Fetcher = Callable[[str], str | None]
+class FetchOutcome(Enum):
+    """Why a directory listing is unavailable.
+
+    ``ABSENT`` means the archive answered and there is no index here: a
+    missing directory, or the ``403`` served for a directory without one.
+    Discovery treats that as a fact about the case. ``FAILED`` means the
+    archive could not be reached or errored, which says nothing about the
+    case and must not be mistaken for "no runs".
+    """
+
+    ABSENT = "absent"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class FetchResult:
+    """A directory index body, or the reason there is not one."""
+
+    body: str | None = None
+    outcome: FetchOutcome | None = None
+
+    @property
+    def failed(self) -> bool:
+        return self.outcome is FetchOutcome.FAILED
+
+
+# A fetcher takes a URL and a remaining-time budget, and returns the body or
+# the reason it is unavailable. Keeping it this narrow is what lets the tests
+# stay offline.
+Fetcher = Callable[[str, float], FetchResult]
 
 
 # ----------------------------------------------------------------------------
@@ -262,16 +289,29 @@ class _Budget:
         self.deadline = time.monotonic() + deadline_seconds
         self.requests_made = 0
         self.truncated = False
+        self.failed = False
+
+    @property
+    def remaining_seconds(self) -> float:
+        return max(0.0, self.deadline - time.monotonic())
+
+    def spend(self) -> bool:
+        """Charge one request, or report that the budget is exhausted."""
+        if self.requests_made >= self.max_requests or self.remaining_seconds <= 0:
+            self.truncated = True
+            return False
+        self.requests_made += 1
+        return True
 
     def listing(self, fetch: Fetcher, url: str) -> list[str]:
-        if self.requests_made >= self.max_requests or time.monotonic() >= self.deadline:
-            self.truncated = True
+        if not self.spend():
             return []
-        self.requests_made += 1
-        body = fetch(url)
-        if body is None:
+        result = fetch(url, self.remaining_seconds)
+        if result.failed:
+            self.failed = True
+        if result.body is None:
             return []
-        return sorted(parse_directory_index(body))
+        return sorted(parse_directory_index(result.body))
 
 
 def discover_diagnostics_viewers(
@@ -289,7 +329,8 @@ def discover_diagnostics_viewers(
         The case's published diagnostics root, as stored on its ``diagnostic``
         external link.
     fetch
-        Returns a directory index body for a URL, or ``None`` on any failure.
+        Given a URL and the seconds left in the crawl, returns the directory
+        index body or the reason it is unavailable.
     max_requests
         Upper bound on index fetches for this root. Defaults to the configured
         ``diagnostics_viewer_discovery_max_requests``.
@@ -319,11 +360,18 @@ def discover_diagnostics_viewers(
     viewers.extend(_e3sm_diags_viewers(root_url, fetch, budget))
     viewers.extend(_mpas_analysis_viewers(root_url, fetch, budget))
 
+    # A reachable archive with no runs is a fact about the case; an archive we
+    # could not reach is not. Only report the second as an error, and only
+    # when it left us with nothing, so one flaky subdirectory among many good
+    # ones still yields a useful listing.
+    error = "archive_unavailable" if budget.failed and not viewers else None
+
     return DiscoveryResult(
         root_url=root_url,
         viewers=tuple(viewers),
         requests_made=budget.requests_made,
         truncated=budget.truncated,
+        error=error,
     )
 
 
@@ -332,29 +380,108 @@ def discover_diagnostics_viewers(
 # ----------------------------------------------------------------------------
 
 _USER_AGENT = "simboard-diagnostics-viewer-discovery/1.0"
+_MAX_REDIRECTS = 3
+
+
+def _read_index_body(
+    response: httpx.Response, deadline: float, max_bytes: int, url: str
+) -> FetchResult:
+    """Stream one index body, abandoning it on the deadline or the size cap."""
+    chunks: list[bytes] = []
+    size = 0
+    for chunk in response.iter_bytes():
+        if time.monotonic() >= deadline:
+            logger.debug("Diagnostics index timed out mid-body: %s", url)
+            return FetchResult(outcome=FetchOutcome.FAILED)
+        size += len(chunk)
+        if size > max_bytes:
+            logger.debug("Diagnostics index exceeded size cap: %s", url)
+            return FetchResult(outcome=FetchOutcome.FAILED)
+        chunks.append(chunk)
+
+    body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+
+    return FetchResult(body=body)
+
+
+def _classify_index_response(response: httpx.Response) -> FetchResult | None:
+    """Map a non-redirect response to an outcome, or ``None`` to read the body.
+
+    ``403`` is what the archive serves for a directory without an index, and
+    ``404`` for one that does not exist. Both mean "no listing here" rather
+    than "the archive is broken".
+    """
+    if response.status_code in (403, 404):
+        return FetchResult(outcome=FetchOutcome.ABSENT)
+    if response.status_code != 200:
+        return FetchResult(outcome=FetchOutcome.FAILED)
+    if "html" not in response.headers.get("content-type", ""):
+        return FetchResult(outcome=FetchOutcome.ABSENT)
+
+    return None
 
 
 def http_directory_fetcher(client: httpx.Client) -> Fetcher:
-    """Build a fetcher over ``client`` that returns index bodies or ``None``.
+    """Build a fetcher over ``client`` that returns index bodies or a reason.
 
-    Only ``200`` HTML responses count. Anything else, including the ``403`` the
-    archive returns for directories without an index and any transport error,
-    is treated as "no listing here" so one bad directory never fails the whole
-    discovery.
+    Three things this guards, none of which the client options cover on their
+    own:
+
+    * **Total time.** ``httpx``'s read timeout bounds the gap between chunks,
+      not the whole response, so an archive trickling data stays under it
+      forever. The body is streamed and abandoned once the crawl's remaining
+      time runs out.
+    * **Body size.** A directory index is kilobytes. Reading stops past
+      ``diagnostics_viewer_max_index_bytes`` rather than buffering whatever
+      arrives.
+    * **Redirects.** Following them automatically would let an allowed archive
+      point the backend at an unreviewed or internal host. Each hop is
+      validated against the allowlist and charged to the redirect limit.
+
+    Timeouts, transport errors and ``5xx`` are ``FAILED``, which keeps an
+    unreachable archive from being cached as "no runs".
     """
 
-    def fetch(url: str) -> str | None:
-        try:
-            response = client.get(url, headers={"User-Agent": _USER_AGENT})
-        except httpx.HTTPError as exc:
-            logger.debug("Diagnostics index fetch failed for %s: %s", url, exc)
-            return None
-        if response.status_code != 200:
-            return None
-        content_type = response.headers.get("content-type", "")
-        if "html" not in content_type:
-            return None
-        return response.text
+    def fetch(url: str, remaining_seconds: float) -> FetchResult:
+        deadline = time.monotonic() + remaining_seconds
+        max_bytes = settings.diagnostics_viewer_max_index_bytes
+        target = url
+
+        for _hop in range(_MAX_REDIRECTS + 1):
+            if time.monotonic() >= deadline:
+                return FetchResult(outcome=FetchOutcome.FAILED)
+            if not is_allowed_archive_url(target):
+                logger.warning(
+                    "Diagnostics index redirect left the reviewed archives: %s", target
+                )
+                return FetchResult(outcome=FetchOutcome.FAILED)
+
+            try:
+                with client.stream(
+                    "GET",
+                    target,
+                    headers={"User-Agent": _USER_AGENT},
+                    follow_redirects=False,
+                ) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            return FetchResult(outcome=FetchOutcome.FAILED)
+                        target = str(response.url.join(location))
+                        continue
+
+                    classified = _classify_index_response(response)
+                    if classified is not None:
+                        return classified
+
+                    return _read_index_body(response, deadline, max_bytes, url)
+            except httpx.HTTPError as exc:
+                logger.debug("Diagnostics index fetch failed for %s: %s", url, exc)
+                return FetchResult(outcome=FetchOutcome.FAILED)
+
+        logger.warning("Diagnostics index exceeded redirect limit: %s", url)
+
+        return FetchResult(outcome=FetchOutcome.FAILED)
 
     return fetch
 
@@ -427,7 +554,7 @@ def discover_with_cache(root_url: str) -> DiscoveryResult:
         return cached
 
     timeout = settings.diagnostics_viewer_discovery_timeout_seconds
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=False) as client:
         result = discover_diagnostics_viewers(root_url, http_directory_fetcher(client))
 
     if result.error is None:

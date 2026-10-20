@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.features.catalog.diagnostics_viewers import (
     DiscoveryCache,
     DiscoveryResult,
+    FetchOutcome,
+    FetchResult,
     discover_diagnostics_viewers,
     discover_with_cache,
     discovery_cache,
@@ -85,8 +87,19 @@ FAKE_ARCHIVE: dict[str, str] = {
 }
 
 
-def fake_fetch(url: str) -> str | None:
-    return FAKE_ARCHIVE.get(url)
+def fake_fetch(url: str, remaining_seconds: float = 30.0) -> FetchResult:
+    body = FAKE_ARCHIVE.get(url)
+    if body is None:
+        return FetchResult(outcome=FetchOutcome.ABSENT)
+    return FetchResult(body=body)
+
+
+def absent_fetch(_url: str, _remaining: float = 30.0) -> FetchResult:
+    return FetchResult(outcome=FetchOutcome.ABSENT)
+
+
+def failing_fetch(_url: str, _remaining: float = 30.0) -> FetchResult:
+    return FetchResult(outcome=FetchOutcome.FAILED)
 
 
 @pytest.fixture(autouse=True)
@@ -224,18 +237,36 @@ class TestDiscoverDiagnosticsViewers:
         assert not any("scratch" in u or "logs" in u or "README" in u for u in urls)
 
     def test_missing_tool_directories_yield_empty_not_error(self):
-        result = discover_diagnostics_viewers(LCRC_ROOT, lambda _url: None)
+        result = discover_diagnostics_viewers(LCRC_ROOT, absent_fetch)
         assert result.viewers == ()
         assert result.error is None
         # One probe each for e3sm_diags/ and mpas_analysis/, nothing deeper.
         assert result.requests_made == 2
 
+    def test_unreachable_archive_is_an_error_not_an_empty_listing(self):
+        """An outage must not be recorded as "this case has no runs"."""
+        result = discover_diagnostics_viewers(LCRC_ROOT, failing_fetch)
+
+        assert result.viewers == ()
+        assert result.error == "archive_unavailable"
+
+    def test_one_failed_subdirectory_does_not_discard_the_rest(self):
+        def flaky(url: str, remaining: float = 30.0) -> FetchResult:
+            if url.endswith("/mpas_analysis/"):
+                return FetchResult(outcome=FetchOutcome.FAILED)
+            return fake_fetch(url, remaining)
+
+        result = discover_diagnostics_viewers(LCRC_ROOT, flaky)
+
+        assert result.error is None
+        assert [v.tool for v in result.viewers] == ["e3sm_diags"] * 5
+
     def test_refuses_roots_outside_reviewed_archives_without_fetching(self):
         calls: list[str] = []
 
-        def spy(url: str) -> str | None:
+        def spy(url: str, _remaining: float = 30.0) -> FetchResult:
             calls.append(url)
-            return None
+            return FetchResult(outcome=FetchOutcome.ABSENT)
 
         result = discover_diagnostics_viewers("https://evil.example/archive/case", spy)
         assert result.error == "root_not_in_reviewed_archive"
@@ -256,9 +287,9 @@ class TestDiscoverDiagnosticsViewers:
         # allows the first three fetches and then stops, keeping what it has.
         clock = {"now": 1000.0}
 
-        def slow_fetch(url: str) -> str | None:
+        def slow_fetch(url: str, _remaining: float = 30.0) -> FetchResult:
             clock["now"] += 3.0
-            return FAKE_ARCHIVE.get(url)
+            return fake_fetch(url)
 
         with patch(
             "app.features.catalog.diagnostics_viewers.time.monotonic",
@@ -286,8 +317,9 @@ class TestDiscoverDiagnosticsViewers:
 
 
 class TestHttpDirectoryFetcher:
-    def _client(self, handler) -> httpx.Client:
-        return httpx.Client(transport=httpx.MockTransport(handler))
+    def _fetch(self, handler, **client_kwargs):
+        client = httpx.Client(transport=httpx.MockTransport(handler), **client_kwargs)
+        return http_directory_fetcher(client)
 
     def test_returns_body_for_html_200_and_sets_user_agent(self):
         seen: dict[str, str] = {}
@@ -298,33 +330,143 @@ class TestHttpDirectoryFetcher:
                 200, text="<a href='x/'>x/</a>", headers={"content-type": "text/html"}
             )
 
-        fetch = http_directory_fetcher(self._client(handler))
-        assert fetch("https://x.test/") == "<a href='x/'>x/</a>"
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
+        assert result.body == "<a href='x/'>x/</a>"
+        assert result.failed is False
         assert seen["ua"].startswith("simboard-diagnostics-viewer-discovery/")
 
-    @pytest.mark.parametrize("status", [403, 404, 500])
-    def test_non_200_is_no_listing(self, status):
-        fetch = http_directory_fetcher(
-            self._client(lambda _r: httpx.Response(status, text="<html>denied</html>"))
+    @pytest.mark.parametrize("status", [403, 404])
+    def test_archive_saying_no_index_is_absent_not_failure(self, status):
+        """403/404 are the archive answering; they must not look like an outage."""
+        result = self._fetch(lambda _r: httpx.Response(status, text="denied"))(
+            LCRC_ROOT + "/mpas_analysis/", 30.0
         )
-        assert fetch("https://x.test/") is None
+        assert result.outcome is FetchOutcome.ABSENT
+        assert result.failed is False
 
-    def test_non_html_200_is_no_listing(self):
-        fetch = http_directory_fetcher(
-            self._client(
-                lambda _r: httpx.Response(
-                    200, content=b"\x89PNG", headers={"content-type": "image/png"}
-                )
+    @pytest.mark.parametrize("status", [500, 502, 503])
+    def test_server_errors_are_failures(self, status):
+        result = self._fetch(lambda _r: httpx.Response(status, text="boom"))(
+            LCRC_ROOT + "/e3sm_diags/", 30.0
+        )
+        assert result.failed is True
+
+    def test_non_html_200_is_absent(self):
+        result = self._fetch(
+            lambda _r: httpx.Response(
+                200, content=b"\x89PNG", headers={"content-type": "image/png"}
             )
-        )
-        assert fetch("https://x.test/") is None
+        )(LCRC_ROOT + "/e3sm_diags/", 30.0)
+        assert result.outcome is FetchOutcome.ABSENT
 
-    def test_transport_errors_are_no_listing(self):
+    def test_transport_errors_are_failures(self):
         def handler(_request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectTimeout("timed out")
 
-        fetch = http_directory_fetcher(self._client(handler))
-        assert fetch("https://x.test/") is None
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
+        assert result.failed is True
+
+    def test_body_larger_than_the_cap_is_abandoned(self):
+        huge = b"<a href='x/'>x/</a>" * 200_000
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, content=huge, headers={"content-type": "text/html"}
+            )
+
+        with patch.object(settings, "diagnostics_viewer_max_index_bytes", 1024):
+            result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
+
+        assert result.failed is True
+
+    def test_body_that_outlasts_the_deadline_is_abandoned(self):
+        """A trickling response stays under the read timeout but not the deadline."""
+        clock = {"now": 0.0}
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            def stream():
+                for _ in range(10):
+                    clock["now"] += 1.0
+                    yield b"<a href='x/'>x/</a>"
+
+            return httpx.Response(
+                200, content=stream(), headers={"content-type": "text/html"}
+            )
+
+        with patch(
+            "app.features.catalog.diagnostics_viewers.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 3.0)
+
+        assert result.failed is True
+
+    def test_redirect_within_the_archive_is_followed(self):
+        target = LCRC_ROOT + "/e3sm_diags/"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if str(request.url).endswith("/e3sm_diags"):
+                return httpx.Response(301, headers={"location": target})
+            return httpx.Response(
+                200,
+                text="<a href='sub/'>sub/</a>",
+                headers={"content-type": "text/html"},
+            )
+
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags", 30.0)
+        assert result.body == "<a href='sub/'>sub/</a>"
+
+    @pytest.mark.parametrize(
+        "location",
+        [
+            "https://evil.example/secrets/",
+            "http://169.254.169.254/latest/meta-data/",
+            "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/ac.someone/",
+        ],
+    )
+    def test_redirect_off_the_reviewed_archives_is_refused(self, location):
+        """An allowed host must not be able to steer the backend elsewhere."""
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            if len(requested) == 1:
+                return httpx.Response(302, headers={"location": location})
+            return httpx.Response(200, text="should never be read")
+
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
+
+        assert result.failed is True
+        assert len(requested) == 1
+
+    def test_no_request_is_made_once_the_deadline_has_passed(self):
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(200, text="", headers={"content-type": "text/html"})
+
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 0.0)
+
+        assert result.failed is True
+        assert requested == []
+
+    def test_redirect_without_a_location_header_is_a_failure(self):
+        result = self._fetch(lambda _r: httpx.Response(302))(
+            LCRC_ROOT + "/e3sm_diags/", 30.0
+        )
+        assert result.failed is True
+
+    def test_redirect_loop_stops_at_the_limit(self):
+        hops: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            hops.append(str(request.url))
+            return httpx.Response(302, headers={"location": LCRC_ROOT + "/e3sm_diags/"})
+
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
+        assert result.failed is True
+        assert len(hops) <= 4
 
 
 # ----------------------------------------------------------------------------

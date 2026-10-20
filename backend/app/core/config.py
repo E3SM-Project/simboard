@@ -171,6 +171,8 @@ class Settings(BaseSettings):
     diagnostics_viewer_discovery_max_requests: int = 64
     diagnostics_viewer_cache_ttl_seconds: float = 600.0
     diagnostics_viewer_cache_max_entries: int = 200
+    # A directory index is kilobytes; this only bounds a pathological response.
+    diagnostics_viewer_max_index_bytes: int = 2_000_000
 
     @property
     def diagnostics_viewer_allowed_url_prefixes_list(self) -> list[str]:
