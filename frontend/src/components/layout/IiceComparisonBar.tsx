@@ -104,7 +104,7 @@ export const IiceComparisonBar = () => {
       aria-label="IICE comparison"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur"
     >
-      <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-3 md:px-6">
+      <div className="mx-auto flex max-h-[45vh] max-w-[1440px] flex-col gap-3 overflow-y-auto px-4 py-3 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-950">IICE comparison</h2>
