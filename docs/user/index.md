@@ -36,6 +36,13 @@ SimBoard can link a catalog case to published zppy diagnostics output. Follow
 the [diagnostics publishing guide](diagnostics.md) to configure zppy, prepare
 the expected archive layout, and troubleshoot missing or incorrect links.
 
+## Compare diagnostics across cases
+
+Once a case has linked diagnostics, SimBoard lists the individual e3sm_diags and
+MPAS-Analysis runs published for it. Collect runs from several cases and open
+them side by side in IICE. See
+[Compare Diagnostics Across Cases](compare-diagnostics.md).
+
 ## Need help?
 
 For missing cases, archive-range requests, or ingestion questions, contact the

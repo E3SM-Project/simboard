@@ -53,4 +53,6 @@ If output is deleted or moved, restore it at the original URL to keep the link w
 
 **The link no longer opens.** Restore the output at its original URL, or manually update or remove the SimBoard link.
 
+Once the link appears, the case page also lists the individual diagnostics runs beneath it and can open several cases side by side; see [Compare Diagnostics Across Cases](compare-diagnostics.md).
+
 For SimBoard scanner implementation details, see [Diagnostics Linkage Architecture](../architecture/diagnostics-linkage.md).
