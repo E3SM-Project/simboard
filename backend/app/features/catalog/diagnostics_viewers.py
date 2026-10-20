@@ -249,15 +249,22 @@ def _mpas_analysis_viewers(
 
 
 class _Budget:
-    """Count requests and stop listing once the budget is spent."""
+    """Stop listing once either the request count or the wall-clock budget is spent.
 
-    def __init__(self, max_requests: int) -> None:
+    The per-request timeout bounds one slow response; the deadline bounds the
+    whole crawl, so a sluggish archive can never hold a case page hostage.
+    Whatever was found before the budget ran out is still returned, flagged
+    ``truncated``.
+    """
+
+    def __init__(self, max_requests: int, deadline_seconds: float) -> None:
         self.max_requests = max_requests
+        self.deadline = time.monotonic() + deadline_seconds
         self.requests_made = 0
         self.truncated = False
 
     def listing(self, fetch: Fetcher, url: str) -> list[str]:
-        if self.requests_made >= self.max_requests:
+        if self.requests_made >= self.max_requests or time.monotonic() >= self.deadline:
             self.truncated = True
             return []
         self.requests_made += 1
@@ -272,6 +279,7 @@ def discover_diagnostics_viewers(
     fetch: Fetcher,
     *,
     max_requests: int | None = None,
+    deadline_seconds: float | None = None,
 ) -> DiscoveryResult:
     """Crawl one archive root and return the IICE-addressable viewers under it.
 
@@ -285,6 +293,9 @@ def discover_diagnostics_viewers(
     max_requests
         Upper bound on index fetches for this root. Defaults to the configured
         ``diagnostics_viewer_discovery_max_requests``.
+    deadline_seconds
+        Upper bound on total wall-clock time for this root. Defaults to the
+        configured ``diagnostics_viewer_discovery_deadline_seconds``.
 
     Notes
     -----
@@ -300,7 +311,10 @@ def discover_diagnostics_viewers(
             error="root_not_in_reviewed_archive",
         )
 
-    budget = _Budget(max_requests or settings.diagnostics_viewer_discovery_max_requests)
+    budget = _Budget(
+        max_requests or settings.diagnostics_viewer_discovery_max_requests,
+        deadline_seconds or settings.diagnostics_viewer_discovery_deadline_seconds,
+    )
     viewers: list[DiagnosticsViewer] = []
     viewers.extend(_e3sm_diags_viewers(root_url, fetch, budget))
     viewers.extend(_mpas_analysis_viewers(root_url, fetch, budget))
@@ -353,9 +367,11 @@ class DiscoveryCache:
     enough for now; the cache is a performance aid, not a source of truth.
     """
 
-    def __init__(self, ttl_seconds: float) -> None:
+    def __init__(self, ttl_seconds: float, max_entries: int = 200) -> None:
         self._ttl = ttl_seconds
+        self._max_entries = max_entries
         self._lock = threading.Lock()
+        # Insertion-ordered, so the oldest entry is always first.
         self._entries: dict[str, tuple[float, DiscoveryResult]] = {}
 
     def get(self, root_url: str) -> DiscoveryResult | None:
@@ -371,15 +387,33 @@ class DiscoveryCache:
             return result
 
     def put(self, root_url: str, result: DiscoveryResult) -> None:
+        now = time.monotonic()
         with self._lock:
-            self._entries[root_url] = (time.monotonic() + self._ttl, result)
+            self._entries.pop(root_url, None)
+            expired = [
+                key
+                for key, (expires_at, _) in self._entries.items()
+                if expires_at < now
+            ]
+            for key in expired:
+                del self._entries[key]
+            while len(self._entries) >= self._max_entries:
+                del self._entries[next(iter(self._entries))]
+            self._entries[root_url] = (now + self._ttl, result)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
 
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
 
 
-discovery_cache = DiscoveryCache(settings.diagnostics_viewer_cache_ttl_seconds)
+discovery_cache = DiscoveryCache(
+    settings.diagnostics_viewer_cache_ttl_seconds,
+    settings.diagnostics_viewer_cache_max_entries,
+)
 
 
 def discover_with_cache(root_url: str) -> DiscoveryResult:

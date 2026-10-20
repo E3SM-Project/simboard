@@ -164,9 +164,13 @@ class Settings(BaseSettings):
         "https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
         "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive",
     ]
-    diagnostics_viewer_discovery_timeout_seconds: float = 10.0
+    # One slow response is bounded by the per-request timeout; the whole
+    # crawl by the deadline. Worst case is roughly the sum of the two.
+    diagnostics_viewer_discovery_timeout_seconds: float = 5.0
+    diagnostics_viewer_discovery_deadline_seconds: float = 8.0
     diagnostics_viewer_discovery_max_requests: int = 64
     diagnostics_viewer_cache_ttl_seconds: float = 600.0
+    diagnostics_viewer_cache_max_entries: int = 200
 
     @property
     def diagnostics_viewer_allowed_url_prefixes_list(self) -> list[str]:

@@ -251,6 +251,29 @@ class TestDiscoverDiagnosticsViewers:
         assert all(v.tool == "e3sm_diags" for v in result.viewers)
         assert len(result.viewers) == 2
 
+    def test_deadline_truncates_a_slow_archive(self):
+        # Each listing "takes" 3 seconds on a fake clock; an 8 s deadline
+        # allows the first three fetches and then stops, keeping what it has.
+        clock = {"now": 1000.0}
+
+        def slow_fetch(url: str) -> str | None:
+            clock["now"] += 3.0
+            return FAKE_ARCHIVE.get(url)
+
+        with patch(
+            "app.features.catalog.diagnostics_viewers.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            result = discover_diagnostics_viewers(
+                LCRC_ROOT, slow_fetch, deadline_seconds=8.0
+            )
+
+        assert result.truncated is True
+        assert result.requests_made == 3
+        # e3sm_diags/, then two subsections: their runs were found before time ran out.
+        assert len(result.viewers) == 3
+        assert all(v.tool == "e3sm_diags" for v in result.viewers)
+
     def test_root_trailing_slash_is_normalized(self):
         with_slash = discover_diagnostics_viewers(LCRC_ROOT + "/", fake_fetch)
         without = discover_diagnostics_viewers(LCRC_ROOT, fake_fetch)
@@ -324,6 +347,31 @@ class TestDiscoveryCache:
             clock.return_value = 10**9
             assert cache.get("r") is None
         assert cache.get("missing") is None
+
+    def test_evicts_oldest_once_full(self):
+        cache = DiscoveryCache(ttl_seconds=60, max_entries=2)
+        cache.put("a", self._result("a"))
+        cache.put("b", self._result("b"))
+        cache.put("c", self._result("c"))
+        assert len(cache) == 2
+        assert cache.get("a") is None
+        assert cache.get("b") is not None and cache.get("c") is not None
+
+    def test_put_purges_expired_before_evicting_live_entries(self):
+        cache = DiscoveryCache(ttl_seconds=60, max_entries=2)
+        with patch("app.features.catalog.diagnostics_viewers.time.monotonic") as clock:
+            clock.return_value = 0.0
+            cache.put("stale", self._result("stale"))
+            clock.return_value = 30.0
+            cache.put("live", self._result("live"))
+            clock.return_value = (
+                70.0  # "stale" (expires 60) is gone, "live" (expires 90) is not
+            )
+            cache.put("new", self._result("new"))
+            assert len(cache) == 2
+            assert cache.get("stale") is None
+            assert cache.get("live") is not None
+            assert cache.get("new") is not None
 
     def test_discover_with_cache_reuses_result_and_skips_errors(self):
         calls = {"n": 0}
