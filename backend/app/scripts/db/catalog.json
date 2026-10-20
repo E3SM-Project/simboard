@@ -2,6 +2,13 @@
   {
     "caseName": "E3SMv1_piControl_DECK_r1i1p1f1",
     "caseGroup": "E3SM Control Group",
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive/production/v3.LR/v3.LR.piControl",
+        "label": "zppy diagnostics"
+      }
+    ],
     "sourceDirectories": [
       {
         "kind": "staging",
@@ -119,6 +126,13 @@
   {
     "caseName": "E3SMv2_HIST_CMIP6_r2i1p1f1",
     "caseGroup": "E3SM CMIP6",
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive/production/v3.LR/v3.LR.historical_0101",
+        "label": "zppy diagnostics"
+      }
+    ],
     "sourceDirectories": [
       {
         "kind": "staging",
@@ -246,6 +260,13 @@
   {
     "caseName": "E3SMv1_AMIP_DECK_r4i1p1f1",
     "caseGroup": "E3SM AMIP Group",
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive/production/v3.NARRM.amip_0101",
+        "label": "zppy diagnostics"
+      }
+    ],
     "sourceDirectories": [
       {
         "kind": "archive",
@@ -364,6 +385,13 @@
   {
     "caseName": "E3SMv3_piClim_DECK_r6i1p1f1",
     "caseGroup": "E3SM Control Group",
+    "links": [
+      {
+        "kind": "diagnostic",
+        "url": "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive/production/v3.LR/v3.LR.piClim-control-iceini",
+        "label": "zppy diagnostics"
+      }
+    ],
     "sourceDirectories": [
       {
         "kind": "archive",
