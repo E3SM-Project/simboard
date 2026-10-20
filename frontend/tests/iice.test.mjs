@@ -126,6 +126,30 @@ test('viewer urls lose trailing slashes, as the CGI re-emits them', () => {
   assert.equal(normalizeIiceViewerUrl('  https://x.test/viewer  '), 'https://x.test/viewer');
 });
 
+test('validation rejects mixing model-vs-obs and model-vs-model runs', () => {
+  // IICE drives one comparison from one template, so these cannot share a link.
+  const mixed = validateIiceLink({
+    tool: 'e3sm_diags',
+    entries: [
+      { url: 'a', label: 'obs run' },
+      { url: 'b', label: 'mvm run', referenceCase: 'v3.LR.piControl' },
+    ],
+  });
+  assert.deepEqual(
+    mixed.map((p) => p.code),
+    ['mixed_comparison_modes'],
+  );
+
+  const allModel = validateIiceLink({
+    tool: 'e3sm_diags',
+    entries: [
+      { url: 'a', label: 'x', referenceCase: 'v3.LR.piControl' },
+      { url: 'b', label: 'y', referenceCase: 'v3.LR.piControl' },
+    ],
+  });
+  assert.deepEqual(allModel, []);
+});
+
 test('validation asks for at least two entries', () => {
   assert.deepEqual(
     validateIiceLink({ tool: 'e3sm_diags', entries: [{ url: 'u', label: 'l' }] }).map(

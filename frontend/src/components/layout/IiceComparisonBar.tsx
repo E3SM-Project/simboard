@@ -14,6 +14,24 @@ const TOOL_LABELS: Record<IiceTool, string> = {
   mpas_analysis: 'MPAS-Analysis',
 };
 
+/**
+ * IICE drives a whole comparison from one template, so model-vs-observations
+ * and model-vs-model runs cannot share a link. Group by tool and mode, and
+ * build a link per group.
+ */
+type GroupKey = `${IiceTool}:${'obs' | 'model'}`;
+
+const groupKeyFor = (entry: IiceBasketEntry): GroupKey =>
+  `${entry.tool}:${entry.comparison === 'model_vs_model' ? 'model' : 'obs'}`;
+
+const groupLabel = (key: GroupKey): string => {
+  const [tool, mode] = key.split(':') as [IiceTool, 'obs' | 'model'];
+  if (tool === 'mpas_analysis') {
+    return TOOL_LABELS[tool];
+  }
+  return `${TOOL_LABELS[tool]} · ${mode === 'model' ? 'model vs model' : 'model vs observations'}`;
+};
+
 const period = (entry: IiceBasketEntry): string =>
   entry.startYear != null && entry.endYear != null
     ? `${String(entry.startYear).padStart(4, '0')}-${String(entry.endYear).padStart(4, '0')}`
@@ -56,13 +74,14 @@ export const IiceComparisonBar = () => {
   }, [visible, collapsed, entries.length]);
 
   const groups = useMemo(() => {
-    const byTool = new Map<IiceTool, IiceBasketEntry[]>();
+    const byGroup = new Map<GroupKey, IiceBasketEntry[]>();
     entries.forEach((entry) => {
-      const list = byTool.get(entry.tool) ?? [];
+      const key = groupKeyFor(entry);
+      const list = byGroup.get(key) ?? [];
       list.push(entry);
-      byTool.set(entry.tool, list);
+      byGroup.set(key, list);
     });
-    return [...byTool.entries()];
+    return [...byGroup.entries()];
   }, [entries]);
 
   if (!visible) {
@@ -106,10 +125,10 @@ export const IiceComparisonBar = () => {
 
         {collapsed ? null : (
           <div className="flex flex-col gap-3">
-            {groups.map(([tool, groupEntries]) => (
+            {groups.map(([key, groupEntries]) => (
               <ToolGroup
-                key={tool}
-                tool={tool}
+                key={key}
+                groupKey={key}
                 entries={groupEntries}
                 onRemove={remove}
                 onUpdate={update}
@@ -124,14 +143,15 @@ export const IiceComparisonBar = () => {
 };
 
 interface ToolGroupProps {
-  tool: IiceTool;
+  groupKey: GroupKey;
   entries: IiceBasketEntry[];
   onRemove: (url: string) => void;
   onUpdate: (url: string, patch: Partial<Pick<IiceBasketEntry, 'label' | 'referenceCase'>>) => void;
   onCopy: (link: string) => void;
 }
 
-const ToolGroup = ({ tool, entries, onRemove, onUpdate, onCopy }: ToolGroupProps) => {
+const ToolGroup = ({ groupKey, entries, onRemove, onUpdate, onCopy }: ToolGroupProps) => {
+  const tool = groupKey.split(':')[0] as IiceTool;
   const missingReference = entries.filter(
     (entry) => entry.comparison === 'model_vs_model' && entry.referenceCase.trim() === '',
   );
@@ -156,7 +176,7 @@ const ToolGroup = ({ tool, entries, onRemove, onUpdate, onCopy }: ToolGroupProps
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-slate-50/60 p-2.5 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 flex-1 space-y-1.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-          {TOOL_LABELS[tool]}{' '}
+          {groupLabel(groupKey)}{' '}
           <span className="font-normal normal-case text-slate-500">
             {entries.length}/{IICE_BASKET_MAX_PER_TOOL}
           </span>

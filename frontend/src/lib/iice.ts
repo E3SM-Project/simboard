@@ -72,7 +72,7 @@ export interface IiceLinkOptions {
 }
 
 export interface IiceLinkProblem {
-  code: 'too_few_entries';
+  code: 'too_few_entries' | 'mixed_comparison_modes';
   message: string;
 }
 
@@ -116,6 +116,19 @@ export const validateIiceLink = (options: IiceLinkOptions): IiceLinkProblem[] =>
     problems.push({
       code: 'too_few_entries',
       message: 'IICE compares two or more diagnostics sets; add at least one more case.',
+    });
+  }
+
+  // One comparison is driven by one IICE template, so a model-vs-observations
+  // run and a model-vs-model run cannot be rendered together.
+  const modes = new Set(
+    options.entries.map((entry) => (entry.referenceCase?.trim() ? 'model' : 'obs')),
+  );
+  if (modes.size > 1) {
+    problems.push({
+      code: 'mixed_comparison_modes',
+      message:
+        'IICE cannot render model-vs-observations and model-vs-model runs together; compare them separately.',
     });
   }
 
@@ -166,6 +179,7 @@ const resolveDconfig = (options: IiceLinkOptions, entries: IiceEntry[]): string 
   if (options.tool === 'mpas_analysis') {
     return 'wcycl';
   }
+
   return entries.some((entry) => entry.referenceCase?.trim()) ? 'vsModel' : 'vsObs';
 };
 
