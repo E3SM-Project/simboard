@@ -11,8 +11,7 @@ const executionQueryKeys = {
     hpcUsername: string,
     caseName: string,
     executionId: string,
-  ) =>
-    ['executions', 'readable-detail', machineName, hpcUsername, caseName, executionId] as const,
+  ) => ['executions', 'readable-detail', machineName, hpcUsername, caseName, executionId] as const,
   history: (id: string) => ['executions', 'detail', id, 'history'] as const,
 };
 
@@ -28,6 +27,7 @@ export const catalogQueryKeys = {
     readableDetail: (machineName: string, hpcUsername: string, caseName: string) =>
       ['cases', 'readable-detail', machineName, hpcUsername, caseName] as const,
     history: (id: string) => ['cases', 'detail', id, 'history'] as const,
+    diagnosticsViewers: (id: string) => ['cases', 'detail', id, 'diagnostics-viewers'] as const,
   },
   executions: executionQueryKeys,
   machines: ['machines'] as const,
