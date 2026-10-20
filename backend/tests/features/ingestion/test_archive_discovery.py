@@ -1685,6 +1685,74 @@ def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
     assert results[4].eligible_keys == set()
 
 
+@pytest.mark.parametrize("stored_outcome", ["rejected_incomplete", "rejected_invalid"])
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError("temporary"),
+        PermissionError("temporary"),
+        OSError("temporary"),
+    ],
+)
+def test_cached_rejection_cannot_settle_after_transient_revalidation(
+    tmp_path: Path, stored_outcome: str, error: OSError
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    execution_dir = archive_root / snapshot_key / "COMPLETED" / "case-a" / "100.1-1"
+    execution_dir.mkdir(parents=True)
+    state = _fresh_state()
+    state["discovery_results"]["case-a"] = [
+        {
+            "case_identity": "case-a",
+            "execution_id": "100.1-1",
+            "outcome": stored_outcome,
+        }
+    ]
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+    )
+    results: list[ExecutionDiscoveryResult] = []
+
+    def locator(path: str) -> object:
+        assert path == str(execution_dir)
+        raise error
+
+    _, candidates, _, stats, snapshot_scan = discovery_module._scan_archive(
+        config, state, locator, discovery_results=results
+    )
+
+    assert candidates == []
+    assert stats["skipped_transient"] == 1
+    assert results == []
+    assert (
+        discovery_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        == set()
+    )
+
+    # Without a checkpoint, a normal scan retries the same execution.
+    _, candidates, _, stats, snapshot_scan = discovery_module._scan_archive(
+        config, state, lambda path: {}, discovery_results=results
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+    assert [result.outcome for result in results] == ["accepted"]
+    assert (
+        discovery_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        == set()
+    )
+
+
 def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:
     snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
     snapshot_scan = discovery_module.ArchiveSnapshotScan(
