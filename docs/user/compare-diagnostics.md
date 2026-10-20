@@ -45,9 +45,10 @@ link does today.
    The bar follows you between pages, so you can search the catalog in between.
 4. Select **Compare in IICE**.
 
-Compare the same diagnostics from each case. Adding `model vs observations` from
-one case and `model vs model` from another produces a comparison IICE cannot
-render.
+Compare the same kind of diagnostics from each case. IICE renders a whole
+comparison from one template, so model-vs-observations and model-vs-model runs
+cannot appear in the same comparison; the bar keeps them in separate groups with
+a link each.
 
 IICE opens with the cases side by side and the familiar e3sm_diags navigation:
 choose a plot set, a variable, and a season, or switch between total fields and
@@ -68,11 +69,15 @@ it, for sharing in email or on a Confluence page.
 | **Clear** | Empties the comparison. |
 | `×` on a chip | Removes one run. |
 
-E3SM Diags and MPAS-Analysis are compared in separate IICE pages, so the bar groups
-them and builds a link for each. The counter on each group, such as
-`E3SM DIAGS 2/6`, shows how many runs are staged. Six per group is the practical
-limit: IICE places every case in a single row across the page, and beyond six the
-plots are too small to read.
+The bar builds one link per comparison: E3SM Diags and MPAS-Analysis open in
+different IICE pages, and model-vs-observations and model-vs-model runs use
+different templates. Each group is labelled and counted, such as
+`E3SM DIAGS · MODEL VS OBSERVATIONS 2/6`. Six per group is the practical limit:
+IICE places every case in a single row across the page, and beyond six the plots
+are too small to read.
+
+On a short window the bar scrolls internally rather than growing past the edge
+of the screen.
 
 Your selection is kept in the browser, so it survives navigation and page reloads,
 and is not shared between browsers or machines.
