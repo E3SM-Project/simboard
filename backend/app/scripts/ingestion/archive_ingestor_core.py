@@ -233,6 +233,8 @@ class IngestorConfig:
     dry_run_use_remote_state: bool = True
     # Optional host filesystem root used only for source directory observations.
     source_root: Path | None = None
+    # Optional single execution to discover without snapshot checkpoint updates.
+    execution_dir: Path | None = None
 
 
 class IngestionRequestError(Exception):
@@ -501,6 +503,7 @@ def _build_config_from_env(
     source_root = _optional_source_root(source_root_env_name)
 
     machine_name = _required_config_value("MACHINE_NAME", machine_name_override)
+    execution_dir = _configured_execution_dir(archive_root)
     dry_run = _parse_bool(os.getenv("DRY_RUN"), default=True)
     dry_run_use_remote_state = _parse_bool(
         os.getenv("DRY_RUN_USE_REMOTE_STATE"), default=True
@@ -570,7 +573,27 @@ def _build_config_from_env(
         request_timeout_seconds=timeout_seconds,
         archive_year_start=archive_year_start,
         archive_year_end=archive_year_end,
+        execution_dir=execution_dir,
     )
+
+
+def _configured_execution_dir(archive_root: Path) -> Path | None:
+    """Validate an explicit selection before any API access or discovery."""
+    value = os.getenv("EXECUTION_DIR", "").strip()
+    if not value:
+        return None
+    execution_dir = Path(value)
+    if not execution_dir.is_absolute():
+        raise ValueError("EXECUTION_DIR must be an absolute path")
+    execution_dir = execution_dir.resolve()
+    if not execution_dir.is_relative_to(archive_root) or execution_dir == archive_root:
+        raise ValueError("EXECUTION_DIR must be beneath the configured scan root")
+    if not execution_dir.is_dir():
+        raise ValueError("EXECUTION_DIR must be an existing directory")
+    if not re.fullmatch(r"\d+\.\d+-\d+", execution_dir.name):
+        raise ValueError("EXECUTION_DIR must name an execution directory")
+
+    return execution_dir
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:

@@ -76,11 +76,14 @@ def test_validate_run_preconditions_logs_failures(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("single_execution", [False, True])
 def test_startup_configuration_has_no_derived_urls_or_block_markers(
     tmp_path: Path,
+    single_execution: bool,
 ) -> None:
     events: list[tuple[str, dict[str, Any]]] = []
-    config = _config(tmp_path, dry_run=True)
+    execution_dir = tmp_path / "user" / "case" / "100.1-1" if single_execution else None
+    config = replace(_config(tmp_path, dry_run=True), execution_dir=execution_dir)
     _log_startup_configuration(
         config,
         log_event_fn=lambda event, fields=None: events.append((event, fields or {})),
@@ -94,6 +97,7 @@ def test_startup_configuration_has_no_derived_urls_or_block_markers(
                 "archive_root": str(tmp_path),
                 "archive_year_start": None,
                 "archive_year_end": None,
+                "execution_dir": str(execution_dir) if execution_dir else None,
             },
         ),
         (

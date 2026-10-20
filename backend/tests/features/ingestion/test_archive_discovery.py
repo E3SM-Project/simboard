@@ -34,6 +34,81 @@ _discover_case_executions = discovery_module._discover_case_executions
 _validate_execution_dir = discovery_module._validate_execution_dir
 
 
+@pytest.mark.parametrize("invalid", [False, True])
+def test_single_execution_ignores_completed_snapshot(tmp_path, invalid) -> None:
+    root = tmp_path / "OLD_PERF"
+    snapshot = "2026-10/performance_archive_2026_10_12_10_02_55"
+    case = root / snapshot / "COMPLETED" / "user" / "case"
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    (case / "101.1-1").mkdir()
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="test-token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+        execution_dir=execution,
+    )
+    visited = []
+
+    def locate(_):
+        if invalid:
+            raise IncompleteArchiveError([])
+        return {}
+
+    _, candidates, _, stats, snapshot_scan = discovery_module._scan_archive(
+        config,
+        _fresh_state(),
+        metadata_locator=locate,
+        completed_snapshot_keys={snapshot},
+        observed_execution_paths=visited,
+    )
+
+    assert len(candidates) == (0 if invalid else 1)
+    if not invalid:
+        assert candidates[0].new_execution_ids == [execution.name]
+    assert stats["skipped_incomplete"] == int(invalid)
+    assert visited == [(case, execution.name)]
+    assert stats["execution_dirs_scanned"] == 1
+    assert not snapshot_scan.eligible_keys
+
+
+def test_single_execution_rejects_excluded_archive_month(tmp_path) -> None:
+    root = tmp_path / "OLD_PERF"
+    execution = (
+        root
+        / "2024-12"
+        / "performance_archive_2024_12_12_10_02_55"
+        / "COMPLETED"
+        / "user"
+        / "case"
+        / "100.1-1"
+    )
+    execution.mkdir(parents=True)
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="test-token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+        execution_dir=execution,
+    )
+
+    with pytest.raises(ValueError, match="outside the configured archive range"):
+        discovery_module._scan_archive(config, _fresh_state(), lambda _: {})
+
+
 @pytest.mark.parametrize(
     ("execution_id", "stored_outcome", "error", "expected_grouped", "expected"),
     [

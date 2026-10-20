@@ -16,6 +16,7 @@ from app.scripts.ingestion import archive_client as client_module
 from app.scripts.ingestion import archive_discovery as discovery_module
 from app.scripts.ingestion import archive_ingestor_core as core_module
 from app.scripts.ingestion import archive_layout as layout_module
+from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_module
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.archive_ingestor_core import (
     IngestionCandidate,
@@ -61,6 +62,133 @@ def _stub_remote_state(monkeypatch) -> None:
         client_module,
         "_post_archive_checkpoints_request",
         lambda *args, **kwargs: {"status_code": 201, "body": {}},
+    )
+
+
+@pytest.mark.parametrize("mode", ["archive", "staging"])
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize("already_processed", [True, False])
+@pytest.mark.parametrize("runner", [ingestor_module, upload_module])
+def test_single_execution_scopes_ingestion_and_preserves_state(
+    tmp_path, monkeypatch, mode, dry_run, already_processed, runner
+) -> None:
+    root = tmp_path / ("OLD_PERF" if mode == "archive" else "performance_archive")
+    case = root / "user" / "case"
+    if mode == "archive":
+        case = (
+            root
+            / "2026-10"
+            / "performance_archive_2026_10_12_10_02_55"
+            / "COMPLETED"
+            / "user"
+            / "case"
+        )
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    (case / "101.1-1").mkdir()
+    (case / "other" / "102.1-1").mkdir(parents=True)
+    state = _fresh_state()
+    if already_processed:
+        state["cases"][str(case)] = {"processed_execution_ids": [execution.name]}
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Targeted ingestion must not read or write snapshot checkpoints")
+
+    monkeypatch.setattr(runner, "_fetch_archive_checkpoints", forbidden)
+    monkeypatch.setattr(runner, "_finalize_archive_checkpoints", forbidden)
+    submissions = []
+    observations = []
+    validated = []
+
+    def post(endpoint, token, path, machine, **kwargs):
+        assert not dry_run
+        submissions.append((path, kwargs["processed_execution_ids"]))
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    def source_post(endpoint, token, machine, **kwargs):
+        assert not dry_run
+        observations.extend(kwargs["directories"])
+        return {"status_code": 200, "body": {}}
+
+    def discovery_post(*args, **kwargs):
+        assert not dry_run
+        return {"status_code": 201, "body": {}}
+
+    def locate(path):
+        validated.append(path)
+        return {}
+
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="test-token",
+        archive_root=root,
+        machine_name="chrysalis" if runner is upload_module else "perlmutter",
+        dry_run=dry_run,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode=mode,
+        archive_year_start="2025-01" if mode == "archive" else None,
+        execution_dir=execution,
+    )
+    result = runner._run_ingestor(
+        config,
+        metadata_locator=locate,
+        post_request_fn=post,
+        discovery_post_request_fn=discovery_post,
+        source_directory_post_request_fn=source_post,
+    )
+
+    assert result == 0
+    assert validated == ([] if already_processed else [str(execution)])
+    assert submissions == (
+        [] if dry_run or already_processed else [(str(case), [execution.name])]
+    )
+    assert [o.execution_path for o in observations] == (
+        [] if dry_run else [str(execution)]
+    )
+
+
+@pytest.mark.parametrize(
+    "mode,relative",
+    [
+        ("staging", "case/100.1-1"),
+        ("staging", "performance_archive_2026_10_12_10_02_55/user/case/100.1-1"),
+        ("archive", "unexpected/user/case/100.1-1"),
+        (
+            "archive",
+            "2026-10/performance_archive_2026_10_12_10_02_55/FAILED/user/case/100.1-1",
+        ),
+    ],
+)
+def test_single_execution_rejects_normal_scan_exclusions(
+    tmp_path, monkeypatch, mode, relative
+) -> None:
+    root = tmp_path / "source"
+    execution = root / relative
+    execution.mkdir(parents=True)
+    if "/FAILED/" in relative:
+        (root / "2026-10/performance_archive_2026_10_12_10_02_55/COMPLETED").mkdir()
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="test-token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode=mode,
+        execution_dir=execution,
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Excluded selections must not validate or submit executions")
+
+    assert (
+        _run_ingestor(config, metadata_locator=forbidden, post_request_fn=forbidden)
+        == 1
     )
 
 

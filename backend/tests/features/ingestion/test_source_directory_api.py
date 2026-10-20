@@ -84,6 +84,19 @@ def test_source_directory_submission_rejects_normal_user(db):
     assert db.query(SourceDirectory).count() == 0
 
 
+def test_source_directory_dry_run_resolves_without_writes(db):
+    user, machine, _, _ = _owners(db)
+    user.role = UserRole.ADMIN
+    payload = _request(machine.name)
+    payload.dry_run = True
+
+    response = record_source_directories(payload, db, user)
+
+    assert response.recorded_count == 1
+    assert response.unresolved == []
+    assert db.query(SourceDirectory).count() == 0
+
+
 def test_source_directory_submission_reports_missing_owners_without_guessing(
     db,
 ):

@@ -34,5 +34,6 @@ nav:
       - NERSC Spin Ingestion Operations Runbook: operations/nersc-spin-runbook.md
       - Set Up Ingestion Operations: operations/setup-ingestion-operations.md
       - Test Ingestion Operations: operations/test-ingestion-operations.md
+      - Metadata Backfill: operations/metadata-backfill.md
       - HPC API Token Authentication: operations/hpc-api-token-authentication.md
       - Read-Only Database Access: operations/read-only-database-access.md

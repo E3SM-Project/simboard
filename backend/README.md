@@ -35,6 +35,33 @@ make backend-migrate m='message'
 make backend-upgrade
 ```
 
+## Single-Execution Ingestion
+
+From the repository root, select an existing absolute execution directory beneath
+the configured archive root (or staging root with `scan_mode=staging`):
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive \
+    env_file="$HOME/.config/simboard/env.dev.sh" \
+    execution_dir="/global/cfs/cdirs/e3sm/OLD_PERF/2026-10/performance_archive_2026_10_12_10_02_55/COMPLETED/mahf708/E1.baseline.pm-gpu.r04/59694792.261011-211434"
+```
+
+Use `ingest-apply` instead of `ingest-dry-run` after reviewing discovery results.
+The selected environment file determines the API destination. The runner uses
+`backend/.venv/bin/python` unless `PYTHON_BIN` overrides it.
+
+Only the selected execution is discovered and submitted; sibling executions are
+excluded. Normal scan layout restrictions and archive date bounds still apply.
+Targeted runs bypass completed snapshot checkpoints but never mark a snapshot
+complete. Existing execution-state and API
+duplicate checks remain active: this is not force-reingestion or metadata overwrite.
+Dry runs perform discovery without writes; they do not exercise server-side parsing
+and persistence. Invalid selections fail instead of falling back to a broad scan.
+
+Directory selection works with both machine runners. For Chrysalis, use
+`machine=chrysalis SIMBOARD_ROOT=<deployment-root>` and a directory beneath its
+configured source root; the existing upload transport and deployment setup apply.
+
 ## Ingested Simulation Dates
 
 Execution simulation dates use `Curr Time` and `Stop Time` from the initial

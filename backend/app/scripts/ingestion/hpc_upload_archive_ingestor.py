@@ -135,7 +135,11 @@ def _prepare_run_state(
         log_event_fn=_log_event,
     )
     completed_snapshot_keys: set[str] = set()
-    if config.scan_mode == "archive" and archive_checkpointing:
+    if (
+        config.scan_mode == "archive"
+        and archive_checkpointing
+        and config.execution_dir is None
+    ):
         try:
             completed_snapshot_keys = _fetch_archive_checkpoints(
                 _build_archive_checkpoints_endpoint_url(config),
@@ -292,7 +296,7 @@ def _run_ingestor(
     ):
         return 1
 
-    if not archive_checkpointing:
+    if not archive_checkpointing or config.execution_dir is not None:
         return ingest_exit_code
 
     if not _finalize_archive_checkpoints(

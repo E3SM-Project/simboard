@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { preferredCaseDirectoryPaths } from '../src/features/catalog/sourceDirectoryUtils.ts';
+import {
+  filterSourceDirectoryPaths,
+  preferredCaseDirectoryPaths,
+} from '../src/features/catalog/sourceDirectoryUtils.ts';
 
 const directory = (kind, path) => ({ id: `${kind}:${path}`, kind, path });
 
@@ -14,6 +17,28 @@ test('a single staging path is displayed', () => {
   assert.deepEqual(preferredCaseDirectoryPaths([directory('staging', '/staging/case')]), [
     '/staging/case',
   ]);
+});
+
+test('executions sharing one staging directory produce one preferred path', () => {
+  assert.deepEqual(
+    preferredCaseDirectoryPaths([
+      { ...directory('staging', '/staging/case'), id: 'execution-1' },
+      { ...directory('staging', '/staging/case'), id: 'execution-2' },
+    ]),
+    ['/staging/case'],
+  );
+});
+
+test('executions sharing one archive directory produce one preferred path despite staging paths', () => {
+  assert.deepEqual(
+    preferredCaseDirectoryPaths([
+      directory('staging', '/staging/execution-1'),
+      directory('staging', '/staging/execution-2'),
+      { ...directory('archive', '/archive/case'), id: 'execution-1' },
+      { ...directory('archive', '/archive/case'), id: 'execution-2' },
+    ]),
+    ['/archive/case'],
+  );
 });
 
 test('all staging paths are sorted and deduplicated without archive mappings', () => {
@@ -46,4 +71,19 @@ test('a single archive hides staging paths', () => {
     ]),
     ['/archive/case'],
   );
+});
+
+test('directory filtering matches full paths without changing values or order', () => {
+  const paths = ['/Archive/Day-1/Case', '/archive/day-2/case', '/archive/day-3/other'];
+  assert.deepEqual(filterSourceDirectoryPaths(paths, '  DAY-1/case  '), [paths[0]]);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, 'CASE'), paths.slice(0, 2));
+  assert.deepEqual(paths, ['/Archive/Day-1/Case', '/archive/day-2/case', '/archive/day-3/other']);
+});
+
+test('empty filters show all paths and unmatched filters show none', () => {
+  const paths = ['/archive/a', '/archive/b'];
+  assert.deepEqual(filterSourceDirectoryPaths(paths, ''), paths);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, '   '), paths);
+  assert.deepEqual(filterSourceDirectoryPaths(paths, 'missing'), []);
+  assert.deepEqual(filterSourceDirectoryPaths([], 'archive'), []);
 });

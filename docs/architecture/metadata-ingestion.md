@@ -116,7 +116,10 @@ these fields remain supported.
 
 These paths are observations, not availability guarantees, and are separate
 from `CASEROOT`, `RUNDIR`, and `DOUT_S_ROOT`. Checkpointed snapshots remain skipped;
-historical metadata backfill is tracked in GitHub issue #360.
+historical metadata backfill uses the explicit
+[metadata backfill command](../operations/metadata-backfill.md). Bootstrap
+mappings from both staging and archive sources first; subsequent metadata
+backfills select existing database records and read their stored source paths.
 
 ### 1. Staging directory (`PERF_ARCHIVE_DIR`)
 

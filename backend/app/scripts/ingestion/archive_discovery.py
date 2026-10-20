@@ -134,7 +134,11 @@ def _scan_archive(
         case_path_filter,
     )
 
-    snapshot_scan = _initialize_snapshot_scan(config, completed_snapshot_keys)
+    snapshot_scan = (
+        ArchiveSnapshotScan(archive_name=config.archive_root.name)
+        if config.execution_dir is not None
+        else _initialize_snapshot_scan(config, completed_snapshot_keys)
+    )
     selected_snapshot_keys = _selected_snapshot_keys(snapshot_scan)
     walk_dir_filter = _build_walk_dir_filter(
         config,
@@ -150,8 +154,25 @@ def _scan_archive(
         staging_root_basename=staging_root_basename,
     )
 
+    discovery_root = config.archive_root
+    if config.execution_dir is not None:
+        discovery_root = config.execution_dir.parent
+        if case_path_filter is not None and not case_path_filter(discovery_root):
+            raise ValueError("EXECUTION_DIR is outside the configured archive range")
+        _validate_selected_execution_layout(
+            config.archive_root,
+            config.execution_dir,
+            walk_dir_filter,
+            additional_dir_pruner,
+        )
+        # Scan just the selected child of this case, never its sibling executions.
+        walk_dir_filter = partial(
+            _filter_single_execution, execution_dir=config.execution_dir
+        )
+        additional_dir_pruner = None
+
     grouped_executions = _discover_case_executions(
-        config.archive_root,
+        discovery_root,
         metadata_locator,
         discovery_stats,
         case_collection_data,
@@ -207,6 +228,31 @@ def _scan_archive(
         discovery_stats,
         snapshot_scan,
     )
+
+
+def _validate_selected_execution_layout(
+    root: Path,
+    execution_dir: Path,
+    walk_dir_filter: Callable[[str, list[str]], None] | None,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None,
+) -> None:
+    """Require each ancestor to pass normal scan layout and site policies."""
+    current = root
+    for part in execution_dir.relative_to(root).parts:
+        dirnames = [child.name for child in current.iterdir() if child.is_dir()]
+        if walk_dir_filter is not None:
+            walk_dir_filter(str(current), dirnames)
+        if additional_dir_pruner is not None:
+            additional_dir_pruner(str(current), dirnames)
+        if part not in dirnames:
+            raise ValueError("EXECUTION_DIR is excluded by the configured scan layout")
+        current /= part
+
+
+def _filter_single_execution(
+    dirpath: str, dirnames: list[str], *, execution_dir: Path
+) -> None:
+    dirnames[:] = [name for name in dirnames if Path(dirpath) / name == execution_dir]
 
 
 def _initialize_snapshot_scan(

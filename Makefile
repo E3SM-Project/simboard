@@ -62,8 +62,10 @@ help:
 	@echo "  make ingest-apply machine=<chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
 	@echo "    Chrysalis: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
+	@echo "    execution_dir=<absolute-path> selects one execution without completing snapshot checkpoints"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
 	@echo "  make v3-ingest-apply SIMBOARD_ROOT=<path> env=<dev|prod>   # Upload Chrysalis v3 archive backfill cases"
+	@echo "  make metadata-backfill machine=<chrysalis|perlmutter> env=<dev|prod> SIMBOARD_ROOT=<path> args='<options>' # Metadata-only backfill; dry-run by default"
 	@echo ""
 	@echo "  Diagnostics:"
 	@echo "  make v3-diags-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Reconcile Chrysalis v3 diagnostics without writes"
@@ -346,6 +348,7 @@ ingest-dry-run ingest-apply: export env := $(env)
 ingest-dry-run ingest-apply: export env_file := $(env_file)
 ingest-dry-run ingest-apply: export scan_mode := $(scan_mode)
 ingest-dry-run ingest-apply: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
+ingest-dry-run ingest-apply: export EXECUTION_DIR := $(execution_dir)
 ingest-dry-run ingest-apply:
 	@bash $(BACKEND_DIR)/app/scripts/ingestion/run_machine_ingestion.sh $(if $(filter ingest-apply,$@),false,true)
 
@@ -362,6 +365,14 @@ v3-ingest-apply:
 # ------------------------------------------------------------
 # Diagnostics
 # ------------------------------------------------------------
+
+.PHONY: metadata-backfill
+metadata-backfill: export machine := $(machine)
+metadata-backfill: export env := $(env)
+metadata-backfill: export env_file := $(env_file)
+metadata-backfill: export SIMBOARD_ROOT := $(SIMBOARD_ROOT)
+metadata-backfill:
+	@bash $(BACKEND_DIR)/app/scripts/ingestion/backfill/run_metadata_backfill.sh $(args)
 
 DIAGNOSTICS_LAUNCHER := backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh
 

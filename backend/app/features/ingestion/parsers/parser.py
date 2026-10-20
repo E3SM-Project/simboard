@@ -625,14 +625,14 @@ def _resolve_run_script_path(
     """Resolve an archived E3SM script to its original HPC provenance path.
 
     CaseDocs copies append the execution LID to the saved provenance filename.
-    Only the observed run.<case>.sh.<timestamp> convention is supported; CIME
+    Only the observed [run.]<case>[_<digits>].sh.<timestamp> convention is supported; CIME
     wrappers and run output must not be used as fallbacks.
     """
     if not case_name or not case_root or not case_root.strip():
         return None
 
     pattern = re.compile(
-        rf"(?P<provenance>run\.{re.escape(case_name)}\.sh\.\d{{8}}-\d{{6}})"
+        rf"(?P<provenance>(?:run\.)?{re.escape(case_name)}(?:_[0-9]+)?\.sh\.\d{{8}}-\d{{6}})"
         rf"\.{re.escape(execution_id)}(?:\.gz)?"
     )
     matches: set[str] = set()

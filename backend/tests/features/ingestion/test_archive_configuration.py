@@ -20,6 +20,7 @@ def site_environment(monkeypatch, tmp_path: Path) -> None:
         "PERF_SOURCE_ROOT",
         "OLD_PERF_SOURCE_ROOT",
         "MACHINE_NAME",
+        "EXECUTION_DIR",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SCAN_MODE", "archive")
@@ -65,6 +66,62 @@ def test_explicit_historical_bound_includes_old_snapshot(monkeypatch) -> None:
     )
     case_path.mkdir(parents=True)
     assert case_filter(case_path)
+
+
+@pytest.mark.parametrize("mode", ["archive", "staging"])
+@pytest.mark.parametrize("machine", ["perlmutter", "chrysalis"])
+def test_single_execution_configuration(monkeypatch, tmp_path, mode, machine) -> None:
+    root = tmp_path / "source"
+    execution = root / "user" / "case" / "100.1-1"
+    execution.mkdir(parents=True)
+    monkeypatch.setenv("SCAN_MODE", mode)
+    monkeypatch.setenv("MACHINE_NAME", machine)
+    monkeypatch.setenv(
+        "OLD_PERF_ARCHIVE_ROOT" if mode == "archive" else "PERF_ARCHIVE_ROOT",
+        str(root),
+    )
+    monkeypatch.setenv("EXECUTION_DIR", str(execution))
+
+    assert _build_config_from_env().execution_dir == execution
+
+
+@pytest.mark.parametrize(
+    "selection,message",
+    [
+        ("relative", "absolute path"),
+        ("outside", "beneath the configured scan root"),
+        ("missing", "existing directory"),
+        ("case", "execution directory"),
+        ("file", "existing directory"),
+        ("symlink", "beneath the configured scan root"),
+        ("root", "beneath the configured scan root"),
+    ],
+)
+def test_single_execution_rejects_invalid_selection(
+    monkeypatch, tmp_path, selection, message
+) -> None:
+    root = tmp_path / "OLD_PERF"
+    case = root / "user" / "case"
+    case.mkdir(parents=True)
+    outside = tmp_path / "100.1-1"
+    outside.mkdir()
+    file = case / "200.1-1"
+    file.touch()
+    symlink = case / "300.1-1"
+    symlink.symlink_to(outside, target_is_directory=True)
+    paths = {
+        "relative": Path("user/case/100.1-1"),
+        "outside": outside,
+        "missing": case / "400.1-1",
+        "case": case,
+        "file": file,
+        "symlink": symlink,
+        "root": root,
+    }
+    monkeypatch.setenv("EXECUTION_DIR", str(paths[selection]))
+
+    with pytest.raises(ValueError, match=message):
+        _build_config_from_env()
 
 
 @pytest.mark.parametrize("mode", ["staging", "archive"])

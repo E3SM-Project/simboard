@@ -72,6 +72,7 @@ fi
 site=$1
 scan_mode=$2
 requested_dry_run="${DRY_RUN:-true}"
+requested_execution_dir="${EXECUTION_DIR:-}"
 
 # =============================================================================
 # Site configuration and standard layout
@@ -189,6 +190,7 @@ fi
 shopt -u nocasematch
 if [[ ${SIMBOARD_ENFORCE_RUN_CONTROLS:-false} == true ]]; then
   export DRY_RUN="${requested_dry_run}" SCAN_MODE="${scan_mode}"
+  export EXECUTION_DIR="${requested_execution_dir}"
 fi
 
 # =============================================================================

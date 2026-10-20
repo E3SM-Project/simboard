@@ -77,6 +77,9 @@ def _log_startup_configuration(
             "archive_root": str(config.archive_root),
             "archive_year_start": config.archive_year_start,
             "archive_year_end": config.archive_year_end,
+            "execution_dir": str(config.execution_dir)
+            if config.execution_dir
+            else None,
         },
     )
     log_event_fn(
