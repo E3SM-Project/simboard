@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { buildIiceLink, type IiceTool } from '@/lib/iice';
-import { type IiceBasketEntry, useIiceBasket } from '@/lib/iiceBasket';
+import { IICE_BASKET_MAX_PER_TOOL, type IiceBasketEntry, useIiceBasket } from '@/lib/iiceBasket';
 
 const TOOL_LABELS: Record<IiceTool, string> = {
   e3sm_diags: 'E3SM Diags',
@@ -132,7 +132,10 @@ const ToolGroup = ({ tool, entries, onRemove, onUpdate, onCopy }: ToolGroupProps
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-slate-50/60 p-2.5 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 flex-1 space-y-1.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-          {TOOL_LABELS[tool]}
+          {TOOL_LABELS[tool]}{' '}
+          <span className="font-normal normal-case text-slate-500">
+            {entries.length}/{IICE_BASKET_MAX_PER_TOOL}
+          </span>
         </p>
         <ul className="flex flex-wrap gap-1.5">
           {entries.map((entry) => (
@@ -148,13 +151,16 @@ const ToolGroup = ({ tool, entries, onRemove, onUpdate, onCopy }: ToolGroupProps
                 </span>
               ) : null}
               {entry.comparison === 'model_vs_model' ? (
-                <Input
-                  value={entry.referenceCase}
-                  onChange={(event) => onUpdate(entry.url, { referenceCase: event.target.value })}
-                  placeholder="reference case"
-                  aria-label={`Reference case for ${entry.caseName} ${period(entry)}`}
-                  className="h-6 w-44 px-1.5 text-xs"
-                />
+                <label className="flex items-center gap-1 text-slate-500">
+                  <span className="whitespace-nowrap">vs ref case:</span>
+                  <Input
+                    value={entry.referenceCase}
+                    onChange={(event) => onUpdate(entry.url, { referenceCase: event.target.value })}
+                    placeholder="e.g. v3.LR.piControl"
+                    aria-label={`Reference case for ${entry.caseName} ${period(entry)}`}
+                    className="h-6 w-44 px-1.5 text-xs"
+                  />
+                </label>
               ) : null}
               <button
                 type="button"

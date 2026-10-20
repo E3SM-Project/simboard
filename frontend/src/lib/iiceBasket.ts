@@ -16,7 +16,12 @@ import type { IiceTool } from '@/lib/iice';
 import type { DiagnosticsViewerOut } from '@/types';
 
 export const IICE_BASKET_STORAGE_KEY = 'iice_comparison_basket';
-export const IICE_BASKET_MAX_ENTRIES = 12;
+/**
+ * IICE renders every case in one table row, so comparisons stop being
+ * readable well before its (nonexistent) technical limit. Six matches what
+ * fits on a wide screen; its own demo compares four.
+ */
+export const IICE_BASKET_MAX_PER_TOOL = 6;
 
 export interface IiceBasketEntry {
   /** Viewer URL; doubles as the entry id. */
@@ -125,7 +130,9 @@ export const useIiceBasket = () => {
     if (current.some((existing) => existing.url === entry.url)) {
       return true;
     }
-    if (current.length >= IICE_BASKET_MAX_ENTRIES) {
+    if (
+      current.filter((existing) => existing.tool === entry.tool).length >= IICE_BASKET_MAX_PER_TOOL
+    ) {
       return false;
     }
     write([...current, entry]);
@@ -147,5 +154,15 @@ export const useIiceBasket = () => {
 
   const has = useCallback((url: string) => entries.some((entry) => entry.url === url), [entries]);
 
-  return { entries, add, remove, update, clear, has };
+  const countFor = useCallback(
+    (tool: IiceTool) => entries.filter((entry) => entry.tool === tool).length,
+    [entries],
+  );
+
+  const isFull = useCallback(
+    (tool: IiceTool) => countFor(tool) >= IICE_BASKET_MAX_PER_TOOL,
+    [countFor],
+  );
+
+  return { entries, add, remove, update, clear, has, countFor, isFull };
 };

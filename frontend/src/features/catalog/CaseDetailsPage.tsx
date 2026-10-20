@@ -1087,12 +1087,6 @@ export const CaseDetailsPage = ({
         </Card>
       </div>
 
-      <DiagnosticsViewersCard
-        caseId={caseRecord.id}
-        caseName={caseRecord.name}
-        hasDiagnosticLinks={hasDiagnosticLinks}
-      />
-
       <section>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="space-y-5 p-5">
@@ -1940,6 +1934,12 @@ export const CaseDetailsPage = ({
           ) : null}
         </div>
       </section>
+
+      <DiagnosticsViewersCard
+        caseId={caseRecord.id}
+        caseName={caseRecord.name}
+        hasDiagnosticLinks={hasDiagnosticLinks}
+      />
     </div>
   );
 };
