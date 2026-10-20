@@ -88,6 +88,9 @@ jobs:
           sudo apt-get install -y postgresql-17
           # Stop other clusters before assigning the standard port to PostgreSQL 17.
           sudo systemctl stop postgresql
+          if [ -d /etc/postgresql/17/main ]; then
+            sudo pg_dropcluster --stop 17 main
+          fi
           sudo pg_createcluster 17 main --port=5432 --start
           sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE simboard WITH LOGIN PASSWORD 'simboard' CREATEDB;"
           sudo -u postgres createdb --owner=simboard simboard

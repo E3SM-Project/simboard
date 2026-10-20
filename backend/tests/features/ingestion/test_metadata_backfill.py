@@ -12,10 +12,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 -- register ORM relationship targets for isolated tests
 from app.features.catalog.enums import ArtifactKind
-from app.features.catalog.models import Artifact, Execution
+from app.features.catalog.models import Artifact, Execution, MetadataChange
 from app.features.ingestion.metadata_backfill import MetadataUpdate, update_metadata
 from app.features.ingestion.v3_classification import V3_SIMULATIONS
 from app.scripts.ingestion.backfill import metadata
@@ -287,6 +288,117 @@ def test_bootstrap_unknown_machine_api_error_is_not_a_skip(
     assert output[-1]["skipped_no_owner"] == 0
 
 
+@pytest.mark.parametrize("apply", [False, True])
+def test_bootstrap_batches_by_machine_with_per_path_outcomes(
+    tmp_path, monkeypatch, capsys, apply
+):
+    for index in range(7):
+        _write_backfill_identity(
+            tmp_path / "alice" / f"case_{index}" / "125.250101-000000",
+            "pm-cpu" if index % 2 == 0 else "muller-gpu",
+        )
+    monkeypatch.setattr(metadata, "DISCOVERY_RESULT_BATCH_SIZE", 2)
+    calls = []
+
+    def request(api, token, route, payload):
+        calls.append(payload)
+        return {
+            "unresolved": [
+                d for d in payload["directories"] if d["case_name"] == "case_2"
+            ]
+        }
+
+    monkeypatch.setattr(metadata, "_request", request)
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        apply=apply,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 0
+    assert len(calls) == 4
+    assert all(1 <= len(p["directories"]) <= 2 for p in calls)
+    assert all(p["dry_run"] == (not apply) for p in calls)
+    for payload in calls:
+        for directory in payload["directories"]:
+            index = int(directory["case_name"].split("_")[-1])
+            assert payload["machine_name"] == (
+                "perlmutter" if index % 2 == 0 else "muller"
+            )
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(output[:-1]) == 7
+    assert output[-1] == {
+        "matched": 6,
+        "skipped_no_owner": 1,
+        "skipped_incomplete": 0,
+        "failed": 0,
+    }
+    assert [
+        Path(item["path"]).parent.name
+        for item in output[:-1]
+        if item["outcome"] == "skipped_no_owner"
+    ] == ["case_2"]
+
+
+def test_bootstrap_failed_batch_reports_every_execution(tmp_path, monkeypatch, capsys):
+    for index in range(3):
+        _write_backfill_identity(
+            tmp_path / "alice" / f"case_{index}" / "125.250101-000000", "pm-cpu"
+        )
+    calls = []
+    monkeypatch.setattr(metadata, "_request", partial(_unknown_machine_request, calls))
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(calls) == 1
+    assert len(output[:-1]) == 3
+    assert all(
+        item["outcome"] == "failed" and "Machine not found" in item["error"]
+        for item in output[:-1]
+    )
+    assert output[-1]["failed"] == 3
+
+
+def test_bootstrap_flushes_pending_observations_after_walk_error(
+    tmp_path, monkeypatch, capsys
+):
+    execution = tmp_path / "alice" / "case" / "125.250101-000000"
+    _write_backfill_identity(execution, "pm-cpu")
+
+    def paths(*args):
+        yield execution
+        raise PermissionError("Cannot traverse remaining directories")
+
+    calls = []
+    monkeypatch.setattr(metadata, "_execution_paths", paths)
+    monkeypatch.setattr(
+        metadata, "_request", partial(_machine_request_stub, calls, None)
+    )
+    args = _source_args(
+        sources="staging",
+        staging_root=tmp_path,
+        machine="perlmutter",
+        case_name=None,
+        hpc_username=None,
+    )
+
+    assert metadata._bootstrap(args, "https://example.test", "token") == 1
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert output[-1]["matched"] == 1
+    assert output[-1]["failed"] == 1
+    assert len(calls) == 1
+
+
 def _update_payload(row, **kwargs):
     return MetadataUpdate(
         machine_name="perlmutter",
@@ -307,21 +419,81 @@ def test_dry_run_fill_missing_overwrite_and_idempotency():
     row.artifacts = [unrelated]
     editor = uuid4()
     dry = _update_payload(row)
+    db = Session()
 
-    result = update_metadata(None, row, dry, editor)
+    result = update_metadata(db, row, dry, editor)
     assert set(result["changes"]) == {"run_script"}
     assert row.artifacts == [unrelated]
+    assert not db.new
 
     dry.dry_run = False
-    update_metadata(None, row, dry, editor)
+    update_metadata(db, row, dry, editor)
     assert row.simulation_start_date == date(1850, 1, 1)
     assert row.artifacts[0] is unrelated
     assert row.artifacts[1].uri == "/case/run.sh"
 
     dry.overwrite = True
-    update_metadata(None, row, dry, editor)
+    update_metadata(db, row, dry, editor)
     assert row.simulation_start_date == date(2020, 1, 1)
-    assert update_metadata(None, row, dry, editor)["outcome"] == "unchanged"
+    assert update_metadata(db, row, dry, editor)["outcome"] == "unchanged"
+    history = list(db.new)
+    assert all(isinstance(item, MetadataChange) for item in history)
+    assert {item.field_name for item in history} == {
+        "artifacts",
+        "simulation_start_date",
+    }
+    assert len(history) == 2
+    assert all(
+        item.editor_id == editor and item.entity_id == row.id for item in history
+    )
+    assert all(item.reason == "Metadata backfill" for item in history)
+    dates = next(item for item in history if item.field_name == "simulation_start_date")
+    assert (dates.old_value, dates.new_value) == ("1850-01-01", "2020-01-01")
+    scripts = next(item for item in history if item.field_name == "artifacts")
+    assert scripts.old_value == [
+        {
+            "kind": "output",
+            "uri": "/keep",
+            "label": None,
+            "checksum": None,
+            "sizeBytes": None,
+        }
+    ]
+    assert scripts.new_value[-1]["uri"] == "/case/run.sh"
+    assert dates.changed_at == row.updated_at
+    db.close()
+
+
+def test_overwrite_script_history_preserves_full_artifact_values():
+    script = Artifact(
+        kind=ArtifactKind.RUN_SCRIPT,
+        uri="/old/run.sh",
+        label="Run script",
+        checksum="old-checksum",
+        size_bytes=123,
+    )
+    row = Execution(id=uuid4(), artifacts=[script])
+    request = _update_payload(row, overwrite=True, dry_run=False)
+    request.fields = ["run-script"]
+    request.expected.run_script = script.uri
+    with Session() as db:
+        update_metadata(db, row, request, uuid4())
+        change = next(iter(db.new))
+        assert change.field_name == "artifacts"
+        assert change.old_value[0] == {
+            "kind": "run_script",
+            "uri": "/old/run.sh",
+            "label": "Run script",
+            "checksum": "old-checksum",
+            "sizeBytes": 123,
+        }
+        assert change.new_value[0] == {
+            "kind": "run_script",
+            "uri": "/case/run.sh",
+            "label": "Run script",
+            "checksum": None,
+            "sizeBytes": None,
+        }
 
 
 def test_stale_update_rejected_before_any_write():
@@ -1162,7 +1334,7 @@ def test_expected_bootstrap_skips_succeed(
         for number in numbers
     ]
     assert all(item["dry_run"] == (not apply) for item in output[:-1])
-    assert len(calls) == len(numbers) - int(123 in numbers)
+    assert len(calls) == int(any(number != 123 for number in numbers))
     assert all(payload["dry_run"] == (not apply) for payload in calls)
     assert "RUN_SUMMARY Status: success" in caplog.text
     assert "RUN_SUMMARY Exit code: 0" in caplog.text
@@ -1290,12 +1462,12 @@ def _summary_read_stub(path, machine, fields):
 
 
 def _summary_request_stub(api, token, route, payload):
-    directory = payload["directories"][0]
-
     return {
-        "unresolved": [directory]
-        if directory["execution_id"].startswith("124.")
-        else []
+        "unresolved": [
+            directory
+            for directory in payload["directories"]
+            if directory["execution_id"].startswith("124.")
+        ]
     }
 
 
@@ -1324,7 +1496,8 @@ def _capture_log(events, event, fields):
 
 
 def _unresolved_request(*args, **kwargs):
-    return {"unresolved": ["missing owner"]}
+    payload = kwargs.get("payload", args[-1])
+    return {"unresolved": payload["directories"]}
 
 
 def _transient_request_failure(*args, **kwargs):

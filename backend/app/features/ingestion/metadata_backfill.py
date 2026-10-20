@@ -1,6 +1,6 @@
 """Narrow updates to existing execution metadata, never ingestion state."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.features.catalog.enums import ArtifactKind
-from app.features.catalog.models import Artifact, Execution
+from app.features.catalog.history import changed_metadata, snapshot_metadata
+from app.features.catalog.models import Artifact, Execution, MetadataChange
 
 
 class MetadataValues(BaseModel):
@@ -56,7 +57,14 @@ def stored_values(execution: Execution) -> MetadataValues:
     )
 
 
-def _apply_changes(execution: Execution, changes: dict, editor: UUID) -> None:
+def _apply_changes(
+    db: Session, execution: Execution, changes: dict, editor: UUID
+) -> None:
+    if not changes:
+        return
+
+    fields = {"artifacts" if name == "run_script" else name for name in changes}
+    previous = snapshot_metadata(execution, fields)
     for name, change in changes.items():
         if name != "run_script":
             setattr(execution, name, change["after"])
@@ -74,8 +82,26 @@ def _apply_changes(execution: Execution, changes: dict, editor: UUID) -> None:
             script.checksum = None
             script.size_bytes = None
 
-    if changes:
-        execution.last_updated_by = editor
+    now = datetime.now(timezone.utc)
+    execution.last_updated_by = editor
+    execution.updated_at = now
+    db.add_all(
+        [
+            MetadataChange(
+                entity_type="execution",
+                entity_id=execution.id,
+                field_name=name,
+                old_value=before,
+                new_value=after,
+                editor_id=editor,
+                changed_at=now,
+                reason="Metadata backfill",
+            )
+            for name, before, after in changed_metadata(
+                previous, snapshot_metadata(execution, fields)
+            )
+        ]
+    )
 
 
 def _validate_fill_dates(old: MetadataValues, payload: MetadataUpdate) -> None:
@@ -130,7 +156,7 @@ def update_metadata(
     MetadataValues.model_validate(resulting)
 
     if not payload.dry_run:
-        _apply_changes(execution, changes, editor)
+        _apply_changes(db, execution, changes, editor)
 
     return {
         "record_id": str(execution.id),

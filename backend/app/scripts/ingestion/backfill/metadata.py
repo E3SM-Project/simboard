@@ -8,6 +8,7 @@ import stat
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -37,6 +38,7 @@ from app.scripts.ingestion.archive_client import (
 )
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
+    DISCOVERY_RESULT_BATCH_SIZE,
     IngestionRequestError,
     _log_event,
     _optional_source_root,
@@ -295,10 +297,7 @@ def _log_scan_progress(event: str, progress: dict, started_at: float) -> None:
 
 def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
     started_at = time.monotonic()
-    failures = 0
-    matched = 0
-    skipped_no_owner = 0
-    skipped_incomplete = 0
+    totals = Counter(matched=0, skipped_no_owner=0, skipped_incomplete=0, failed=0)
 
     for kind in ("staging", "archive"):
         if args.sources not in (kind, "both"):
@@ -309,87 +308,129 @@ def _bootstrap(args: argparse.Namespace, api: str, token: str) -> int:
         if root is None:
             raise ValueError(f"--{kind}-root is required")
 
-        try:
-            for path in _execution_paths(root.resolve(), kind, args):
-                try:
-                    source = _bootstrap_observation(path, kind, args)
-                    if source is None:
-                        continue
+        totals.update(_bootstrap_root(args, api, token, root, kind))
 
-                    machine_name, observation = source
-                    result = _request(
-                        api,
-                        token,
-                        "ingestions/source-directories",
-                        {
-                            "machine_name": machine_name,
-                            "dry_run": not args.apply,
-                            "directories": [observation.model_dump(mode="json")],
-                        },
-                    )
-                    unresolved = bool(result["unresolved"])
-                    matched += not unresolved
-                    skipped_no_owner += unresolved
-
-                    print(
-                        json.dumps(
-                            {
-                                "path": str(path),
-                                "outcome": "skipped_no_owner"
-                                if unresolved
-                                else "matched",
-                                "dry_run": not args.apply,
-                            }
-                        )
-                    )
-                except _IncompleteExecutionError as exc:
-                    skipped_incomplete += 1
-                    print(
-                        json.dumps(
-                            {
-                                "path": str(path),
-                                "outcome": "skipped_incomplete",
-                                "dry_run": not args.apply,
-                                "error": str(exc),
-                            }
-                        )
-                    )
-                except (ValueError, OSError, IngestionRequestError) as exc:
-                    failures += 1
-                    print(
-                        json.dumps(
-                            {"path": str(path), "outcome": "failed", "error": str(exc)}
-                        )
-                    )
-        except (ValueError, OSError) as exc:
-            failures += 1
-            print(
-                json.dumps({"root": str(root), "outcome": "failed", "error": str(exc)})
-            )
-
-    print(
-        json.dumps(
-            {
-                "matched": matched,
-                "skipped_no_owner": skipped_no_owner,
-                "skipped_incomplete": skipped_incomplete,
-                "failed": failures,
-            }
-        )
-    )
+    print(json.dumps(totals))
     _log_backfill_summary(
         args,
         [
-            ("Existing owners matched", matched),
-            ("Skipped without existing owner", skipped_no_owner),
-            ("Skipped incomplete executions", skipped_incomplete),
-            ("Read/parse/API/scan failures", failures),
+            ("Existing owners matched", totals["matched"]),
+            ("Skipped without existing owner", totals["skipped_no_owner"]),
+            ("Skipped incomplete executions", totals["skipped_incomplete"]),
+            ("Read/parse/API/scan failures", totals["failed"]),
         ],
-        failures,
+        totals["failed"],
         started_at,
     )
 
-    return int(bool(failures))
+    return int(bool(totals["failed"]))
+
+
+def _bootstrap_root(
+    args: argparse.Namespace, api: str, token: str, root: Path, kind: str
+) -> Counter:
+    """Read one source root, flushing machine-specific batches even after walk errors."""
+    totals = Counter()
+    pending: dict[str, list[SourceDirectoryObservation]] = {}
+    try:
+        for path in _execution_paths(root.resolve(), kind, args):
+            try:
+                source = _bootstrap_observation(path, kind, args)
+                if source is None:
+                    continue
+
+                machine_name, observation = source
+                batch = pending.setdefault(machine_name, [])
+                batch.append(observation)
+                if len(batch) >= DISCOVERY_RESULT_BATCH_SIZE:
+                    totals.update(
+                        _submit_source_batch(args, api, token, machine_name, batch)
+                    )
+                    batch.clear()
+            except _IncompleteExecutionError as exc:
+                totals["skipped_incomplete"] += 1
+                print(
+                    json.dumps(
+                        {
+                            "path": str(path),
+                            "outcome": "skipped_incomplete",
+                            "dry_run": not args.apply,
+                            "error": str(exc),
+                        }
+                    )
+                )
+            except (ValueError, OSError, IngestionRequestError) as exc:
+                totals["failed"] += 1
+                print(
+                    json.dumps(
+                        {"path": str(path), "outcome": "failed", "error": str(exc)}
+                    )
+                )
+    except (ValueError, OSError) as exc:
+        totals["failed"] += 1
+        print(json.dumps({"root": str(root), "outcome": "failed", "error": str(exc)}))
+
+    for machine_name, batch in pending.items():
+        if batch:
+            totals.update(_submit_source_batch(args, api, token, machine_name, batch))
+
+    return totals
+
+
+def _submit_source_batch(
+    args: argparse.Namespace,
+    api: str,
+    token: str,
+    machine_name: str,
+    batch: list[SourceDirectoryObservation],
+) -> Counter:
+    """Submit bounded observations while retaining one outcome per execution path."""
+    try:
+        result = _request(
+            api,
+            token,
+            "ingestions/source-directories",
+            {
+                "machine_name": machine_name,
+                "dry_run": not args.apply,
+                "directories": [
+                    observation.model_dump(mode="json") for observation in batch
+                ],
+            },
+        )
+        unresolved_paths = {item["execution_path"] for item in result["unresolved"]}
+    except (ValueError, OSError, IngestionRequestError) as exc:
+        for observation in batch:
+            print(
+                json.dumps(
+                    {
+                        "path": observation.execution_path,
+                        "outcome": "failed",
+                        "error": str(exc),
+                    }
+                )
+            )
+        return Counter(failed=len(batch))
+
+    totals = Counter()
+    for observation in batch:
+        outcome = (
+            "skipped_no_owner"
+            if observation.execution_path in unresolved_paths
+            else "matched"
+        )
+        totals[outcome] += 1
+        print(
+            json.dumps(
+                {
+                    "path": observation.execution_path,
+                    "outcome": outcome,
+                    "dry_run": not args.apply,
+                }
+            )
+        )
+
+    return totals
 
 
 def _bootstrap_observation(
