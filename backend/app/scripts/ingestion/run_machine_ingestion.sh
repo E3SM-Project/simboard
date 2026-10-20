@@ -12,6 +12,7 @@ esac
 [[ ${env:-} == dev || ${env:-} == prod ]] || fail 'env must be dev or prod'
 selected_scan_mode=${scan_mode:-}
 [[ $selected_scan_mode == archive || $selected_scan_mode == staging ]] || fail 'scan_mode must be archive or staging (required)'
+selected_execution_dir=${EXECUTION_DIR:-}
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 config="$script_dir/sites/configs/$selected_machine.config"
@@ -43,6 +44,7 @@ fi
 # shellcheck source=/dev/null
 source "$config"
 export DRY_RUN=$requested_dry_run SCAN_MODE=$selected_scan_mode
+export EXECUTION_DIR=$selected_execution_dir
 if [[ $SCAN_MODE == archive ]]; then
   export ARCHIVE_YEAR_START=${ARCHIVE_YEAR_START:-$SIMBOARD_DEFAULT_ARCHIVE_YEAR_START}
 fi

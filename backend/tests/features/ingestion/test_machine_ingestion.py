@@ -35,6 +35,7 @@ def test_machine_dispatch(
         "export SIMBOARD_API_TOKEN=hidden-token\n"
         f"export DRY_RUN={'false' if dry == 'true' else 'true'}\n"
         "export SCAN_MODE=invalid\n"
+        "export EXECUTION_DIR=/ignored\n"
     )
     capture = tmp_path / "capture"
     python = tmp_path / "fake python"
@@ -43,6 +44,7 @@ def test_machine_dispatch(
         '"$MACHINE_NAME" "$ARCHIVE_YEAR_START" "$ARCHIVE_YEAR_END" '
         '"$MAX_CASES_PER_RUN" "$SIMBOARD_INGESTION_LOG_LEVEL" '
         '"$PERF_ARCHIVE_ROOT" "$OLD_PERF_ARCHIVE_ROOT" > "$CAPTURE"\n'
+        'printf "%s\\n" "${EXECUTION_DIR:-}" >> "$CAPTURE"\n'
         'exit "${FAKE_EXIT:-0}"\n'
     )
     python.chmod(0o755)
@@ -71,6 +73,7 @@ def test_machine_dispatch(
             "ARCHIVE_YEAR_END=2025-03",
             "MAX_CASES_PER_RUN=5",
             "SIMBOARD_INGESTION_LOG_LEVEL=DEBUG",
+            "execution_dir=/source with spaces/case/100.1-1",
         ],
         env,
     )
@@ -91,6 +94,7 @@ def test_machine_dispatch(
         "DEBUG",
         "/custom/staging",
         "/custom/archive",
+        "/source with spaces/case/100.1-1",
     ]
     assert "hidden-token" not in result.stdout + result.stderr
     if machine == "chrysalis":
