@@ -56,6 +56,7 @@ import {
   CaseArtifactsTable,
   type CaseArtifactValue,
 } from '@/features/catalog/components/CaseArtifactsTable';
+import { DiagnosticsViewersCard } from '@/features/catalog/components/DiagnosticsViewersCard';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
@@ -828,6 +829,7 @@ export const CaseDetailsPage = ({
   const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
+  const hasDiagnosticLinks = caseRecord.links.some((link) => link.kind === 'diagnostic');
   const diagnosticsTierLabel = caseRecord.diagnosticsTiers.join(' and ');
   const hasAmbiguousDiagnosticsTiers = caseRecord.diagnosticsTiers.length > 1;
   const hasDiagnosticsMismatch =
@@ -1084,6 +1086,12 @@ export const CaseDetailsPage = ({
           </CardContent>
         </Card>
       </div>
+
+      <DiagnosticsViewersCard
+        caseId={caseRecord.id}
+        caseName={caseRecord.name}
+        hasDiagnosticLinks={hasDiagnosticLinks}
+      />
 
       <section>
         <Card className="border-slate-200 shadow-sm">
