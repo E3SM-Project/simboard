@@ -20,8 +20,16 @@ export const IICE_BASKET_STORAGE_KEY = 'iice_comparison_basket';
  * IICE renders every case in one table row, so comparisons stop being
  * readable well before its (nonexistent) technical limit. Six matches what
  * fits on a wide screen; its own demo compares four.
+ *
+ * The limit is per comparison, and IICE drives one comparison from one
+ * template, so model-vs-observations and model-vs-model runs of the same
+ * tool are counted separately.
  */
 export const IICE_BASKET_MAX_PER_TOOL = 6;
+
+/** Entries that will share one IICE link: same tool, same comparison mode. */
+export const iiceGroupKey = (entry: Pick<IiceBasketEntry, 'tool' | 'comparison'>): string =>
+  `${entry.tool}:${entry.comparison === 'model_vs_model' ? 'model' : 'obs'}`;
 
 export interface IiceBasketEntry {
   /** Viewer URL; doubles as the entry id. */
@@ -155,12 +163,16 @@ export const useIiceBasket = () => {
   const has = useCallback((url: string) => entries.some((entry) => entry.url === url), [entries]);
 
   const countFor = useCallback(
-    (tool: IiceTool) => entries.filter((entry) => entry.tool === tool).length,
+    (viewer: Pick<IiceBasketEntry, 'tool' | 'comparison'>) => {
+      const key = iiceGroupKey(viewer);
+      return entries.filter((entry) => iiceGroupKey(entry) === key).length;
+    },
     [entries],
   );
 
   const isFull = useCallback(
-    (tool: IiceTool) => countFor(tool) >= IICE_BASKET_MAX_PER_TOOL,
+    (viewer: Pick<IiceBasketEntry, 'tool' | 'comparison'>) =>
+      countFor(viewer) >= IICE_BASKET_MAX_PER_TOOL,
     [countFor],
   );
 

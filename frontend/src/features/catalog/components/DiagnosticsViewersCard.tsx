@@ -190,7 +190,7 @@ export const DiagnosticsViewersCard = ({
 interface SourceViewersProps {
   source: DiagnosticsViewerSourceOut;
   isAdded: (url: string) => boolean;
-  isFull: (tool: DiagnosticsViewerOut['tool']) => boolean;
+  isFull: (viewer: Pick<DiagnosticsViewerOut, 'tool' | 'comparison'>) => boolean;
   onAdd: (viewer: DiagnosticsViewerOut) => void;
   onRemove: (url: string) => void;
 }
@@ -294,7 +294,7 @@ const SourceViewers = ({ source, isAdded, isFull, onAdd, onRemove }: SourceViewe
 interface ViewerGroupSectionProps {
   group: ViewerGroup;
   isAdded: (url: string) => boolean;
-  isFull: (tool: DiagnosticsViewerOut['tool']) => boolean;
+  isFull: (viewer: Pick<DiagnosticsViewerOut, 'tool' | 'comparison'>) => boolean;
   onAdd: (viewer: DiagnosticsViewerOut) => void;
   onRemove: (url: string) => void;
 }
@@ -341,7 +341,7 @@ const ViewerGroupSection = ({
               key={viewer.url}
               viewer={viewer}
               added={isAdded(viewer.url)}
-              full={isFull(viewer.tool)}
+              full={isFull(viewer)}
               onAdd={() => onAdd(viewer)}
               onRemove={() => onRemove(viewer.url)}
             />
