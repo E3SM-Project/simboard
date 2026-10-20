@@ -156,6 +156,25 @@ class Settings(BaseSettings):
     assistant_llm_max_tokens: int = 2048
     assistant_snapshot_max_chars: int = 12000
 
+    # --- Diagnostics viewer discovery (IICE) ---
+    # Discovery follows server-provided directory links, so it is confined to
+    # the reviewed archive base URLs. Keep in step with
+    # app/scripts/ingestion/diagnostics_archives.py.
+    diagnostics_viewer_allowed_url_prefixes: str | list[str] = [
+        "https://portal.nersc.gov/cfs/e3sm/diagnostics_archive",
+        "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output/diagnostics_archive",
+    ]
+    diagnostics_viewer_discovery_timeout_seconds: float = 10.0
+    diagnostics_viewer_discovery_max_requests: int = 64
+    diagnostics_viewer_cache_ttl_seconds: float = 600.0
+
+    @property
+    def diagnostics_viewer_allowed_url_prefixes_list(self) -> list[str]:
+        prefixes = self.diagnostics_viewer_allowed_url_prefixes
+        if isinstance(prefixes, str):
+            prefixes = prefixes.split(",")
+        return _normalize_list(prefixes)
+
     @field_validator("assistant_livai_base_url", mode="before")
     @classmethod
     def _strip_livai_base_url(cls, value: str) -> str:

@@ -85,6 +85,39 @@ class SourceDirectoryOut(CamelOutBaseModel):
     path: str
 
 
+class DiagnosticsViewerOut(CamelOutBaseModel):
+    """One IICE-addressable diagnostics output discovered under a case's archive root."""
+
+    tool: Literal["e3sm_diags", "mpas_analysis"]
+    url: str
+    subsection: str | None = None
+    comparison: Literal["model_vs_obs", "model_vs_model"] | None = None
+    start_year: int | None = None
+    end_year: int | None = None
+    ts_start_year: int | None = None
+    ts_end_year: int | None = None
+    reference_hint: str | None = None
+
+
+class DiagnosticsViewerSourceOut(CamelOutBaseModel):
+    """Discovery outcome for one ``diagnostic`` link on the case."""
+
+    link_id: UUID
+    root_url: str
+    label: str | None = None
+    viewers: list[DiagnosticsViewerOut]
+    truncated: bool = False
+    error: str | None = None
+
+
+class CaseDiagnosticsViewersOut(CamelOutBaseModel):
+    """All diagnostics viewers for a case, grouped by the link they came from."""
+
+    case_id: UUID
+    case_name: str
+    sources: list[DiagnosticsViewerSourceOut]
+
+
 class ExternalLinkCreate(CamelInBaseModel):
     """Schema for creating a new External Link."""
 

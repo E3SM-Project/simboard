@@ -10,6 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
+from app.features.catalog.diagnostics_viewers import discover_with_cache
 from app.features.catalog.enums import (
     ArtifactKind,
     CaseSimulationType,
@@ -28,6 +29,7 @@ from app.features.catalog.models import (
 )
 from app.features.catalog.schemas import (
     CaseDetailOut,
+    CaseDiagnosticsViewersOut,
     CaseExecutionArtifactOut,
     CaseFilterOptionsOut,
     CaseListItemOut,
@@ -38,6 +40,8 @@ from app.features.catalog.schemas import (
     DiagnosticProvenanceStateOut,
     DiagnosticsLinkRequest,
     DiagnosticsScannerLinkRequest,
+    DiagnosticsViewerOut,
+    DiagnosticsViewerSourceOut,
     ExecutionCreate,
     ExecutionExternalLinkOut,
     ExecutionFilterOptionsOut,
@@ -531,6 +535,66 @@ def get_case_history(
         entity_id=case_id,
         page=page,
         page_size=page_size,
+    )
+
+
+@case_router.get(
+    "/{case_id}/diagnostics/viewers",
+    response_model=CaseDiagnosticsViewersOut,
+    responses={
+        200: {"description": "Diagnostics viewers discovered for the case."},
+        404: {"description": "Case not found."},
+    },
+)
+def get_case_diagnostics_viewers(
+    case_id: UUID, db: Session = Depends(get_database_session)
+) -> CaseDiagnosticsViewersOut:
+    """List the IICE-addressable diagnostics viewers published for a case.
+
+    SimBoard stores a single ``diagnostic`` link per case pointing at the root
+    of its published zppy output. IICE needs the individual e3sm_diags
+    ``viewer/`` and mpas-analysis run directories beneath that root, of which
+    there are often many. This endpoint reads the archive's directory indexes
+    to enumerate them, so the frontend can offer side-by-side comparison links
+    without the user hand-copying URLs.
+
+    Discovery is bounded, confined to the reviewed archive hosts, and cached
+    per root. A root that cannot be read yields an empty ``viewers`` list and
+    an ``error`` code rather than failing the whole response.
+    """
+    case = _get_case(case_id, db)
+
+    sources: list[DiagnosticsViewerSourceOut] = []
+    for link in case.links:
+        if link.kind != ExternalLinkKind.DIAGNOSTIC:
+            continue
+        result = discover_with_cache(link.url)
+        sources.append(
+            DiagnosticsViewerSourceOut(
+                link_id=link.id,
+                root_url=link.url,
+                label=link.label,
+                viewers=[
+                    DiagnosticsViewerOut(
+                        tool=viewer.tool,
+                        url=viewer.url,
+                        subsection=viewer.subsection,
+                        comparison=viewer.comparison,
+                        start_year=viewer.start_year,
+                        end_year=viewer.end_year,
+                        ts_start_year=viewer.ts_start_year,
+                        ts_end_year=viewer.ts_end_year,
+                        reference_hint=viewer.reference_hint,
+                    )
+                    for viewer in result.viewers
+                ],
+                truncated=result.truncated,
+                error=result.error,
+            )
+        )
+
+    return CaseDiagnosticsViewersOut(
+        case_id=case.id, case_name=case.name, sources=sources
     )
 
 
