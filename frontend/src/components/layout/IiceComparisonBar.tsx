@@ -1,5 +1,5 @@
 import { Check, Copy, ExternalLink, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,29 @@ export const IiceComparisonBar = () => {
   const { entries, remove, update, clear } = useIiceBasket();
   const { toast } = useToast();
   const [collapsed, setCollapsed] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const visible = entries.length > 0;
+
+  // The bar is fixed to the viewport, so it would cover whatever sits at the
+  // bottom of the page. Reserve its height as body padding while shown so the
+  // page content, including the diagnostics card, ends above it.
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (!visible || !bar) {
+      document.body.style.paddingBottom = '';
+      return;
+    }
+    const apply = () => {
+      document.body.style.paddingBottom = `${bar.getBoundingClientRect().height}px`;
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      document.body.style.paddingBottom = '';
+    };
+  }, [visible, collapsed, entries.length]);
 
   const groups = useMemo(() => {
     const byTool = new Map<IiceTool, IiceBasketEntry[]>();
@@ -42,7 +65,7 @@ export const IiceComparisonBar = () => {
     return [...byTool.entries()];
   }, [entries]);
 
-  if (entries.length === 0) {
+  if (!visible) {
     return null;
   }
 
@@ -57,6 +80,7 @@ export const IiceComparisonBar = () => {
 
   return (
     <div
+      ref={barRef}
       role="region"
       aria-label="IICE comparison"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur"
