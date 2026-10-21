@@ -562,7 +562,8 @@ def _check_staging_readiness(
         matches = _find_spec_matches(
             str(case_dir / execution_id), [], FILE_SPECS["case_status"]
         )
-        # Missing or ambiguous files still go through normal metadata validation.
+        # Missing or ambiguous files do not establish readiness. Fresh discovery
+        # validates them; cached acceptance retains its existing reuse behavior.
         if len(matches) != 1:
             return None
         status = parse_case_status(matches[0])["status"]

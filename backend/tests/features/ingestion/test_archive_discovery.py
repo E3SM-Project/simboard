@@ -305,7 +305,10 @@ def test_staging_readiness_checks_current_status_before_acceptance(
     assert stats["execution_dirs_accepted"] == int(not deferred)
 
 
-def test_missing_case_status_remains_incomplete(tmp_path) -> None:
+@pytest.mark.parametrize("cached", [False, True])
+def test_missing_case_status_preserves_validation_and_cached_acceptance(
+    tmp_path, cached
+) -> None:
     case = stage_continuation_case(tmp_path)
     execution = next(case.iterdir())
     next(execution.glob("CaseStatus.*.gz")).unlink()
@@ -313,13 +316,18 @@ def test_missing_case_status_remains_incomplete(tmp_path) -> None:
     logs = {}
 
     grouped = _discover_case_executions(
-        case, discovery_results=results, case_collection_data=logs
+        case,
+        discovery_results=results,
+        case_collection_data=logs,
+        discovery_results_by_key=(
+            {(str(case.resolve()), execution.name): "accepted"} if cached else {}
+        ),
     )
 
-    assert execution.name not in grouped[str(case.resolve())]
+    assert (execution.name in grouped[str(case.resolve())]) is cached
     assert [
         result.outcome for result in results if result.execution_id == execution.name
-    ] == ["rejected_incomplete"]
+    ] == ([] if cached else ["rejected_incomplete"])
     assert logs[str(case.resolve())].deferred_decisions == []
 
 

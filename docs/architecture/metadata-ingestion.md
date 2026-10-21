@@ -104,9 +104,11 @@ execution IDs rather than automatically refreshing their run status.
 Staging collection checks the latest `case.run` attempt using the existing
 `CaseStatus` parser before accepting an unprocessed execution, including cached
 acceptance. A parsed `running` status defers collection until a later scan.
-`unknown`, `completed`, and `failed` retain normal metadata validation and
-selection behavior; a missing required `CaseStatus` still fails metadata
-validation. Archive scans do not apply this readiness gate. This is a metadata
+`unknown`, `completed`, and `failed` retain existing validation/cache and
+selection behavior. A missing required `CaseStatus` fails fresh metadata
+validation. Missing or ambiguous `CaseStatus` files do not invalidate cached
+acceptance during discovery; this readiness gate does not revalidate the full
+metadata cache. Archive scans do not apply this readiness gate. This is a metadata
 readiness check, not PACE's scheduler-state filtering: it makes no Slurm queries
 and cannot guarantee final metadata. A stale `running` snapshot can remain
 deferred in staging until its status changes or it is collected from archive.
