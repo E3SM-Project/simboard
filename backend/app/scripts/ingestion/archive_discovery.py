@@ -5,15 +5,20 @@ from __future__ import annotations
 import os
 import re
 import time
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
+from app.features.catalog.enums import ExecutionStatus
+from app.features.ingestion.parsers.case_status import parse_case_status
 from app.features.ingestion.parsers.parser import (
+    FILE_SPECS,
     ArchiveValidationError,
     IncompleteArchiveError,
+    _find_spec_matches,
     _locate_metadata_files,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
@@ -505,6 +510,21 @@ def _collect_case_execution(
         _record_already_processed_execution(case_path, execution_id, log_data, stats)
         return
 
+    if scan_mode == "staging":
+        readiness_decision = _check_staging_readiness(case_dir, execution_id)
+        if readiness_decision is not None:
+            if stats is not None:
+                stats["execution_dirs_scanned"] += 1
+                if readiness_decision.reason == "transient":
+                    stats["skipped_transient"] += 1
+                    stats["transient_execution_ids"] += 1
+            if log_data is not None:
+                if readiness_decision.decision == "deferred":
+                    log_data.deferred_decisions.append(readiness_decision)
+                else:
+                    log_data.rejected_decisions.append(readiness_decision)
+            return
+
     stored_outcome = (
         None
         if discovery_results_by_key is None
@@ -530,6 +550,35 @@ def _collect_case_execution(
         stats=stats,
         log_data=log_data,
         discovery_results=discovery_results,
+    )
+
+
+def _check_staging_readiness(
+    case_dir: Path, execution_id: str
+) -> ExecutionCollectionDecision | None:
+    """Defer a known-running execution without caching a metadata rejection."""
+    case_path = str(case_dir.resolve())
+    try:
+        matches = _find_spec_matches(
+            str(case_dir / execution_id), [], FILE_SPECS["case_status"]
+        )
+        # Missing or ambiguous files still go through normal metadata validation.
+        if len(matches) != 1:
+            return None
+        status = parse_case_status(matches[0])["status"]
+    except (OSError, EOFError, zlib.error) as exc:
+        return _build_rejected_execution_decision(
+            case_path, execution_id, "transient", exc
+        )
+
+    if status != ExecutionStatus.RUNNING.value:
+        return None
+
+    return ExecutionCollectionDecision(
+        case_path=case_path,
+        execution_id=execution_id,
+        decision="deferred",
+        reason="execution_running",
     )
 
 
@@ -802,9 +851,13 @@ def _calculate_case_collection_outcome(
     existing_ids = sorted(
         existing_rejected_ids | (valid_execution_id_set & processed_ids)
     )
-    deferred_ids = sorted(new_ids - selected_new_ids)
+    deferred_ids = sorted(
+        (new_ids - selected_new_ids)
+        | {decision.execution_id for decision in log_data.deferred_decisions}
+    )
     decisions_by_execution_id = {
-        decision.execution_id: decision for decision in log_data.rejected_decisions
+        decision.execution_id: decision
+        for decision in (*log_data.rejected_decisions, *log_data.deferred_decisions)
     }
 
     for execution_id in valid_execution_ids:
@@ -862,8 +915,8 @@ def _update_collection_decision_stats(
             discovery_stats["rejected_existing_execution_ids"] += 1
         elif decision.decision == "accepted":
             discovery_stats["accepted_execution_ids"] += 1
-        elif decision.decision == "deferred":
-            discovery_stats["deferred_execution_ids"] += 1
+
+    discovery_stats["deferred_execution_ids"] += len(outcome.deferred_ids)
 
 
 def _case_collection_summary_fields(

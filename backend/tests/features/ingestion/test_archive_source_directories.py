@@ -296,6 +296,61 @@ def test_source_file_errors_preserve_other_observations(
     ]
 
 
+def test_local_staging_ingests_only_ready_siblings(tmp_path, monkeypatch, db, client):
+    user, _, _ = _create_dependencies(db)
+    user.role = UserRole.SERVICE_ACCOUNT
+    db.flush()
+    monkeypatch.setitem(app.dependency_overrides, current_active_user, lambda: user)
+    root = tmp_path / "performance_archive"
+    case_path = stage_continuation_case(root / "user")
+    running_id = next(iter(EXECUTIONS))
+    status_file = case_path / running_id / f"CaseStatus.{running_id}.gz"
+    starting = "2026-10-20 10:00:00: case.run starting\n"
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting)
+    submissions = []
+
+    @contextmanager
+    def urlopen(request, timeout):
+        payload = json.loads(request.data) if request.data else None
+        if request.full_url.endswith("/from-path"):
+            submissions.append(payload)
+        response = client.request(request.get_method(), request.full_url, json=payload)
+        assert response.is_success, response.text
+        yield SimpleNamespace(
+            status=response.status_code, read=lambda: response.content
+        )
+
+    monkeypatch.setattr(source_module.urllib.request, "urlopen", urlopen)
+    config = replace(_config(root), api_base_url="http://testserver")
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    ready_ids = sorted(set(EXECUTIONS) - {running_id})
+    assert submissions[0]["selected_execution_ids"] == ready_ids
+    assert sorted(row.execution_id for row in db.query(Execution).all()) == ready_ids
+    assert (
+        db.query(Ingestion)
+        .filter_by(source_reference=str(case_path))
+        .one()
+        .processed_execution_ids
+        == ready_ids
+    )
+
+    # A repeated scan must not ingest the running sibling through the case path.
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    assert len(submissions) == 1
+    assert db.query(Execution).count() == len(ready_ids)
+
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting + "2026-10-20 11:00:00: case.run success\n")
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    assert submissions[1]["selected_execution_ids"] == [running_id]
+    assert db.query(Execution).count() == len(EXECUTIONS)
+    assert (
+        db.query(Execution).filter_by(execution_id=running_id).one().status
+        == "completed"
+    )
+
+
 @pytest.mark.parametrize(
     "runner", [nersc_archive_ingestor, hpc_upload_archive_ingestor]
 )

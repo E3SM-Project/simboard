@@ -157,6 +157,7 @@ def main_parser(
     output_dir: str | Path,
     *,
     strict_validation: bool = False,
+    selected_execution_ids: list[str] | None = None,
 ) -> tuple[list[ParsedExecution], int]:
     """Main entrypoint for parser workflow.
 
@@ -174,6 +175,8 @@ def main_parser(
         directory.
     output_dir : str
         Directory to extract and process files.
+    selected_execution_ids : list[str] | None
+        Only parse matching execution directory names; None parses all executions.
 
     Returns
     -------
@@ -211,6 +214,9 @@ def main_parser(
     skipped_count = 0
 
     validation_errors: list[dict[str, str]] = []
+    selected_ids = (
+        None if selected_execution_ids is None else set(selected_execution_ids)
+    )
 
     for case_dir, exec_dirs in case_to_executions_dirs.items():
         sorted_exec_dirs = sorted(exec_dirs)
@@ -220,6 +226,8 @@ def main_parser(
         )
 
         for exec_dir in sorted_exec_dirs:
+            if selected_ids is not None and Path(exec_dir).name not in selected_ids:
+                continue
             parsed_execution, exec_validation_errors, exec_skipped_count = (
                 _process_execution_dir(exec_dir, strict_validation=strict_validation)
             )

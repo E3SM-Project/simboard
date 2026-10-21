@@ -2976,8 +2976,9 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
 
+    @pytest.mark.parametrize("selected_ids", [None, ["100.1-1"]])
     def test_run_ingest_archive_forwards_strict_validation_and_hpc_username(
-        self, db: Session
+        self, db: Session, selected_ids
     ):
         expected_result = IngestArchiveResult(
             executions=[],
@@ -2996,6 +2997,7 @@ class TestIngestionApiCoverage:
                 db,
                 strict_validation=True,
                 hpc_username="request-user",
+                selected_execution_ids=selected_ids,
             )
 
         assert result == expected_result
@@ -3006,6 +3008,7 @@ class TestIngestionApiCoverage:
             strict_validation=True,
             hpc_username="request-user",
             production_case_identity=None,
+            selected_execution_ids=selected_ids,
         )
 
     def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):

@@ -1,5 +1,6 @@
 """Tests for the NERSC archive ingestion runner script."""
 
+import gzip
 import logging
 import runpy
 from dataclasses import replace
@@ -38,6 +39,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
 from tests.features.ingestion.source_directory_utils import (
     stub_source_directory_persistence,
 )
+from tests.fixtures.continuation_case import stage_continuation_case
 
 
 @pytest.fixture(autouse=True)
@@ -302,6 +304,77 @@ def test_rejected_staging_execution_recovers_when_files_become_valid(
         )
         assert len(reads) == 2
         assert len(submitted) == 1
+
+
+@pytest.mark.parametrize("runner", [ingestor_module, upload_module])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("terminal", ["success", "error"])
+def test_running_staging_execution_is_deferred_then_ingested(
+    tmp_path, monkeypatch, runner, cached, dry_run, terminal
+) -> None:
+    root = tmp_path / "performance_archive"
+    case = stage_continuation_case(root / "user")
+    execution = next(case.iterdir())
+    status_file = next(execution.glob("CaseStatus.*.gz"))
+    starting = "2026-10-20 10:00:00: case.run starting 100\n"
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting)
+    state = _fresh_state()
+    if cached:
+        state["discovery_results"]["user/" + case.name] = [
+            {
+                "case_identity": "user/" + case.name,
+                "execution_id": execution.name,
+                "outcome": "accepted",
+            }
+        ]
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    submitted = []
+    persisted = []
+
+    def submit(endpoint, token, path, machine, **kwargs):
+        submitted.append(kwargs["processed_execution_ids"])
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    def persist(*args, results, **kwargs):
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="chrysalis" if runner is upload_module else "perlmutter",
+        dry_run=dry_run,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        execution_dir=execution,
+    )
+    assert (
+        runner._run_ingestor(
+            config, post_request_fn=submit, discovery_post_request_fn=persist
+        )
+        == 0
+    )
+    assert submitted == []
+    assert persisted == []
+    assert state["cases"] == {}
+
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting + f"2026-10-20 11:00:00: case.run {terminal} 100\n")
+
+    assert (
+        runner._run_ingestor(
+            config, post_request_fn=submit, discovery_post_request_fn=persist
+        )
+        == 0
+    )
+    assert submitted == ([] if dry_run else [[execution.name]])
+    assert all(result.outcome == "accepted" for result in persisted)
+    if not dry_run:
+        assert state["cases"][str(case)]["processed_execution_ids"] == [execution.name]
 
 
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(

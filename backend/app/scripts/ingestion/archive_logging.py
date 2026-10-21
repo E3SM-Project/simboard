@@ -240,6 +240,7 @@ def presentation(
             "already_processed": "skipped",
             "transient": "unreadable",
             "max_cases_per_run": "deferred",
+            "execution_running": "deferred",
         }.get(fields.get("reason"), fields.get("reason"))
         fields = {key: value for key, value in fields.items() if key != "decision"}
         fields["outcome"] = outcome

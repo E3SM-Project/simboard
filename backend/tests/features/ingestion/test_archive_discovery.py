@@ -1,5 +1,6 @@
 """Focused tests for archive discovery decisions and snapshot settlement."""
 
+import gzip
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -27,6 +28,7 @@ from app.scripts.ingestion.archive_layout import (
     _build_case_path_filter,
     _build_walk_dir_filter,
 )
+from tests.fixtures.continuation_case import stage_continuation_case
 
 _build_case_scan_results = discovery_module._build_case_scan_results
 _build_ingestion_candidates = discovery_module._build_ingestion_candidates
@@ -191,7 +193,7 @@ def test_collect_case_execution_records_each_decision_source(
     expected: dict[str, int],
 ) -> None:
     case_dir = tmp_path / "case-a"
-    case_dir.mkdir()
+    (case_dir / execution_id).mkdir(parents=True)
     grouped: dict[str, set[str]] = {}
     logs: dict[str, CaseCollectionLogData] = {}
     stats = discovery_module._new_discovery_stats()
@@ -249,6 +251,128 @@ def test_collect_case_execution_records_each_decision_source(
     assert [decision.reason for decision in log_data.rejected_decisions] == (
         [] if expected_rejection_reason is None else [expected_rejection_reason]
     )
+
+
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("terminal", [None, "success", "error", "unknown"])
+def test_staging_readiness_checks_current_status_before_acceptance(
+    tmp_path, scan_mode, cached, terminal
+) -> None:
+    case = tmp_path / "case"
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    content = "2026-10-20 10:00:00: case.run starting 100\n"
+    if terminal == "unknown":
+        content = "2026-10-20 10:00:00: case.setup success\n"
+    elif terminal is not None:
+        content += f"2026-10-20 11:00:00: case.run {terminal} 100\n"
+    with gzip.open(execution / "CaseStatus.100.1-1.gz", "wt") as stream:
+        stream.write(content)
+    grouped = {}
+    logs = {}
+    stats = discovery_module._new_discovery_stats()
+    results = []
+    validations = []
+    case_identity = str(case.resolve())
+    cache_key = discovery_module._case_identity_key(case_identity, scan_mode)
+
+    discovery_module._collect_case_execution(
+        grouped,
+        case,
+        execution.name,
+        metadata_locator=lambda path: validations.append(path),
+        stats=stats,
+        case_collection_data=logs,
+        processed_ids_by_key=None,
+        scan_mode=scan_mode,
+        staging_root_basename="performance_archive",
+        discovery_results=results,
+        discovery_results_by_key=(
+            {(cache_key, execution.name): "accepted"} if cached else {}
+        ),
+    )
+
+    deferred = scan_mode == "staging" and terminal is None
+    assert grouped == ({} if deferred else {case_identity: {execution.name}})
+    assert validations == ([] if deferred or cached else [str(execution)])
+    assert len(results) == int(not deferred and not cached)
+    assert logs[case_identity].rejected_decisions == []
+    decisions = logs[case_identity].deferred_decisions
+    assert [decision.reason for decision in decisions] == (
+        ["execution_running"] if deferred else []
+    )
+    assert stats["execution_dirs_accepted"] == int(not deferred)
+
+
+def test_missing_case_status_remains_incomplete(tmp_path) -> None:
+    case = stage_continuation_case(tmp_path)
+    execution = next(case.iterdir())
+    next(execution.glob("CaseStatus.*.gz")).unlink()
+    results = []
+    logs = {}
+
+    grouped = _discover_case_executions(
+        case, discovery_results=results, case_collection_data=logs
+    )
+
+    assert execution.name not in grouped[str(case.resolve())]
+    assert [
+        result.outcome for result in results if result.execution_id == execution.name
+    ] == ["rejected_incomplete"]
+    assert logs[str(case.resolve())].deferred_decisions == []
+
+
+def test_staging_readiness_access_error_is_retryable(tmp_path, monkeypatch) -> None:
+    execution = tmp_path / "case" / "100.1-1"
+    execution.mkdir(parents=True)
+    logs = {}
+    results = []
+    stats = discovery_module._new_discovery_stats()
+
+    def unreadable(*args):
+        raise PermissionError("temporarily inaccessible")
+
+    monkeypatch.setattr(discovery_module, "_find_spec_matches", unreadable)
+    grouped = _discover_case_executions(
+        tmp_path,
+        stats=stats,
+        discovery_results=results,
+        case_collection_data=logs,
+    )
+
+    assert grouped == {}
+    assert results == []
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
+    assert (
+        logs[str(execution.parent.resolve())].rejected_decisions[0].reason
+        == "transient"
+    )
+
+
+def test_truncated_case_status_does_not_abort_staging_scan(tmp_path) -> None:
+    case = tmp_path / "case"
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    (case / "101.1-1").mkdir()
+    content = gzip.compress(b"2026-10-20 10:00:00: case.run starting\n")
+    (execution / "CaseStatus.100.1-1.gz").write_bytes(content[:-8])
+    stats = discovery_module._new_discovery_stats()
+    results = []
+
+    grouped = _discover_case_executions(
+        tmp_path,
+        metadata_locator=lambda path: {},
+        stats=stats,
+        discovery_results=results,
+    )
+
+    assert grouped == {str(case.resolve()): ["101.1-1"]}
+    assert stats["skipped_transient"] == 1
+    assert [(result.execution_id, result.outcome) for result in results] == [
+        ("101.1-1", "accepted")
+    ]
 
 
 def test_collection_outcomes_preserve_order_fields_and_limit_counters(
