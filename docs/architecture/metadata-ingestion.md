@@ -74,6 +74,37 @@ There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_
 > SimBoard automation can scan either `PERF_ARCHIVE_DIR` or
 > `OLD_PERF_ARCHIVE_DIR` depending on runner configuration.
 
+### PACE archiving and metadata state
+
+**Staging metadata is not necessarily final.** Staging can contain active runs
+as well as executions awaiting the next PACE collection run. PACE selects
+individual execution directories, not entire case lifecycles.
+
+- **NERSC:** The Python workflow selects executions using Slurm accounting status,
+  leaving selected active job states in staging. Other states, including
+  `UNKNOWN`, are eligible to move. See
+  [`pace-process-perf-archive.py`](https://github.com/E3SM-Project/pace/blob/master/portal/utils/pace-process-perf-archive.py)
+  and the upload/archive wrapper,
+  [`pace_archive_nersc.sh`](https://github.com/E3SM-Project/pace/blob/master/portal/utils/pace_archive_nersc.sh).
+- **LCRC and other sites using the Perl workflow:** The script first checks for
+  a gzipped `CaseStatus` and all readable regular files being gzipped, then falls
+  back to machine-specific scheduler checks. See
+  [`e3sm_perf_archive.perl`](https://pace.ornl.gov/static/tools/e3sm_perf_archive.perl)
+  and the upload/archive wrapper,
+  [`pace_archive.sh`](https://github.com/E3SM-Project/E3SM_test_scripts/blob/master/util/pace_archive.sh).
+
+**Archived does not mean successful.** Both workflows can archive failed
+executions without requiring a `case.run success` entry. These scripts do not
+establish whether staged metadata is refreshed after a run finishes.
+
+For SimBoard, metadata completeness means the required files and fields are
+present, not that the run completed. Normal collection skips already-processed
+execution IDs rather than automatically refreshing their run status.
+
+See the [PACE Collection and Upload Reference](https://e3sm.atlassian.net/wiki/spaces/EPG/pages/5477335106/PACE+Collection+and+Upload+Reference)
+for detailed selection criteria and site workflows. Site-deployed scripts may
+differ from the published references.
+
 ### Source directory mappings
 
 Normal ingestion records original case and execution directories as `staging`
@@ -149,7 +180,7 @@ Example NERSC path:
 
 ### 2. Archive directory (`OLD_PERF_ARCHIVE_DIR`)
 
-Long-term filesystem location managed by PACE, referred to as `OLD_PERF_ARCHIVE_DIR`. PACE moves staging output into this directory once per day.
+Long-term filesystem location managed by PACE, referred to as `OLD_PERF_ARCHIVE_DIR`. PACE moves eligible staging output into this directory when the site's archiving job runs; site scheduling determines the frequency.
 
 Supported structure under configured archive root:
 
