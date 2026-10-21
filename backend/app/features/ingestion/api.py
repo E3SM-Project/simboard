@@ -330,7 +330,11 @@ def ingest_from_path(
         user=user,
         archive_sha256=None,
         hpc_username=payload.hpc_username,
-        processed_execution_ids=payload.processed_execution_ids,
+        processed_execution_ids=(
+            payload.selected_execution_ids
+            if payload.selected_execution_ids is not None
+            else payload.processed_execution_ids
+        ),
         source_directories=payload.source_directories,
         db=db,
     )

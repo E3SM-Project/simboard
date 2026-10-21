@@ -566,8 +566,8 @@ def _check_staging_readiness(
         # validates them; cached acceptance retains its existing reuse behavior.
         if len(matches) != 1:
             return None
-        status = parse_case_status(matches[0])["status"]
-    except (OSError, EOFError, zlib.error) as exc:
+        status = parse_case_status(matches[0], strict_read=True)["status"]
+    except (OSError, EOFError, UnicodeDecodeError, zlib.error) as exc:
         return _build_rejected_execution_decision(
             case_path, execution_id, "transient", exc
         )

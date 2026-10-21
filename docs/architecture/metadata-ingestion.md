@@ -108,13 +108,17 @@ acceptance. A parsed `running` status defers collection until a later scan.
 selection behavior. A missing required `CaseStatus` fails fresh metadata
 validation. Missing or ambiguous `CaseStatus` files do not invalidate cached
 acceptance during discovery; this readiness gate does not revalidate the full
-metadata cache. Archive scans do not apply this readiness gate. This is a metadata
-readiness check, not PACE's scheduler-state filtering: it makes no Slurm queries
+metadata cache. Read/decompression errors during readiness checks are retryable
+unreadable observations, not parsed `unknown` statuses. Archive scans do not
+apply this readiness gate. This is a metadata readiness check, not PACE's
+scheduler-state filtering: it makes no Slurm queries
 and cannot guarantee final metadata. A stale `running` snapshot can remain
 deferred in staging until its status changes or it is collected from archive.
 
 Automated path submissions send `selected_execution_ids` so the backend parses
 only selected execution directories, not deferred siblings in the same case.
+When supplied, selected IDs also determine the persisted processed IDs, even
+if the request's `processed_execution_ids` differs or is omitted.
 Requests omitting this optional field retain whole-path parsing. Deploy the
 backend's selection support before running the updated path collector.
 

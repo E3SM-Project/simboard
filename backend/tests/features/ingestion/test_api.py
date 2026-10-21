@@ -162,6 +162,36 @@ def test_ingested_case_defaults_preserve_existing_types(
         )
 
 
+@pytest.mark.parametrize("processed_ids", [None, [], list(EXECUTIONS)])
+def test_path_selection_limits_persisted_processed_ids(
+    client, db, tmp_path, processed_ids
+):
+    case_path = stage_continuation_case(tmp_path)
+    selected_id = next(iter(EXECUTIONS))
+    payload = {
+        "archive_path": str(case_path),
+        "machine_name": "chrysalis",
+        "selected_execution_ids": [selected_id],
+    }
+    if processed_ids is not None:
+        payload["processed_execution_ids"] = processed_ids
+
+    response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 1
+    assert [row.execution_id for row in db.query(Execution).all()] == [selected_id]
+    ingestion = db.query(Ingestion).filter_by(source_reference=str(case_path)).one()
+    assert ingestion.processed_execution_ids == [selected_id]
+    state = client.get(
+        f"{API_BASE}/ingestions/state", params={"machine_name": "chrysalis"}
+    )
+    assert state.status_code == 200, state.text
+    assert state.json()["cases"][str(case_path)]["processed_execution_ids"] == [
+        selected_id
+    ]
+
+
 @pytest.mark.parametrize(
     "username", ["ac.kai.zhang", " ac.kai.zhang ", "other-user", None]
 )

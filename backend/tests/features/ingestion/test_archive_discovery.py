@@ -359,25 +359,46 @@ def test_staging_readiness_access_error_is_retryable(tmp_path, monkeypatch) -> N
     )
 
 
-def test_truncated_case_status_does_not_abort_staging_scan(tmp_path) -> None:
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize(
+    "failure", ["truncated", "bad_header", "bad_crc", "bad_deflate"]
+)
+def test_unreadable_case_status_is_retryable_without_aborting_scan(
+    tmp_path, cached, failure
+) -> None:
     case = tmp_path / "case"
     execution = case / "100.1-1"
     execution.mkdir(parents=True)
     (case / "101.1-1").mkdir()
     content = gzip.compress(b"2026-10-20 10:00:00: case.run starting\n")
-    (execution / "CaseStatus.100.1-1.gz").write_bytes(content[:-8])
+    if failure == "truncated":
+        content = content[:-8]
+    elif failure == "bad_header":
+        content = b"not a gzip file"
+    elif failure == "bad_crc":
+        content = content[:-8] + bytes([content[-8] ^ 0xFF]) + content[-7:]
+    else:
+        content = content[:10] + b"\x07" + content[-8:]
+    (execution / "CaseStatus.100.1-1.gz").write_bytes(content)
     stats = discovery_module._new_discovery_stats()
     results = []
+    logs = {}
 
     grouped = _discover_case_executions(
         tmp_path,
         metadata_locator=lambda path: {},
         stats=stats,
         discovery_results=results,
+        case_collection_data=logs,
+        discovery_results_by_key=(
+            {(str(case.resolve()), execution.name): "accepted"} if cached else {}
+        ),
     )
 
     assert grouped == {str(case.resolve()): ["101.1-1"]}
     assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
+    assert logs[str(case.resolve())].rejected_decisions[0].reason == "transient"
     assert [(result.execution_id, result.outcome) for result in results] == [
         ("101.1-1", "accepted")
     ]
