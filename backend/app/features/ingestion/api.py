@@ -319,6 +319,7 @@ def ingest_from_path(
             output_dir=tmpdir,
             db=db,
             hpc_username=payload.hpc_username,
+            selected_execution_ids=payload.selected_execution_ids,
         )
 
     response = _process_ingestion(
@@ -329,7 +330,11 @@ def ingest_from_path(
         user=user,
         archive_sha256=None,
         hpc_username=payload.hpc_username,
-        processed_execution_ids=payload.processed_execution_ids,
+        processed_execution_ids=(
+            payload.selected_execution_ids
+            if payload.selected_execution_ids is not None
+            else payload.processed_execution_ids
+        ),
         source_directories=payload.source_directories,
         db=db,
     )
@@ -803,6 +808,7 @@ def _run_ingest_archive(
     strict_validation: bool = False,
     hpc_username: str | None = None,
     production_case_identity: CaseIdentity | None = None,
+    selected_execution_ids: list[str] | None = None,
 ) -> IngestArchiveResult:
     try:
         return ingest_archive(
@@ -812,6 +818,7 @@ def _run_ingest_archive(
             strict_validation=strict_validation,
             hpc_username=hpc_username,
             production_case_identity=production_case_identity,
+            selected_execution_ids=selected_execution_ids,
         )
     except ArchiveValidationError as exc:
         _raise_archive_validation_error(exc.errors)

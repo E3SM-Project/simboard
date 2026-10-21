@@ -16,12 +16,16 @@ CASE_RUN_TERMINAL_PATTERN = re.compile(
 )
 
 
-def parse_case_status(file_path: str | Path) -> dict[str, str | None]:
+def parse_case_status(
+    file_path: str | Path, *, strict_read: bool = False
+) -> dict[str, str | None]:
     """Parse the latest ``case.run`` attempt from ``CaseStatus``.
 
     ``CaseStatus`` can record multiple attempts for the same execution. The
     latest ``case.run starting`` entry is treated as authoritative and the first
     terminal entry after it determines the run status.
+
+    Set ``strict_read`` to propagate read errors instead of returning ``unknown``.
     """
     file_path = Path(file_path)
     result: dict[str, str | None] = {
@@ -33,6 +37,8 @@ def parse_case_status(file_path: str | Path) -> dict[str, str | None]:
     try:
         lines = _open_text(file_path).splitlines()
     except (OSError, UnicodeDecodeError) as exc:
+        if strict_read:
+            raise
         logger.warning("Failed to read case status file %s (%s)", file_path, exc)
         return result
 

@@ -780,7 +780,7 @@ def test_ingest_case_with_retries_returns_exhausted_retries_when_zero_attempts()
         ('"unexpected"', {}),
     ],
 )
-def test_post_ingestion_request_preserves_wire_contract(
+def test_post_ingestion_request_selects_discovered_execution_ids(
     monkeypatch,
     response_body: str,
     expected_body: dict[str, int],
@@ -814,6 +814,7 @@ def test_post_ingestion_request_preserves_wire_contract(
         "archive_path": "/archive/case_a",
         "machine_name": "pm",
         "processed_execution_ids": ["100.1-1", "101.1-1"],
+        "selected_execution_ids": ["100.1-1", "101.1-1"],
     }
     assert request.data == json.dumps(expected_payload).encode("utf-8")
 

@@ -64,6 +64,25 @@ class TestIngestionSchemas:
         assert payload.archive_path == "/tmp/archive.zip"
         assert payload.machine_name == "chrysalis"
         assert payload.processed_execution_ids == ["101.1-1"]
+        assert payload.selected_execution_ids is None
+
+    @pytest.mark.parametrize("selected_ids", [None, ["101.1-1"]])
+    def test_path_request_accepts_optional_execution_selection(self, selected_ids):
+        payload = IngestFromPathRequest(
+            archive_path="/tmp/case",
+            machine_name="perlmutter",
+            selected_execution_ids=selected_ids,
+        )
+
+        assert payload.selected_execution_ids == selected_ids
+
+    def test_path_request_rejects_empty_execution_selection(self):
+        with pytest.raises(ValidationError):
+            IngestFromPathRequest(
+                archive_path="/tmp/case",
+                machine_name="perlmutter",
+                selected_execution_ids=[],
+            )
 
     def test_ingest_archive_request_missing_fields(self) -> None:
         with pytest.raises(ValidationError):

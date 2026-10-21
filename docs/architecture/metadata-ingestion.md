@@ -46,7 +46,7 @@ Case-level state is derived from execution-level state.
 | Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. Rejections are revalidated when an unprocessed execution is visited again; filesystem access failures are reported separately. |
 | Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
-| Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
+| Deferred execution        | An execution not selected in this invocation because its staging `CaseStatus` reports `running`, or because a per-run cap stopped selection. Readiness deferrals are retried on later scans without being marked processed or persisted as metadata rejections. |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
 | Discovery result          | Validation outcome keyed by machine, normalized case identity, and execution ID. Accepted results are stable; rejected outcomes may be refreshed by revalidation. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`. |
 
@@ -100,6 +100,27 @@ establish whether staged metadata is refreshed after a run finishes.
 For SimBoard, metadata completeness means the required files and fields are
 present, not that the run completed. Normal collection skips already-processed
 execution IDs rather than automatically refreshing their run status.
+
+Staging collection checks the latest `case.run` attempt using the existing
+`CaseStatus` parser before accepting an unprocessed execution, including cached
+acceptance. A parsed `running` status defers collection until a later scan.
+`unknown`, `completed`, and `failed` retain existing validation/cache and
+selection behavior. A missing required `CaseStatus` fails fresh metadata
+validation. Missing or ambiguous `CaseStatus` files do not invalidate cached
+acceptance during discovery; this readiness gate does not revalidate the full
+metadata cache. Read/decompression errors during readiness checks are retryable
+unreadable observations, not parsed `unknown` statuses. Archive scans do not
+apply this readiness gate. This is a metadata readiness check, not PACE's
+scheduler-state filtering: it makes no Slurm queries
+and cannot guarantee final metadata. A stale `running` snapshot can remain
+deferred in staging until its status changes or it is collected from archive.
+
+Automated path submissions send `selected_execution_ids` so the backend parses
+only selected execution directories, not deferred siblings in the same case.
+When supplied, selected IDs also determine the persisted processed IDs, even
+if the request's `processed_execution_ids` differs or is omitted.
+Requests omitting this optional field retain whole-path parsing. Deploy the
+backend's selection support before running the updated path collector.
 
 See the [PACE Collection and Upload Reference](https://e3sm.atlassian.net/wiki/spaces/EPG/pages/5477335106/PACE+Collection+and+Upload+Reference)
 for detailed selection criteria and site workflows. Site-deployed scripts may

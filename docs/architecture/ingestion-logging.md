@@ -138,7 +138,7 @@ not combine the two populations or infer public counts from validation totals.
 | `rejected_incomplete_execution_ids` / per-case `rejected_incomplete` | Final missing-metadata observation mapped to `executions.incomplete`. |
 | `rejected_invalid_execution_ids` / per-case `rejected_invalid` | Final invalid-metadata observation mapped to `executions.invalid`. |
 | `transient_execution_ids` / per-case `transient` | Final inaccessible-files observation mapped to `executions.unreadable`. |
-| `deferred_execution_ids` / per-case `deferred` | Final limit-excluded observation mapped to `executions.deferred`. |
+| `deferred_execution_ids` / per-case `deferred` | Staging readiness or case-limit deferral mapped to `executions.deferred`. |
 
 Only the validation/cache counters are included in `scan_completed`; final
 outcome counters are represented by case summaries and canonical metrics rather
@@ -184,7 +184,13 @@ Each observation receives one final discovery outcome:
 | `incomplete` | Required metadata missing |
 | `invalid` | Metadata failed validation |
 | `unreadable` | Files could not be accessed |
-| `deferred` | Eligible but excluded by the case limit |
+| `deferred` | Staging `CaseStatus` reports `running`, or an eligible execution was excluded by the case limit |
+
+Readiness deferrals use `reason=execution_running`; limit deferrals use
+`reason=max_cases_per_run`. Both report `outcome=deferred`. A case containing
+only running executions counts as found, not eligible. Case-level `deferred`
+still counts only eligible cases excluded by the limit. Readiness deferrals
+are not persisted as metadata rejections or marked processed.
 
 ```text
 total = selected + skipped + incomplete + invalid + unreadable + deferred

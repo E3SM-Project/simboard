@@ -95,6 +95,7 @@ def ingest_archive(
     strict_validation: bool = False,
     hpc_username: str | None = None,
     production_case_identity: CaseIdentity | None = None,
+    selected_execution_ids: list[str] | None = None,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
@@ -114,6 +115,9 @@ def ingest_archive(
         Trusted production classification target (name, machine ID, HPC username).
         Only matching new cases use production; other new cases use development.
         Existing classifications are not changed here.
+    selected_execution_ids : list[str] | None
+        Only parse matching execution directory names; None parses all executions.
+
     Returns
     -------
     IngestArchiveResult
@@ -131,6 +135,7 @@ def ingest_archive(
         archive_path_resolved,
         output_dir_resolved,
         strict_validation=strict_validation,
+        selected_execution_ids=selected_execution_ids,
     )
 
     if not parsed_executions:

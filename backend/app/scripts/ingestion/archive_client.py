@@ -501,6 +501,7 @@ def _post_ingestion_request(
         "archive_path": archive_path,
         "machine_name": machine_name,
         "processed_execution_ids": processed_execution_ids,
+        "selected_execution_ids": processed_execution_ids,
     }
     request = _build_json_request(endpoint_url, api_token, payload)
 

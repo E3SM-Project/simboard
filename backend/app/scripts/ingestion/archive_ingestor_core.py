@@ -337,6 +337,7 @@ class CaseCollectionLogData:
     case_path: str
     valid_execution_ids: set[str] = field(default_factory=set)
     rejected_decisions: list[ExecutionCollectionDecision] = field(default_factory=list)
+    deferred_decisions: list[ExecutionCollectionDecision] = field(default_factory=list)
 
 
 @dataclass

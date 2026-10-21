@@ -1,5 +1,6 @@
 """Tests of the public ingestion log contract without live API calls."""
 
+import gzip
 import io
 import json
 import logging
@@ -480,6 +481,58 @@ def test_real_discovery_partitions_and_submission_results(
             )
             == value
         )
+
+
+def test_running_deferrals_combine_with_case_limit_in_metrics(
+    output, tmp_path, monkeypatch
+):
+    root = tmp_path / "performance_archive"
+    for case, execution_id, running in [
+        ("a", "100.1-1", False),
+        ("a", "101.1-1", True),
+        ("b", "200.1-1", False),
+        ("c", "300.1-1", True),
+    ]:
+        execution = root / "user" / case / execution_id
+        execution.mkdir(parents=True)
+        if running:
+            with gzip.open(execution / f"CaseStatus.{execution_id}.gz", "wt") as stream:
+                stream.write("2026-10-20 10:00:00: case.run starting\n")
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", "DEBUG")
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        dry_run_use_remote_state=False,
+    )
+
+    @logs.logged_main
+    def main():
+        return runner._run_ingestor(config, metadata_locator=lambda path: {})
+
+    assert main() == 0
+    record = records(output)[0]
+    assert record["executions"] == {
+        "total": 4,
+        "selected": 1,
+        "skipped": 0,
+        "incomplete": 0,
+        "invalid": 0,
+        "unreadable": 0,
+        "deferred": 3,
+    }
+    assert record["cases"]["found"] == 3
+    assert record["cases"]["eligible"] == 2
+    assert record["cases"]["selected"] == 1
+    assert record["cases"]["deferred"] == 1
+    assert "outcome=deferred" in output.getvalue()
+    assert "reason=execution_running" in output.getvalue()
+    assert "reason=max_cases_per_run" in output.getvalue()
 
 
 @pytest.mark.parametrize(

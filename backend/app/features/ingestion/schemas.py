@@ -82,6 +82,14 @@ class IngestFromPathRequest(BaseModel):
 
     archive_path: Annotated[str, Field(..., description="Path to the archive file")]
     source_directories: list[SourceDirectoryObservation] = Field(default_factory=list)
+    selected_execution_ids: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            min_length=1,
+            description="Only parse these execution directory names; omitted means all",
+        ),
+    ] = None
     machine_name: Annotated[
         str,
         Field(..., description="Name of the machine associated with the executions"),
