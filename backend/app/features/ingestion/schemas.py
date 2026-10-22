@@ -17,6 +17,12 @@ from app.features.ingestion.enums import (
     IngestionStatus,
 )
 
+# PACE producers use either a bare timestamp or an opaque machine/project prefix.
+ARCHIVE_SNAPSHOT_NAME_PATTERN = (
+    r"^performance_archive_(?:[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)+_)?"
+    r"\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
+)
+
 
 class IngestionExecutionSummary(BaseModel):
     """Lightweight summary of a persisted execution created by ingestion."""
@@ -234,7 +240,7 @@ class ArchiveCheckpointEntry(BaseModel):
         str,
         Field(
             ...,
-            pattern=(r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"),
+            pattern=ARCHIVE_SNAPSHOT_NAME_PATTERN,
         ),
     ]
 
