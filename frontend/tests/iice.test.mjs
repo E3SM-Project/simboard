@@ -126,6 +126,31 @@ test('viewer urls lose trailing slashes, as the CGI re-emits them', () => {
   assert.equal(normalizeIiceViewerUrl('  https://x.test/viewer  '), 'https://x.test/viewer');
 });
 
+test('a reference case cannot inject extra query parameters', () => {
+  // referenceCase is free text that is prefixed into the label parameter, and
+  // the copy button exists so the link can be shared with someone else.
+  const link = buildIiceLink({
+    tool: 'e3sm_diags',
+    entries: [
+      {
+        url: 'https://x.test/a/viewer/',
+        label: 'hist',
+        referenceCase: 'ref&url1=https://evil.test/viewer&label1=pwned',
+      },
+      { url: 'https://x.test/b/viewer/', label: 'ctrl', referenceCase: 'ref' },
+    ],
+  });
+
+  // The hostile text survives inside the label, which is harmless; what
+  // matters is that it cannot become a parameter of its own.
+  const parsed = query(link);
+  assert.equal(parsed.url1, 'https://x.test/a/viewer');
+  assert.equal(parsed.url2, 'https://x.test/b/viewer');
+  assert.equal(Object.keys(parsed).length, 5);
+  assert.match(parsed.label1, /^!ref /);
+  assert.equal(formatIiceLabel({ url: 'u', label: 'x', referenceCase: 'a\nb' }), '!a b x');
+});
+
 test('validation rejects mixing model-vs-obs and model-vs-model runs', () => {
   // IICE drives one comparison from one template, so these cannot share a link.
   const mixed = validateIiceLink({

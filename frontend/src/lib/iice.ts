@@ -33,7 +33,6 @@
 export const IICE_ORIGIN = 'https://portal.nersc.gov';
 
 export const IICE_ENTRANCE_URL = `${IICE_ORIGIN}/project/e3sm/iice/`;
-export const IICE_MPAS_ENTRANCE_URL = `${IICE_ORIGIN}/project/e3sm/iice/mpas-a/`;
 
 const IICE_E3SM_DIAGS_CGI = `${IICE_ORIGIN}/project/m2136/bin/iice/iice.cgi`;
 const IICE_MPAS_ANALYSIS_CGI = `${IICE_ORIGIN}/project/m2136/bin/iice/mpas-a.cgi`;
@@ -99,7 +98,11 @@ const encodeIiceValue = (value: string): string => value.replace(/ /g, '%20');
  */
 export const formatIiceLabel = (entry: IiceEntry): string => {
   const base = cleanLabel(entry.label);
-  const reference = entry.referenceCase?.trim();
+  // The reference case is free text and is prefixed into the same query
+  // parameter, so it needs the same cleaning as the label: an unescaped `&`
+  // would otherwise let it append parameters to a link meant for sharing.
+  const reference = cleanLabel(entry.referenceCase ?? '');
+
   return reference ? `!${reference} ${base}`.trim() : base;
 };
 

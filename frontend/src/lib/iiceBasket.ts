@@ -62,7 +62,9 @@ const isEntry = (value: unknown): value is IiceBasketEntry => {
     typeof candidate.caseId === 'string' &&
     typeof candidate.caseName === 'string' &&
     (candidate.tool === 'e3sm_diags' || candidate.tool === 'mpas_analysis') &&
-    typeof candidate.label === 'string'
+    typeof candidate.label === 'string' &&
+    // Guards a basket written by an earlier build: the bar calls .trim() on this.
+    typeof candidate.referenceCase === 'string'
   );
 };
 
@@ -138,9 +140,9 @@ export const useIiceBasket = () => {
     if (current.some((existing) => existing.url === entry.url)) {
       return true;
     }
-    if (
-      current.filter((existing) => existing.tool === entry.tool).length >= IICE_BASKET_MAX_PER_TOOL
-    ) {
+    const key = iiceGroupKey(entry);
+    const inGroup = current.filter((existing) => iiceGroupKey(existing) === key);
+    if (inGroup.length >= IICE_BASKET_MAX_PER_TOOL) {
       return false;
     }
     write([...current, entry]);
