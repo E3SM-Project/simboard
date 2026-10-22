@@ -60,6 +60,10 @@ _MPAS_ANALYSIS_RUN_RE = re.compile(
 # zppy's naming, e.g. ``atm_monthly_180x360_aave_mvm_PI100``. It is a hint,
 # not the reference case name IICE needs; see ``reference_hint`` below.
 _MVM_TAG_RE = re.compile(r"_mvm(?:_(?P<tag>.+))?$")
+# Directory names are joined straight into a URL, so keep them to the plain
+# characters zppy actually produces. This also keeps control characters and
+# percent escapes out of the request, which httpx rejects with InvalidURL.
+_SAFE_INDEX_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 
 
 @dataclass(frozen=True)
@@ -169,7 +173,9 @@ def parse_directory_index(html: str) -> list[str]:
 
     Only relative, single-segment entries ending in ``/`` are returned, so
     parent links, absolute links, query-sorted column headers, and files are
-    all excluded. Names are returned without the trailing slash.
+    all excluded. Names must also look like the plain directory names zppy
+    writes; anything else is skipped rather than joined into a request URL.
+    Names are returned without the trailing slash.
     """
     parser = _IndexLinkParser()
     try:
@@ -184,7 +190,7 @@ def parse_directory_index(html: str) -> list[str]:
         if "://" in href:
             continue
         name = href[:-1]
-        if not name or "/" in name:
+        if not _SAFE_INDEX_NAME_RE.match(name):
             continue
         names.append(name)
     return names
@@ -475,7 +481,9 @@ def http_directory_fetcher(client: httpx.Client) -> Fetcher:
                         return classified
 
                     return _read_index_body(response, deadline, max_bytes, url)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, httpx.InvalidURL) as exc:
+                # InvalidURL is not an HTTPError, and a malformed Location
+                # header reaches us through the same path as a transport fault.
                 logger.debug("Diagnostics index fetch failed for %s: %s", url, exc)
                 return FetchResult(outcome=FetchOutcome.FAILED)
 

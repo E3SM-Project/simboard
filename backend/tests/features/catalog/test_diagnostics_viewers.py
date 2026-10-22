@@ -125,6 +125,22 @@ class TestParseDirectoryIndex:
         html = _apache_index("x", [])
         assert parse_directory_index(html) == []
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "javascript:alert(1)",
+            "%2e%2e",
+            ".hidden",
+            "a b",
+            "bad\x01name",
+            "-leading-dash",
+        ],
+    )
+    def test_rejects_names_that_are_not_plain_directories(self, name):
+        """These would be joined into a request URL, so they never leave the parser."""
+        html = _apache_index("x", [f"{name}/", "good_name/"])
+        assert parse_directory_index(html) == ["good_name"]
+
     def test_tolerates_non_html(self):
         assert parse_directory_index("not html at all") == []
         assert parse_directory_index("") == []
@@ -455,6 +471,17 @@ class TestHttpDirectoryFetcher:
         result = self._fetch(lambda _r: httpx.Response(302))(
             LCRC_ROOT + "/e3sm_diags/", 30.0
         )
+        assert result.failed is True
+
+    def test_malformed_redirect_target_is_a_failure_not_a_crash(self):
+        """httpx.InvalidURL is not an HTTPError and would otherwise escape."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                302, headers={"location": "https://web.lcrc.anl.gov/\x01"}
+            )
+
+        result = self._fetch(handler)(LCRC_ROOT + "/e3sm_diags/", 30.0)
         assert result.failed is True
 
     def test_redirect_loop_stops_at_the_limit(self):
