@@ -365,8 +365,13 @@ Key table for `nersc-archive-ingestor-env`:
 | `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
 
 `OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
-`YYYY-MM` buckets containing immutable `performance_archive_<timestamp>`
-snapshots. The runner stores completed snapshot checkpoints in SimBoard's
+`YYYY-MM` buckets containing immutable `performance_archive_<timestamp>` or
+`performance_archive_<machine>_<project-tag>_<timestamp>` snapshots, where
+`<timestamp>` is `YYYY_MM_DD_HH_MM_SS`. NERSC uses the timestamp-only format;
+the shared scanner also accepts machine/project-prefixed names produced by the
+PACE shell script on sites such as Chrysalis and Compy. Prefix values may contain
+underscores and do not determine machine identity. Both formats receive the same
+snapshot checkpoint handling. The runner stores completed snapshot checkpoints in SimBoard's
 database, so no separate checkpoint file or persistent checkpoint volume is
 needed. `ARCHIVE_YEAR_START` is the earliest month considered; newly arriving
 snapshots in any eligible month are discovered automatically.

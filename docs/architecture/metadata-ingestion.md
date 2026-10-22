@@ -207,16 +207,26 @@ Supported structure under configured archive root:
 
 ```bash
 YYYY-MM/
-  performance_archive_<timestamp>/
+  performance_archive_[<machine>_<project-tag>_]<timestamp>/
     [STATUS_BUCKET/] # Optional, for example COMPLETED/ on machines with status bucketing such as NERSC and ALCF.
       user/
         case/
           execution/
 ```
 
-Archive runners treat each immediate `YYYY-MM/performance_archive_<timestamp>`
-directory as an atomic, immutable snapshot. Other top-level directories are
-ignored.
+Square brackets denote an optional prefix or status bucket. The timestamp format
+is `YYYY_MM_DD_HH_MM_SS`. Both PACE producer formats are supported:
+
+- Python producer (for example, NERSC and ORNL Frontier):
+  `performance_archive_2026_05_22_08_01_32`.
+- Shell producer (for example, LCRC Chrysalis and PNNL Compy):
+  `performance_archive_chrysalis_e3sm_2026_05_22_08_01_32`.
+
+The optional machine/project prefix is opaque, may contain underscores, and does
+not determine machine identity. Archive runners treat each matching immediate
+snapshot directory under `YYYY-MM/` as atomic and immutable. Both formats use the
+same discovery, case-identity, status-pruning, and database checkpoint handling.
+Other top-level directories are ignored.
 
 Example NERSC path for `COMPLETED` status cases:
 
