@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ExternalLink, Info, Plus } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, Info, Plus, RotateCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,12 @@ const TOOL_LABELS: Record<DiagnosticsViewerOut['tool'], string> = {
   e3sm_diags: 'E3SM Diags',
   mpas_analysis: 'MPAS-Analysis',
 };
+
+// Axios surfaces transport detail such as "timeout of 30000ms exceeded",
+// which tells a scientist nothing. Discovery reads a shared archive, so a
+// failure here is nearly always that archive being slow or unreachable.
+const FAILED_SUMMARY =
+  'The diagnostics archive could not be read just now. The runs are still published; try again shortly.';
 
 const ERROR_MESSAGES: Record<string, string> = {
   root_not_in_reviewed_archive:
@@ -55,7 +61,7 @@ export const DiagnosticsViewersCard = ({
   caseName,
   hasDiagnosticLinks,
 }: DiagnosticsViewersCardProps) => {
-  const { data, loading, error } = useCaseDiagnosticsViewers(
+  const { data, loading, error, isFetching, refetch } = useCaseDiagnosticsViewers(
     hasDiagnosticLinks ? caseId : undefined,
   );
   const basket = useIiceBasket();
@@ -83,12 +89,13 @@ export const DiagnosticsViewersCard = ({
   const summary = loading
     ? 'Reading the diagnostics archive…'
     : error
-      ? `Could not list diagnostics viewers: ${error}`
+      ? FAILED_SUMMARY
       : counts.total === 0
         ? 'No e3sm_diags or MPAS-Analysis runs were found.'
         : [
             counts.e3sm_diags ? `${counts.e3sm_diags} E3SM Diags` : null,
             counts.mpas_analysis ? `${counts.mpas_analysis} MPAS-Analysis` : null,
+            counts.truncated ? 'partial listing' : null,
             stagedHere ? `${stagedHere} staged for IICE` : null,
           ]
             .filter(Boolean)
@@ -163,7 +170,18 @@ export const DiagnosticsViewersCard = ({
             {loading ? (
               <p className="text-sm text-slate-500">Reading the diagnostics archive…</p>
             ) : error ? (
-              <p className="text-sm text-red-600">Could not list diagnostics viewers: {error}</p>
+              <div className="space-y-2">
+                <p className="text-sm text-red-600">{FAILED_SUMMARY}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refetch()}
+                  disabled={isFetching}
+                >
+                  <RotateCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                  {isFetching ? 'Retrying…' : 'Try again'}
+                </Button>
+              </div>
             ) : data && data.sources.length > 0 ? (
               <div className="space-y-5">
                 {data.sources.map((source) => (

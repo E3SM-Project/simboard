@@ -31,7 +31,8 @@ compare:
 
 Each row shows the period the run covers, such as `1985-2014`, and the zppy
 subsection that produced it, such as `atm_monthly_180x360_aave`. A case often
-publishes the same diagnostics for several periods.
+publishes the same diagnostics for several periods. The number of runs varies
+widely: some cases publish two, long control runs publish twenty or more.
 
 **Open** goes straight to that run's own viewer, exactly as the case's diagnostics
 link does today.
@@ -107,6 +108,10 @@ published output is complete and matches the expected archive layout.
 only for output published to the reviewed archives at NERSC and LCRC. Older or
 hand-entered links to other locations still open normally with **Open**, but their
 runs cannot be listed.
+
+**It says the archive could not be read.** The archive was slow or briefly
+unreachable. The published runs are unaffected; select **Try again**, or reopen
+the case shortly.
 
 **Only some runs are listed.** A message reports when a case publishes more runs
 than SimBoard listed. Open the archive link shown above the groups to browse the
