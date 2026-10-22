@@ -175,19 +175,26 @@ def ingest_archive(
                 executions.append(execution)
 
         except (ValueError, LookupError, ValidationError) as e:
+            error = {
+                "execution_dir": parsed_execution.execution_dir,
+                "error_type": type(e).__name__,
+                "error": str(e),
+            }
+            if isinstance(e, ValidationError) and e.error_count():
+                first_error = e.errors()[0]
+                error["code"] = first_error["type"]
+                if first_error["loc"]:
+                    error["field"] = ".".join(map(str, first_error["loc"]))
+
             logger.error(
-                "Failed to process execution from %s: %s",
+                "Failed to process execution from %s (field=%s, code=%s): %s",
                 parsed_execution.execution_dir,
+                error.get("field", "unknown"),
+                error.get("code", "unknown"),
                 e,
             )
 
-            errors.append(
-                {
-                    "execution_dir": parsed_execution.execution_dir,
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                }
-            )
+            errors.append(error)
             continue
 
     result = IngestArchiveResult(
@@ -540,12 +547,35 @@ def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
         "grid_resolution",
         "initialization_type",
     ):
-        _STRING_ADAPTER.validate_python(getattr(draft, field_name))
+        _validate_draft_field(_STRING_ADAPTER, field_name, getattr(draft, field_name))
 
-    _DATE_ADAPTER.validate_python(draft.simulation_start_date)
+    _validate_draft_field(
+        _DATE_ADAPTER, "simulation_start_date", draft.simulation_start_date
+    )
 
     if draft.git_repository_url is not None:
-        _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
+        _validate_draft_field(
+            _HTTP_URL_ADAPTER, "git_repository_url", draft.git_repository_url
+        )
+
+
+def _validate_draft_field(adapter: TypeAdapter, field_name: str, value: object) -> None:
+    """Retain field context when a scalar type adapter rejects a draft value."""
+    try:
+        adapter.validate_python(value)
+    except ValidationError as exc:
+        raise ValidationError.from_exception_data(
+            exc.title,
+            [
+                {
+                    "type": error["type"],
+                    "loc": (field_name, *error["loc"]),
+                    "input": error["input"],
+                    "ctx": error.get("ctx", {}),
+                }
+                for error in exc.errors(include_url=False)
+            ],
+        ) from exc
 
 
 def _get_or_create_case(
