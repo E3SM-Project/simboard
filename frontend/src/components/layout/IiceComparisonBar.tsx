@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
-import { buildIiceLink, type IiceTool } from '@/lib/iice';
+import { buildIiceLink, type IiceTool, validateIiceLink } from '@/lib/iice';
 import { IICE_BASKET_MAX_PER_TOOL, type IiceBasketEntry, useIiceBasket } from '@/lib/iiceBasket';
 
 const TOOL_LABELS: Record<IiceTool, string> = {
@@ -152,25 +152,22 @@ interface ToolGroupProps {
 
 const ToolGroup = ({ groupKey, entries, onRemove, onUpdate, onCopy }: ToolGroupProps) => {
   const tool = groupKey.split(':')[0] as IiceTool;
-  const missingReference = entries.filter(
-    (entry) => entry.comparison === 'model_vs_model' && entry.referenceCase.trim() === '',
+  const linkEntries = entries.map((entry) => ({
+    url: entry.url,
+    label: entry.label,
+    referenceCase: entry.referenceCase?.trim() || undefined,
+  }));
+  const link = buildIiceLink({ tool, entries: linkEntries });
+
+  const missingReference = entries.some(
+    (entry) => entry.comparison === 'model_vs_model' && !entry.referenceCase?.trim(),
   );
-
-  const link = buildIiceLink({
-    tool,
-    entries: entries.map((entry) => ({
-      url: entry.url,
-      label: entry.label,
-      referenceCase: entry.referenceCase.trim() || undefined,
-    })),
-  });
-
-  const disabledReason =
-    entries.length < 2
-      ? 'Add a viewer from another case to compare.'
-      : missingReference.length > 0
-        ? 'Enter the reference case for model-vs-model runs.'
-        : null;
+  // A model-vs-model entry without its reference case is incomplete rather
+  // than invalid, so the shared validator cannot see it; everything else it
+  // can judge is delegated so the rules live in one place.
+  const disabledReason = missingReference
+    ? 'Enter the reference case for model-vs-model runs.'
+    : (validateIiceLink({ tool, entries: linkEntries })[0]?.message ?? null);
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-slate-50/60 p-2.5 lg:flex-row lg:items-start lg:justify-between">
@@ -198,7 +195,7 @@ const ToolGroup = ({ groupKey, entries, onRemove, onUpdate, onCopy }: ToolGroupP
                 <label className="flex items-center gap-1 text-slate-500">
                   <span className="whitespace-nowrap">vs ref case:</span>
                   <Input
-                    value={entry.referenceCase}
+                    value={entry.referenceCase ?? ''}
                     onChange={(event) => onUpdate(entry.url, { referenceCase: event.target.value })}
                     placeholder="e.g. v3.LR.piControl"
                     aria-label={`Reference case for ${entry.caseName} ${period(entry)}`}
