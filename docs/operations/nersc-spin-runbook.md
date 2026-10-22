@@ -455,6 +455,11 @@ still prevents already processed executions from being submitted again.
 | Successful jobs history limit | `3`                                            |
 | Failed jobs history limit     | `3`                                            |
 
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
+
 ##### 2. Pod tab
 
 `Security Context`:
@@ -526,8 +531,13 @@ still prevents already processed executions from being submitted again.
 | Rancher field                 | Value                                          |
 | ----------------------------- | ---------------------------------------------- |
 | Concurrency policy            | `Skip next run if current run hasn't finished` |
-| Successful jobs history limit | `3`                                            |
+| Successful jobs history limit | `7`                                            |
 | Failed jobs history limit     | `3`                                            |
+
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
 
 ##### 2. Pod tab
 
@@ -662,9 +672,14 @@ Open **Workloads -> CronJobs -> Create**:
 | Rancher field | Value |
 | --- | --- |
 | Concurrency policy | `Skip next run if current run hasn't finished` (`Forbid`) |
-| Successful jobs history limit | `3` |
+| Successful jobs history limit | `4` |
 | Failed jobs history limit | `3` |
 | Job backoff limit | `0` (retry at the next schedule) |
+
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
 
 Scans run every six hours at 02:00, 08:00, 14:00, and 20:00 UTC, retaining the
 14:00 run after 12:00 archive ingestion. If the time-zone field is unavailable,
