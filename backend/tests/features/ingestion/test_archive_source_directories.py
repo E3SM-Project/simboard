@@ -107,6 +107,9 @@ def test_duplicate_only_scan_records_paths_without_upload(
 )
 @pytest.mark.parametrize("fail_mapping", [False, True])
 @pytest.mark.parametrize("source_root", [None, Path("/host/OLD_PERF")])
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
 def test_archive_mappings_precede_checkpoints(
     tmp_path,
     monkeypatch,
@@ -114,11 +117,12 @@ def test_archive_mappings_precede_checkpoints(
     runner,
     fail_mapping,
     source_root,
+    prefix,
 ):
     root = tmp_path / "OLD_PERF"
     snapshot_names = [
-        "performance_archive_2025_01_01_00_00_00",
-        "performance_archive_2025_01_02_00_00_00",
+        f"performance_archive_{prefix}2025_01_01_00_00_00",
+        f"performance_archive_{prefix}2025_01_02_00_00_00",
     ]
     case_paths = [
         root / "2025-01" / name / "COMPLETED" / "user" / "case"
@@ -140,6 +144,7 @@ def test_archive_mappings_precede_checkpoints(
         return {"status_code": 200, "body": {}}
 
     def checkpoint(*args, **kwargs):
+        assert kwargs["snapshot_keys"] == [f"2025-01/{name}" for name in snapshot_names]
         events.append("checkpoint")
         return {"status_code": 200, "body": {}}
 

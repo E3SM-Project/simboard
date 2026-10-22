@@ -939,13 +939,16 @@ def test_build_ingestion_candidates_keeps_raw_staging_paths_without_root_basenam
     assert candidates[0].new_execution_ids == ["100.1-1"]
 
 
-def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
+def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state(
+    prefix: str,
+) -> None:
     scan_results = [
         CaseScanResult(
             case_path=(
-                "/archive/2026-05/performance_archive_2026_05_22_08_01_32/"
+                f"/archive/2026-05/performance_archive_{prefix}2026_05_22_08_01_32/"
                 "COMPLETED/user_a/case_a"
             ),
             execution_ids=["100.1-1"],
@@ -953,7 +956,7 @@ def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_st
         ),
         CaseScanResult(
             case_path=(
-                "/archive/2026-06/performance_archive_2026_06_01_08_01_32/user_a/case_a"
+                f"/archive/2026-06/performance_archive_{prefix}2026_06_01_08_01_32/user_a/case_a"
             ),
             execution_ids=["100.1-1", "101.1-1"],
             fingerprint="fp-2",
@@ -1215,14 +1218,18 @@ def test_discover_case_executions_ignores_root_symlink_for_year_filter(
     assert stats["execution_dirs_scanned"] == 0
 
 
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
 def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     tmp_path: Path,
+    prefix: str,
 ) -> None:
     archive_root = tmp_path / "old_perf"
     completed_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "COMPLETED"
         / "user_a"
         / "case_a"
@@ -1231,7 +1238,7 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     stopped_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "STOPPED"
         / "user_a"
         / "case_a"
@@ -1240,7 +1247,7 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     pending_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "PENDING"
         / "user_a"
         / "case_a"
@@ -1770,10 +1777,15 @@ def test_validate_execution_dir_compacts_archive_validation_errors(
     assert stats["skipped_invalid"] == 1
 
 
-def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
+def test_archive_scan_skips_database_completed_snapshots(
+    tmp_path: Path, prefix: str
+) -> None:
     archive_root = tmp_path / "OLD_PERF"
-    first_key = "2025-01/performance_archive_2025_01_01_00_00_00"
-    second_key = "2025-01/performance_archive_2025_01_02_00_00_00"
+    first_key = f"2025-01/performance_archive_{prefix}2025_01_01_00_00_00"
+    second_key = f"2025-01/performance_archive_{prefix}2025_01_02_00_00_00"
     for key, execution_id in ((first_key, "100.1-1"), (second_key, "101.1-1")):
         (archive_root / key / "COMPLETED" / "case-a" / execution_id).mkdir(parents=True)
     visited: list[str] = []
@@ -1803,6 +1815,7 @@ def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None
     ]
     assert results[4].eligible_keys == {first_key, second_key}
     assert results[4].completed_keys == {first_key}
+    assert results[4].references_by_key == {second_key: {("case-a", "101.1-1")}}
 
 
 def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(

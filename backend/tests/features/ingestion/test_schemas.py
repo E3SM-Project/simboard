@@ -17,6 +17,37 @@ from app.features.ingestion.schemas import (
 
 
 class TestIngestionSchemas:
+    @pytest.mark.parametrize(
+        "prefix",
+        ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"],
+    )
+    def test_archive_checkpoint_accepts_pace_snapshot_formats(
+        self, prefix: str
+    ) -> None:
+        name = f"performance_archive_{prefix}2026_07_15_12_00_00"
+        snapshot = ArchiveCheckpointEntry(archive_month="2026-07", snapshot_name=name)
+
+        assert snapshot.snapshot_name == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "performance_archive_chrysalis_2026_07_15_12_00_00",
+            "performance_archive_chrysalis__2026_07_15_12_00_00",
+            "performance_archive_chrysalis_e3sm_2026_07_15_12_00",
+            "performance_archive_chrysalis_e3sm_2026_07_15_12_00_00_extra",
+            "performance_archive_chrysalis/e3sm_2026_07_15_12_00_00",
+            "performance_archive_chrysalis\\e3sm_2026_07_15_12_00_00",
+            "performance_archive_chrysalis e3sm_2026_07_15_12_00_00",
+            "other_performance_archive_chrysalis_e3sm_2026_07_15_12_00_00",
+        ],
+    )
+    def test_archive_checkpoint_rejects_malformed_snapshot_names(
+        self, name: str
+    ) -> None:
+        with pytest.raises(ValidationError):
+            ArchiveCheckpointEntry(archive_month="2026-07", snapshot_name=name)
+
     def test_archive_checkpoints_request_strips_identity(self) -> None:
         snapshot = ArchiveCheckpointEntry(
             archive_month="2026-07",

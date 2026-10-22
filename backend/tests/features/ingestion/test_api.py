@@ -743,8 +743,11 @@ class TestExecutionDiscoveryResultsEndpoint:
 
 
 class TestArchiveCheckpointsEndpoint:
+    @pytest.mark.parametrize(
+        "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+    )
     def test_batch_is_idempotent_and_get_is_range_filtered(
-        self, client, db: Session
+        self, client, db: Session, prefix: str
     ) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
@@ -755,11 +758,11 @@ class TestArchiveCheckpointsEndpoint:
             "snapshots": [
                 {
                     "archive_month": "2025-01",
-                    "snapshot_name": "performance_archive_2025_01_10_00_00_00",
+                    "snapshot_name": f"performance_archive_{prefix}2025_01_10_00_00_00",
                 },
                 {
                     "archive_month": "2025-02",
-                    "snapshot_name": "performance_archive_2025_02_10_00_00_00",
+                    "snapshot_name": f"performance_archive_{prefix}2025_02_10_00_00_00",
                 },
             ],
         }
