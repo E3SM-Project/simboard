@@ -143,6 +143,14 @@ def _next_component_observation(observations, *args):
     return observations.pop(0)
 
 
+def test_component_alias_comparison_ignores_case_and_preserves_first_spelling():
+    observations = [{"compset_alias": "F20TR-GHG"}, {"compset_alias": "f20tr-ghg"}]
+
+    assert metadata._consistent_values(observations, ["compset_alias"]) == {
+        "compset_alias": "F20TR-GHG"
+    }
+
+
 def test_both_layouts_and_archive_bounds(tmp_path):
     staging = tmp_path / "staging"
     archive = tmp_path / "archive"

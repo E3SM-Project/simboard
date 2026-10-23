@@ -24,7 +24,7 @@ from app.features.machine.utils import parse_machine_name, resolve_machine_by_na
 logger = _setup_custom_logger(__name__)
 
 _STRING_ADAPTER = TypeAdapter(str)
-_LONG_NAME_ADAPTER = TypeAdapter(Annotated[str, Field(min_length=1)])
+_LONG_NAME_ADAPTER = TypeAdapter(Annotated[str, Field(min_length=1, pattern=r"\S")])
 _DATE_ADAPTER = TypeAdapter(ModelDate)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)

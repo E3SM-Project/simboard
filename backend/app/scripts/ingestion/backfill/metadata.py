@@ -531,14 +531,22 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
     values = {}
     for name in names:
         distinct = {
-            o[name]
+            o[name].casefold()
+            if name == "compset_alias" and o[name] is not None
+            else o[name]
             for o in observations
             if o[name] is not None or name == "compset_alias"
         }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
         if distinct:
-            values[name] = distinct.pop()
+            # Source paths are sorted by the caller. Keep the first spelling
+            # when CIME-equivalent aliases differ only in case.
+            values[name] = next(
+                o[name]
+                for o in observations
+                if o[name] is not None or name == "compset_alias"
+            )
 
     if not values:
         raise ValueError("No requested metadata from available mapped directories")

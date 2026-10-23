@@ -1382,6 +1382,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             ("execution_id", None, "string_type"),
             ("compset_long_name", None, "string_type"),
             ("compset_long_name", "", "string_too_short"),
+            ("compset_long_name", "   ", "string_pattern_mismatch"),
             ("compset_alias", 123, "string_type"),
             ("grid_name", None, "string_type"),
             ("grid_resolution", None, "string_type"),

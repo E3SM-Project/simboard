@@ -292,7 +292,10 @@ class ExecutionCreate(CamelInBaseModel):
     compset_long_name: Annotated[
         str,
         Field(
-            ..., min_length=1, description="Component-set long name from XML COMPSET"
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Component-set long name from XML COMPSET",
         ),
     ]
     compset_alias: Annotated[

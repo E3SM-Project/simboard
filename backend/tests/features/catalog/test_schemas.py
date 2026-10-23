@@ -27,6 +27,22 @@ from app.features.user.schemas import UserPreview
 
 
 class TestExecutionCreateSchema:
+    @pytest.mark.parametrize("value", [" ", "\t\n", "\u2003"])
+    def test_rejects_whitespace_only_component_long_name(self, value):
+        with pytest.raises(ValidationError) as exc:
+            ExecutionCreate(
+                caseId=uuid4(),
+                executionId="whitespace-compset",
+                compsetLongName=value,
+                gridName="ne30",
+                gridResolution="ne30",
+                initializationType="startup",
+                status="created",
+                simulationStartDate="1850-01-01",
+            )
+
+        assert exc.value.errors()[0]["type"] == "string_pattern_mismatch"
+
     def test_valid_execution_create_required_fields(self):
         payload = {
             "caseId": uuid4(),
