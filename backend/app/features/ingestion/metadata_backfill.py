@@ -1,12 +1,13 @@
 """Narrow updates to existing execution metadata, never ingestion state."""
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
+from app.common.model_dates import ModelDate
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.history import changed_metadata, snapshot_metadata
 from app.features.catalog.models import Artifact, Execution, MetadataChange
@@ -15,8 +16,8 @@ from app.features.catalog.models import Artifact, Execution, MetadataChange
 class MetadataValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    simulation_start_date: date | None = None
-    simulation_end_date: date | None = None
+    simulation_start_date: ModelDate | None = None
+    simulation_end_date: ModelDate | None = None
     run_script: str | None = Field(default=None, max_length=1000, min_length=1)
 
     @model_validator(mode="after")

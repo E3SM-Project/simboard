@@ -292,6 +292,27 @@ class TestParseEnvRun:
 
         assert result["simulation_end_date"] == "2020-01-11"
 
+    @pytest.mark.parametrize(
+        "start, option, count, stop_date, expected",
+        [
+            ("0000-01-02", "ndays", "10", "", "0000-01-12"),
+            ("0000-01-31", "nmonths", "1", "", "0000-02-29"),
+            ("0000-01-02", "nyears", "1", "", "0001-01-02"),
+            ("0000-01-02", "date", "", "00001231", "0000-12-31"),
+        ],
+    )
+    def test_year_zero_dates(self, tmp_path, start, option, count, stop_date, expected):
+        path = tmp_path / "env_run.xml"
+        path.write_text(f"""<config>
+            <entry id="RUN_STARTDATE" value="{start}" />
+            <entry id="STOP_OPTION" value="{option}" />
+            <entry id="STOP_N" value="{count}" />
+            <entry id="STOP_DATE" value="{stop_date}" />
+        </config>""")
+        result = parse_env_run(path)
+        assert result["simulation_start_date"] == start
+        assert result["simulation_end_date"] == expected
+
     def test_stop_option_nmonths(self, tmp_path):
         xml_run = """
         <config>

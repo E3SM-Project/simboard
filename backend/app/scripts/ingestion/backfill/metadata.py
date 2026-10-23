@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
+from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
-from app.features.ingestion.ingest import _normalize_path_candidate, _parse_date_field
+from app.features.ingestion.ingest import _normalize_path_candidate
 from app.features.ingestion.parsers.parser import (
     FILE_SPECS,
     _find_casedocs_dirs,
@@ -556,11 +557,7 @@ def _source_path(value: str) -> Path:
 
 
 def _normalized_date(value: str | None) -> str | None:
-    parsed = _parse_date_field(value)
-    if value and parsed is None:
-        raise ValueError(f"Invalid source date: {value}")
-
-    return parsed.isoformat() if parsed else None
+    return normalize_model_date(value) if value else None
 
 
 def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:

@@ -2,7 +2,7 @@
 
 import shlex
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, time, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -11,6 +11,7 @@ from dateutil import parser as dateutil_parser
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from app.common.model_dates import ModelDate, normalize_model_date
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.catalog.enums import ArtifactKind, CaseSimulationType, ExecutionStatus
@@ -23,7 +24,7 @@ from app.features.machine.utils import parse_machine_name, resolve_machine_by_na
 logger = _setup_custom_logger(__name__)
 
 _STRING_ADAPTER = TypeAdapter(str)
-_DATE_ADAPTER = TypeAdapter(date)
+_DATE_ADAPTER = TypeAdapter(ModelDate)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 CaseIdentity = tuple[str, UUID, str]
@@ -72,8 +73,8 @@ class ExecutionCreateDraft:
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None
-    simulation_start_date: date | None
-    simulation_end_date: date | None
+    simulation_start_date: str | None
+    simulation_end_date: str | None
     run_start_date: datetime | None
     run_end_date: datetime | None
     compiler: str | None
@@ -552,6 +553,10 @@ def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     _validate_draft_field(
         _DATE_ADAPTER, "simulation_start_date", draft.simulation_start_date
     )
+    if draft.simulation_end_date is not None:
+        _validate_draft_field(
+            _DATE_ADAPTER, "simulation_end_date", draft.simulation_end_date
+        )
 
     if draft.git_repository_url is not None:
         _validate_draft_field(
@@ -894,20 +899,17 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
         return None
 
 
-def _parse_date_field(value: str | None) -> date | None:
-    """Parse a calendar date, rejecting values not at midnight UTC."""
+def _parse_date_field(value: str | None) -> str | None:
+    """Normalize model dates, retaining invalid input for field-aware validation."""
     if not value:
         return None
     try:
-        parsed = dateutil_parser.parse(value)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        parsed = parsed.astimezone(timezone.utc)
-        if parsed.time() != time.min:
-            raise ValueError("Model date datetime must represent midnight UTC")
-
-        return parsed.date()
+        try:
+            return normalize_model_date(value)
+        except ValueError:
+            # Preserve the archive parser's existing flexible ordinary-date inputs.
+            return normalize_model_date(dateutil_parser.parse(value))
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
 
-        return None
+        return value

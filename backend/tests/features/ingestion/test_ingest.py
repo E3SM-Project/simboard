@@ -1,6 +1,6 @@
 import gzip
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Mapping
 from unittest.mock import MagicMock, patch
@@ -51,11 +51,11 @@ def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
     assert [
         (item.simulation_start_date, item.simulation_end_date) for item in executions
     ] == [
-        (date(2019, 1, 1), date(2020, 1, 1)),
-        (date(2020, 1, 1), date(2021, 1, 1)),
-        (date(2021, 1, 1), date(2022, 1, 1)),
-        (date(2022, 1, 1), date(2023, 1, 1)),
-        (date(2023, 1, 1), date(2024, 1, 1)),
+        ("2019-01-01", "2020-01-01"),
+        ("2020-01-01", "2021-01-01"),
+        ("2021-01-01", "2022-01-01"),
+        ("2022-01-01", "2023-01-01"),
+        ("2023-01-01", "2024-01-01"),
     ]
     assert all(item.case_id == case_id for item in executions)
     assert all(item.status == ExecutionStatus.COMPLETED for item in executions)
@@ -132,7 +132,7 @@ def test_qa_continuation_without_start_date_reports_ingestion_errors(tmp_path, c
     assert result.skipped_count == 0
     assert len(result.errors) == 5
     assert all(error["error_type"] == "ValidationError" for error in result.errors)
-    assert all("valid date" in error["error"] for error in result.errors)
+    assert all(error["field"] == "simulation_start_date" for error in result.errors)
     db.add.assert_not_called()
 
 
@@ -497,9 +497,12 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.executions) == 1
-        assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
+        assert ingest_result.executions[0].simulation_start_date == "2020-01-01"
 
-    def test_preserves_env_run_calendar_date(self, db: Session) -> None:
+    @pytest.mark.parametrize("model_date", ["2019-08-01", "0000-01-01", "0000-01-02"])
+    def test_preserves_env_run_calendar_date(
+        self, db: Session, model_date: str
+    ) -> None:
         machine = self._create_machine(db, "test-machine")
         mock_executions = {
             "/path/to/1082000.251218-200900": {
@@ -510,7 +513,8 @@ class TestIngestArchive:
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
                 "machine": machine.name,
-                "simulation_start_date": "2019-08-01",
+                "simulation_start_date": model_date,
+                "simulation_end_date": model_date,
                 "initialization_type": "startup",
             }
         }
@@ -523,10 +527,13 @@ class TestIngestArchive:
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.executions[0].simulation_start_date == date(2019, 8, 1)
+        assert ingest_result.created_count == 1
+        assert ingest_result.errors == []
+        assert ingest_result.executions[0].simulation_start_date == model_date
+        assert ingest_result.executions[0].simulation_end_date == model_date
         assert (
             ingest_result.executions[0].model_dump(mode="json")["simulation_start_date"]
-            == "2019-08-01"
+            == model_date
         )
 
     def test_rejects_non_midnight_model_datetime(self, db: Session) -> None:
@@ -811,7 +818,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             )
 
             assert len(ingest_result.executions) == 1
-            assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
+            assert ingest_result.executions[0].simulation_start_date == "2020-01-01"
             # Run fields remain timezone-aware timestamps.
             if ingest_result.executions[0].run_start_date:
                 assert ingest_result.executions[0].run_start_date.tzinfo is not None
@@ -918,7 +925,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1046,7 +1053,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1131,7 +1138,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1378,9 +1385,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             ("grid_name", None, "string_type"),
             ("grid_resolution", None, "string_type"),
             ("initialization_type", None, "string_type"),
-            ("simulation_start_date", None, "date_type"),
-            ("simulation_start_date", "not-a-date", "date_type"),
-            ("simulation_start_date", "0000-01-02", "date_type"),
+            ("simulation_start_date", None, "value_error"),
+            ("simulation_start_date", "not-a-date", "value_error"),
+            ("simulation_start_date", "0000-02-30", "value_error"),
+            ("simulation_end_date", "0000-02-30", "value_error"),
             ("git_repository_url", "not-a-url", "url_parsing"),
             ("git_repository_url", "ftp://example.com/repo", "url_scheme"),
         ],
@@ -1735,7 +1743,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1797,7 +1805,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1859,7 +1867,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1921,7 +1929,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1993,7 +2001,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -2061,7 +2069,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -2275,7 +2283,7 @@ class TestCaseHashIngestion:
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -2356,7 +2364,7 @@ class TestCaseHashIngestion:
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
-                simulation_start_date=datetime(2020, 1, 1),
+                simulation_start_date="2020-01-01",
                 initialization_type="test",
                 status=ExecutionStatus.CREATED,
                 created_by=user.id,
@@ -2703,7 +2711,7 @@ class TestIngestHelpers:
             campaign="campaign",
             experiment_type="historical",
             initialization_type="test",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             simulation_end_date=None,
             run_start_date=None,
             run_end_date=None,

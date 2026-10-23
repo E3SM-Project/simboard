@@ -38,7 +38,7 @@ class TestExecutionCreateSchema:
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
-            "simulationStartDate": date(2023, 1, 1),
+            "simulationStartDate": "2023-01-01",
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
         }
@@ -58,12 +58,12 @@ class TestExecutionCreateSchema:
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
-            "simulationStartDate": date(2023, 1, 1),
+            "simulationStartDate": "2023-01-01",
             "gitTag": "v1.0",
             "gitCommitHash": "abc123",
             "campaign": "campaign1",
             "experimentType": "exp1",
-            "simulationEndDate": date(2023, 12, 31),
+            "simulationEndDate": "2023-12-31",
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
@@ -135,7 +135,7 @@ class TestExecutionCreateSchema:
             simulationStartDate=value,
         )
 
-        assert execution.simulation_start_date == date(2019, 8, 1)
+        assert execution.simulation_start_date == "2019-08-01"
         assert (
             execution.model_dump(mode="json")["simulation_start_date"] == "2019-08-01"
         )
@@ -375,7 +375,7 @@ class TestExecutionOutSchema:
             "initialization_type": "startup",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": date(2023, 1, 1),
+            "simulation_start_date": "2023-01-01",
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -458,7 +458,7 @@ class TestExecutionOutSchema:
             "initialization_type": "startup",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": date(2023, 1, 1),
+            "simulation_start_date": "2023-01-01",
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -491,7 +491,7 @@ class TestExecutionOutSchema:
             "campaign": "campaign1",
             "experiment_type": "exp1",
             "case_group": "group1",
-            "simulation_end_date": date(2023, 12, 31),
+            "simulation_end_date": "2023-12-31",
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
@@ -723,7 +723,7 @@ class TestExecutionSummaryOutSchema:
             simulation_end_date=date(2023, 12, 31),
         )
         assert summary.case_hash == "hash-2"
-        assert summary.simulation_end_date == date(2023, 12, 31)
+        assert summary.simulation_end_date == "2023-12-31"
 
 
 class TestCaseSchemas:

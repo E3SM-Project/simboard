@@ -106,7 +106,7 @@ class TestIngestionWithAPIToken:
                 grid_resolution="1x1",
                 status=ExecutionStatus.COMPLETED,
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=svc_user.id,
                 last_updated_by=svc_user.id,
                 ingestion_id=ingestion.id,
