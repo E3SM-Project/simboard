@@ -28,7 +28,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         - ``campaign``: Derived campaign identifier from the case name
         - ``experiment_type``: Derived experiment type, constrained to
           KNOWN_EXPERIMENT_TYPES when possible
-        - ``compset_alias``: Compset alias (``COMPSET``)
+        - ``compset_long_name``: Required component-set long name (``COMPSET``)
         - ``case_root``: Case root directory (``CASEROOT``)
     """
     env_case_path = Path(env_case_path)
@@ -38,7 +38,9 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     case_group = _extract_value_from_file(env_case_path, "CASE_GROUP")
     machine = _extract_value_from_file(env_case_path, "MACH")
     user = _extract_value_from_file(env_case_path, "REALUSER")
-    compset_alias = _extract_value_from_file(env_case_path, "COMPSET")
+    compset_long_name = _extract_value_from_file(env_case_path, "COMPSET")
+    if compset_long_name is not None:
+        compset_long_name = compset_long_name.strip() or None
     case_root = _extract_value_from_file(env_case_path, "CASEROOT")
 
     # Extract metadata that requires special handling
@@ -52,7 +54,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         "user": user,
         "campaign": campaign,
         "experiment_type": experiment_type,
-        "compset_alias": compset_alias,
+        "compset_long_name": compset_long_name,
         "case_root": case_root,
     }
 

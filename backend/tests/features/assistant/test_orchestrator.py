@@ -32,7 +32,7 @@ def _make_snapshot() -> ExecutionSnapshot:
             id="execution-1",
             execution_id="assistant-livai-exec",
             description="LivAI-backed execution summary test.",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -206,7 +206,7 @@ class TestValidationHelpers:
     def test_normalize_llm_answer_strips_inline_citation_markers(self) -> None:
         answer = (
             "This execution completed [execution.status]. It ran on chrysalis "
-            "[machine.name] and used WCYCL20TR [execution.compset]."
+            "[machine.name] and used WCYCL20TR [execution.compset_long_name]."
         )
 
         assert orchestrator._normalize_llm_answer(answer) == (

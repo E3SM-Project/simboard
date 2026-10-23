@@ -585,6 +585,14 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
     )
 
     execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
+    compset_alias = metadata.get("compset_alias")
+    compset_long_name = metadata.get("compset_long_name")
+    if (
+        compset_alias
+        and compset_long_name
+        and compset_alias.casefold() == compset_long_name.casefold()
+    ):
+        compset_alias = None
 
     return ParsedExecution(
         execution_dir=exec_dir,
@@ -593,8 +601,8 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         case_group=metadata.get("case_group"),
         machine=metadata.get("machine"),
         hpc_username=metadata.get("user"),
-        compset=metadata.get("compset"),
-        compset_alias=metadata.get("compset_alias"),
+        compset_long_name=compset_long_name,
+        compset_alias=compset_alias,
         grid_name=metadata.get("grid_name"),
         grid_resolution=metadata.get("grid_resolution"),
         campaign=metadata.get("campaign"),

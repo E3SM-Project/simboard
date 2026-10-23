@@ -37,6 +37,7 @@ from app.features.catalog.models import (
 from app.features.catalog.schemas import (
     CaseUpdate,
     ExecutionCreate,
+    ExecutionOut,
     ExecutionUpdate,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -178,7 +179,7 @@ def _create_matching_execution(
     execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
@@ -207,7 +208,7 @@ def test_year_zero_dates_survive_create_storage_and_catalog_reads(
         json={
             "caseId": str(case.id),
             "executionId": "year-zero-execution",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -232,6 +233,49 @@ def test_year_zero_dates_survive_create_storage_and_catalog_reads(
             record = record["executions"][0]
         assert record["simulationStartDate"] == start
         assert record["simulationEndDate"] == "0000-12-31"
+
+
+def test_component_long_name_and_null_alias_round_trip(client, db):
+    case = _create_case(db, "component-round-trip")
+    db.commit()
+    long_name = "1850_EAM%" + "MODIFIER" * 20 + "_ELM_MPASSI_MPASO"
+    response = client.post(
+        f"{API_BASE}/executions",
+        json={
+            "caseId": str(case.id),
+            "executionId": "component-round-trip",
+            "compsetLongName": long_name,
+            "gridName": "ne30",
+            "gridResolution": "ne30",
+            "initializationType": "startup",
+            "status": "created",
+            "simulationStartDate": "1850-01-01",
+        },
+    )
+    assert response.status_code == 201, response.text
+    execution = db.get(Execution, response.json()["id"])
+    db.refresh(execution)
+    assert execution.compset_long_name == long_name
+    assert execution.compset_alias is None
+
+    # Historical empty values must remain readable until provenance repair.
+    for value in (long_name, ""):
+        execution.compset_long_name = value
+        db.commit()
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        record = response.json()
+        assert record["compsetLongName"] == value
+        assert record["compsetAlias"] is None
+        assert "compset" not in record
+        exported = ExecutionOut.model_validate(record).model_dump_json(by_alias=True)
+        assert ExecutionOut.model_validate_json(exported).compset_alias is None
+        assert ExecutionOut.model_validate_json(exported).compset_long_name == value
+        response = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id)}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["compsetLongName"] == value
 
 
 def test_openapi_exposes_only_canonical_execution_contract(client) -> None:
@@ -351,7 +395,7 @@ def _create_execution_record(
         case_id=case.id,
         execution_id=execution_id,
         description=description,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
@@ -427,7 +471,7 @@ class TestListCases:
             case_id=case.id,
             execution_id="case-nested-exec-1",
             case_hash="nested-hash-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -442,7 +486,7 @@ class TestListCases:
             case_id=case.id,
             execution_id="case-nested-exec-2",
             case_hash="nested-hash-2",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -1123,7 +1167,7 @@ class TestGetCase:
             case_id=case.id,
             execution_id="case-detail-exec-1",
             case_hash="detail-hash-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -1260,7 +1304,7 @@ class TestGetCase:
                 case_id=case.id,
                 execution_id="case-detail-links-exec-1",
                 case_hash="detail-links-hash-1",
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
                 grid_name="f19_f19",
                 grid_resolution="1.9x2.5",
@@ -1316,7 +1360,7 @@ class TestCreateExecution:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -1364,7 +1408,7 @@ class TestCreateExecution:
         payload = {
             "caseId": str(uuid4()),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -1392,7 +1436,7 @@ class TestUpdateCase:
             execution = Execution(
                 case_id=case.id,
                 execution_id=execution_id,
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
                 grid_name="f19_f19",
                 grid_resolution="1.9x2.5",
@@ -1458,7 +1502,7 @@ class TestUpdateCase:
             machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="original-group",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -1516,7 +1560,7 @@ class TestUpdateCase:
             machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="ingested-group",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -2253,7 +2297,7 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -2284,7 +2328,7 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200924",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -2311,7 +2355,7 @@ class TestUpdateCase:
 
         payload = {
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -2346,7 +2390,7 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
             "gridName": "f19_f19",
             "gridResolution": "1.9x2.5",
@@ -2373,7 +2417,7 @@ class TestUpdateCase:
             {
                 "caseId": str(case_id),
                 "executionId": "reload-missing-exec-1",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
                 "gridName": "f19_f19",
                 "gridResolution": "1.9x2.5",
@@ -2439,7 +2483,7 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=execution_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -2556,7 +2600,7 @@ class TestListExecutions:
         execution.git_commit_hash = "unique-search-commit"
         execution.grid_name = "unique-search-grid"
         execution.grid_resolution = "unique-search-resolution"
-        execution.compset = "unique-search-compset"
+        execution.compset_long_name = "unique-search-compset"
         execution.compset_alias = "unique-search-alias"
         db.commit()
 
@@ -2644,7 +2688,7 @@ class TestListExecutions:
             execution.simulation_end_date = timestamp
             execution.run_start_date = timestamp
             execution.grid_resolution = f"{prefix}-resolution"
-            execution.compset = f"{prefix}-compset"
+            execution.compset_long_name = f"{prefix}-compset"
             execution.grid_name = f"{prefix}-grid"
             execution.created_at = timestamp
             execution.updated_at = timestamp
@@ -2668,7 +2712,7 @@ class TestListExecutions:
             "run_start_date",
             "run_activity",
             "grid_resolution",
-            "compset",
+            "compset_long_name",
             "grid_name",
             "machine_name",
         ):
@@ -2798,7 +2842,7 @@ class TestListExecutions:
             Execution(
                 case_id=case.id,
                 execution_id="filter-options",
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
                 grid_name="f19_f19",
                 grid_resolution="1.9x2.5",
@@ -2855,7 +2899,7 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-test-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -2920,7 +2964,7 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-test-exec-misconfigured",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -2966,7 +3010,7 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -3027,7 +3071,7 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -3090,7 +3134,7 @@ class TestListExecutions:
                 Execution(
                     case_id=first_case.id,
                     execution_id="normalized-exec-1",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -3104,7 +3148,7 @@ class TestListExecutions:
                 Execution(
                     case_id=second_case.id,
                     execution_id="normalized-exec-2",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -3158,7 +3202,7 @@ class TestListExecutions:
                 Execution(
                     case_id=c.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -3208,7 +3252,7 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-links-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -3345,7 +3389,7 @@ class TestGetExecution:
             case_id=case.id,
             execution_id="get-test-exec-1",
             case_hash="abc123casehash",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -3405,7 +3449,7 @@ class TestGetExecution:
         execution = Execution(
             case_id=case.id,
             execution_id="get-test-exec-misconfigured",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -3458,7 +3502,7 @@ class TestGetExecution:
         execution = Execution(
             case_id=case.id,
             execution_id="get-links-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",
@@ -4348,7 +4392,7 @@ class TestExecutionBrowserIncludesCaseMetadata:
         execution = Execution(
             case_id=case.id,
             execution_id="browser-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
             grid_name="f19_f19",
             grid_resolution="1.9x2.5",

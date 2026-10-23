@@ -211,7 +211,7 @@ export const CompareWorkspace = ({
     if (!execution) return '—';
 
     const configBits = [
-      execution.compset || null,
+      execution.compsetLongName || null,
       execution.gridName || null,
       execution.gridResolution || null,
     ]
@@ -254,7 +254,7 @@ export const CompareWorkspace = ({
     configuration: [
       makeMetricRow('Case Name', 'caseName', ''),
       makeMetricRow('Model Version', 'gitTag', ''),
-      makeMetricRow('Compset', 'compset', ''),
+      makeMetricRow('Compset Long Name', 'compsetLongName', ''),
       makeMetricRow('Grid Name', 'gridName', ''),
       makeMetricRow('Grid Resolution', 'gridResolution', ''),
       makeMetricRow('Initialization Type', 'initializationType', ''),

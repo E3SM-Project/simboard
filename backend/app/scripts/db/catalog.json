@@ -26,7 +26,7 @@
           }
         ],
         "description": "Reference preindustrial control run for E3SM version 1.1.0.",
-        "compset": "PICNTRL",
+        "compsetLongName": "PICNTRL",
         "compsetAlias": "piControl",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -88,7 +88,7 @@
           }
         ],
         "description": "Second execution of piControl \u2014 continued from year 45.",
-        "compset": "PICNTRL",
+        "compsetLongName": "PICNTRL",
         "compsetAlias": "piControl",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -135,7 +135,7 @@
           }
         ],
         "description": "E3SM historical simulation for CMIP6 experiments.",
-        "compset": "HIST",
+        "compsetLongName": "HIST",
         "compsetAlias": "historical",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -204,7 +204,7 @@
           }
         ],
         "description": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
-        "compset": "SSP585",
+        "compsetLongName": "SSP585",
         "compsetAlias": "ssp585",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -262,7 +262,7 @@
           }
         ],
         "description": "Atmospheric Model Intercomparison Project (AMIP) simulation for E3SM v1.2.0.",
-        "compset": "AMIP",
+        "compsetLongName": "AMIP",
         "compsetAlias": "amip",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -321,7 +321,7 @@
           }
         ],
         "description": "Representative Concentration Pathway 4.5 (RCP4.5) simulation for E3SM v2.1.0.",
-        "compset": "RCP45",
+        "compsetLongName": "RCP45",
         "compsetAlias": "rcp45",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -380,7 +380,7 @@
           }
         ],
         "description": "Preindustrial climate simulation for E3SM v3.1.0.",
-        "compset": "PICLIM",
+        "compsetLongName": "PICLIM",
         "compsetAlias": "piClim",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -426,7 +426,7 @@
           }
         ],
         "description": "Second piClim execution with updated aerosol scheme.",
-        "compset": "PICLIM",
+        "compsetLongName": "PICLIM",
         "compsetAlias": "piClim",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -473,7 +473,7 @@
           }
         ],
         "description": "Low-emissions scenario (SSP1-2.6) projection using E3SM v3.2.0.",
-        "compset": "SSP126",
+        "compsetLongName": "SSP126",
         "compsetAlias": "ssp126",
         "gridName": "ne30_oECv3",
         "gridResolution": "1\u00b0",
@@ -531,7 +531,7 @@
           }
         ],
         "description": "High-resolution simulation for E3SM v3.3.0.",
-        "compset": "HIGHRES",
+        "compsetLongName": "HIGHRES",
         "compsetAlias": "highres",
         "gridName": "ne120_oRRS18v3",
         "gridResolution": "0.25\u00b0",

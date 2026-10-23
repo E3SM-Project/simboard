@@ -1,4 +1,5 @@
 import re
+import shlex
 from pathlib import Path
 
 from app.features.ingestion.parsers.utils import _open_text
@@ -6,7 +7,7 @@ from app.features.ingestion.parsers.utils import _open_text
 
 def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     """
-    Parse a README.case file and extract creation date, resolution, and compset.
+    Parse a README.case file and extract creation date, resolution, and compset alias.
 
     Parameters
     ----------
@@ -16,7 +17,7 @@ def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict[str, str | None]
-        Dictionary with keys: 'creation_date', 'res', 'compset'.
+        Dictionary with keys: 'creation_date', 'grid_name', 'compset_alias'.
     """
     path = Path(path)
     text = _open_text(path)
@@ -24,9 +25,22 @@ def parse_readme_case(path: str | Path) -> dict[str, str | None]:
 
     creation_date = _extract_timestamp(lines)
     grid_name = _extract_flag_value(lines, "--res")
-    compset = _extract_flag_value(lines, "--compset")
+    compset = _extract_flag_value(lines, "--compset", "-compset")
+    # CIME's config_compsets.xsd defines aliases as XML NCNames. Long names
+    # start with a time specifier (e.g. 1850/20TR) or use colon-labelled
+    # components, and may contain percent modifiers. Underscores alone do not
+    # distinguish aliases from long names.
+    compset_alias = (
+        compset
+        if compset and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", compset)
+        else None
+    )
 
-    return {"creation_date": creation_date, "grid_name": grid_name, "compset": compset}
+    return {
+        "creation_date": creation_date,
+        "grid_name": grid_name,
+        "compset_alias": compset_alias,
+    }
 
 
 def _extract_timestamp(lines: list[str]) -> str | None:
@@ -42,7 +56,7 @@ def _extract_timestamp(lines: list[str]) -> str | None:
     return None
 
 
-def _extract_flag_value(lines: list[str], flag: str) -> str | None:
+def _extract_flag_value(lines: list[str], *flags: str) -> str | None:
     """
     Extract a value for a given flag (e.g., --res) from the create_newcase
     command line.
@@ -51,8 +65,8 @@ def _extract_flag_value(lines: list[str], flag: str) -> str | None:
     ----------
     lines : list of str
         Lines from the README.case file.
-    flag : str
-        The flag to search for (e.g., '--res').
+    flags : str
+        Accepted spellings of the flag (e.g., '--res').
 
     Returns
     -------
@@ -61,13 +75,16 @@ def _extract_flag_value(lines: list[str], flag: str) -> str | None:
     """
     for line in lines:
         if "create_newcase" in line:
-            parts = line.strip().split()
+            try:
+                parts = shlex.split(line)
+            except ValueError:
+                continue
 
             for i, part in enumerate(parts):
-                if part == flag:
-                    if i + 1 < len(parts):
-                        return parts[i + 1]
-                elif part.startswith(flag + "="):
-                    return part.split("=", 1)[1]
+                if part in flags:
+                    if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
+                        return parts[i + 1] or None
+                elif any(part.startswith(flag + "=") for flag in flags):
+                    return part.split("=", 1)[1] or None
 
     return None

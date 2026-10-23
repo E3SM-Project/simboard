@@ -289,10 +289,15 @@ class ExecutionCreate(CamelInBaseModel):
     description: Annotated[
         str | None, Field(None, description="Optional description of the execution")
     ]
-    compset: Annotated[
-        str, Field(..., description="Component set used in the simulation")
+    compset_long_name: Annotated[
+        str,
+        Field(
+            ..., min_length=1, description="Component-set long name from XML COMPSET"
+        ),
     ]
-    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
+    compset_alias: Annotated[
+        str | None, Field(None, description="Alias for the component set")
+    ]
     grid_name: Annotated[
         str, Field(..., description="Grid name used in the simulation")
     ]
@@ -668,8 +673,8 @@ class ExecutionListItemOut(CamelOutBaseModel):
     status: ExecutionStatus
     campaign: str | None = None
     experiment_type: str | None = None
-    compset: str
-    compset_alias: str
+    compset_long_name: str
+    compset_alias: str | None = None
     grid_name: str
     grid_resolution: str
     initialization_type: str
@@ -977,10 +982,13 @@ class ExecutionOut(CamelOutBaseModel):
     description: Annotated[
         str | None, Field(None, description="Optional description of the execution")
     ]
-    compset: Annotated[
-        str, Field(..., description="Component set used in the simulation")
+    compset_long_name: Annotated[
+        str,
+        Field(..., description="Component-set long name from XML COMPSET"),
     ]
-    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
+    compset_alias: Annotated[
+        str | None, Field(None, description="Alias for the component set")
+    ]
     grid_name: Annotated[
         str, Field(..., description="Grid name used in the simulation")
     ]

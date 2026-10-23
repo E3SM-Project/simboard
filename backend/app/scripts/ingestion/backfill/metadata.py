@@ -55,6 +55,7 @@ from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import (
 FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
+    "component-set": ("compset_long_name", "compset_alias"),
 }
 
 
@@ -73,7 +74,12 @@ def main() -> int:
     parser.add_argument(
         "--fields",
         nargs="+",
-        choices=["source-directories", "simulation-dates", "run-script"],
+        choices=[
+            "source-directories",
+            "simulation-dates",
+            "run-script",
+            "component-set",
+        ],
         required=True,
     )
     parser.add_argument(
@@ -137,8 +143,9 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
 
     if "simulation-dates" in fields:
         keys.extend(["case_docs_env_run", "cpl_log"])
+    if "component-set" in fields:
+        keys.append("readme_case")
 
-    files = {}
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
     watched.extend(
@@ -149,19 +156,15 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     )
     before = [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]
 
-    for key in keys:
-        matches = _find_spec_matches(str(path), directories, FILE_SPECS[key])
-        if len(matches) > 1:
-            raise ValueError(f"Ambiguous {key}: {path}")
-        if not matches and key in ("case_docs_env_case", "e3sm_timing"):
-            raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
-        files[key] = matches[0] if matches else None
+    files = _locate_backfill_files(path, directories, keys)
 
     timing_identity = FILE_SPECS["e3sm_timing"]["parser"](files["e3sm_timing"])
     if timing_identity.get("execution_id") != path.name:
         raise ValueError(f"Timing identity does not match execution directory: {path}")
 
     parsed = _parse_all_files(str(path), files)
+    if "component-set" in fields and not parsed.compset_long_name:
+        raise ValueError(f"Missing XML COMPSET: {path}")
 
     if before != [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]:
         raise ValueError(f"Source changed while reading: {path}")
@@ -174,6 +177,21 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
         raise ValueError(f"Missing case identity: {path}")
 
     return parsed
+
+
+def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) -> dict:
+    files = {}
+    for key in keys:
+        matches = _find_spec_matches(str(path), directories, FILE_SPECS[key])
+        if len(matches) > 1:
+            raise ValueError(f"Ambiguous {key}: {path}")
+        if not matches and key in ("case_docs_env_case", "e3sm_timing"):
+            raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
+        if not matches and key == "readme_case":
+            raise ValueError(f"Missing component-set source {key}: {path}")
+        files[key] = matches[0] if matches else None
+
+    return files
 
 
 def _request(
@@ -496,14 +514,27 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                     "run_script": _normalize_path_candidate(parsed.run_script_path),
                 }
             )
+            if "component-set" in args.fields:
+                observations[-1].update(
+                    compset_long_name=parsed.compset_long_name,
+                    compset_alias=parsed.compset_alias,
+                )
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
-    values = {}
     names = [name for group in args.fields for name in FIELD_NAMES[group]]
 
+    return _consistent_values(observations, names)
+
+
+def _consistent_values(observations: list[dict], names: list[str]) -> dict:
+    values = {}
     for name in names:
-        distinct = {o[name] for o in observations if o[name] is not None}
+        distinct = {
+            o[name]
+            for o in observations
+            if o[name] is not None or name == "compset_alias"
+        }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
         if distinct:

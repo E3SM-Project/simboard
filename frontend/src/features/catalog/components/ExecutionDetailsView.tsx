@@ -989,8 +989,8 @@ export const ExecutionDetailsView = ({
                     <FieldRow label="Model Version">
                       <ReadonlyInput value={execution.gitTag ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Compset">
-                      <ReadonlyInput value={execution.compset ?? undefined} />
+                    <FieldRow label="Compset Long Name">
+                      <ReadonlyInput value={execution.compsetLongName ?? undefined} />
                     </FieldRow>
                     <FieldRow label="Compset Alias">
                       <ReadonlyInput value={execution.compsetAlias ?? undefined} />

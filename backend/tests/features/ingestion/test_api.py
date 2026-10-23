@@ -4,6 +4,7 @@ This test module provides comprehensive coverage for the ingestion API,
 including path-based and upload-based ingestion endpoints.
 """
 
+import gzip
 import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -60,6 +61,7 @@ from app.main import app
 from tests.features.site.utils import get_or_create_site
 from tests.fixtures.continuation_case import (
     CASE_NAME,
+    ENV_CASE,
     EXECUTIONS,
     stage_continuation_case,
 )
@@ -159,6 +161,71 @@ def test_ingested_case_defaults_preserve_existing_types(
         assert case.simulation_type == (
             "development" if existing_type == "new" else existing_type
         )
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [
+        ("-compset F20TR-GHG", "F20TR-GHG"),
+        ("--compset=F20TR-GHG", "F20TR-GHG"),
+        ("-compset=1850_EAM_ELM", None),
+        ("--compset 1850_EAM_ELM", None),
+        ("", None),
+    ],
+)
+def test_component_metadata_survives_api_ingestion_and_catalog_reads(
+    client, db, tmp_path, argument, alias
+):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument} --res ne30\n")
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(EXECUTIONS)
+    for execution in db.query(Execution).all():
+        assert execution.compset_long_name.startswith("20TRSOI_EAM%")
+        assert execution.compset_alias == alias
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["compsetLongName"] == execution.compset_long_name
+        assert response.json()["compsetAlias"] == alias
+        assert "compset" not in response.json()
+    response = client.get(
+        f"{API_BASE}/executions",
+        params={
+            "compset_long_name": execution.compset_long_name,
+            "sort_by": "compset_long_name",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == len(EXECUTIONS)
+    assert all(row["compsetAlias"] == alias for row in response.json()["items"])
+
+
+def test_missing_xml_component_set_fails_before_case_creation(client, db, tmp_path):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/env_case.xml.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "\n".join(
+                    line for line in ENV_CASE.splitlines() if 'id="COMPSET"' not in line
+                )
+            )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 0
+    assert all(
+        error["field"] == "compset_long_name" for error in response.json()["errors"]
+    )
+    assert db.query(Case).count() == 0
+    assert db.query(Execution).count() == 0
 
 
 @pytest.mark.parametrize("processed_ids", [None, [], list(EXECUTIONS)])
@@ -858,7 +925,7 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id=execution_id,
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="ne30pg2_r05_IcoswISC30E3r5",
                 grid_resolution="1x1",
@@ -977,7 +1044,7 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=partial_case.id,
                 execution_id="100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
@@ -1041,7 +1108,7 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id="legacy-100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
@@ -1087,7 +1154,7 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id="legacy-upload-100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
@@ -1139,7 +1206,7 @@ class TestGetIngestionStateEndpoint:
                 Execution(
                     case_id=case.id,
                     execution_id=f"legacy-{index}.1-1",
-                    compset="FHIST",
+                    compset_long_name="FHIST",
                     compset_alias="fhist",
                     grid_name="grid",
                     grid_resolution="1x1",
@@ -1241,7 +1308,7 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=blank_execution_case.id,
                 execution_id="",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
@@ -1323,7 +1390,7 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-summary-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1388,7 +1455,7 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case1.id),
                     "executionId": "exec-errors-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1403,7 +1470,7 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case2.id),
                     "executionId": "exec-errors-2",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1475,7 +1542,7 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-audit-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1617,7 +1684,7 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": f"exec-{machine_alias}",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1670,7 +1737,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-zip-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1721,7 +1788,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-targz-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1797,7 +1864,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-sha256-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1855,7 +1922,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-partial-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -1975,7 +2042,7 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username="ac.golaz",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
@@ -2061,7 +2128,7 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username="ac.golaz",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
@@ -2142,7 +2209,7 @@ class TestIngestFromUploadEndpoint:
             {
                 "execution_dir": "/path/to/exec1",
                 "error_type": "ValidationError",
-                "field": "compset",
+                "field": "compset_long_name",
                 "code": "string_type",
                 "error": "Input should be a valid string",
             },
@@ -2194,7 +2261,7 @@ class TestIngestFromUploadEndpoint:
             case_group=None,
             machine=machine.name,
             hpc_username="test-user",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid",
             grid_resolution="0.9x1.25",
@@ -2350,7 +2417,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-artifacts-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2405,7 +2472,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-links-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2479,7 +2546,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-git-url-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2538,7 +2605,7 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-hpc-username-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2594,7 +2661,7 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username=None,
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
@@ -2669,7 +2736,7 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-hpc-upload-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2955,7 +3022,7 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(first_case.id),
                     "executionId": "multi-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",
@@ -2968,7 +3035,7 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(second_case.id),
                     "executionId": "multi-2",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
                     "gridName": "f19_f19",
                     "gridResolution": "1.9x2.5",

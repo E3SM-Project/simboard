@@ -36,7 +36,7 @@ _SNAPSHOT_PATH_ACCESSORS = {
     "execution.id": lambda snapshot: snapshot.execution.id,
     "execution.execution_id": lambda snapshot: snapshot.execution.execution_id,
     "execution.description": lambda snapshot: snapshot.execution.description,
-    "execution.compset": lambda snapshot: snapshot.execution.compset,
+    "execution.compset_long_name": lambda snapshot: snapshot.execution.compset_long_name,
     "execution.compset_alias": lambda snapshot: snapshot.execution.compset_alias,
     "execution.grid_name": lambda snapshot: snapshot.execution.grid_name,
     "execution.grid_resolution": lambda snapshot: snapshot.execution.grid_resolution,

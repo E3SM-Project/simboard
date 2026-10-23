@@ -72,7 +72,7 @@ async def _create_execution(
     execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",

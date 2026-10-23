@@ -11,7 +11,7 @@ class ParsedExecution:
     case_group: str | None
     machine: str | None
     hpc_username: str | None
-    compset: str | None
+    compset_long_name: str | None
     compset_alias: str | None
     grid_name: str | None
     grid_resolution: str | None

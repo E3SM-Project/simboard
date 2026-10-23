@@ -4,11 +4,11 @@ import shlex
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import HttpUrl, TypeAdapter, ValidationError
+from pydantic import Field, HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.common.model_dates import ModelDate, normalize_model_date
@@ -24,6 +24,7 @@ from app.features.machine.utils import parse_machine_name, resolve_machine_by_na
 logger = _setup_custom_logger(__name__)
 
 _STRING_ADAPTER = TypeAdapter(str)
+_LONG_NAME_ADAPTER = TypeAdapter(Annotated[str, Field(min_length=1)])
 _DATE_ADAPTER = TypeAdapter(ModelDate)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
@@ -65,7 +66,7 @@ class ExecutionCreateDraft:
 
     case_id: UUID | None
     execution_id: str
-    compset: str | None
+    compset_long_name: str | None
     compset_alias: str | None
     grid_name: str | None
     grid_resolution: str | None
@@ -542,13 +543,18 @@ def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     """Validate the draft fields that must succeed before case creation."""
     for field_name in (
         "execution_id",
-        "compset",
-        "compset_alias",
+        "compset_long_name",
         "grid_name",
         "grid_resolution",
         "initialization_type",
     ):
-        _validate_draft_field(_STRING_ADAPTER, field_name, getattr(draft, field_name))
+        adapter = (
+            _LONG_NAME_ADAPTER if field_name == "compset_long_name" else _STRING_ADAPTER
+        )
+        _validate_draft_field(adapter, field_name, getattr(draft, field_name))
+
+    if draft.compset_alias is not None:
+        _validate_draft_field(_STRING_ADAPTER, "compset_alias", draft.compset_alias)
 
     _validate_draft_field(
         _DATE_ADAPTER, "simulation_start_date", draft.simulation_start_date
@@ -812,7 +818,7 @@ def _build_execution_create_draft(
     execution_draft = ExecutionCreateDraft(
         case_id=case_id,
         execution_id=parsed_execution.execution_id,
-        compset=parsed_execution.compset,
+        compset_long_name=parsed_execution.compset_long_name,
         compset_alias=parsed_execution.compset_alias,
         grid_name=parsed_execution.grid_name,
         grid_resolution=parsed_execution.grid_resolution,

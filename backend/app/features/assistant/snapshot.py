@@ -48,8 +48,8 @@ class SnapshotExecutionFields(BaseModel):
     id: str
     execution_id: str
     description: str | None = None
-    compset: str
-    compset_alias: str
+    compset_long_name: str
+    compset_alias: str | None = None
     grid_name: str
     grid_resolution: str
     status: str
@@ -210,7 +210,7 @@ def build_execution_snapshot(
             id=str(execution.id),
             execution_id=execution.execution_id,
             description=execution.description,
-            compset=execution.compset,
+            compset_long_name=execution.compset_long_name,
             compset_alias=execution.compset_alias,
             grid_name=execution.grid_name,
             grid_resolution=execution.grid_resolution,

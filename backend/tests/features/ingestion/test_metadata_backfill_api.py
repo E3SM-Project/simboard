@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from app.api.metadata_backfill import backfill_record, list_records
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.models import Artifact, MetadataChange
-from app.features.ingestion.metadata_backfill import MetadataUpdate
+from app.features.ingestion.metadata_backfill import MetadataUpdate, stored_values
 from app.features.user.models import UserRole
 from tests.features.ingestion.test_source_directory_api import _owners
 
@@ -216,3 +216,100 @@ def test_failed_commit_rolls_back_metadata_and_history(db, monkeypatch):
     db.refresh(execution)
     assert execution.simulation_start_date == "1850-01-01"
     assert db.query(MetadataChange).count() == 0
+
+
+@pytest.mark.parametrize("alias", ["F20TR-GHG", None])
+@pytest.mark.parametrize("old_long_name", ["AQUAPLANET", ""])
+def test_component_set_repair_is_guarded_and_idempotent(db, alias, old_long_name):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.compset_long_name = old_long_name
+    db.commit()
+    before = stored_values(execution).model_dump()
+    original_dates = (execution.simulation_start_date, execution.simulation_end_date)
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["component-set"],
+        values={
+            "compset_long_name": "1850_EAM_ELM_" + "X" * 121,
+            "compset_alias": alias,
+        },
+        expected=before,
+        overwrite=True,
+    )
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert stored_values(execution).model_dump() == before
+    assert db.query(MetadataChange).count() == 0
+
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.compset_long_name == request.values.compset_long_name
+    assert execution.compset_alias == alias
+    assert (
+        execution.simulation_start_date,
+        execution.simulation_end_date,
+    ) == original_dates
+    assert {row.field_name for row in db.query(MetadataChange).all()} == {
+        "compset_long_name",
+        "compset_alias",
+    }
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    assert db.query(MetadataChange).count() == 2
+
+
+def test_component_set_repair_rejects_stale_pair_and_requires_overwrite(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    db.commit()
+    before = stored_values(execution).model_dump()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["component-set"],
+        values={"compset_long_name": "1850_EAM_ELM", "compset_alias": None},
+        expected=before,
+        dry_run=False,
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    execution.compset_long_name = "concurrent-change"
+    db.commit()
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+    assert exc.value.status_code == 409
+    db.refresh(execution)
+    assert execution.compset_alias == before["compset_alias"]
+    assert db.query(MetadataChange).count() == 0
+
+
+@pytest.mark.parametrize(
+    "section,field",
+    [
+        ("values", "compset_long_name"),
+        ("values", "compset_alias"),
+        ("expected", "compset_alias"),
+    ],
+)
+def test_component_repair_requires_explicit_pair(section, field):
+    pair = {"compset_long_name": "1850_EAM_ELM", "compset_alias": None}
+    payload = {"values": dict(pair), "expected": dict(pair)}
+    del payload[section][field]
+    with pytest.raises(ValueError, match="Explicit component-set pair"):
+        MetadataUpdate(
+            machine_name="chrysalis",
+            record_id="00000000-0000-0000-0000-000000000001",
+            case_name="case",
+            hpc_username="alice",
+            execution_id="1.1-1",
+            fields=["component-set"],
+            **payload,
+        )
