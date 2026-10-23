@@ -20,6 +20,7 @@ from app.features.ingestion.metadata_backfill import MetadataUpdate, update_meta
 from app.features.ingestion.v3_classification import V3_SIMULATIONS
 from app.scripts.ingestion.backfill import metadata
 from app.scripts.ingestion.backfill.metadata import _execution_paths, _read_execution
+from tests.fixtures.continuation_case import stage_continuation_case
 
 
 @pytest.fixture
@@ -53,6 +54,101 @@ def _read_execution_stub(record, path, machine, fields):
 
 def _unreadable_execution(*args):
     raise OSError("unreadable")
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [("-compset F20TR-GHG", "F20TR-GHG"), ("--compset=1850_EAM_ELM", None), ("", None)],
+)
+def test_component_repair_reads_sources_not_stored_values(tmp_path, argument, alias):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    for path in execution.glob("CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    parsed = _read_execution(execution, "chrysalis", ["component-set"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"compset_long_name": "untrusted", "compset_alias": "also-untrusted"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record,
+        Namespace(machine="chrysalis", sources="archive", fields=["component-set"]),
+    )
+
+    assert values["compset_long_name"].startswith("20TRSOI_EAM%")
+    assert values["compset_alias"] == alias
+    assert set(values) == {"compset_long_name", "compset_alias"}
+
+
+@pytest.mark.parametrize("source", ["readme", "xml-value"])
+def test_component_repair_requires_readable_sources(tmp_path, source):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    if source == "readme":
+        next(execution.glob("CaseDocs.*/README.case.*.gz")).unlink()
+    else:
+        path = next(execution.glob("CaseDocs.*/env_case.xml.*.gz"))
+        with gzip.open(path, "rt") as stream:
+            content = stream.read()
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "\n".join(
+                    line for line in content.splitlines() if 'id="COMPSET"' not in line
+                )
+            )
+
+    with pytest.raises(ValueError, match="Missing"):
+        _read_execution(execution, "chrysalis", ["component-set"])
+
+
+def test_component_repair_rejects_null_alias_conflict(tmp_path, monkeypatch):
+    paths = [tmp_path / "one", tmp_path / "two"]
+    for path in paths:
+        path.mkdir()
+    parsed = Namespace(
+        case_name="case",
+        hpc_username="alice",
+        execution_id="1.1-1",
+        simulation_start_date=None,
+        simulation_end_date=None,
+        run_script_path=None,
+        compset_long_name="1850_EAM_ELM",
+        compset_alias="F20TR-GHG",
+    )
+    observations = [parsed, Namespace(**{**vars(parsed), "compset_alias": None})]
+    monkeypatch.setattr(
+        metadata, "_read_execution", partial(_next_component_observation, observations)
+    )
+    record = {
+        "case_name": "case",
+        "hpc_username": "alice",
+        "execution_id": "1.1-1",
+        "error": None,
+        "directories": [{"kind": "archive", "path": str(path)} for path in paths],
+    }
+
+    with pytest.raises(ValueError, match="Conflicting source values for compset_alias"):
+        metadata._observed_values(
+            record,
+            Namespace(machine="chrysalis", sources="archive", fields=["component-set"]),
+        )
+
+
+def _next_component_observation(observations, *args):
+    return observations.pop(0)
+
+
+def test_component_alias_comparison_ignores_case_and_preserves_first_spelling():
+    observations = [{"compset_alias": "F20TR-GHG"}, {"compset_alias": "f20tr-ghg"}]
+
+    assert metadata._consistent_values(observations, ["compset_alias"]) == {
+        "compset_alias": "F20TR-GHG"
+    }
 
 
 def test_both_layouts_and_archive_bounds(tmp_path):

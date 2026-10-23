@@ -905,7 +905,7 @@ def list_executions(  # noqa: C901
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
-    compset: list[str] | None = Query(None),
+    compset_long_name: list[str] | None = Query(None),
     grid_name: list[str] | None = Query(None),
     grid_resolution: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
@@ -918,7 +918,7 @@ def list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset|grid_name|machine_name)$"
+            "grid_resolution|compset_long_name|grid_name|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -937,7 +937,7 @@ def list_executions(  # noqa: C901
         hpc_username=hpc_username,
         campaign=campaign,
         experiment_type=experiment_type,
-        compset=compset,
+        compset_long_name=compset_long_name,
         grid_name=grid_name,
         grid_resolution=grid_resolution,
         initialization_type=initialization_type,
@@ -1061,7 +1061,7 @@ def _list_executions(  # noqa: C901
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
-    compset: list[str] | None = Query(None),
+    compset_long_name: list[str] | None = Query(None),
     grid_name: list[str] | None = Query(None),
     grid_resolution: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
@@ -1074,7 +1074,7 @@ def _list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset|grid_name|machine_name)$"
+            "grid_resolution|compset_long_name|grid_name|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -1097,7 +1097,7 @@ def _list_executions(  # noqa: C901
                 Execution.git_commit_hash.ilike(term),
                 Execution.grid_name.ilike(term),
                 Execution.grid_resolution.ilike(term),
-                Execution.compset.ilike(term),
+                Execution.compset_long_name.ilike(term),
                 Execution.compset_alias.ilike(term),
                 Machine.name.ilike(term),
             )
@@ -1117,7 +1117,7 @@ def _list_executions(  # noqa: C901
     for column, values in (
         (Execution.campaign, campaign),
         (Execution.experiment_type, experiment_type),
-        (Execution.compset, compset),
+        (Execution.compset_long_name, compset_long_name),
         (Execution.grid_name, grid_name),
         (Execution.grid_resolution, grid_resolution),
         (Execution.initialization_type, initialization_type),
@@ -1139,7 +1139,7 @@ def _list_executions(  # noqa: C901
         Execution.status,
         Execution.campaign,
         Execution.experiment_type,
-        Execution.compset,
+        Execution.compset_long_name,
         Execution.compset_alias,
         Execution.grid_name,
         Execution.grid_resolution,
@@ -1179,7 +1179,7 @@ def _list_executions(  # noqa: C901
         "run_start_date": Execution.run_start_date,
         "run_activity": func.coalesce(Execution.run_end_date, Execution.run_start_date),
         "grid_resolution": Execution.grid_resolution,
-        "compset": Execution.compset,
+        "compset_long_name": Execution.compset_long_name,
         "grid_name": Execution.grid_name,
         "machine_name": Machine.name,
     }[sort_by]
@@ -1210,7 +1210,7 @@ def _get_execution_filter_options(db: Session) -> ExecutionFilterOptionsOut:
         hpc_usernames=_distinct_values(db, Case.hpc_username),
         campaigns=_distinct_values(db, Execution.campaign),
         experiment_types=_distinct_values(db, Execution.experiment_type),
-        compsets=_distinct_values(db, Execution.compset),
+        compsets=_distinct_values(db, Execution.compset_long_name),
         grid_names=_distinct_values(db, Execution.grid_name),
         grid_resolutions=_distinct_values(db, Execution.grid_resolution),
         initialization_types=_distinct_values(db, Execution.initialization_type),

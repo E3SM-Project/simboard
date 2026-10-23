@@ -60,8 +60,8 @@ def _create_execution(
         description="Control execution for deterministic summary."
         if with_optional_metadata
         else None,
-        compset="AQUAPLANET",
-        compset_alias="QPC4",
+        compset_long_name="AQUAPLANET",
+        compset_alias="QPC4" if with_optional_metadata else None,
         grid_name="f19_f19",
         grid_resolution="1.9x2.5",
         status="completed",
@@ -157,6 +157,11 @@ class TestBuildExecutionSummary:
         summary = build_execution_summary(execution)
 
         assert "Recorded description:" not in summary.answer
+        assert "(None)" not in summary.answer
+        assert "It uses compset AQUAPLANET on grid" in summary.answer
+        assert "execution.compset_alias" not in {
+            citation.path for citation in summary.citations
+        }
         assert "Version metadata is not recorded for this execution." in summary.caveats
         assert (
             "Campaign metadata is not recorded for this execution." in summary.caveats
@@ -243,7 +248,7 @@ class TestBuildExecutionSummary:
                 execution=SnapshotExecutionFields(
                     id="execution-1",
                     execution_id="assistant-no-case-hash",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",
@@ -263,7 +268,7 @@ class TestBuildExecutionSummary:
                 execution=SnapshotExecutionFields(
                     id="execution-1",
                     execution_id="assistant-no-start-date",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
                     grid_resolution="1.9x2.5",

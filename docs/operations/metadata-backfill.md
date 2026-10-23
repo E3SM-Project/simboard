@@ -101,6 +101,57 @@ after selection also fails the record. Explicit `--sources archive` and
 `--sources staging` remain strict: every selected mapping must be readable.
 These rules do not change source-directory bootstrap.
 
+### Component-set repair (#425)
+
+Deploy the component-set schema migration, API, ingestion clients, and frontend
+together. Execution payloads now use `compsetLongName` (`compset_long_name` in
+Python); execution filters and sorting use `compset_long_name`. The old `compset`
+field is no longer part of the contract. `compsetAlias` can be null. This is a
+breaking API change: update external clients and saved filter/sort requests too.
+
+The migration preserves existing values; it does **not** repair their meaning.
+Source-based repair with `--overwrite` is a required deployment step for existing
+records, not an optional follow-up. Keep catalog consumers in maintenance while
+the trusted repair API is available. Before restoring catalog access, reconcile
+the full intended record scope, verify repaired values, and resolve failures or
+unavailable provenance explicitly. Do not describe unresolved records as repaired.
+Do not swap columns or replay duplicates to repair records. The source-based
+`component-set` group reads XML `COMPSET` and the README creation argument from
+verified mapped executions. Both source files must be present and readable.
+Missing XML `COMPSET`, ambiguous sources, identity mismatches, and conflicting
+observations fail the record without changes. An absent README argument or a
+long-name argument produces an explicit null alias. Null and non-null alias
+observations conflict rather than silently selecting the non-null value.
+
+On an archive-access host, first verify source-directory mappings and preview a
+single case against the dev API:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields component-set --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review each before/after pair against XML and README, including intentional alias
+clearing. Obtain separate authorization before replacing `--dry-run` with
+`--apply` or widening the scope. Updates retain expected-value checks, record
+locking, and metadata history. Reruns with unchanged sources are no-ops.
+No ingestion state or discovery checkpoints change.
+
+After applying, verify execution detail, list, and exported execution JSON. Confirm
+`compsetLongName` matches source XML and `compsetAlias` matches the README alias or
+is null. Verify a scoped new execution through API ingestion as well; scalar
+checks alone do not establish full schema/database compatibility or recovery.
+
+CIME defines long names as unbounded strings and can append component modifiers;
+the database uses `TEXT` rather than the old `VARCHAR(120)`. See the upstream
+[component-set schema](https://github.com/ESMCI/cime/blob/master/CIME/data/config/xml_schemas/config_compsets.xsd)
+and [long-name construction](https://github.com/ESMCI/cime/blob/master/CIME/case/case.py).
+Aliases follow CIME's XML NCName syntax; numeric time-prefixed, percent-modified,
+and colon-labelled long-name arguments are not aliases. Underscores alone do
+not identify a long name. Downgrade refuses null aliases or names longer than
+120 characters until an operator explicitly resolves incompatible records.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.

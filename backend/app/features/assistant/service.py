@@ -69,13 +69,19 @@ def _add_identity_and_status(
 
 
 def _add_configuration(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None:
+    alias = (
+        f" ({snapshot.execution.compset_alias})"
+        if snapshot.execution.compset_alias
+        else ""
+    )
     draft.sentences.append(
-        f"It uses compset {snapshot.execution.compset} ({snapshot.execution.compset_alias}) "
+        f"It uses compset {snapshot.execution.compset_long_name}{alias} "
         f"on grid {snapshot.execution.grid_name} at {snapshot.execution.grid_resolution} "
         f"resolution with {snapshot.execution.initialization_type} initialization."
     )
-    draft.add_citation("execution.compset")
-    draft.add_citation("execution.compset_alias")
+    draft.add_citation("execution.compset_long_name")
+    if snapshot.execution.compset_alias:
+        draft.add_citation("execution.compset_alias")
     draft.add_citation("execution.grid_name")
     draft.add_citation("execution.grid_resolution")
     draft.add_citation("execution.initialization_type")

@@ -12,6 +12,16 @@ from app.features.ingestion.parsers.case_docs import (
 
 
 class TestParseEnvCase:
+    @pytest.mark.parametrize("value", ["1850_EAM_ELM_MPASSI_MPASO", "", "   "])
+    def test_component_long_name_comes_from_xml(self, tmp_path, value):
+        path = tmp_path / "env_case.xml"
+        path.write_text(f'<config><entry id="COMPSET" value="{value}"/></config>')
+
+        result = parse_env_case(path)
+
+        assert result["compset_long_name"] == (value.strip() or None)
+        assert "compset_alias" not in result
+
     def test_extracts_case_root(self, tmp_path):
         xml_case = """
         <config>

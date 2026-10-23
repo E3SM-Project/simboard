@@ -152,7 +152,7 @@ def _parsed_executions_from_mapping(
                 hpc_username=metadata.get("hpc_username")
                 or metadata.get("user")
                 or "test-user",
-                compset=metadata.get("compset"),
+                compset_long_name=metadata.get("compset_long_name"),
                 compset_alias=metadata.get("compset_alias"),
                 grid_name=metadata.get("grid_name"),
                 grid_resolution=metadata.get("grid_resolution"),
@@ -247,7 +247,7 @@ class TestIngestArchive:
             "/path/to/1081156.251218-200923": {
                 "execution_id": "1081156.251218-200923",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
                 "grid_resolution": "0.9x1.25",
@@ -294,7 +294,7 @@ class TestIngestArchive:
             "/path/to/1081157.251218-200924": {
                 "execution_id": "1081157.251218-200924",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
                 "grid_resolution": "0.9x1.25",
@@ -317,7 +317,7 @@ class TestIngestArchive:
             "/path/to/1081158.251218-200925": {
                 "execution_id": "1081158.251218-200925",
                 "case_name": "case2",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid2",
                 "grid_resolution": "0.9x1.25",
@@ -369,7 +369,7 @@ class TestIngestArchive:
             "/path/to/1081159.251218-200926": {
                 "execution_id": "1081159.251218-200926",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -410,7 +410,7 @@ class TestIngestArchive:
             "/path/to/1081160.251218-200927": {
                 "execution_id": "1081160.251218-200927",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -466,7 +466,7 @@ class TestIngestArchive:
                 f"/path/to/108200{idx}.251218-200900": {
                     "execution_id": f"108200{idx}.251218-200900",
                     "case_name": f"case1_{date_str}",
-                    "compset": "test",
+                    "compset_long_name": "test",
                     "compset_alias": "test_alias",
                     "grid_name": "grid",
                     "grid_resolution": "0.9x1.25",
@@ -508,7 +508,7 @@ class TestIngestArchive:
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "timezone-regression",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -542,7 +542,7 @@ class TestIngestArchive:
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "invalid-model-date",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -573,7 +573,7 @@ class TestIngestArchive:
             "/path/to/1081170.251218-200930": {
                 "execution_id": "1081170.251218-200930",
                 "case_name": None,
-                "compset": None,
+                "compset_long_name": None,
                 "compset_alias": "test_alias",
                 "grid_name": None,
                 "grid_resolution": "0.9x1.25",
@@ -623,7 +623,7 @@ class TestIngestArchive:
             "/path/to/1081171.251218-200931": {
                 "execution_id": "1081171.251218-200931",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -664,7 +664,7 @@ class TestIngestArchive:
             "/path/to/1081172.251218-200932": {
                 "execution_id": "1081172.251218-200932",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -726,7 +726,7 @@ class TestIngestArchive:
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -787,7 +787,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081173.251218-200933": {
                 "execution_id": "1081173.251218-200933",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -837,7 +837,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081174.251218-200934": {
                 "execution_id": "1081174.251218-200934",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
                 "grid_name": "f09_fe",
                 "grid_resolution": "0.9x1.25",
@@ -921,7 +921,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200935",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
@@ -940,7 +940,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "existing_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -983,7 +983,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200940": {
                 "execution_id": "1081175.251218-200940",
                 "case_name": "orphan_case_validation",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1049,7 +1049,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200941",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
@@ -1067,7 +1067,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200941": {
                 "execution_id": "1081175.251218-200941",
                 "case_name": "orphan_case_duplicate",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1134,7 +1134,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081176.251218-200936",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
             grid_name="grid",
             grid_resolution="0.9x1.25",
@@ -1152,7 +1152,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081176.251218-200936": {
                 "execution_id": "1081176.251218-200936",
                 "case_name": "existing_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1175,7 +1175,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081177.251218-200937": {
                 "execution_id": "1081176.251218-200936",
                 "case_name": "new_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1238,7 +1238,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081178.251218-200938": {
                 "execution_id": "1081178.251218-200938",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1287,7 +1287,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081179.251218-200939": {
                 "execution_id": "1081179.251218-200939",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1341,7 +1341,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081180.251218-200940": {
                 "execution_id": "1081180.251218-200940",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1380,8 +1380,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
         ("field_name", "value", "code"),
         [
             ("execution_id", None, "string_type"),
-            ("compset", None, "string_type"),
-            ("compset_alias", None, "string_type"),
+            ("compset_long_name", None, "string_type"),
+            ("compset_long_name", "", "string_too_short"),
+            ("compset_long_name", "   ", "string_pattern_mismatch"),
+            ("compset_alias", 123, "string_type"),
             ("grid_name", None, "string_type"),
             ("grid_resolution", None, "string_type"),
             ("initialization_type", None, "string_type"),
@@ -1404,7 +1406,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                     "execution_id": "1081181.251218-200941",
                     "case_name": "invalid-field",
                     "machine": machine.name,
-                    "compset": "test",
+                    "compset_long_name": "test",
                     "compset_alias": "test_alias",
                     "grid_name": "grid",
                     "grid_resolution": "0.9x1.25",
@@ -1443,7 +1445,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                     "execution_id": "1081181.251218-200941",
                     "case_name": "multiple-invalid-fields",
                     "machine": machine.name,
-                    "compset": None,
+                    "compset_long_name": None,
                     "grid_name": None,
                     "simulation_start_date": None,
                     "git_repository_url": "invalid-url",
@@ -1456,7 +1458,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
 
         assert len(result.errors) == 1
-        assert result.errors[0]["field"] == "compset"
+        assert result.errors[0]["field"] == "compset_long_name"
         assert result.errors[0]["code"] == "string_type"
 
     def test_missing_simulation_start_date(self, db: Session) -> None:
@@ -1467,7 +1469,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081181.251218-200941": {
                 "execution_id": "1081181.251218-200941",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1575,7 +1577,7 @@ class TestNormalizeGitUrl:
             "/path/to/1081182.251218-200942": {
                 "execution_id": "1081182.251218-200942",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid",
                 "grid_resolution": "0.9x1.25",
@@ -1657,7 +1659,7 @@ class TestCaseHashIngestion:
         base: dict[str, str | None] = {
             "execution_id": execution_id,
             "case_name": case_name,
-            "compset": "FHIST",
+            "compset_long_name": "FHIST",
             "compset_alias": "test_alias",
             "grid_name": "grid1",
             "grid_resolution": "0.9x1.25",
@@ -1739,7 +1741,7 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -1801,7 +1803,7 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -1863,7 +1865,7 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -1881,7 +1883,7 @@ class TestCaseHashIngestion:
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
-                compset=None,
+                compset_long_name=None,
             ),
         }
 
@@ -1925,7 +1927,7 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -1997,7 +1999,7 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200953",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2065,7 +2067,7 @@ class TestCaseHashIngestion:
             case_id=case.id,
             execution_id="1081194.251218-200954",
             case_hash="existing-hash",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2279,7 +2281,7 @@ class TestCaseHashIngestion:
             case_id=case.id,
             execution_id="1081192.251218-200952",
             case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2360,7 +2362,7 @@ class TestCaseHashIngestion:
                 case_id=existing_case.id,
                 execution_id="1081192.251218-200952",
                 case_hash="existing-hash",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
                 grid_name="grid1",
                 grid_resolution="0.9x1.25",
@@ -2562,7 +2564,7 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2618,7 +2620,7 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2644,7 +2646,7 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2703,7 +2705,7 @@ class TestIngestHelpers:
         draft = ExecutionCreateDraft(
             case_id=uuid4(),
             execution_id="1082005.260305-120005",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2742,7 +2744,7 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username="test-user",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
             grid_resolution="0.9x1.25",
@@ -2804,7 +2806,7 @@ class TestIngestHelpers:
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
                 "grid_resolution": "0.9x1.25",
@@ -2856,7 +2858,7 @@ class TestIngestHelpers:
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
                 "grid_resolution": "0.9x1.25",
@@ -2919,7 +2921,7 @@ class TestIngestHelpers:
             "/path/to/1082011.260305-120011": {
                 "execution_id": "1082011.260305-120011",
                 "case_name": "case-missing-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
                 "grid_name": "grid1",
                 "grid_resolution": "0.9x1.25",

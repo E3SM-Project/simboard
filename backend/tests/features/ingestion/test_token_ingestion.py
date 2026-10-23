@@ -100,7 +100,7 @@ class TestIngestionWithAPIToken:
             Execution(
                 case_id=case.id,
                 execution_id="1083012.260305-120012",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
                 grid_name="grid",
                 grid_resolution="1x1",
@@ -405,7 +405,7 @@ class TestIngestionWithAPIToken:
             mock_sim = ExecutionCreate(
                 caseId=case.id,
                 executionId="1081156.251218-200923",
-                compset="test_compset",
+                compsetLongName="test_compset",
                 compsetAlias="test_alias",
                 gridName="test_grid",
                 gridResolution="1x1",

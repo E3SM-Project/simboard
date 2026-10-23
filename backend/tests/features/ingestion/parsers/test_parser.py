@@ -23,6 +23,28 @@ from tests.fixtures.continuation_case import (
 
 
 class TestMainParser:
+    @pytest.mark.parametrize(
+        "argument,alias",
+        [
+            ("-compset F20TR-GHG", "F20TR-GHG"),
+            ("", None),
+            ("--compset 1850_EAM_ELM_MPASSI_MPASO", None),
+        ],
+    )
+    def test_component_set_merge_retains_xml(self, tmp_path, argument, alias):
+        case = stage_continuation_case(tmp_path)
+        for path in case.glob("*/CaseDocs.*/README.case.*.gz"):
+            with gzip.open(path, "wt") as stream:
+                stream.write(f"create_newcase {argument} --res ne30\n")
+
+        results, skipped = parser.main_parser(
+            case, tmp_path / "out", strict_validation=True
+        )
+
+        assert skipped == 0
+        assert all(row.compset_long_name.startswith("20TRSOI_EAM%") for row in results)
+        assert all(row.compset_alias == alias for row in results)
+
     @pytest.mark.parametrize("compressed", [False, True])
     def test_qa_continuation_execution_ranges(self, tmp_path, compressed):
         case = stage_continuation_case(tmp_path, compressed_cpl=compressed)

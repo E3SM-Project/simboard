@@ -179,7 +179,7 @@ SELECT
   c.name AS case_name,
   e.execution_id,
   e.status AS execution_status,
-  e.compset,
+  e.compset_long_name,
   e.grid_name
 FROM ingestions AS i
 JOIN machines AS m ON m.id = i.machine_id

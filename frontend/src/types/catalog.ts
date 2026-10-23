@@ -209,8 +209,8 @@ export interface ExecutionCreate {
   executionId: string;
   caseHash?: string | null;
   description: string | null;
-  compset: string;
-  compsetAlias: string;
+  compsetLongName: string;
+  compsetAlias: string | null;
   gridName: string;
   gridResolution: string;
 
@@ -333,8 +333,8 @@ export interface ExecutionListItemOut {
   status: ExecutionStatusValue;
   campaign: string | null;
   experimentType: string | null;
-  compset: string;
-  compsetAlias: string;
+  compsetLongName: string;
+  compsetAlias: string | null;
   gridName: string;
   gridResolution: string;
   initializationType: string;

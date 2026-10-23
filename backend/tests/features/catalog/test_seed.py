@@ -103,7 +103,7 @@ class TestSeedExecution:
                 "machineId": str(machine.id),
                 "hpcUsername": "override-me",
                 "executionId": "1081156.251218-200923",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
                 "gridName": "f19_f19",
                 "gridResolution": "1.9x2.5",
@@ -230,7 +230,7 @@ class TestRollbackSeed:
             execution_entry={
                 "machine": {"name": machine.name},
                 "executionId": "rollback-seeded-execution",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
                 "gridName": "f19_f19",
                 "gridResolution": "1.9x2.5",

@@ -32,7 +32,7 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Description",
     ),
-    "execution.compset": CitationRegistryEntry(
+    "execution.compset_long_name": CitationRegistryEntry(
         source_type="execution_field",
         label="Compset",
     ),

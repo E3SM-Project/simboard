@@ -19,6 +19,8 @@ class MetadataValues(BaseModel):
     simulation_start_date: ModelDate | None = None
     simulation_end_date: ModelDate | None = None
     run_script: str | None = Field(default=None, max_length=1000, min_length=1)
+    compset_long_name: str | None = None
+    compset_alias: str | None = None
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -37,13 +39,30 @@ class MetadataUpdate(BaseModel):
     case_name: str = Field(min_length=1)
     hpc_username: str = Field(min_length=1)
     execution_id: str = Field(min_length=1)
-    fields: list[Literal["simulation-dates", "run-script"]] = Field(
-        min_length=1, max_length=2
+    fields: list[Literal["simulation-dates", "run-script", "component-set"]] = Field(
+        min_length=1, max_length=3
     )
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
     dry_run: bool = True
+
+    @model_validator(mode="after")
+    def complete_component_set(self):
+        if "component-set" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if (
+                    not {"compset_long_name", "compset_alias"}
+                    <= values.model_fields_set
+                ):
+                    raise ValueError(f"Explicit component-set pair required in {label}")
+            if (
+                not self.values.compset_long_name
+                or not self.values.compset_long_name.strip()
+            ):
+                raise ValueError("Required component-set long name missing in values")
+
+        return self
 
 
 def stored_values(execution: Execution) -> MetadataValues:
@@ -55,6 +74,8 @@ def stored_values(execution: Execution) -> MetadataValues:
         simulation_start_date=execution.simulation_start_date,
         simulation_end_date=execution.simulation_end_date,
         run_script=scripts[0].uri if scripts else None,
+        compset_long_name=execution.compset_long_name,
+        compset_alias=execution.compset_alias,
     )
 
 
@@ -140,11 +161,12 @@ def update_metadata(
         names.extend(["simulation_start_date", "simulation_end_date"])
     if "run-script" in payload.fields:
         names.append("run_script")
+    names.extend(_component_set_fields(old, payload))
 
     for name in names:
         before = getattr(old, name)
         after = getattr(payload.values, name)
-        if after is None or before == after:
+        if before == after or (after is None and name != "compset_alias"):
             continue
         if before is not None and not payload.overwrite:
             continue
@@ -165,3 +187,27 @@ def update_metadata(
         "changes": changes,
         "dry_run": payload.dry_run,
     }
+
+
+def _component_set_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str]:
+    if "component-set" not in payload.fields:
+        return []
+
+    fields = ["compset_long_name", "compset_alias"]
+    # Compare the pair, even if one member is unchanged. Never clear an alias
+    # against a long name that changed after source observation.
+    for name in fields:
+        before = getattr(old, name)
+        if before != getattr(payload.expected, name) and before != getattr(
+            payload.values, name
+        ):
+            raise ValueError(f"Stored {name} changed; rerun backfill")
+
+    # Treat the pair atomically when fill-only mode cannot replace a member.
+    needs_overwrite = any(
+        getattr(old, name) is not None
+        and getattr(old, name) != getattr(payload.values, name)
+        for name in fields
+    )
+
+    return fields if payload.overwrite or not needs_overwrite else []
