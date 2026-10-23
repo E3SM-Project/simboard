@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
-    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -21,8 +20,9 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
+from app.common.model_dates import normalize_model_date
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
 from app.features.catalog.enums import (
@@ -144,8 +144,8 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Model timeline
     # ~~~~~~~~~~~~~~
-    simulation_start_date: Mapped[date] = mapped_column(Date)
-    simulation_end_date: Mapped[date | None] = mapped_column(Date)
+    simulation_start_date: Mapped[str] = mapped_column(String(10))
+    simulation_end_date: Mapped[str | None] = mapped_column(String(10))
     run_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     run_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     compiler: Mapped[str | None] = mapped_column(String(100))
@@ -202,6 +202,10 @@ class Execution(Base, IDMixin, TimestampMixin):
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="execution", cascade="all, delete-orphan"
     )
+
+    @validates("simulation_start_date", "simulation_end_date")
+    def _normalize_simulation_date(self, key: str, value: object) -> str | None:
+        return normalize_model_date(value) if value is not None else None
 
 
 class SourceDirectory(Base, IDMixin):

@@ -7,7 +7,6 @@ including path-based and upload-based ingestion endpoints.
 import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -865,7 +864,7 @@ class TestGetIngestionStateEndpoint:
                 grid_resolution="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=ingestion.id,
@@ -984,7 +983,7 @@ class TestGetIngestionStateEndpoint:
                 grid_resolution="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=partial_ingestion.id,
@@ -1048,7 +1047,7 @@ class TestGetIngestionStateEndpoint:
                 grid_resolution="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
                 ingestion_id=ingestion.id,
@@ -1094,7 +1093,7 @@ class TestGetIngestionStateEndpoint:
                 grid_resolution="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
                 ingestion_id=ingestion.id,
@@ -1146,7 +1145,7 @@ class TestGetIngestionStateEndpoint:
                     grid_resolution="1x1",
                     status="completed",
                     initialization_type="branch",
-                    simulation_start_date=datetime.now(timezone.utc),
+                    simulation_start_date="2020-01-01",
                     created_by=user_id,
                     last_updated_by=user_id,
                     ingestion_id=ingestion.id,
@@ -1248,7 +1247,7 @@ class TestGetIngestionStateEndpoint:
                 grid_resolution="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=blank_execution_ingestion.id,
@@ -2227,8 +2226,8 @@ class TestIngestFromUploadEndpoint:
         assert error["execution_dir"] == parsed_execution.execution_dir
         assert error["error_type"] == "ValidationError"
         assert error["field"] == "simulation_start_date"
-        assert error["code"] == "date_type"
-        assert "Input should be a valid date" in error["error"]
+        assert error["code"] == "value_error"
+        assert "Model date must use YYYY-MM-DD" in error["error"]
 
         ingestion = (
             db.query(Ingestion)

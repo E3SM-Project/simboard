@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -218,7 +218,7 @@ class TestSnapshotHelpers:
             grid_resolution="1.9x2.5",
             status=ExecutionStatus.COMPLETED,
             initialization_type="startup",
-            simulation_start_date=date(2024, 1, 1),
+            simulation_start_date="0000-01-02",
             created_by=uuid4(),
             last_updated_by=uuid4(),
             ingestion_id=uuid4(),
@@ -253,6 +253,7 @@ class TestSnapshotHelpers:
 
         snapshot = snapshot_module.build_execution_snapshot(execution)
 
+        assert snapshot.execution.simulation_start_date == "0000-01-02"
         assert [(link.url, link.label) for link in snapshot.links] == [
             ("https://example.com/case-only", "Case only"),
             ("https://example.com/shared", "Execution shared"),

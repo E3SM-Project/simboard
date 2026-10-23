@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -120,7 +120,7 @@ class TestSeedExecution:
         assert execution.case_id == case.id
         assert execution.ingestion_id is not None
         assert execution.compute_type == "gpu"
-        assert execution.simulation_start_date == date(2023, 1, 1)
+        assert execution.simulation_start_date == "2023-01-01"
 
 
 class TestSeedSourceDirectories:

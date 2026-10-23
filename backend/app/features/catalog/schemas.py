@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from pydantic import (
     field_validator,
 )
 
+from app.common.model_dates import ModelDate
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.catalog.enums import (
     ArtifactKind,
@@ -324,10 +325,10 @@ class ExecutionCreate(CamelInBaseModel):
     # Model timeline
     # --------------
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,
@@ -571,10 +572,10 @@ class ExecutionSummaryOut(CamelOutBaseModel):
         ExecutionStatus, Field(..., description="Current status of the execution")
     ]
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
 
 
@@ -672,8 +673,8 @@ class ExecutionListItemOut(CamelOutBaseModel):
     grid_name: str
     grid_resolution: str
     initialization_type: str
-    simulation_start_date: date
-    simulation_end_date: date | None = None
+    simulation_start_date: ModelDate
+    simulation_end_date: ModelDate | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
@@ -1021,10 +1022,10 @@ class ExecutionOut(CamelOutBaseModel):
         ),
     ]
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,

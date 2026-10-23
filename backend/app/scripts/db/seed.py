@@ -11,7 +11,7 @@ Usage:
 import json
 import os
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 # required to register models with SQLAlchemy
+from app.common.model_dates import normalize_model_date
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.features.catalog.enums import SourceDirectoryKind
@@ -209,9 +210,8 @@ def _parse_datetime(value):
         return None
 
 
-def _parse_date(value) -> date | None:
-    parsed = _parse_datetime(value)
-    return parsed.date() if parsed is not None else None
+def _parse_date(value) -> str | None:
+    return normalize_model_date(value) if value else None
 
 
 def _resolve_seed_case_machine(

@@ -1,7 +1,5 @@
 """Database-backed metadata selection, ownership, and update contracts."""
 
-from datetime import date
-
 import pytest
 from fastapi import HTTPException
 
@@ -65,6 +63,21 @@ def test_selection_filters_and_pagination(db):
     assert list_records(machine.name, db, user, offset=1, limit=1)["records"] == []
 
 
+def test_backfill_preserves_year_zero_dates_and_history(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    request = _payload(machine, case, execution, overwrite=True, dry_run=False)
+    request.values.simulation_start_date = "0000-01-02"
+    request.values.simulation_end_date = "0000-12-31"
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.simulation_start_date == "0000-01-02"
+    assert execution.simulation_end_date == "0000-12-31"
+    changes = {row.field_name: row.new_value for row in db.query(MetadataChange).all()}
+    assert changes["simulation_start_date"] == "0000-01-02"
+    assert changes["simulation_end_date"] == "0000-12-31"
+
+
 @pytest.mark.parametrize(
     "field", ["case_name", "hpc_username", "execution_id", "machine_name"]
 )
@@ -83,24 +96,24 @@ def test_update_requires_complete_identity(db, field):
 def test_dry_run_and_stale_update_do_not_write(db):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
     db.commit()
 
     request = _payload(machine, case, execution, overwrite=True)
     assert backfill_record(request, db, user)["outcome"] == "changed"
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
     assert db.query(MetadataChange).count() == 0
 
     request.dry_run = False
-    request.expected.simulation_start_date = date(1900, 1, 1)
+    request.expected.simulation_start_date = "1900-01-01"
 
     with pytest.raises(HTTPException) as exc:
         backfill_record(request, db, user)
     assert exc.value.status_code == 409
 
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
 
 
 def test_multiple_run_scripts_are_reported_and_not_overwritten(db):
@@ -126,8 +139,8 @@ def test_multiple_run_scripts_are_reported_and_not_overwritten(db):
 def test_apply_records_execution_history_in_same_transaction(db, existing_script):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
-    execution.simulation_end_date = date(1851, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
+    execution.simulation_end_date = "1851-01-01"
     if existing_script:
         execution.artifacts.append(
             Artifact(kind=ArtifactKind.RUN_SCRIPT, uri="/old/run.sh")
@@ -187,7 +200,7 @@ def test_apply_records_execution_history_in_same_transaction(db, existing_script
 def test_failed_commit_rolls_back_metadata_and_history(db, monkeypatch):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
     db.commit()
     request = _payload(machine, case, execution, overwrite=True, dry_run=False)
 
@@ -201,5 +214,5 @@ def test_failed_commit_rolls_back_metadata_and_history(db, monkeypatch):
             backfill_record(request, db, user)
 
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
     assert db.query(MetadataChange).count() == 0

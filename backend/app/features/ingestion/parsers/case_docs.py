@@ -1,10 +1,8 @@
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
 from pathlib import Path
 
-from dateutil.relativedelta import relativedelta
-
+from app.common.model_dates import add_model_date, normalize_model_date
 from app.features.catalog.schemas import KNOWN_EXPERIMENT_TYPES
 from app.features.ingestion.parsers.utils import _open_text
 
@@ -283,21 +281,17 @@ def _calculate_simulation_end_date(
         return None
 
     try:
-        start_date = datetime.strptime(simulation_start_date, "%Y-%m-%d")
         stop_n_int = int(stop_n)
+        if stop_option == "ndays":
+            return add_model_date(simulation_start_date, days=stop_n_int)
+        if stop_option == "nmonths":
+            return add_model_date(simulation_start_date, months=stop_n_int)
+        if stop_option == "nyears":
+            return add_model_date(simulation_start_date, months=stop_n_int * 12)
     except ValueError:
         return None
 
-    if stop_option == "ndays":
-        end_date = start_date + relativedelta(days=stop_n_int)
-    elif stop_option == "nmonths":
-        end_date = start_date + relativedelta(months=stop_n_int)
-    elif stop_option == "nyears":
-        end_date = start_date + relativedelta(years=stop_n_int)
-    else:
-        return None
-
-    return end_date.strftime("%Y-%m-%d")
+    return None
 
 
 def _parse_stop_date(stop_date: str | None) -> str | None:
@@ -305,6 +299,9 @@ def _parse_stop_date(stop_date: str | None) -> str | None:
         return None
 
     try:
-        return datetime.strptime(stop_date, "%Y%m%d").strftime("%Y-%m-%d")
+        if not re.fullmatch(r"[0-9]{8}", stop_date):
+            return None
+
+        return normalize_model_date(f"{stop_date[:4]}-{stop_date[4:6]}-{stop_date[6:]}")
     except ValueError:
         return None

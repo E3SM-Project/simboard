@@ -184,7 +184,7 @@ def _create_matching_execution(
         grid_resolution="1.9x2.5",
         initialization_type="startup",
         status=ExecutionStatus.CREATED,
-        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        simulation_start_date="2023-01-01",
         created_by=user_id,
         last_updated_by=user_id,
         ingestion_id=ingestion.id,
@@ -194,6 +194,44 @@ def _create_matching_execution(
     db.commit()
 
     return case, execution
+
+
+@pytest.mark.parametrize("start", ["0000-01-01", "0000-01-02"])
+def test_year_zero_dates_survive_create_storage_and_catalog_reads(
+    client, db: Session, start: str
+):
+    case = _create_case(db, "year-zero")
+    db.commit()
+    response = client.post(
+        f"{API_BASE}/executions",
+        json={
+            "caseId": str(case.id),
+            "executionId": "year-zero-execution",
+            "compset": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridName": "f19_f19",
+            "gridResolution": "1.9x2.5",
+            "initializationType": "startup",
+            "status": "created",
+            "simulationStartDate": start,
+            "simulationEndDate": "0000-12-31",
+        },
+    )
+    assert response.status_code == 201, response.text
+    record = response.json()
+    execution = db.get(Execution, record["id"])
+    db.refresh(execution)
+    assert execution.simulation_start_date == start
+    assert execution.simulation_end_date == "0000-12-31"
+
+    for path in (f"executions/{execution.id}", f"cases/{case.id}"):
+        response = client.get(f"{API_BASE}/{path}")
+        assert response.status_code == 200, response.text
+        record = response.json()
+        if path.startswith("cases/"):
+            record = record["executions"][0]
+        assert record["simulationStartDate"] == start
+        assert record["simulationEndDate"] == "0000-12-31"
 
 
 def test_openapi_exposes_only_canonical_execution_contract(client) -> None:

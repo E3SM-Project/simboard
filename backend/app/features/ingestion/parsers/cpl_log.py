@@ -2,9 +2,9 @@
 
 import re
 import zlib
-from datetime import datetime
 from pathlib import Path
 
+from app.common.model_dates import normalize_model_date
 from app.features.ingestion.parsers.utils import _open_text
 
 
@@ -39,10 +39,11 @@ def parse_cpl_log(path: str | Path) -> dict[str, str]:
             )
             if match:
                 try:
-                    value = datetime.strptime(match.group(1), "%Y%m%d").date()
+                    raw = match.group(1)
+                    value = normalize_model_date(f"{raw[:4]}-{raw[4:6]}-{raw[6:]}")
                 except ValueError:
                     continue
-                dates[key] = value.isoformat()
+                dates[key] = value
         if (
             dates.get("simulation_start_date")
             and dates.get("simulation_end_date")

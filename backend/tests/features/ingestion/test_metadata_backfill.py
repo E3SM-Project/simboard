@@ -6,7 +6,6 @@ import json
 import logging
 import urllib.error
 from argparse import Namespace
-from datetime import date
 from functools import partial
 from pathlib import Path
 from uuid import uuid4
@@ -414,7 +413,7 @@ def _update_payload(row, **kwargs):
 
 
 def test_dry_run_fill_missing_overwrite_and_idempotency():
-    row = Execution(id=uuid4(), simulation_start_date=date(1850, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1850-01-01")
     unrelated = Artifact(kind=ArtifactKind.OUTPUT, uri="/keep")
     row.artifacts = [unrelated]
     editor = uuid4()
@@ -428,13 +427,13 @@ def test_dry_run_fill_missing_overwrite_and_idempotency():
 
     dry.dry_run = False
     update_metadata(db, row, dry, editor)
-    assert row.simulation_start_date == date(1850, 1, 1)
+    assert row.simulation_start_date == "1850-01-01"
     assert row.artifacts[0] is unrelated
     assert row.artifacts[1].uri == "/case/run.sh"
 
     dry.overwrite = True
     update_metadata(db, row, dry, editor)
-    assert row.simulation_start_date == date(2020, 1, 1)
+    assert row.simulation_start_date == "2020-01-01"
     assert update_metadata(db, row, dry, editor)["outcome"] == "unchanged"
     history = list(db.new)
     assert all(isinstance(item, MetadataChange) for item in history)
@@ -497,13 +496,13 @@ def test_overwrite_script_history_preserves_full_artifact_values():
 
 
 def test_stale_update_rejected_before_any_write():
-    row = Execution(id=uuid4(), simulation_start_date=date(1900, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1900-01-01")
     with pytest.raises(ValueError, match="changed"):
         update_metadata(
             None, row, _update_payload(row, overwrite=True, dry_run=False), uuid4()
         )
     assert row.artifacts == []
-    assert row.simulation_start_date == date(1900, 1, 1)
+    assert row.simulation_start_date == "1900-01-01"
 
 
 def test_database_first_uses_mappings_and_detects_conflicts(tmp_path, monkeypatch):
@@ -556,9 +555,9 @@ def test_metadata_schema_rejects_unknown_fields():
 
 
 def test_fill_dates_cannot_mix_intervals():
-    row = Execution(id=uuid4(), simulation_start_date=date(1850, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1850-01-01")
     request = _update_payload(row)
-    request.values.simulation_end_date = date(2030, 1, 1)
+    request.values.simulation_end_date = "2030-01-01"
     with pytest.raises(ValueError, match="different interval"):
         update_metadata(None, row, request, uuid4())
 

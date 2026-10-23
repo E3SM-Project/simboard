@@ -69,6 +69,13 @@ driver clock in `cpl.log.<execution_id>` (plain or gzipped). `Stop Time` is the
 configured simulation end; termination timestamps do not override it. These
 dates are separate from the wall-clock run timestamps supplied by CaseStatus.
 
+Simulation start and end dates use validated `YYYY-MM-DD` strings in the API
+and database, including astronomical year `0000`. Validation and fallback date
+arithmetic use Gregorian rules; calendar-specific model arithmetic is not inferred.
+Wall-clock run timestamps remain timezone-aware datetimes. The model-date migration
+preserves existing dates and null end dates; downgrade is blocked while year-zero
+records exist because PostgreSQL `DATE` cannot represent a literal year zero.
+
 Without usable coupler dates, non-continuation runs retain the XML-derived
 fallback. For `CONTINUE_RUN=TRUE`, XML initialization dates do not describe the
 execution interval and are not used. If the simulation start remains unknown,
