@@ -333,6 +333,26 @@ make ingest-apply machine=perlmutter env=dev scan_mode=archive env_file=/path/to
 - **Execution:** Uses `perlmutter.config` and the NERSC archive ingestor with the current checkout’s backend Python. Override Python with `PYTHON_BIN`; `SIMBOARD_ROOT` is not required.
 - **Output and locking:** Output goes to the terminal or scheduler. This path adds no launcher file logs or locks. **Avoid overlap with scheduled NERSC jobs.**
 
+#### Single-Execution Ingestion
+
+From the repository root, select an existing absolute execution directory under
+the configured archive root. Use `scan_mode=staging` for the staging root.
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive \
+    env_file="$HOME/.config/simboard/env.dev.sh" \
+    execution_dir="/global/cfs/cdirs/e3sm/OLD_PERF/2026-10/performance_archive_2026_10_12_10_02_55/COMPLETED/mahf708/E1.baseline.pm-gpu.r04/59694792.261011-211434"
+```
+
+Review discovery results before switching to `ingest-apply`. `env_file` selects
+the API destination; dry runs do not test server-side parsing or persistence.
+
+- Only the selected execution is eligible; layout rules and archive bounds still apply.
+- Targeted runs bypass completed snapshot checkpoints but never complete a snapshot.
+- Existing execution-state and duplicate checks remain active; selection does not force re-ingestion or metadata overwrite.
+- Invalid selections fail rather than trigger a broad scan.
+- For Chrysalis, use `machine=chrysalis SIMBOARD_ROOT=<deployment-root>` and a directory under its configured source root.
+
 ## NERSC Spin operations
 
 Use NERSC Spin path ingestion when the performance archive is mounted in the

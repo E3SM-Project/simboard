@@ -65,6 +65,15 @@ selected submissions. It advances when a case finishes (including retries),
 whether successful or failed. Non-interactive runs keep the existing structured
 case and summary logs without a terminal progress bar.
 
+## Ingested Simulation Dates
+
+- **Source:** `Curr Time` and `Stop Time` from the initial driver clock in `cpl.log.<execution_id>` (plain or gzipped). `Stop Time` is the configured end; termination timestamps do not override it.
+- **Fallback:** XML-derived dates apply only to non-continuation runs, never `CONTINUE_RUN=TRUE`. Missing coupler logs alone do not fail required-file validation.
+- **Validation:** An unknown start date prevents execution creation; the end date may be null.
+- **Storage:** API and database use validated `YYYY-MM-DD` strings, including year `0000`. Validation and fallback arithmetic use Gregorian rules, not inferred model calendars. Actual run timestamps from CaseStatus remain timezone-aware datetimes.
+- **Migration:** Existing dates and nulls are preserved. Year-zero records block downgrade to PostgreSQL `DATE`.
+- **Corrections:** Duplicates remain skipped; update stored dates through [metadata backfill](../operations/metadata-backfill.md).
+
 ## Performance Directories
 
 There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_DIR`) and archive (`OLD_PERF_ARCHIVE_DIR`).
