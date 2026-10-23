@@ -2140,7 +2140,13 @@ class TestIngestFromUploadEndpoint:
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_errors = [
-            {"file": "sim1.json", "error": "Invalid format"},
+            {
+                "execution_dir": "/path/to/exec1",
+                "error_type": "ValidationError",
+                "field": "compset",
+                "code": "string_type",
+                "error": "Input should be a valid string",
+            },
             {"file": "sim2.json", "error": "Missing field"},
         ]
 
@@ -2155,6 +2161,13 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 201
 
         # Verify failed status in audit record
+        assert res.json() == {
+            "created_count": 0,
+            "duplicate_count": 0,
+            "executions": [],
+            "errors": mock_errors,
+        }
+
         ingestion = (
             db.query(Ingestion)
             .filter(Ingestion.source_reference == str(archive_path))
@@ -2181,7 +2194,7 @@ class TestIngestFromUploadEndpoint:
             case_name="orphan_case_endpoint",
             case_group=None,
             machine=machine.name,
-            hpc_username=None,
+            hpc_username="test-user",
             compset="FHIST",
             compset_alias="test_alias",
             grid_name="grid",
@@ -2210,6 +2223,12 @@ class TestIngestFromUploadEndpoint:
         assert res.status_code == 201
         assert res.json()["created_count"] == 0
         assert len(res.json()["errors"]) == 1
+        error = res.json()["errors"][0]
+        assert error["execution_dir"] == parsed_execution.execution_dir
+        assert error["error_type"] == "ValidationError"
+        assert error["field"] == "simulation_start_date"
+        assert error["code"] == "date_type"
+        assert "Input should be a valid date" in error["error"]
 
         ingestion = (
             db.query(Ingestion)

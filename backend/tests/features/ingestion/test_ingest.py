@@ -1,4 +1,5 @@
 import gzip
+from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Mapping
@@ -1367,6 +1368,88 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert len(ingest_result.errors) == 1
             assert ingest_result.errors[0]["error_type"] == "ValueError"
             assert "Machine name is required" in ingest_result.errors[0]["error"]
+
+    @pytest.mark.parametrize(
+        ("field_name", "value", "code"),
+        [
+            ("execution_id", None, "string_type"),
+            ("compset", None, "string_type"),
+            ("compset_alias", None, "string_type"),
+            ("grid_name", None, "string_type"),
+            ("grid_resolution", None, "string_type"),
+            ("initialization_type", None, "string_type"),
+            ("simulation_start_date", None, "date_type"),
+            ("simulation_start_date", "not-a-date", "date_type"),
+            ("simulation_start_date", "0000-01-02", "date_type"),
+            ("git_repository_url", "not-a-url", "url_parsing"),
+            ("git_repository_url", "ftp://example.com/repo", "url_scheme"),
+        ],
+    )
+    def test_prevalidation_errors_include_field_and_code(
+        self, db: Session, field_name, value, code
+    ) -> None:
+        machine = self._create_machine(db, "test-machine")
+        execution_dir = "/path/to/1081181.251218-200941"
+        parsed = _parsed_executions_from_mapping(
+            {
+                execution_dir: {
+                    "execution_id": "1081181.251218-200941",
+                    "case_name": "invalid-field",
+                    "machine": machine.name,
+                    "compset": "test",
+                    "compset_alias": "test_alias",
+                    "grid_name": "grid",
+                    "grid_resolution": "0.9x1.25",
+                    "initialization_type": "startup",
+                    "simulation_start_date": "2020-01-01",
+                }
+            }
+        )[0]
+        parsed = replace(parsed, **{field_name: value})
+        with (
+            patch(
+                "app.features.ingestion.ingest.main_parser", return_value=([parsed], 0)
+            ),
+            patch("app.features.ingestion.ingest.logger") as logger,
+        ):
+            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+        assert result.executions == []
+        assert result.created_count == result.duplicate_count == 0
+        assert len(result.errors) == 1
+        error = result.errors[0]
+        assert error["execution_dir"] == execution_dir
+        assert error["error_type"] == "ValidationError"
+        assert error["field"] == field_name
+        assert error["code"] == code
+        assert f"[type={code}," in error["error"]
+        logger.error.assert_called_once()
+        assert logger.error.call_args.args[1:4] == (execution_dir, field_name, code)
+        assert db.query(Case).filter(Case.name == "invalid-field").first() is None
+
+    def test_prevalidation_reports_first_failure(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+        parsed = _parsed_executions_from_mapping(
+            {
+                "/path/to/1081181.251218-200941": {
+                    "execution_id": "1081181.251218-200941",
+                    "case_name": "multiple-invalid-fields",
+                    "machine": machine.name,
+                    "compset": None,
+                    "grid_name": None,
+                    "simulation_start_date": None,
+                    "git_repository_url": "invalid-url",
+                }
+            }
+        )
+        with patch(
+            "app.features.ingestion.ingest.main_parser", return_value=(parsed, 0)
+        ):
+            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+        assert len(result.errors) == 1
+        assert result.errors[0]["field"] == "compset"
+        assert result.errors[0]["code"] == "string_type"
 
     def test_missing_simulation_start_date(self, db: Session) -> None:
         """Test error when simulation_start_date cannot be parsed."""
