@@ -180,6 +180,7 @@ def seed_from_json(db: Session, json_path: str):
         db.flush()
 
         _seed_source_directories(db, case, case_entry)
+        _seed_case_links(db, case, case_entry)
 
         for execution_entry in executions_data:
             _ = _seed_execution(db, execution_entry, case, case_name, first_user_id)
@@ -191,6 +192,27 @@ def seed_from_json(db: Session, json_path: str):
         f"✅ Done! Inserted {len(data)} cases with "
         f"{total_executions} executions, artifacts, and links."
     )
+
+
+def _seed_case_links(db: Session, case: Case, entry: dict) -> None:
+    """Persist case-owned links, matching what the diagnostics scanner produces.
+
+    The scanner attaches ``diagnostic`` links to the case, not to an
+    execution, so seeding them here lets local development exercise the
+    same code paths (case detail resources, diagnostics viewer discovery)
+    that production data does.
+    """
+    for link_entry in entry.get("links", []):
+        link = ExternalLinkCreate(**link_entry)
+        db.add(
+            ExternalLink(
+                case_id=case.id,
+                **{
+                    **link.model_dump(),
+                    "url": str(link.url) if isinstance(link.url, HttpUrl) else link.url,
+                },
+            )
+        )
 
 
 def _seed_source_directories(db: Session, owner: Case | Execution, entry: dict) -> None:

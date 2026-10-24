@@ -87,6 +87,37 @@ export interface SourceDirectoryOut {
   path: string;
 }
 
+/** One IICE-addressable diagnostics output discovered under a case's archive root. */
+export interface DiagnosticsViewerOut {
+  tool: 'e3sm_diags' | 'mpas_analysis';
+  /** e3sm_diags `viewer/` directory or mpas-analysis run directory. */
+  url: string;
+  subsection: string | null;
+  comparison: 'model_vs_obs' | 'model_vs_model' | null;
+  startYear: number | null;
+  endYear: number | null;
+  tsStartYear: number | null;
+  tsEndYear: number | null;
+  /** zppy's `_mvm_<tag>` suffix for model_vs_model runs; a hint, not a case name. */
+  referenceHint: string | null;
+}
+
+/** Discovery outcome for one `diagnostic` link on a case. */
+export interface DiagnosticsViewerSourceOut {
+  linkId: string;
+  rootUrl: string;
+  label: string | null;
+  viewers: DiagnosticsViewerOut[];
+  truncated: boolean;
+  error: string | null;
+}
+
+export interface CaseDiagnosticsViewersOut {
+  caseId: string;
+  caseName: string;
+  sources: DiagnosticsViewerSourceOut[];
+}
+
 export interface CaseDetailOut extends CaseSummaryOut {
   sourceDirectories?: SourceDirectoryOut[];
   performanceSourceDirectory?: SourceDirectoryOut | null;
