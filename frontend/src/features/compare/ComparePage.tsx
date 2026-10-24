@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
+import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { ExecutionOut } from '@/types/index';
@@ -41,7 +42,7 @@ interface CompareWorkspaceProps {
 interface CompareMetricRow {
   label: string;
   values: unknown[];
-  renderMode?: 'default' | 'rich';
+  renderMode?: 'default' | 'rich' | 'repository';
   diffable?: boolean;
 }
 
@@ -319,7 +320,7 @@ export const CompareWorkspace = ({
       },
     ],
     provenance: [
-      makeMetricRow('Git Repository', 'gitRepositoryUrl', '', 'rich'),
+      makeMetricRow('Git Repository', 'gitRepositorySource', '', 'repository'),
       makeMetricRow('Git Branch', 'gitBranch', ''),
       makeMetricRow('Git Tag', 'gitTag', ''),
       makeMetricRow('Git Commit Hash', 'gitCommitHash', ''),
@@ -572,6 +573,25 @@ export const CompareWorkspace = ({
       }
 
       return <TableCellText value={textValue} lines={2} fullValueMode="tooltip" />;
+    }
+
+    if (row.renderMode === 'repository') {
+      const source = typeof value === 'string' ? value : null;
+      const href = repositoryBrowserUrl(source);
+      const text = <TableCellText value={source || '—'} lines={2} fullValueMode="tooltip" />;
+
+      return href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:underline"
+        >
+          {text}
+        </a>
+      ) : (
+        text
+      );
     }
 
     if (

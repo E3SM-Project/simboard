@@ -53,6 +53,7 @@ import {
   type ResourceRowFieldErrors,
   toEditableLinkRows,
 } from '@/features/catalog/externalLinkEditing';
+import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type {
@@ -622,6 +623,7 @@ export const ExecutionDetailsView = ({
   onHistoryLoadMore,
   onHistoryOpenChange,
 }: ExecutionDetailsViewProps) => {
+  const repositoryHref = repositoryBrowserUrl(execution.gitRepositorySource);
   const [activeTab, setActiveTab] = useState('summary');
   const [isEditing, setIsEditing] = useState(false);
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
@@ -1236,18 +1238,18 @@ export const ExecutionDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Repository:
                       </Label>
-                      {execution.gitRepositoryUrl ? (
+                      {repositoryHref ? (
                         <a
-                          href={execution.gitRepositoryUrl}
+                          href={repositoryHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block min-w-0 truncate text-sm text-blue-600 hover:underline"
-                          title={execution.gitRepositoryUrl}
+                          title={execution.gitRepositorySource ?? undefined}
                         >
-                          {execution.gitRepositoryUrl}
+                          {execution.gitRepositorySource}
                         </a>
                       ) : (
-                        <p className="text-sm">—</p>
+                        <ReadonlyText value={execution.gitRepositorySource} />
                       )}
                     </div>
                     <div className="flex items-center gap-2">

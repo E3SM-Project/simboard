@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import Field, HttpUrl, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.common.model_dates import ModelDate, normalize_model_date
@@ -27,7 +27,6 @@ _STRING_ADAPTER = TypeAdapter(str)
 _LONG_NAME_ADAPTER = TypeAdapter(Annotated[str, Field(min_length=1, pattern=r"\S")])
 _DATE_ADAPTER = TypeAdapter(ModelDate)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
-_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 CaseIdentity = tuple[str, UUID, str]
 
 
@@ -79,7 +78,7 @@ class ExecutionCreateDraft:
     run_start_date: datetime | None
     run_end_date: datetime | None
     compiler: str | None
-    git_repository_url: str | None
+    git_repository_source: str | None
     git_branch: str | None
     git_tag: str | None
     git_commit_hash: str | None
@@ -568,9 +567,9 @@ def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
             _DATE_ADAPTER, "simulation_end_date", draft.simulation_end_date
         )
 
-    if draft.git_repository_url is not None:
+    if draft.git_repository_source is not None:
         _validate_draft_field(
-            _HTTP_URL_ADAPTER, "git_repository_url", draft.git_repository_url
+            _STRING_ADAPTER, "git_repository_source", draft.git_repository_source
         )
 
 
@@ -743,53 +742,6 @@ def _find_existing_execution(
     return result
 
 
-def _normalize_git_url(url: str | None) -> str | None:
-    """Convert SSH git URL to HTTPS format.
-
-    Parameters
-    ----------
-    url : str | None
-        Git URL (SSH or HTTPS format).
-
-    Returns
-    -------
-    str | None
-        Normalized HTTPS URL or None if input is None/empty.
-
-    Examples
-    --------
-    >>> _normalize_git_url("git@github.com:E3SM-Project/E3SM.git")
-    'https://github.com/E3SM-Project/E3SM.git'
-
-    >>> _normalize_git_url("https://github.com/E3SM-Project/E3SM.git")
-    'https://github.com/E3SM-Project/E3SM.git'
-
-    >>> _normalize_git_url(None)
-    None
-    """
-    if not url:
-        return None
-
-    # If already HTTPS, return as-is
-    if url.startswith("https://") or url.startswith("http://"):
-        return url
-
-    # Convert SSH format: git@github.com:owner/repo.git → https://github.com/owner/repo.git
-    if url.startswith("git@"):
-        try:
-            # Extract host and path from git@host:path format
-            # Remove 'git@'.
-            host_and_path = url[4:]
-            host, path = host_and_path.split(":", 1)
-            return f"https://{host}/{path}"
-        except ValueError:
-            logger.warning(f"Could not normalize git URL: {url}")
-            return url
-
-    # For any other format, return as-is
-    return url
-
-
 def _build_execution_create_draft(
     parsed_execution: ParsedExecution,
     case_id: UUID | None,
@@ -815,7 +767,6 @@ def _build_execution_create_draft(
     run_start_date = _parse_datetime_field(parsed_execution.run_start_date)
     run_end_date = _parse_datetime_field(parsed_execution.run_end_date)
 
-    git_repository_url = _normalize_git_url(parsed_execution.git_repository_url)
     status = _normalize_execution_status(parsed_execution.status)
     _, compute_type = parse_machine_name(parsed_execution.machine or "")
 
@@ -836,7 +787,7 @@ def _build_execution_create_draft(
         run_end_date=run_end_date,
         compiler=parsed_execution.compiler,
         compute_type=compute_type,
-        git_repository_url=git_repository_url,
+        git_repository_source=parsed_execution.git_repository_source,
         git_branch=parsed_execution.git_branch,
         git_tag=parsed_execution.git_tag,
         git_commit_hash=parsed_execution.git_commit_hash,

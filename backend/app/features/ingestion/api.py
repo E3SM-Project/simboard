@@ -1074,9 +1074,6 @@ def _persist_executions(
             exclude_unset=True,
         )
 
-        if data.get("git_repository_url") is not None:
-            data["git_repository_url"] = str(data["git_repository_url"])
-
         execution = Execution(
             **data,
             ingestion_id=ingestion_id,

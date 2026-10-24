@@ -56,6 +56,7 @@ FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
     "component-set": ("compset_long_name", "compset_alias"),
+    "git-repository": ("git_repository_source",),
     "grid": ("grid_long_name", "grid_alias"),
 }
 
@@ -80,6 +81,7 @@ def main() -> int:
             "simulation-dates",
             "run-script",
             "component-set",
+            "git-repository",
             "grid",
         ],
         required=True,
@@ -149,6 +151,8 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
         keys.append("readme_case")
     if "grid" in fields:
         keys.append("case_docs_env_build")
+    if "git-repository" in fields:
+        keys.append("git_config")
 
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
@@ -183,6 +187,9 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
 
 
 def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
+    if "git-repository" in fields and not parsed.git_repository_source:
+        raise ValueError(f"Missing repository source: {path}")
+
     for group, field, entry in (
         ("component-set", "compset_long_name", "COMPSET"),
         ("grid", "grid_long_name", "GRID"),
@@ -530,6 +537,10 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                 observations[-1].update(
                     compset_long_name=parsed.compset_long_name,
                     compset_alias=parsed.compset_alias,
+                )
+            if "git-repository" in args.fields:
+                observations[-1].update(
+                    git_repository_source=parsed.git_repository_source,
                 )
             if "grid" in args.fields:
                 observations[-1].update(

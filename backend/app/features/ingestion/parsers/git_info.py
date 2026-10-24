@@ -65,7 +65,7 @@ def parse_git_status(status_path: str | Path) -> dict[str, str | None]:
 
 
 def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
-    """Parse GIT_CONFIG file for repository URL.
+    """Parse GIT_CONFIG file for the original repository source.
 
     Parameters
     ----------
@@ -75,7 +75,7 @@ def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict[str, str | None]
-        Dictionary containing the repository URL, or None if not found.
+        Dictionary containing the repository source, or None if not found.
     """
     config_path = Path(config_path)
     config_lines = _open_text(config_path).splitlines()
@@ -86,7 +86,7 @@ def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
             url = line.split("=", 1)[1].strip()
             break
 
-    return {"git_repository_url": url}
+    return {"git_repository_source": url}
 
 
 def _extract_branch(lines: list[str]) -> str | None:

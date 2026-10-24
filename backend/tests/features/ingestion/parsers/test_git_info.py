@@ -53,7 +53,9 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == {"git_repository_url": "https://github.com/example/repo.git"}
+        assert result == {
+            "git_repository_source": "https://github.com/example/repo.git"
+        }
 
     def test_parse_git_config_missing_origin_url(self, tmp_path: Path) -> None:
         content = (
@@ -67,7 +69,7 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == {"git_repository_url": None}
+        assert result == {"git_repository_source": None}
 
     def test_extract_remote_url_returns_origin_url(self) -> None:
         lines = [

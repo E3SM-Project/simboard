@@ -20,7 +20,6 @@ from app.features.ingestion.ingest import (
     _get_known_case_hash,
     _get_or_create_case,
     _normalize_execution_status,
-    _normalize_git_url,
     _normalize_path_candidate,
     _track_case_hash_grouping,
     _validate_execution_create,
@@ -164,7 +163,7 @@ def _parsed_executions_from_mapping(
                 run_start_date=metadata.get("run_start_date"),
                 run_end_date=metadata.get("run_end_date"),
                 compiler=metadata.get("compiler"),
-                git_repository_url=metadata.get("git_repository_url"),
+                git_repository_source=metadata.get("git_repository_source"),
                 git_branch=metadata.get("git_branch"),
                 git_tag=metadata.get("git_tag"),
                 git_commit_hash=metadata.get("git_commit_hash"),
@@ -260,7 +259,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -307,7 +306,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -330,7 +329,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -382,7 +381,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -423,7 +422,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -479,7 +478,7 @@ class TestIngestArchive:
                     "run_start_date": None,
                     "run_end_date": None,
                     "compiler": None,
-                    "git_repository_url": None,
+                    "git_repository_source": None,
                     "git_branch": None,
                     "git_tag": None,
                     "git_commit_hash": None,
@@ -586,7 +585,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -636,7 +635,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -677,7 +676,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -739,7 +738,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -800,7 +799,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "2020-01-01",
                 "run_end_date": "2020-12-31",
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -851,7 +850,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "2020-01-01 00:00:00",
                 "run_end_date": "2020-12-31 23:59:59",
                 "compiler": "gcc",
-                "git_repository_url": "https://github.com/test/repo",
+                "git_repository_source": "https://github.com/test/repo",
                 "git_branch": "main",
                 "git_tag": "v1.0.0",
                 "git_commit_hash": "abc123",
@@ -873,7 +872,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.executions[0].campaign == "CMIP6"
             assert ingest_result.executions[0].compiler == "gcc"
             assert (
-                str(ingest_result.executions[0].git_repository_url)
+                ingest_result.executions[0].git_repository_source
                 == "https://github.com/test/repo"
             )
             assert ingest_result.executions[0].git_branch == "main"
@@ -953,7 +952,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -996,7 +995,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1080,7 +1079,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1165,7 +1164,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1188,7 +1187,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1251,7 +1250,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,  # None should parse gracefully
                 "run_end_date": None,  # None should parse gracefully
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1300,7 +1299,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "INVALID_DATE_STRING_FOR_TESTING",
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1354,7 +1353,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1393,8 +1392,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             ("simulation_start_date", "not-a-date", "value_error"),
             ("simulation_start_date", "0000-02-30", "value_error"),
             ("simulation_end_date", "0000-02-30", "value_error"),
-            ("git_repository_url", "not-a-url", "url_parsing"),
-            ("git_repository_url", "ftp://example.com/repo", "url_scheme"),
+            ("git_repository_source", 123, "string_type"),
         ],
     )
     def test_prevalidation_errors_include_field_and_code(
@@ -1450,7 +1448,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                     "compset_long_name": None,
                     "grid_long_name": None,
                     "simulation_start_date": None,
-                    "git_repository_url": "invalid-url",
+                    "git_repository_source": "invalid-url",
                 }
             }
         )
@@ -1484,7 +1482,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1506,72 +1504,47 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.errors[0]["error_type"] == "ValidationError"
 
 
-class TestNormalizeGitUrl:
-    """Tests for the _normalize_git_url helper function.
+@pytest.mark.parametrize(
+    "source",
+    [
+        "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+        "/global/homes/m/mchinita/E3SM_SCREAM_pm_oct_2023/scream",
+        "../E3SM",
+        "ssh://git@private.example/owner/repo.git",
+        "ssh://git@github.com:2222/owner/repo.git",
+        "git@github.com:owner/../repo.git",
+        "git@github.com:owner/repo.git?query",
+        "https://github.com/owner/repo.git",
+        "git://github.com/owner/repo.git",
+        "not-a-url",
+    ],
+)
+def test_repository_provenance_survives_archive_validation(tmp_path, db, source):
+    case = stage_continuation_case(tmp_path)
+    for execution_dir in case.iterdir():
+        config = execution_dir / f"GIT_CONFIG.{execution_dir.name}.gz"
+        with gzip.open(config, "wt") as stream:
+            stream.write(f'[remote "origin"]\n    url = {source}\n')
+    parsed, _ = main_parser(case, tmp_path / "parsed", strict_validation=True)
+    # The fixture must actually contain rewritten source files.
+    assert parsed and all(item.git_repository_source == source for item in parsed)
+    result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+    assert result.errors == []
+    assert result.executions
+    for execution in result.executions:
+        assert execution.git_repository_source == source
+        assert "gitRepositoryUrl" not in execution.model_dump(by_alias=True)
+        restored = ExecutionCreate.model_validate_json(
+            execution.model_dump_json(by_alias=True)
+        )
+        assert restored.git_repository_source == source
 
-    Tests cover SSH to HTTPS URL conversion and various edge cases.
-    """
 
-    def test_converts_ssh_github_url_to_https(self) -> None:
-        """Test conversion of SSH GitHub URL to HTTPS."""
-        ssh_url = "git@github.com:E3SM-Project/E3SM.git"
-        expected = "https://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(ssh_url) == expected
+class TestRepositorySource:
+    """Repository sources remain unchanged through ingestion."""
 
-    def test_converts_ssh_gitlab_url_to_https(self) -> None:
-        """Test conversion of SSH GitLab URL to HTTPS."""
-        ssh_url = "git@gitlab.com:owner/repo.git"
-        expected = "https://gitlab.com/owner/repo.git"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_converts_ssh_url_with_nested_path(self) -> None:
-        """Test conversion of SSH URL with nested repository path."""
-        ssh_url = "git@github.com:organization/group/nested/repo.git"
-        expected = "https://github.com/organization/group/nested/repo.git"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_preserves_https_url(self) -> None:
-        """Test that HTTPS URLs are preserved as-is."""
-        https_url = "https://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(https_url) == https_url
-
-    def test_preserves_http_url(self) -> None:
-        """Test that HTTP URLs are preserved as-is."""
-        http_url = "http://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(http_url) == http_url
-
-    def test_returns_none_for_none_input(self) -> None:
-        """Test that None input returns None."""
-        assert _normalize_git_url(None) is None
-
-    def test_returns_none_for_empty_string(self) -> None:
-        """Test that empty string returns None."""
-        assert _normalize_git_url("") is None
-
-    def test_handles_ssh_url_without_git_extension(self) -> None:
-        """Test SSH URL conversion without .git extension."""
-        ssh_url = "git@github.com:owner/repo"
-        expected = "https://github.com/owner/repo"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_handles_malformed_ssh_url_gracefully(self) -> None:
-        """Test that malformed SSH URLs are returned as-is."""
-        # Malformed SSH URL (no colon separator)
-        malformed_url = "git@github.com"
-        # Should return original since it can't be split on colon
-        assert _normalize_git_url(malformed_url) == malformed_url
-
-    def test_handles_other_git_formats(self) -> None:
-        """Test that non-SSH non-HTTP URLs are returned as-is."""
-        file_url = "file:///path/to/repo.git"
-        assert _normalize_git_url(file_url) == file_url
-
-    def test_ssh_url_conversion_integrated_in_ingest(self, db: Session) -> None:
-        """Test SSH URL conversion through the full ingest pipeline.
-
-        This test verifies that _normalize_git_url is actually used when
-        processing metadata through ingest_archive.
-        """
+    def test_ssh_source_preserved_in_ingest(self, db: Session) -> None:
+        """The full ingest pipeline preserves SSH repository sources."""
         machine = self._create_machine(db, "test-machine")
 
         # SSH URL in metadata
@@ -1592,7 +1565,7 @@ class TestNormalizeGitUrl:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": "git@github.com:E3SM-Project/E3SM.git",
+                "git_repository_source": "git@github.com:E3SM-Project/E3SM.git",
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1609,10 +1582,10 @@ class TestNormalizeGitUrl:
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            # Verify SSH URL was converted to HTTPS
+            # Verify the original SSH source is preserved.
             assert len(ingest_result.executions) == 1
-            assert str(ingest_result.executions[0].git_repository_url) == (
-                "https://github.com/E3SM-Project/E3SM.git"
+            assert ingest_result.executions[0].git_repository_source == (
+                "git@github.com:E3SM-Project/E3SM.git"
             )
 
     @staticmethod
@@ -1675,7 +1648,7 @@ class TestCaseHashIngestion:
             "run_start_date": None,
             "run_end_date": None,
             "compiler": None,
-            "git_repository_url": None,
+            "git_repository_source": None,
             "git_branch": None,
             "git_tag": None,
             "git_commit_hash": None,
@@ -2011,7 +1984,7 @@ class TestCaseHashIngestion:
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
-            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+            git_repository_source="https://github.com/E3SM-Project/E3SM.git",
         )
         db.add(execution)
         db.flush()
@@ -2022,7 +1995,7 @@ class TestCaseHashIngestion:
             "/path/to/1081194.251218-200956": self._make_metadata(
                 execution_id="1081194.251218-200956",
                 simulation_start_date="2020-06-01",
-                git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+                git_repository_source="git@github.com:E3SM-Project/E3SM.git",
             ),
         }
 
@@ -2035,8 +2008,8 @@ class TestCaseHashIngestion:
         assert result.created_count == 1
         assert len(result.executions) == 1
         assert result.executions[0].case_id == case.id
-        assert str(result.executions[0].git_repository_url) == (
-            "https://github.com/E3SM-Project/E3SM.git"
+        assert result.executions[0].git_repository_source == (
+            "git@github.com:E3SM-Project/E3SM.git"
         )
 
     def test_incremental_ingestion_keeps_new_case_hash_on_created_run(
@@ -2578,7 +2551,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2634,7 +2607,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2660,7 +2633,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2720,7 +2693,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler="gcc",
-            git_repository_url="https://example.com/repo.git",
+            git_repository_source="https://example.com/repo.git",
             git_branch="main",
             git_tag="v1.0.0",
             git_commit_hash="abc123",
@@ -2758,7 +2731,7 @@ class TestIngestHelpers:
             run_start_date="2020-01-02T03:04:05Z",
             run_end_date=None,
             compiler="gcc",
-            git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+            git_repository_source="git@github.com:E3SM-Project/E3SM.git",
             git_branch="main",
             git_tag="v1.0.0",
             git_commit_hash="abc123",
@@ -2772,7 +2745,7 @@ class TestIngestHelpers:
         )
 
         assert draft.status == ExecutionStatus.COMPLETED
-        assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
+        assert draft.git_repository_source == "git@github.com:E3SM-Project/E3SM.git"
         assert draft.case_hash == "hash123"
         assert draft.simulation_start_date is not None
         assert draft.run_start_date is not None

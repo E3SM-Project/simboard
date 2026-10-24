@@ -2124,7 +2124,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_repository_source="https://github.com/E3SM-Project/E3SM.git",
                 git_branch="main",
                 git_tag="v3",
                 git_commit_hash="abc123",
@@ -2210,7 +2210,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_repository_source="https://github.com/E3SM-Project/E3SM.git",
                 git_branch="main",
                 git_tag="v3",
                 git_commit_hash="abc123",
@@ -2343,7 +2343,7 @@ class TestIngestFromUploadEndpoint:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2597,10 +2597,18 @@ class TestIngestFromUploadEndpoint:
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Filename is required"
 
-    def test_persist_executions_with_git_repository_url(
-        self, client, db: Session, tmp_path
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "ssh://git@github.com/E3SM-Project/E3SM.git",
+            "/global/homes/user/E3SM",
+            "git@private.example:owner/repo.git",
+        ],
+    )
+    def test_persist_executions_with_git_repository_source(
+        self, client, db: Session, tmp_path, source
     ):
-        """Test that executions with git_repository_url are persisted correctly."""
+        """Repository sources survive API persistence without URL normalization."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2625,7 +2633,7 @@ class TestIngestFromUploadEndpoint:
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
-                    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM.git",
+                    "gitRepositorySource": source,
                 }
             )
         ]
@@ -2646,9 +2654,8 @@ class TestIngestFromUploadEndpoint:
         execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
         assert execution is not None
-        assert (
-            execution.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
-        )
+        db.refresh(execution)
+        assert execution.git_repository_source == source
 
     def test_persist_executions_with_hpc_username(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
@@ -2743,7 +2750,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url=None,
+                git_repository_source=None,
                 git_branch=None,
                 git_tag=None,
                 git_commit_hash=None,

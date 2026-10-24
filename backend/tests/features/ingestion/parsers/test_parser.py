@@ -440,7 +440,7 @@ class TestMainParser:
                 defaults["parse_git_config"]
                 if isinstance(defaults["parse_git_config"], dict)
                 else (
-                    {"git_repository_url": defaults["parse_git_config"]}
+                    {"git_repository_source": defaults["parse_git_config"]}
                     if defaults["parse_git_config"]
                     else {}
                 )

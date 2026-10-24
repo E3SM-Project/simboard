@@ -101,6 +101,54 @@ after selection also fails the record. Explicit `--sources archive` and
 `--sources staging` remain strict: every selected mapping must be readable.
 These rules do not change source-directory bootstrap.
 
+### Git repository repair (#427)
+
+Deploy the backend, ingestion/backfill clients, and frontend together. Apply
+revision `20261023_040000` before starting the new backend. This is a breaking
+API change: `gitRepositorySource` replaces `gitRepositoryUrl`, with no legacy
+alias. Update external clients and payloads to use the source field.
+
+`gitRepositorySource` is the sole stored repository value. Archive ingestion
+preserves the extracted `GIT_CONFIG` value as text, including HTTP(S), SSH,
+local paths, and unsupported remotes. Browser-link validation does not affect
+ingestion. Details and comparison views display the original source and derive
+links only for valid HTTP(S) URLs and recognized GitHub SCP-style or
+`ssh://git@github.com/owner/repo` remotes. Local paths, unknown hosts, custom SSH
+ports, malformed values, and credential-bearing URLs remain non-clickable.
+
+The raw source is returned under the same access controls as other execution
+metadata. It can contain internal paths. Do not ingest repository configurations
+containing embedded credentials; this field preserves source text, not a redacted
+display value. Browser links reject embedded credentials, but source storage
+does not redact them.
+
+After bootstrapping source-directory mappings, preview a scoped repair:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields git-repository --sources archive --case-name exact-case-name --hpc-username exact-user --dry-run'
+```
+
+Repair reads archived `GIT_CONFIG` and updates only the source field. Missing
+source values, conflicting directories, or stale expected values fail safely.
+Fill-only mode skips existing sources. Use `--overwrite` to preview corrections
+to existing values. Apply requires separate live-write authorization;
+replace `--dry-run` with `--apply` only after reviewing the intended changes.
+Changes enter metadata history; repeating a successful repair makes no changes.
+
+Duplicate ingestion does not repair existing records. Executions never created
+must instead be replayed after deployment. Other schema failures may still block
+those executions; a successful Git scalar check does not establish full recovery.
+The source-only migration renames the stored URL column to the source column
+directly after grid revision `20261023_020000`. It preserves all existing values
+but cannot recover original SSH syntax from normalized URLs. Source-backed repair
+is still needed for those records. Downgrade renames the column back without
+changing values; legacy HTTP-only API schemas may reject SSH remotes or local
+paths stored since upgrade. Resolve those values before rolling back the backend.
+The removed, unreleased provenance revision `20261023_030000` must not have been
+applied to a deployed database; this migration chain does not support that state.
+
 ### Component-set repair (#425)
 
 Deploy the component-set schema migration, API, ingestion clients, and frontend

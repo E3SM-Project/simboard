@@ -64,7 +64,7 @@ class SnapshotExecutionFields(BaseModel):
     key_features: str | None = None
     known_issues: str | None = None
     notes_markdown: str | None = None
-    git_repository_url: str | None = None
+    git_repository_source: str | None = None
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
@@ -226,7 +226,7 @@ def build_execution_snapshot(
             key_features=execution.key_features,
             known_issues=execution.known_issues,
             notes_markdown=execution.notes_markdown,
-            git_repository_url=execution.git_repository_url,
+            git_repository_source=execution.git_repository_source,
             git_branch=execution.git_branch,
             git_tag=execution.git_tag,
             git_commit_hash=execution.git_commit_hash,

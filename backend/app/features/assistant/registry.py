@@ -96,9 +96,9 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Notes",
     ),
-    "execution.git_repository_url": CitationRegistryEntry(
+    "execution.git_repository_source": CitationRegistryEntry(
         source_type="execution_field",
-        label="Git repository URL",
+        label="Git repository source",
     ),
     "execution.git_branch": CitationRegistryEntry(
         source_type="execution_field",

@@ -21,6 +21,7 @@ class MetadataValues(BaseModel):
     run_script: str | None = Field(default=None, max_length=1000, min_length=1)
     compset_long_name: str | None = None
     compset_alias: str | None = None
+    git_repository_source: str | None = None
     grid_long_name: str | None = None
     grid_alias: str | None = None
 
@@ -41,16 +42,25 @@ class MetadataUpdate(BaseModel):
     case_name: str = Field(min_length=1)
     hpc_username: str = Field(min_length=1)
     execution_id: str = Field(min_length=1)
-    fields: list[Literal["simulation-dates", "run-script", "component-set", "grid"]] = (
-        Field(min_length=1, max_length=4)
-    )
+    fields: list[
+        Literal[
+            "simulation-dates", "run-script", "component-set", "git-repository", "grid"
+        ]
+    ] = Field(min_length=1, max_length=5)
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
     dry_run: bool = True
 
     @model_validator(mode="after")
-    def complete_component_set(self):
+    def complete_metadata_groups(self):
+        if "git-repository" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if "git_repository_source" not in values.model_fields_set:
+                    raise ValueError(f"Explicit repository source required in {label}")
+            if not self.values.git_repository_source:
+                raise ValueError("Repository source is required")
+
         if "component-set" in self.fields:
             for label, values in (("values", self.values), ("expected", self.expected)):
                 if (
@@ -89,6 +99,7 @@ def stored_values(execution: Execution) -> MetadataValues:
         run_script=scripts[0].uri if scripts else None,
         compset_long_name=execution.compset_long_name,
         compset_alias=execution.compset_alias,
+        git_repository_source=execution.git_repository_source,
         grid_long_name=execution.grid_long_name,
         grid_alias=execution.grid_alias,
     )
@@ -177,6 +188,8 @@ def update_metadata(
     if "run-script" in payload.fields:
         names.append("run_script")
     names.extend(_component_set_fields(old, payload))
+    if "git-repository" in payload.fields:
+        names.append("git_repository_source")
     names.extend(_grid_fields(old, payload))
 
     for name in names:

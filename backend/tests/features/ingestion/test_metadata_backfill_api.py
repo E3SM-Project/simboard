@@ -146,6 +146,51 @@ def test_selection_filters_and_pagination(db):
     assert list_records(machine.name, db, user, offset=1, limit=1)["records"] == []
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "/global/homes/user/E3SM",
+        "ssh://git@github.com/owner/repo.git",
+    ],
+)
+def test_repository_repair_is_audited_and_idempotent(db, source):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_repository_source = "https://wrong.example/repo"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["git-repository"],
+        values={"git_repository_source": source},
+        expected={
+            "git_repository_source": execution.git_repository_source,
+        },
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    assert execution.git_repository_source == "https://wrong.example/repo"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    assert execution.git_repository_source == "https://wrong.example/repo"
+    assert db.query(MetadataChange).count() == 0
+    request.dry_run = False
+    request.expected.git_repository_source = "changed-by-someone-else"
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+    assert exc.value.status_code == 409
+    request.expected.git_repository_source = "https://wrong.example/repo"
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.git_repository_source == source
+    assert {row.field_name for row in db.query(MetadataChange).all()} == {
+        "git_repository_source",
+    }
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
 def test_backfill_preserves_year_zero_dates_and_history(db):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
@@ -197,6 +242,44 @@ def test_dry_run_and_stale_update_do_not_write(db):
 
     db.refresh(execution)
     assert execution.simulation_start_date == "1850-01-01"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {},
+        {"git_repository_source": None},
+        {"git_repository_source": ""},
+        {"git_repository_source": 123},
+    ],
+)
+def test_repository_repair_rejects_missing_or_non_text_sources(db, values):
+    _, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["git-repository"],
+            values=values,
+            expected={"git_repository_source": None},
+        )
+
+
+def test_opaque_repository_source_does_not_block_other_repairs(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_repository_source = "legacy-invalid-url"
+    db.commit()
+    records = list_records(machine.name, db, user, offset=0, limit=100)["records"]
+    assert records[0]["values"]["git_repository_source"] == "legacy-invalid-url"
+    request = _payload(machine, case, execution, overwrite=True, dry_run=False)
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.simulation_start_date == "2020-01-01"
+    assert execution.git_repository_source == "legacy-invalid-url"
 
 
 def test_multiple_run_scripts_are_reported_and_not_overwritten(db):
