@@ -140,13 +140,14 @@ Changes enter metadata history; repeating a successful repair makes no changes.
 Duplicate ingestion does not repair existing records. Executions never created
 must instead be replayed after deployment. Other schema failures may still block
 those executions; a successful Git scalar check does not establish full recovery.
-The source-only migration retains existing source values. Where source is null,
-it copies the stored URL before dropping the URL column. This preserves the best
-available repository value but cannot recover original SSH syntax. Source-backed
-repair is still needed for those records. Downgrade restores URLs only from
-HTTP(S)-prefixed sources; SSH remotes and local paths retain source text with a
-null legacy URL. Downgrading further through the provenance migration drops
-the source column and loses stored provenance.
+The source-only migration renames the stored URL column to the source column
+directly after grid revision `20261023_020000`. It preserves all existing values
+but cannot recover original SSH syntax from normalized URLs. Source-backed repair
+is still needed for those records. Downgrade renames the column back without
+changing values; legacy HTTP-only API schemas may reject SSH remotes or local
+paths stored since upgrade. Resolve those values before rolling back the backend.
+The removed, unreleased provenance revision `20261023_030000` must not have been
+applied to a deployed database; this migration chain does not support that state.
 
 ### Component-set repair (#425)
 

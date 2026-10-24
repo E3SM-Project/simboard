@@ -21,6 +21,7 @@ def test_repository_source_migration_is_reversible():
             for column in inspect(engine).get_columns("executions")
         }
         assert columns["git_repository_source"]["nullable"]
+        assert "git_repository_url" not in columns
         command.downgrade(config, "20261023_020000")
         assert "git_repository_source" not in {
             column["name"] for column in inspect(engine).get_columns("executions")

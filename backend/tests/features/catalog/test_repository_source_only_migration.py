@@ -1,4 +1,4 @@
-"""Source-only migration retains observed provenance and legacy fallback values."""
+"""Repository column renames preserve values in both directions."""
 
 from importlib import import_module
 
@@ -19,7 +19,6 @@ def test_repository_source_only_migration_preserves_values():
             text("""
             CREATE TEMP TABLE executions (
                 id integer PRIMARY KEY,
-                git_repository_source text,
                 git_repository_url text
             ) ON COMMIT DROP
         """)
@@ -27,10 +26,10 @@ def test_repository_source_only_migration_preserves_values():
         connection.execute(
             text("""
             INSERT INTO executions VALUES
-            (1, 'ssh://git@github.com/owner/repo', 'https://github.com/owner/repo'),
-            (2, NULL, 'https://example.com/repo'),
-            (3, '/local/repo', NULL),
-            (4, NULL, NULL)
+            (1, 'https://github.com/owner/repo'),
+            (2, 'https://example.com/repo'),
+            (3, '/local/repo'),
+            (4, NULL)
         """)
         )
         with Operations.context(MigrationContext.configure(connection)):
@@ -38,13 +37,23 @@ def test_repository_source_only_migration_preserves_values():
             assert connection.execute(
                 text("SELECT git_repository_source FROM executions ORDER BY id")
             ).scalars().all() == [
+                "https://github.com/owner/repo",
+                "https://example.com/repo",
+                "/local/repo",
+                None,
+            ]
+            connection.execute(
+                text(
+                    "UPDATE executions SET git_repository_source = 'ssh://git@github.com/owner/repo' WHERE id = 1"
+                )
+            )
+            migration.downgrade()
+            assert connection.execute(
+                text("SELECT git_repository_url FROM executions ORDER BY id")
+            ).scalars().all() == [
                 "ssh://git@github.com/owner/repo",
                 "https://example.com/repo",
                 "/local/repo",
                 None,
             ]
-            migration.downgrade()
-            assert connection.execute(
-                text("SELECT git_repository_url FROM executions ORDER BY id")
-            ).scalars().all() == [None, "https://example.com/repo", None, None]
             migration.upgrade()
