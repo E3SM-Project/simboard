@@ -122,8 +122,8 @@ class Execution(Base, IDMixin, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     compset_long_name: Mapped[str] = mapped_column(Text)
     compset_alias: Mapped[str | None] = mapped_column(Text, nullable=True)
-    grid_name: Mapped[str] = mapped_column(Text)
-    grid_resolution: Mapped[str] = mapped_column(Text)
+    grid_alias: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grid_long_name: Mapped[str] = mapped_column(Text)
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~

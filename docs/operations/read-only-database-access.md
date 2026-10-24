@@ -180,7 +180,8 @@ SELECT
   e.execution_id,
   e.status AS execution_status,
   e.compset_long_name,
-  e.grid_name
+  e.grid_alias,
+  e.grid_long_name
 FROM ingestions AS i
 JOIN machines AS m ON m.id = i.machine_id
 JOIN executions AS e ON e.ingestion_id = i.id

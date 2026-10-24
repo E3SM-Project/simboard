@@ -301,11 +301,18 @@ class ExecutionCreate(CamelInBaseModel):
     compset_alias: Annotated[
         str | None, Field(None, description="Alias for the component set")
     ]
-    grid_name: Annotated[
-        str, Field(..., description="Grid name used in the simulation")
+    grid_alias: Annotated[
+        str | None,
+        Field(None, description="Selected grid alias from README --res or -res"),
     ]
-    grid_resolution: Annotated[
-        str, Field(..., description="Grid resolution used in the simulation")
+    grid_long_name: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Resolved grid specification from XML GRID",
+        ),
     ]
 
     status: Annotated[
@@ -678,8 +685,8 @@ class ExecutionListItemOut(CamelOutBaseModel):
     experiment_type: str | None = None
     compset_long_name: str
     compset_alias: str | None = None
-    grid_name: str
-    grid_resolution: str
+    grid_alias: str | None
+    grid_long_name: str
     initialization_type: str
     simulation_start_date: ModelDate
     simulation_end_date: ModelDate | None = None
@@ -719,8 +726,8 @@ class ExecutionFilterOptionsOut(CamelOutBaseModel):
     campaigns: list[str]
     experiment_types: list[str]
     compsets: list[str]
-    grid_names: list[str]
-    grid_resolutions: list[str]
+    grid_aliases: list[str]
+    grid_long_names: list[str]
     initialization_types: list[str]
     compilers: list[str]
     statuses: list[ExecutionStatus]
@@ -992,11 +999,18 @@ class ExecutionOut(CamelOutBaseModel):
     compset_alias: Annotated[
         str | None, Field(None, description="Alias for the component set")
     ]
-    grid_name: Annotated[
-        str, Field(..., description="Grid name used in the simulation")
+    grid_alias: Annotated[
+        str | None,
+        Field(None, description="Selected grid alias from README --res or -res"),
     ]
-    grid_resolution: Annotated[
-        str, Field(..., description="Grid resolution used in the simulation")
+    grid_long_name: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Resolved grid specification from XML GRID",
+        ),
     ]
 
     # Model setup/context

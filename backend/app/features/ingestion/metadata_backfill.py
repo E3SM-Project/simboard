@@ -21,6 +21,8 @@ class MetadataValues(BaseModel):
     run_script: str | None = Field(default=None, max_length=1000, min_length=1)
     compset_long_name: str | None = None
     compset_alias: str | None = None
+    grid_long_name: str | None = None
+    grid_alias: str | None = None
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -39,8 +41,8 @@ class MetadataUpdate(BaseModel):
     case_name: str = Field(min_length=1)
     hpc_username: str = Field(min_length=1)
     execution_id: str = Field(min_length=1)
-    fields: list[Literal["simulation-dates", "run-script", "component-set"]] = Field(
-        min_length=1, max_length=3
+    fields: list[Literal["simulation-dates", "run-script", "component-set", "grid"]] = (
+        Field(min_length=1, max_length=4)
     )
     values: MetadataValues
     expected: MetadataValues
@@ -64,6 +66,17 @@ class MetadataUpdate(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def complete_grid(self):
+        if "grid" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if not {"grid_long_name", "grid_alias"} <= values.model_fields_set:
+                    raise ValueError(f"Explicit grid pair required in {label}")
+            if not self.values.grid_long_name or not self.values.grid_long_name.strip():
+                raise ValueError("Required grid long name missing in values")
+
+        return self
+
 
 def stored_values(execution: Execution) -> MetadataValues:
     scripts = [a for a in execution.artifacts if a.kind == ArtifactKind.RUN_SCRIPT]
@@ -76,6 +89,8 @@ def stored_values(execution: Execution) -> MetadataValues:
         run_script=scripts[0].uri if scripts else None,
         compset_long_name=execution.compset_long_name,
         compset_alias=execution.compset_alias,
+        grid_long_name=execution.grid_long_name,
+        grid_alias=execution.grid_alias,
     )
 
 
@@ -162,11 +177,14 @@ def update_metadata(
     if "run-script" in payload.fields:
         names.append("run_script")
     names.extend(_component_set_fields(old, payload))
+    names.extend(_grid_fields(old, payload))
 
     for name in names:
         before = getattr(old, name)
         after = getattr(payload.values, name)
-        if before == after or (after is None and name != "compset_alias"):
+        if before == after or (
+            after is None and name not in ("compset_alias", "grid_alias")
+        ):
             continue
         if before is not None and not payload.overwrite:
             continue
@@ -204,6 +222,28 @@ def _component_set_fields(old: MetadataValues, payload: MetadataUpdate) -> list[
             raise ValueError(f"Stored {name} changed; rerun backfill")
 
     # Treat the pair atomically when fill-only mode cannot replace a member.
+    needs_overwrite = any(
+        getattr(old, name) is not None
+        and getattr(old, name) != getattr(payload.values, name)
+        for name in fields
+    )
+
+    return fields if payload.overwrite or not needs_overwrite else []
+
+
+def _grid_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str]:
+    if "grid" not in payload.fields:
+        return []
+
+    fields = ["grid_long_name", "grid_alias"]
+    # Compare both members, including unchanged values, before updating the pair.
+    for name in fields:
+        before = getattr(old, name)
+        if before != getattr(payload.expected, name) and before != getattr(
+            payload.values, name
+        ):
+            raise ValueError(f"Stored {name} changed; rerun backfill")
+
     needs_overwrite = any(
         getattr(old, name) is not None
         and getattr(old, name) != getattr(payload.values, name)

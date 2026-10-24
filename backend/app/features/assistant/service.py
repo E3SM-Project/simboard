@@ -76,14 +76,16 @@ def _add_configuration(snapshot: ExecutionSnapshot, draft: SummaryDraft) -> None
     )
     draft.sentences.append(
         f"It uses compset {snapshot.execution.compset_long_name}{alias} "
-        f"on grid {snapshot.execution.grid_name} at {snapshot.execution.grid_resolution} "
-        f"resolution with {snapshot.execution.initialization_type} initialization."
+        f"on grid {snapshot.execution.grid_alias or '(alias unavailable)'} "
+        f"with specification {snapshot.execution.grid_long_name} "
+        f"with {snapshot.execution.initialization_type} initialization."
     )
     draft.add_citation("execution.compset_long_name")
     if snapshot.execution.compset_alias:
         draft.add_citation("execution.compset_alias")
-    draft.add_citation("execution.grid_name")
-    draft.add_citation("execution.grid_resolution")
+    if snapshot.execution.grid_alias:
+        draft.add_citation("execution.grid_alias")
+    draft.add_citation("execution.grid_long_name")
     draft.add_citation("execution.initialization_type")
 
 

@@ -70,18 +70,20 @@ def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with keys 'grid_resolution', 'compiler', 'mpilib',
+        Dictionary with keys 'grid_long_name', 'compiler', 'mpilib',
         and 'cime_output_root' (str or None)
     """
     env_build_path = Path(env_build_path)
 
-    grid_resolution = _extract_value_from_file(env_build_path, "GRID")
+    grid_long_name = _extract_value_from_file(env_build_path, "GRID")
+    if grid_long_name is not None:
+        grid_long_name = grid_long_name.strip() or None
     compiler = _extract_value_from_file(env_build_path, "COMPILER")
     mpilib = _extract_value_from_file(env_build_path, "MPILIB")
     cime_output_root = _extract_value_from_file(env_build_path, "CIME_OUTPUT_ROOT")
 
     return {
-        "grid_resolution": grid_resolution,
+        "grid_long_name": grid_long_name,
         "compiler": compiler,
         "mpilib": mpilib,
         "cime_output_root": cime_output_root,

@@ -13,8 +13,8 @@ class ParsedExecution:
     hpc_username: str | None
     compset_long_name: str | None
     compset_alias: str | None
-    grid_name: str | None
-    grid_resolution: str | None
+    grid_alias: str | None
+    grid_long_name: str | None
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None

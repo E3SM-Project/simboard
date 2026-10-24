@@ -228,6 +228,76 @@ def test_missing_xml_component_set_fails_before_case_creation(client, db, tmp_pa
     assert db.query(Execution).count() == 0
 
 
+@pytest.mark.parametrize(
+    "argument,alias",
+    [
+        ("--res arcticx4", "arcticx4"),
+        ("-res arcticx4", "arcticx4"),
+        ("--res=arcticx4", "arcticx4"),
+        ("-res=arcticx4", "arcticx4"),
+        ("", None),
+    ],
+)
+def test_grid_metadata_survives_api_ingestion_and_catalog_reads(
+    client, db, tmp_path, argument, alias
+):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(EXECUTIONS)
+    for execution in db.query(Execution).all():
+        db.refresh(execution)
+        assert execution.grid_alias == alias
+        assert execution.grid_long_name.startswith("a%ne30np4.pg2_l%r05_")
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["gridAlias"] == alias
+        assert response.json()["gridLongName"] == execution.grid_long_name
+        assert "gridName" not in response.json()
+        assert "gridResolution" not in response.json()
+    params = {"grid_long_name": execution.grid_long_name, "sort_by": "grid_long_name"}
+    if alias is not None:
+        params["grid_alias"] = alias
+    response = client.get(f"{API_BASE}/executions", params=params)
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == len(EXECUTIONS)
+    assert all(row["gridAlias"] == alias for row in response.json()["items"])
+    response = client.get(f"{API_BASE}/executions/filter-options")
+    assert response.status_code == 200, response.text
+    assert response.json()["gridAliases"] == ([alias] if alias else [])
+    assert response.json()["gridLongNames"] == [execution.grid_long_name]
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_missing_xml_grid_fails_before_case_creation(client, db, tmp_path, value):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/env_build.xml.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "<config>"
+                + (f'<entry id="GRID" value="{value}" />' if value is not None else "")
+                + "</config>"
+            )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 0
+    assert len(response.json()["errors"]) == len(EXECUTIONS)
+    assert all(
+        error["field"] == "grid_long_name" for error in response.json()["errors"]
+    )
+    assert db.query(Case).count() == 0
+    assert db.query(Execution).count() == 0
+
+
 @pytest.mark.parametrize("processed_ids", [None, [], list(EXECUTIONS)])
 def test_path_selection_limits_persisted_processed_ids(
     client, db, tmp_path, processed_ids
@@ -927,8 +997,8 @@ class TestGetIngestionStateEndpoint:
                 execution_id=execution_id,
                 compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="ne30pg2_r05_IcoswISC30E3r5",
-                grid_resolution="1x1",
+                grid_alias="ne30pg2_r05_IcoswISC30E3r5",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
                 simulation_start_date="2020-01-01",
@@ -1046,8 +1116,8 @@ class TestGetIngestionStateEndpoint:
                 execution_id="100.1-1",
                 compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
                 simulation_start_date="2020-01-01",
@@ -1110,8 +1180,8 @@ class TestGetIngestionStateEndpoint:
                 execution_id="legacy-100.1-1",
                 compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
                 simulation_start_date="2020-01-01",
@@ -1156,8 +1226,8 @@ class TestGetIngestionStateEndpoint:
                 execution_id="legacy-upload-100.1-1",
                 compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
                 simulation_start_date="2020-01-01",
@@ -1208,8 +1278,8 @@ class TestGetIngestionStateEndpoint:
                     execution_id=f"legacy-{index}.1-1",
                     compset_long_name="FHIST",
                     compset_alias="fhist",
-                    grid_name="grid",
-                    grid_resolution="1x1",
+                    grid_alias="grid",
+                    grid_long_name="1x1",
                     status="completed",
                     initialization_type="branch",
                     simulation_start_date="2020-01-01",
@@ -1310,8 +1380,8 @@ class TestGetIngestionStateEndpoint:
                 execution_id="",
                 compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
                 simulation_start_date="2020-01-01",
@@ -1392,8 +1462,8 @@ class TestIngestFromPathEndpoint:
                     "executionId": "exec-summary-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1457,8 +1527,8 @@ class TestIngestFromPathEndpoint:
                     "executionId": "exec-errors-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1472,8 +1542,8 @@ class TestIngestFromPathEndpoint:
                     "executionId": "exec-errors-2",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1544,8 +1614,8 @@ class TestIngestFromPathEndpoint:
                     "executionId": "exec-audit-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1686,8 +1756,8 @@ class TestIngestFromPathEndpoint:
                     "executionId": f"exec-{machine_alias}",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1739,8 +1809,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-zip-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1790,8 +1860,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-targz-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1866,8 +1936,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-sha256-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1924,8 +1994,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-partial-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2044,8 +2114,8 @@ class TestIngestFromUploadEndpoint:
                 hpc_username="ac.golaz",
                 compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign="v3.LR.historical",
                 experiment_type="historical",
                 initialization_type="branch",
@@ -2130,8 +2200,8 @@ class TestIngestFromUploadEndpoint:
                 hpc_username="ac.golaz",
                 compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign="v3.LR.historical",
                 experiment_type="historical",
                 initialization_type="branch",
@@ -2263,8 +2333,8 @@ class TestIngestFromUploadEndpoint:
             hpc_username="test-user",
             compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid",
+            grid_long_name="0.9x1.25",
             campaign=None,
             experiment_type=None,
             initialization_type="test",
@@ -2419,8 +2489,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-artifacts-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2474,8 +2544,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-links-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2548,8 +2618,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-git-url-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2607,8 +2677,8 @@ class TestIngestFromUploadEndpoint:
                     "executionId": "exec-hpc-username-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2663,8 +2733,8 @@ class TestIngestFromUploadEndpoint:
                 hpc_username=None,
                 compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign=None,
                 experiment_type=None,
                 initialization_type="branch",
@@ -2738,8 +2808,8 @@ class TestIngestFromHpcUploadEndpoint:
                     "executionId": "exec-hpc-upload-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -3024,8 +3094,8 @@ class TestIngestFromHpcUploadEndpoint:
                     "executionId": "multi-1",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -3037,8 +3107,8 @@ class TestIngestFromHpcUploadEndpoint:
                     "executionId": "multi-2",
                     "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",

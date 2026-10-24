@@ -56,6 +56,7 @@ FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
     "component-set": ("compset_long_name", "compset_alias"),
+    "grid": ("grid_long_name", "grid_alias"),
 }
 
 
@@ -79,6 +80,7 @@ def main() -> int:
             "simulation-dates",
             "run-script",
             "component-set",
+            "grid",
         ],
         required=True,
     )
@@ -143,8 +145,10 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
 
     if "simulation-dates" in fields:
         keys.extend(["case_docs_env_run", "cpl_log"])
-    if "component-set" in fields:
+    if "component-set" in fields or "grid" in fields:
         keys.append("readme_case")
+    if "grid" in fields:
+        keys.append("case_docs_env_build")
 
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
@@ -163,8 +167,7 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
         raise ValueError(f"Timing identity does not match execution directory: {path}")
 
     parsed = _parse_all_files(str(path), files)
-    if "component-set" in fields and not parsed.compset_long_name:
-        raise ValueError(f"Missing XML COMPSET: {path}")
+    _validate_required_metadata(parsed, path, fields)
 
     if before != [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]:
         raise ValueError(f"Source changed while reading: {path}")
@@ -179,6 +182,15 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     return parsed
 
 
+def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
+    for group, field, entry in (
+        ("component-set", "compset_long_name", "COMPSET"),
+        ("grid", "grid_long_name", "GRID"),
+    ):
+        if group in fields and not getattr(parsed, field):
+            raise ValueError(f"Missing XML {entry}: {path}")
+
+
 def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) -> dict:
     files = {}
     for key in keys:
@@ -188,7 +200,7 @@ def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) 
         if not matches and key in ("case_docs_env_case", "e3sm_timing"):
             raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
         if not matches and key == "readme_case":
-            raise ValueError(f"Missing component-set source {key}: {path}")
+            raise ValueError(f"Missing README source {key}: {path}")
         files[key] = matches[0] if matches else None
 
     return files
@@ -519,6 +531,11 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                     compset_long_name=parsed.compset_long_name,
                     compset_alias=parsed.compset_alias,
                 )
+            if "grid" in args.fields:
+                observations[-1].update(
+                    grid_long_name=parsed.grid_long_name,
+                    grid_alias=parsed.grid_alias,
+                )
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
@@ -535,7 +552,7 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             if name == "compset_alias" and o[name] is not None
             else o[name]
             for o in observations
-            if o[name] is not None or name == "compset_alias"
+            if o[name] is not None or name in ("compset_alias", "grid_alias")
         }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
@@ -545,7 +562,7 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             values[name] = next(
                 o[name]
                 for o in observations
-                if o[name] is not None or name == "compset_alias"
+                if o[name] is not None or name in ("compset_alias", "grid_alias")
             )
 
     if not values:
