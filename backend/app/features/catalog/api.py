@@ -906,8 +906,8 @@ def list_executions(  # noqa: C901
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
     compset_long_name: list[str] | None = Query(None),
-    grid_name: list[str] | None = Query(None),
-    grid_resolution: list[str] | None = Query(None),
+    grid_alias: list[str] | None = Query(None),
+    grid_long_name: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
     compiler: list[str] | None = Query(None),
     git_tag: list[str] | None = Query(None),
@@ -918,7 +918,7 @@ def list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset_long_name|grid_name|machine_name)$"
+            "grid_long_name|compset_long_name|grid_alias|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -938,8 +938,8 @@ def list_executions(  # noqa: C901
         campaign=campaign,
         experiment_type=experiment_type,
         compset_long_name=compset_long_name,
-        grid_name=grid_name,
-        grid_resolution=grid_resolution,
+        grid_alias=grid_alias,
+        grid_long_name=grid_long_name,
         initialization_type=initialization_type,
         compiler=compiler,
         git_tag=git_tag,
@@ -1062,8 +1062,8 @@ def _list_executions(  # noqa: C901
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
     compset_long_name: list[str] | None = Query(None),
-    grid_name: list[str] | None = Query(None),
-    grid_resolution: list[str] | None = Query(None),
+    grid_alias: list[str] | None = Query(None),
+    grid_long_name: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
     compiler: list[str] | None = Query(None),
     git_tag: list[str] | None = Query(None),
@@ -1074,7 +1074,7 @@ def _list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset_long_name|grid_name|machine_name)$"
+            "grid_long_name|compset_long_name|grid_alias|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -1095,8 +1095,8 @@ def _list_executions(  # noqa: C901
                 Execution.git_branch.ilike(term),
                 Execution.git_tag.ilike(term),
                 Execution.git_commit_hash.ilike(term),
-                Execution.grid_name.ilike(term),
-                Execution.grid_resolution.ilike(term),
+                Execution.grid_alias.ilike(term),
+                Execution.grid_long_name.ilike(term),
                 Execution.compset_long_name.ilike(term),
                 Execution.compset_alias.ilike(term),
                 Machine.name.ilike(term),
@@ -1118,8 +1118,8 @@ def _list_executions(  # noqa: C901
         (Execution.campaign, campaign),
         (Execution.experiment_type, experiment_type),
         (Execution.compset_long_name, compset_long_name),
-        (Execution.grid_name, grid_name),
-        (Execution.grid_resolution, grid_resolution),
+        (Execution.grid_alias, grid_alias),
+        (Execution.grid_long_name, grid_long_name),
         (Execution.initialization_type, initialization_type),
         (Execution.compiler, compiler),
         (Execution.git_tag, git_tag),
@@ -1141,8 +1141,8 @@ def _list_executions(  # noqa: C901
         Execution.experiment_type,
         Execution.compset_long_name,
         Execution.compset_alias,
-        Execution.grid_name,
-        Execution.grid_resolution,
+        Execution.grid_alias,
+        Execution.grid_long_name,
         Execution.initialization_type,
         Execution.simulation_start_date,
         Execution.simulation_end_date,
@@ -1178,9 +1178,9 @@ def _list_executions(  # noqa: C901
         "simulation_end_date": Execution.simulation_end_date,
         "run_start_date": Execution.run_start_date,
         "run_activity": func.coalesce(Execution.run_end_date, Execution.run_start_date),
-        "grid_resolution": Execution.grid_resolution,
+        "grid_long_name": Execution.grid_long_name,
         "compset_long_name": Execution.compset_long_name,
-        "grid_name": Execution.grid_name,
+        "grid_alias": Execution.grid_alias,
         "machine_name": Machine.name,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
@@ -1211,8 +1211,8 @@ def _get_execution_filter_options(db: Session) -> ExecutionFilterOptionsOut:
         campaigns=_distinct_values(db, Execution.campaign),
         experiment_types=_distinct_values(db, Execution.experiment_type),
         compsets=_distinct_values(db, Execution.compset_long_name),
-        grid_names=_distinct_values(db, Execution.grid_name),
-        grid_resolutions=_distinct_values(db, Execution.grid_resolution),
+        grid_aliases=_distinct_values(db, Execution.grid_alias),
+        grid_long_names=_distinct_values(db, Execution.grid_long_name),
         initialization_types=_distinct_values(db, Execution.initialization_type),
         compilers=_distinct_values(db, Execution.compiler),
         statuses=_distinct_values(db, Execution.status),

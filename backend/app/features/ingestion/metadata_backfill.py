@@ -31,6 +31,8 @@ class MetadataValues(BaseModel):
     compset_alias: str | None = None
     git_repository_url: str | None = None
     git_repository_source: str | None = None
+    grid_long_name: str | None = None
+    grid_alias: str | None = None
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -50,8 +52,10 @@ class MetadataUpdate(BaseModel):
     hpc_username: str = Field(min_length=1)
     execution_id: str = Field(min_length=1)
     fields: list[
-        Literal["simulation-dates", "run-script", "component-set", "git-repository"]
-    ] = Field(min_length=1, max_length=4)
+        Literal[
+            "simulation-dates", "run-script", "component-set", "git-repository", "grid"
+        ]
+    ] = Field(min_length=1, max_length=5)
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
@@ -103,6 +107,17 @@ class MetadataUpdate(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def complete_grid(self):
+        if "grid" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if not {"grid_long_name", "grid_alias"} <= values.model_fields_set:
+                    raise ValueError(f"Explicit grid pair required in {label}")
+            if not self.values.grid_long_name or not self.values.grid_long_name.strip():
+                raise ValueError("Required grid long name missing in values")
+
+        return self
+
 
 def stored_values(execution: Execution) -> MetadataValues:
     scripts = [a for a in execution.artifacts if a.kind == ArtifactKind.RUN_SCRIPT]
@@ -117,6 +132,8 @@ def stored_values(execution: Execution) -> MetadataValues:
         compset_alias=execution.compset_alias,
         git_repository_url=execution.git_repository_url,
         git_repository_source=execution.git_repository_source,
+        grid_long_name=execution.grid_long_name,
+        grid_alias=execution.grid_alias,
     )
 
 
@@ -204,12 +221,14 @@ def update_metadata(
         names.append("run_script")
     names.extend(_component_set_fields(old, payload))
     names.extend(_repository_fields(old, payload))
+    names.extend(_grid_fields(old, payload))
 
     for name in names:
         before = getattr(old, name)
         after = getattr(payload.values, name)
         if before == after or (
-            after is None and name not in ("compset_alias", "git_repository_url")
+            after is None
+            and name not in ("compset_alias", "grid_alias", "git_repository_url")
         ):
             continue
         if before is not None and not payload.overwrite:
@@ -262,6 +281,28 @@ def _repository_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str
         return []
 
     fields = ["git_repository_source", "git_repository_url"]
+    for name in fields:
+        before = getattr(old, name)
+        if before != getattr(payload.expected, name) and before != getattr(
+            payload.values, name
+        ):
+            raise ValueError(f"Stored {name} changed; rerun backfill")
+
+    needs_overwrite = any(
+        getattr(old, name) is not None
+        and getattr(old, name) != getattr(payload.values, name)
+        for name in fields
+    )
+
+    return fields if payload.overwrite or not needs_overwrite else []
+
+
+def _grid_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str]:
+    if "grid" not in payload.fields:
+        return []
+
+    fields = ["grid_long_name", "grid_alias"]
+    # Compare both members, including unchanged values, before updating the pair.
     for name in fields:
         before = getattr(old, name)
         if before != getattr(payload.expected, name) and before != getattr(

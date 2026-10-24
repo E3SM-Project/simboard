@@ -211,8 +211,8 @@ export interface ExecutionCreate {
   description: string | null;
   compsetLongName: string;
   compsetAlias: string | null;
-  gridName: string;
-  gridResolution: string;
+  gridAlias: string | null;
+  gridLongName: string;
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
@@ -335,8 +335,8 @@ export interface ExecutionListItemOut {
   experimentType: string | null;
   compsetLongName: string;
   compsetAlias: string | null;
-  gridName: string;
-  gridResolution: string;
+  gridAlias: string | null;
+  gridLongName: string;
   initializationType: string;
   simulationStartDate: string;
   simulationEndDate: string | null;

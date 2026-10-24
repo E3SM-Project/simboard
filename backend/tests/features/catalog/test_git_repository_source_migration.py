@@ -10,7 +10,7 @@ from tests.conftest import ALEMBIC_INI_PATH, TEST_DB_URL, engine
 def test_repository_source_migration_is_reversible():
     config = Config(ALEMBIC_INI_PATH)
     config.set_main_option("sqlalchemy.url", TEST_DB_URL)
-    command.downgrade(config, "20261023_010000")
+    command.downgrade(config, "20261023_020000")
     try:
         assert "git_repository_source" not in {
             column["name"] for column in inspect(engine).get_columns("executions")
@@ -21,7 +21,7 @@ def test_repository_source_migration_is_reversible():
             for column in inspect(engine).get_columns("executions")
         }
         assert columns["git_repository_source"]["nullable"]
-        command.downgrade(config, "20261023_010000")
+        command.downgrade(config, "20261023_020000")
         assert "git_repository_source" not in {
             column["name"] for column in inspect(engine).get_columns("executions")
         }

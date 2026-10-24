@@ -24,6 +24,26 @@ from tests.fixtures.continuation_case import (
 
 class TestMainParser:
     @pytest.mark.parametrize(
+        "argument,alias", [("-res arcticx4", "arcticx4"), ("", None)]
+    )
+    def test_grid_merge_retains_xml(self, tmp_path, argument, alias):
+        case = stage_continuation_case(tmp_path)
+        for path in case.glob("*/CaseDocs.*/README.case.*.gz"):
+            with gzip.open(path, "wt") as stream:
+                stream.write(f"create_newcase {argument}\n")
+
+        results, skipped = parser.main_parser(
+            case, tmp_path / "out", strict_validation=True
+        )
+
+        assert skipped == 0
+        assert results
+        assert all(
+            row.grid_long_name.startswith("a%ne30np4.pg2_l%r05_") for row in results
+        )
+        assert all(row.grid_alias == alias for row in results)
+
+    @pytest.mark.parametrize(
         "argument,alias",
         [
             ("-compset F20TR-GHG", "F20TR-GHG"),

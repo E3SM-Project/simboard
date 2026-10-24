@@ -69,8 +69,8 @@ class ExecutionCreateDraft:
     execution_id: str
     compset_long_name: str | None
     compset_alias: str | None
-    grid_name: str | None
-    grid_resolution: str | None
+    grid_alias: str | None
+    grid_long_name: str | None
     status: ExecutionStatus
     campaign: str | None
     experiment_type: str | None
@@ -546,17 +546,21 @@ def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     for field_name in (
         "execution_id",
         "compset_long_name",
-        "grid_name",
-        "grid_resolution",
+        "grid_long_name",
         "initialization_type",
     ):
         adapter = (
-            _LONG_NAME_ADAPTER if field_name == "compset_long_name" else _STRING_ADAPTER
+            _LONG_NAME_ADAPTER
+            if field_name in ("compset_long_name", "grid_long_name")
+            else _STRING_ADAPTER
         )
         _validate_draft_field(adapter, field_name, getattr(draft, field_name))
 
     if draft.compset_alias is not None:
         _validate_draft_field(_STRING_ADAPTER, "compset_alias", draft.compset_alias)
+
+    if draft.grid_alias is not None:
+        _validate_draft_field(_STRING_ADAPTER, "grid_alias", draft.grid_alias)
 
     _validate_draft_field(
         _DATE_ADAPTER, "simulation_start_date", draft.simulation_start_date
@@ -826,8 +830,8 @@ def _build_execution_create_draft(
         execution_id=parsed_execution.execution_id,
         compset_long_name=parsed_execution.compset_long_name,
         compset_alias=parsed_execution.compset_alias,
-        grid_name=parsed_execution.grid_name,
-        grid_resolution=parsed_execution.grid_resolution,
+        grid_alias=parsed_execution.grid_alias,
+        grid_long_name=parsed_execution.grid_long_name,
         status=status,
         campaign=parsed_execution.campaign,
         experiment_type=parsed_execution.experiment_type,

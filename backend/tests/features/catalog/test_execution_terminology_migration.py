@@ -180,13 +180,13 @@ def test_execution_terminology_migration_preserves_schema_data_and_behavior() ->
                         """
                         INSERT INTO executions (
                             id, case_id, execution_id, compset_long_name, compset_alias,
-                            grid_name, grid_resolution, status,
+                            grid_alias, grid_long_name, status,
                             initialization_type, simulation_start_date, created_by,
                             last_updated_by, ingestion_id, extra
                         )
                         SELECT
                             :id, case_id, execution_id, compset_long_name, compset_alias,
-                            grid_name, grid_resolution, status,
+                            grid_alias, grid_long_name, status,
                             initialization_type, simulation_start_date, created_by,
                             last_updated_by, ingestion_id, extra
                         FROM executions WHERE id = :source_id

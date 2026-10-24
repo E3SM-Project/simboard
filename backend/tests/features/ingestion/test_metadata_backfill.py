@@ -101,6 +101,58 @@ def test_repository_repair_rejects_conflicting_null_url():
 
 @pytest.mark.parametrize(
     "argument,alias",
+    [("-res arcticx4", "arcticx4"), ("--res=arcticx4", "arcticx4"), ("", None)],
+)
+def test_grid_repair_reads_sources_not_stored_values(tmp_path, argument, alias):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    for path in execution.glob("CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    parsed = _read_execution(execution, "chrysalis", ["grid"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"grid_long_name": "untrusted", "grid_alias": "also-untrusted"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record, Namespace(machine="chrysalis", sources="archive", fields=["grid"])
+    )
+
+    assert values["grid_long_name"].startswith("a%ne30np4.pg2_l%r05_")
+    assert values["grid_alias"] == alias
+    assert set(values) == {"grid_long_name", "grid_alias"}
+
+
+@pytest.mark.parametrize("source", ["readme", "xml-file", "xml-value"])
+def test_grid_repair_requires_readable_sources(tmp_path, source):
+    execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
+    if source == "readme":
+        next(execution.glob("CaseDocs.*/README.case.*.gz")).unlink()
+    else:
+        path = next(execution.glob("CaseDocs.*/env_build.xml.*.gz"))
+        if source == "xml-file":
+            path.unlink()
+        else:
+            with gzip.open(path, "wt") as stream:
+                stream.write("<config />")
+
+    with pytest.raises(ValueError, match="Missing"):
+        _read_execution(execution, "chrysalis", ["grid"])
+
+
+def test_grid_repair_rejects_null_alias_conflict():
+    with pytest.raises(ValueError, match="Conflicting source values for grid_alias"):
+        metadata._consistent_values(
+            [{"grid_alias": "alias"}, {"grid_alias": None}], ["grid_alias"]
+        )
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
     [("-compset F20TR-GHG", "F20TR-GHG"), ("--compset=1850_EAM_ELM", None), ("", None)],
 )
 def test_component_repair_reads_sources_not_stored_values(tmp_path, argument, alias):

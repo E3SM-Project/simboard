@@ -189,6 +189,45 @@ and colon-labelled long-name arguments are not aliases. Underscores alone do
 not identify a long name. Downgrade refuses null aliases or names longer than
 120 characters until an operator explicitly resolves incompatible records.
 
+### Grid repair (#426)
+
+Deploy the grid migration, API, ingestion clients, and frontend together. Payloads
+use `gridAlias` (nullable) and `gridLongName` (required); Python fields, filters,
+and sorting use `grid_alias` and `grid_long_name`. Filter options use `gridAliases`
+and `gridLongNames`. Update external consumers and saved requests: the old names
+are no longer supported. The development seed contains illustrative grid specifications,
+not source-verified production metadata.
+
+The migration renames columns without repairing historical values. Keep catalog
+consumers in maintenance while the trusted repair API remains available. Reconcile
+the intended scope before restoring access; report unresolved records explicitly.
+Never swap values or rely on duplicate replay to update existing executions.
+
+The `grid` backfill group reads `env_build.xml` entry `GRID` and README `--res` or
+`-res`, including `flag=value`. Missing alias arguments yield explicit null.
+Both source files must be present and readable. Missing or blank XML `GRID`, source
+identity mismatches, ambiguous files, and conflicting observations fail without
+changes. Null and non-null alias observations conflict. Pair updates retain
+expected-value checks, locking, metadata history, and source-change detection.
+
+After verifying source-directory mappings, preview one case on an archive-access host:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields grid --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review both before/after values against XML and README. Obtain separate authorization
+before replacing `--dry-run` with `--apply` or widening scope. Reruns with unchanged
+sources are no-ops; checkpoints and ingestion state remain unchanged. Verify detail,
+list, and exported execution JSON after repair. Verify a new execution through full
+dev API ingestion too; scalar checks alone do not establish recovery.
+
+`gridLongName` is the resolved grid specification, not numeric spacing. Component-specific
+physical resolution, units, and authoritative sources require a separate issue.
+Downgrade refuses null aliases until an operator explicitly resolves those records.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.

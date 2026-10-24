@@ -1,14 +1,14 @@
 """Preserve original repository provenance separately from its web URL.
 
-Revision ID: 20261023_020000
-Revises: 20261023_010000
+Revision ID: 20261023_030000
+Revises: 20261023_020000
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20261023_020000"
-down_revision = "20261023_010000"
+revision = "20261023_030000"
+down_revision = "20261023_020000"
 branch_labels = None
 depends_on = None
 
