@@ -234,7 +234,7 @@ def _normalize_remote_state(body: object) -> dict[str, Any]:
         }
 
     raw_discovery_results = body.get("discovery_results", {})
-    discovery_results: dict[str, list[dict[str, str]]] = {}
+    discovery_results: dict[str, list[dict[str, Any]]] = {}
     if isinstance(raw_discovery_results, dict):
         for case_identity, raw_results in raw_discovery_results.items():
             if not isinstance(case_identity, str) or not isinstance(raw_results, list):
@@ -244,6 +244,7 @@ def _normalize_remote_state(body: object) -> dict[str, Any]:
                     "case_identity": case_identity,
                     "execution_id": result["execution_id"],
                     "outcome": result["outcome"],
+                    "errors": result.get("errors", []),
                 }
                 for result in raw_results
                 if isinstance(result, dict)
@@ -377,6 +378,7 @@ def _post_discovery_results_request(
                 "case_identity": result.case_identity,
                 "execution_id": result.execution_id,
                 "outcome": result.outcome,
+                "errors": result.errors,
             }
             for result in results
         ],

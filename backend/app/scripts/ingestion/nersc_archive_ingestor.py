@@ -31,7 +31,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from app.features.ingestion.parsers.parser import _locate_metadata_files
+from app.features.ingestion.ingest import validate_execution_directory
 from app.scripts.ingestion.archive_client import (
     _build_archive_checkpoints_endpoint_url,
     _build_discovery_results_endpoint_url,
@@ -185,7 +185,7 @@ def _prepare_run_state(
 
 def _run_ingestor(
     config: IngestorConfig,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
+    metadata_locator: MetadataLocator = validate_execution_directory,
     sleep_fn: SleepCallback = time.sleep,
     post_request_fn: CaseSubmissionCallback | None = None,
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,

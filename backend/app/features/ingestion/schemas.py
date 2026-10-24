@@ -188,6 +188,7 @@ class ExecutionDiscoveryResultEntry(BaseModel):
     case_identity: Annotated[str, Field(..., min_length=1)]
     execution_id: Annotated[str, Field(..., min_length=1)]
     outcome: ExecutionDiscoveryOutcome
+    errors: list[dict[str, str]] = Field(default_factory=list)
 
     @field_validator("case_identity", "execution_id")
     @classmethod

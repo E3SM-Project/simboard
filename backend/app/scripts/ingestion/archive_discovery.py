@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.features.catalog.enums import ExecutionStatus
+from app.features.ingestion.ingest import validate_execution_directory
 from app.features.ingestion.parsers.case_status import parse_case_status
 from app.features.ingestion.parsers.parser import (
     FILE_SPECS,
     ArchiveValidationError,
     IncompleteArchiveError,
     _find_spec_matches,
-    _locate_metadata_files,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
@@ -330,7 +330,7 @@ def _handle_archive_walk_error(
 
 def _discover_case_executions(
     archive_root: Path,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
+    metadata_locator: MetadataLocator = validate_execution_directory,
     stats: DiscoveryStats | None = None,
     case_collection_data: dict[str, CaseCollectionLogData] | None = None,
     *,
@@ -525,20 +525,8 @@ def _collect_case_execution(
                     log_data.rejected_decisions.append(readiness_decision)
             return
 
-    stored_outcome = (
-        None
-        if discovery_results_by_key is None
-        else discovery_results_by_key.get((case_identity_key, execution_id))
-    )
-    if _record_stored_discovery_outcome(
-        stored_outcome,
-        grouped=grouped,
-        case_path=case_path,
-        execution_id=execution_id,
-        log_data=log_data,
-        stats=stats,
-    ):
-        return
+    # Stored acceptance may predate schema validation or changed metadata.
+    # Only successfully processed executions can bypass current preflight.
 
     _collect_fresh_execution(
         grouped,
@@ -601,23 +589,6 @@ def _record_already_processed_execution(
                 reason="already_processed",
             )
         )
-
-
-def _record_stored_discovery_outcome(
-    stored_outcome: str | None,
-    *,
-    grouped: dict[str, set[str]],
-    case_path: str,
-    execution_id: str,
-    log_data: CaseCollectionLogData | None,
-    stats: DiscoveryStats | None,
-) -> bool:
-    """Reuse accepted validation only; cached rejections require a fresh check."""
-    if stored_outcome == "accepted":
-        _record_accepted_execution(grouped, case_path, execution_id, log_data, stats)
-        return True
-
-    return False
 
 
 def _collect_fresh_execution(
@@ -686,6 +657,7 @@ def _record_rejected_discovery_result(
                 if rejection_decision.reason == "incomplete"
                 else "rejected_invalid"
             ),
+            errors=rejection_decision.errors or [],
         )
     )
 
@@ -771,7 +743,7 @@ def _validate_execution_dir(
             reason="invalid",
             exc=exc,
         )
-    except OSError as exc:
+    except (OSError, EOFError, UnicodeDecodeError, zlib.error) as exc:
         if stats is not None:
             stats["skipped_transient"] += 1
             stats["transient_execution_ids"] += 1
@@ -1000,7 +972,7 @@ def _compact_structured_parser_errors(
         }
     )
 
-    metadata: dict[str, Any] = {"error_count": len(errors)}
+    metadata: dict[str, Any] = {"error_count": len(errors), "errors": errors}
     if error_codes:
         metadata["error_codes"] = error_codes
     if missing_file_specs:

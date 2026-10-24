@@ -61,6 +61,7 @@ from app.main import app
 from tests.features.site.utils import get_or_create_site
 from tests.fixtures.continuation_case import (
     CASE_NAME,
+    ENV_BUILD,
     ENV_CASE,
     EXECUTIONS,
     stage_continuation_case,
@@ -152,7 +153,9 @@ def test_ingested_case_defaults_preserve_existing_types(
                 data=payload,
                 files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
             )
-        assert response.status_code == 201, response.text
+        assert response.status_code == (
+            200 if transport == "path" and attempt else 201
+        ), response.text
         assert response.json()["created_count"] == (
             len(EXECUTIONS) if attempt == 0 else 0
         )
@@ -219,7 +222,7 @@ def test_missing_xml_component_set_fails_before_case_creation(client, db, tmp_pa
         f"{API_BASE}/ingestions/from-path",
         json={"machine_name": "chrysalis", "archive_path": str(case_path)},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 400, response.text
     assert response.json()["created_count"] == 0
     assert all(
         error["field"] == "compset_long_name" for error in response.json()["errors"]
@@ -288,7 +291,7 @@ def test_missing_xml_grid_fails_before_case_creation(client, db, tmp_path, value
         f"{API_BASE}/ingestions/from-path",
         json={"machine_name": "chrysalis", "archive_path": str(case_path)},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 400, response.text
     assert response.json()["created_count"] == 0
     assert len(response.json()["errors"]) == len(EXECUTIONS)
     assert all(
@@ -296,6 +299,77 @@ def test_missing_xml_grid_fails_before_case_creation(client, db, tmp_path, value
     )
     assert db.query(Case).count() == 0
     assert db.query(Execution).count() == 0
+
+
+@pytest.mark.parametrize("all_invalid", [False, True])
+@pytest.mark.parametrize("transport", ["path", "hpc-upload"])
+def test_hpc_validation_preserves_audit_and_only_tracks_successful_ids(
+    client, db, tmp_path, all_invalid, transport
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_ids = set(EXECUTIONS) if all_invalid else {next(iter(EXECUTIONS))}
+    for execution_id in invalid_ids:
+        path = next((case / execution_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+        with gzip.open(path, "wt") as stream:
+            stream.write("<config />")
+    payload = {
+        "machine_name": "chrysalis",
+        "archive_path": str(case),
+        "selected_execution_ids": list(EXECUTIONS),
+    }
+    if transport == "path":
+        response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+    else:
+        archive = BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:gz") as stream:
+            stream.add(case, arcname=case.name)
+        response = client.post(
+            f"{API_BASE}/ingestions/from-hpc-upload",
+            data={
+                "machine_name": "chrysalis",
+                "case_path": str(case),
+                "processed_execution_ids": list(EXECUTIONS),
+            },
+            files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+        )
+
+    assert response.status_code == (
+        400 if all_invalid and transport == "path" else 201
+    ), response.text
+    assert response.json()["created_count"] == len(EXECUTIONS) - len(invalid_ids)
+    assert len(response.json()["errors"]) == len(invalid_ids)
+    assert all(
+        error["field"] == "grid_long_name" for error in response.json()["errors"]
+    )
+    audit = db.query(Ingestion).one()
+    assert audit.status == ("failed" if all_invalid else "partial")
+    assert audit.error_count == len(invalid_ids)
+    assert set(audit.processed_execution_ids) == set(EXECUTIONS) - invalid_ids
+    state = client.get(
+        f"{API_BASE}/ingestions/state", params={"machine_name": "chrysalis"}
+    )
+    assert (
+        set(state.json()["cases"][str(case)]["processed_execution_ids"])
+        == set(EXECUTIONS) - invalid_ids
+    )
+
+    # A retry with only successful executions is a duplicate-only no-op.
+    if not all_invalid:
+        payload["selected_execution_ids"] = sorted(set(EXECUTIONS) - invalid_ids)
+        response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+        assert response.status_code == 200, response.text
+        assert response.json()["duplicate_count"] == len(EXECUTIONS) - len(invalid_ids)
+        assert response.json()["errors"] == []
+
+    # Corrected metadata remains eligible after a failed or partial ingestion.
+    for execution_id in invalid_ids:
+        path = next((case / execution_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+        with gzip.open(path, "wt") as stream:
+            stream.write(ENV_BUILD)
+    payload["selected_execution_ids"] = sorted(invalid_ids)
+    response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(invalid_ids)
 
 
 @pytest.mark.parametrize("processed_ids", [None, [], list(EXECUTIONS)])
@@ -446,9 +520,9 @@ class TestExecutionDiscoveryResultsEndpoint:
             f"{API_BASE}/ingestions/state", params={"machine_name": machine.name}
         )
         assert state.status_code == 200
-        assert (
-            state.json()["discovery_results"]["campaign/case-a"] == payload["results"]
-        )
+        assert state.json()["discovery_results"]["campaign/case-a"] == [
+            {**result, "errors": []} for result in payload["results"]
+        ]
 
     def test_idempotency_reread_loads_only_requested_composite_identity(
         self, client, db: Session
@@ -496,7 +570,9 @@ class TestExecutionDiscoveryResultsEndpoint:
         assert response.status_code == 201
         assert loaded_execution_ids == ["100.1-1"]
 
-    def test_conflicting_stored_outcome_returns_409(self, client, db: Session) -> None:
+    def test_current_validation_refreshes_accepted_outcome(
+        self, client, db: Session
+    ) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
         base: dict[str, Any] = {
@@ -516,12 +592,26 @@ class TestExecutionDiscoveryResultsEndpoint:
             == 201
         )
         base["results"][0]["outcome"] = "rejected_invalid"
+        errors = [
+            {
+                "field": "grid_long_name",
+                "code": "string_type",
+                "message": "Invalid grid",
+            }
+        ]
+        base["results"][0]["errors"] = errors
 
         response = client.post(f"{API_BASE}/ingestions/discovery-results", json=base)
 
-        assert response.status_code == 409
+        assert response.status_code == 201
         stored = db.query(ExecutionDiscoveryResult).one()
-        assert stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
+        db.refresh(stored)
+        assert stored.outcome == ExecutionDiscoveryOutcome.REJECTED_INVALID
+        assert stored.errors == errors
+        state = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": machine.name}
+        )
+        assert state.json()["discovery_results"]["case-a"][0]["errors"] == errors
 
     @pytest.mark.parametrize("previous", ["rejected_incomplete", "rejected_invalid"])
     @pytest.mark.parametrize(
@@ -556,7 +646,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             assert original.id == original_id
         assert db.query(ExecutionDiscoveryResult).count() == 1
 
-    def test_conflicting_batch_rolls_back_new_rows(self, client, db: Session) -> None:
+    def test_current_validation_refreshes_batch(self, client, db: Session) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
         endpoint = f"{API_BASE}/ingestions/discovery-results"
@@ -599,19 +689,19 @@ class TestExecutionDiscoveryResultsEndpoint:
             },
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 201
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter_by(execution_id="102.1-1")
             .one()
             .outcome
-            == ExecutionDiscoveryOutcome.REJECTED_INCOMPLETE
+            == ExecutionDiscoveryOutcome.ACCEPTED
         )
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.execution_id == "101.1-1")
             .one_or_none()
-            is None
+            is not None
         )
 
     def test_concurrent_identical_inserts_both_succeed(self, db: Session) -> None:
@@ -641,7 +731,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             == 1
         )
 
-    def test_concurrent_differing_inserts_preserve_acceptance(
+    def test_concurrent_differing_inserts_keep_one_current_outcome(
         self, db: Session
     ) -> None:
         machine = db.query(Machine).first()
@@ -675,23 +765,24 @@ class TestExecutionDiscoveryResultsEndpoint:
         results = self._persist_concurrently(db.get_bind().engine, [base, conflicting])
 
         assert results[0] == "success"
-        assert results[1] in {"success", "http_409"}
+        assert results[1] == "success"
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.case_identity == identity)
             .count()
             == 1
         )
-        assert (
-            db.query(ExecutionDiscoveryResult)
-            .filter_by(case_identity=identity)
-            .one()
-            .outcome
-            == ExecutionDiscoveryOutcome.ACCEPTED
-        )
+        assert db.query(ExecutionDiscoveryResult).filter_by(
+            case_identity=identity
+        ).one().outcome in {
+            ExecutionDiscoveryOutcome.ACCEPTED,
+            ExecutionDiscoveryOutcome.REJECTED_INVALID,
+        }
 
     @pytest.mark.parametrize("rejected", ["rejected_incomplete", "rejected_invalid"])
-    def test_concurrent_revalidation_preserves_acceptance(self, db: Session, rejected):
+    def test_concurrent_revalidation_keeps_one_current_outcome(
+        self, db: Session, rejected
+    ):
         machine = db.query(Machine).first()
         identity = f"concurrent-revalidation-{uuid.uuid4()}"
         previous = ExecutionDiscoveryResultsRequest.model_validate(
@@ -714,14 +805,10 @@ class TestExecutionDiscoveryResultsEndpoint:
         results = self._persist_concurrently(bind, [previous, accepted])
 
         assert results[1] == "success"
-        assert results[0] in {"success", "http_409"}
-        assert (
-            db.query(ExecutionDiscoveryResult)
-            .filter_by(case_identity=identity)
-            .one()
-            .outcome
-            == ExecutionDiscoveryOutcome.ACCEPTED
-        )
+        assert results[0] == "success"
+        assert db.query(ExecutionDiscoveryResult).filter_by(
+            case_identity=identity
+        ).one().outcome in {ExecutionDiscoveryOutcome.ACCEPTED, rejected}
 
     def test_conflicting_batch_input_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -2294,7 +2381,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
-        assert res.status_code == 201
+        assert res.status_code == 400
 
         # Verify failed status in audit record
         assert res.json() == {
@@ -2356,7 +2443,7 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
-        assert res.status_code == 201
+        assert res.status_code == 400
         assert res.json()["created_count"] == 0
         assert len(res.json()["errors"]) == 1
         error = res.json()["errors"][0]

@@ -18,7 +18,7 @@ class IngestionSourceType(StrEnum):
 
 
 class ExecutionDiscoveryOutcome(StrEnum):
-    """Immutable outcome of validating one discovered execution."""
+    """Current outcome of validating one discovered execution."""
 
     ACCEPTED = "accepted"
     REJECTED_INCOMPLETE = "rejected_incomplete"

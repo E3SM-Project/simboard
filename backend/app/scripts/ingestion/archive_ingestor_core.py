@@ -300,6 +300,7 @@ class ExecutionCollectionDecision:
     error_codes: list[str] | None = None
     missing_file_specs: list[str] | None = None
     detail: str | None = None
+    errors: list[dict[str, str]] = field(default_factory=list)
 
     def to_log_fields(self, case: str | None = None) -> dict[str, Any]:
         """Render log fields for one execution decision."""
@@ -317,6 +318,8 @@ class ExecutionCollectionDecision:
             fields["missing_file_specs"] = self.missing_file_specs
         if self.detail is not None:
             fields["detail"] = self.detail
+        if self.errors:
+            fields["errors"] = self.errors
 
         return fields
 
@@ -328,6 +331,7 @@ class ExecutionDiscoveryResult:
     case_identity: str
     execution_id: str
     outcome: Literal["accepted", "rejected_incomplete", "rejected_invalid"]
+    errors: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -735,6 +739,7 @@ def _fresh_state() -> dict[str, Any]:
 def _record_successful_case(
     state: dict[str, Any],
     candidate: IngestionCandidate,
+    errors: list[dict[str, str]] | None = None,
 ) -> None:
     """Update persisted state after a successful case ingestion.
 
@@ -756,7 +761,14 @@ def _record_successful_case(
         if isinstance(existing_case_state, dict)
         else set()
     )
-    merged_execution_ids = sorted(existing_execution_ids | set(candidate.execution_ids))
+    rejected_ids = {
+        Path(error["execution_dir"]).name
+        for error in errors or []
+        if "execution_dir" in error
+    }
+    merged_execution_ids = sorted(
+        existing_execution_ids | (set(candidate.execution_ids) - rejected_ids)
+    )
     fingerprint = (
         candidate.fingerprint
         if merged_execution_ids == candidate.execution_ids

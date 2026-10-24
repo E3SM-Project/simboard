@@ -48,7 +48,7 @@ Case-level state is derived from execution-level state.
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
 | Deferred execution        | An execution not selected in this invocation because its staging `CaseStatus` reports `running`, or because a per-run cap stopped selection. Readiness deferrals are retried on later scans without being marked processed or persisted as metadata rejections. |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
-| Discovery result          | Validation outcome keyed by machine, normalized case identity, and execution ID. Accepted results are stable; rejected outcomes may be refreshed by revalidation. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`. |
+| Discovery result          | Current validation outcome keyed by machine, normalized case identity, and execution ID, with structured errors including field/code details. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`. Unprocessed executions are revalidated when visited again. |
 
 ### Logging reference
 
@@ -113,11 +113,10 @@ execution IDs rather than automatically refreshing their run status.
 Staging collection checks the latest `case.run` attempt using the existing
 `CaseStatus` parser before accepting an unprocessed execution, including cached
 acceptance. A parsed `running` status defers collection until a later scan.
-`unknown`, `completed`, and `failed` retain existing validation/cache and
-selection behavior. A missing required `CaseStatus` fails fresh metadata
-validation. Missing or ambiguous `CaseStatus` files do not invalidate cached
-acceptance during discovery; this readiness gate does not revalidate the full
-metadata cache. Read/decompression errors during readiness checks are retryable
+`unknown`, `completed`, and `failed` retain existing selection behavior.
+Every unprocessed execution must pass current metadata and schema validation.
+Missing or ambiguous required `CaseStatus` files fail this validation, even
+after earlier acceptance. Read/decompression errors during readiness checks are retryable
 unreadable observations, not parsed `unknown` statuses. Archive scans do not
 apply this readiness gate. This is a metadata readiness check, not PACE's
 scheduler-state filtering: it makes no Slurm queries
@@ -339,13 +338,20 @@ uncheckpointed. See the NERSC Spin runbook for the operational SQL procedure.
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
 2. Read processed execution IDs and discovery results from `/api/v1/ingestions/state`.
-3. Skip processed executions. For unprocessed executions, reuse accepted validation results; revalidate cached `rejected_incomplete` and `rejected_invalid` outcomes in both staging and archive scans.
-4. Validate new and previously rejected executions. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
-5. Persist current results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent. Rejected rows can be refreshed, including promotion to `accepted`; accepted rows cannot be downgraded. A downgrade conflicts and rolls back the batch. Concurrent requests serialize changes to each stored identity. Fresh acceptance takes precedence over rejections for the same identity within one scan. `existing_count` includes refreshed rejected rows.
+3. Skip processed executions. Revalidate all unprocessed executions in both staging and archive scans, including earlier accepted outcomes.
+4. Locate files, parse metadata, and validate normalized execution fields against the ingestion schema before selection. `IncompleteArchiveError` becomes `rejected_incomplete`, invalid fields or `ArchiveValidationError` become `rejected_invalid`, and successful validation becomes `accepted`. Invalid executions remain visible in logs and stored discovery results, but are excluded from submission. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
+5. Persist current results and structured errors in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent. Existing rows can be refreshed in either direction. Concurrent requests serialize changes to each stored identity. Fresh acceptance takes precedence over rejections for the same identity within one scan. `existing_count` includes refreshed rows.
 6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`. Remote uploads stage a delta archive with the case root and only those selected execution directories; retries reuse that one immutable multipart payload, then remove the staging directory after either success or failure.
 7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
-8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
+8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, undergo current preflight before later submission.
 9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has a stored rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed. These checkpoint settlement rules are unchanged by rejection revalidation.
+
+The server validates submitted executions again before persistence. `/from-path`
+returns HTTP 201 when executions are created, including partial results with
+counts and per-execution errors. It returns HTTP 400 when no executions are
+created and validation errors remain, preserving the failed ingestion audit.
+Duplicate-only and empty error-free no-ops return HTTP 200. Failed executions
+are not added to successful processed state.
 
 Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
 scans additionally deduplicate by stable logical case identity plus
