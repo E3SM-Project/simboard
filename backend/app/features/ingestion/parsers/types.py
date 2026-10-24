@@ -23,7 +23,7 @@ class ParsedExecution:
     run_start_date: str | None
     run_end_date: str | None
     compiler: str | None
-    git_repository_url: str | None
+    git_repository_source: str | None
     git_branch: str | None
     git_tag: str | None
     git_commit_hash: str | None

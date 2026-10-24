@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlsplit
 
 from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
-from app.features.ingestion.ingest import _normalize_git_url, _normalize_path_candidate
+from app.features.ingestion.ingest import _normalize_path_candidate
 from app.features.ingestion.parsers.parser import (
     FILE_SPECS,
     _find_casedocs_dirs,
@@ -56,7 +56,7 @@ FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
     "component-set": ("compset_long_name", "compset_alias"),
-    "git-repository": ("git_repository_source", "git_repository_url"),
+    "git-repository": ("git_repository_source",),
     "grid": ("grid_long_name", "grid_alias"),
 }
 
@@ -187,7 +187,7 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
 
 
 def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
-    if "git-repository" in fields and not parsed.git_repository_url:
+    if "git-repository" in fields and not parsed.git_repository_source:
         raise ValueError(f"Missing repository source: {path}")
 
     for group, field, entry in (
@@ -540,8 +540,7 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                 )
             if "git-repository" in args.fields:
                 observations[-1].update(
-                    git_repository_source=parsed.git_repository_url,
-                    git_repository_url=_normalize_git_url(parsed.git_repository_url),
+                    git_repository_source=parsed.git_repository_source,
                 )
             if "grid" in args.fields:
                 observations[-1].update(
@@ -564,8 +563,7 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             if name == "compset_alias" and o[name] is not None
             else o[name]
             for o in observations
-            if o[name] is not None
-            or name in ("compset_alias", "grid_alias", "git_repository_url")
+            if o[name] is not None or name in ("compset_alias", "grid_alias")
         }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
@@ -575,8 +573,7 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             values[name] = next(
                 o[name]
                 for o in observations
-                if o[name] is not None
-                or name in ("compset_alias", "grid_alias", "git_repository_url")
+                if o[name] is not None or name in ("compset_alias", "grid_alias")
             )
 
     if not values:

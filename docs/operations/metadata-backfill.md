@@ -103,18 +103,24 @@ These rules do not change source-directory bootstrap.
 
 ### Git repository repair (#427)
 
-Deploy the repository-source migration and updated backend/client before repair.
-`gitRepositorySource` preserves the original `GIT_CONFIG` repository value;
-`gitRepositoryUrl` remains an optional HTTP(S) web URL. Only recognized GitHub
-SCP-style and `ssh://git@github.com/owner/repo` remotes map to HTTPS. Local paths
-and unsupported SSH remotes retain source provenance with a null web URL.
-Custom SSH ports and malformed remotes never receive guessed web URLs.
+Deploy the backend, ingestion/backfill clients, and frontend together. Apply
+revision `20261023_040000` before starting the new backend. This is a breaking
+API change: `gitRepositorySource` replaces `gitRepositoryUrl`, with no legacy
+alias. Update external clients and payloads to use the source field.
+
+`gitRepositorySource` is the sole stored repository value. Archive ingestion
+preserves the extracted `GIT_CONFIG` value as text, including HTTP(S), SSH,
+local paths, and unsupported remotes. Browser-link validation does not affect
+ingestion. Details and comparison views display the original source and derive
+links only for valid HTTP(S) URLs and recognized GitHub SCP-style or
+`ssh://git@github.com/owner/repo` remotes. Local paths, unknown hosts, custom SSH
+ports, malformed values, and credential-bearing URLs remain non-clickable.
 
 The raw source is returned under the same access controls as other execution
 metadata. It can contain internal paths. Do not ingest repository configurations
 containing embedded credentials; this field preserves source text, not a redacted
-display value. Other malformed values and unsupported non-SSH URL schemes remain
-subject to the existing URL validation rules.
+display value. Browser links reject embedded credentials, but source storage
+does not redact them.
 
 After bootstrapping source-directory mappings, preview a scoped repair:
 
@@ -124,19 +130,23 @@ make metadata-backfill machine=perlmutter env=dev \
   args='--fields git-repository --sources archive --case-name exact-case-name --hpc-username exact-user --dry-run'
 ```
 
-Repair reads archived `GIT_CONFIG`, not the stored URL, and updates source and URL
-as a pair. Missing source values, conflicting directories, or stale expected
-values fail safely. Fill-only mode skips a pair that would replace existing
-metadata. Use `--overwrite` to preview corrections, including clearing an
-incorrect URL for a local source. Apply requires separate live-write authorization;
+Repair reads archived `GIT_CONFIG` and updates only the source field. Missing
+source values, conflicting directories, or stale expected values fail safely.
+Fill-only mode skips existing sources. Use `--overwrite` to preview corrections
+to existing values. Apply requires separate live-write authorization;
 replace `--dry-run` with `--apply` only after reviewing the intended changes.
 Changes enter metadata history; repeating a successful repair makes no changes.
 
 Duplicate ingestion does not repair existing records. Executions never created
 must instead be replayed after deployment. Other schema failures may still block
 those executions; a successful Git scalar check does not establish full recovery.
-The migration leaves existing source values null rather than inventing provenance.
-Downgrading drops the new source column and loses its stored provenance.
+The source-only migration retains existing source values. Where source is null,
+it copies the stored URL before dropping the URL column. This preserves the best
+available repository value but cannot recover original SSH syntax. Source-backed
+repair is still needed for those records. Downgrade restores URLs only from
+HTTP(S)-prefixed sources; SSH remotes and local paths retain source text with a
+null legacy URL. Downgrading further through the provenance migration drops
+the source column and loses stored provenance.
 
 ### Component-set repair (#425)
 

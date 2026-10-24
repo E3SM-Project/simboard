@@ -38,6 +38,7 @@ def _make_snapshot() -> ExecutionSnapshot:
             key_features="Features " * 5,
             known_issues="Issues " * 5,
             case_hash="snapshot-hash-1",
+            git_repository_source="ssh://git@github.com/owner/repo.git",
             extra={"foo": "bar"},
         ),
         case=SnapshotCaseFields(name="assistant_case"),
@@ -58,6 +59,15 @@ def _make_snapshot() -> ExecutionSnapshot:
 
 
 class TestSnapshotHelpers:
+    def test_repository_source_survives_snapshot_serialization(self) -> None:
+        snapshot = _make_snapshot()
+        restored = ExecutionSnapshot.model_validate_json(snapshot.model_dump_json())
+        assert (
+            restored.execution.git_repository_source
+            == "ssh://git@github.com/owner/repo.git"
+        )
+        assert "git_repository_url" not in restored.execution.model_dump()
+
     def test_enum_value_and_isoformat_handle_none_enum_and_plain_values(self) -> None:
         timestamp = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
 

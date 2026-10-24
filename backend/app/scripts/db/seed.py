@@ -314,14 +314,7 @@ def _seed_execution(
         )
     )
 
-    execution = Execution(
-        **{
-            **execution_in.model_dump(exclude={"artifacts", "links"}),
-            "git_repository_url": str(execution_in.git_repository_url)
-            if isinstance(execution_in.git_repository_url, HttpUrl)
-            else execution_in.git_repository_url,
-        }
-    )
+    execution = Execution(**execution_in.model_dump(exclude={"artifacts", "links"}))
 
     execution_id = execution_entry.get("executionId")
     if not execution_id:

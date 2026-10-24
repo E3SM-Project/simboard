@@ -52,7 +52,7 @@ _SNAPSHOT_PATH_ACCESSORS = {
     "execution.key_features": lambda snapshot: snapshot.execution.key_features,
     "execution.known_issues": lambda snapshot: snapshot.execution.known_issues,
     "execution.notes_markdown": lambda snapshot: snapshot.execution.notes_markdown,
-    "execution.git_repository_url": lambda snapshot: snapshot.execution.git_repository_url,
+    "execution.git_repository_source": lambda snapshot: snapshot.execution.git_repository_source,
     "execution.git_branch": lambda snapshot: snapshot.execution.git_branch,
     "execution.git_tag": lambda snapshot: snapshot.execution.git_tag,
     "execution.git_commit_hash": lambda snapshot: snapshot.execution.git_commit_hash,

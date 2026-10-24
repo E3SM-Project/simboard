@@ -161,7 +161,6 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: Mapped[str | None] = mapped_column(Text)
     git_repository_source: Mapped[str | None] = mapped_column(Text)
     git_branch: Mapped[str | None] = mapped_column(String(200))
     git_tag: Mapped[str | None] = mapped_column(String(100))

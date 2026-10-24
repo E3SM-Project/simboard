@@ -238,7 +238,7 @@ export interface ExecutionCreate {
 
   // Version control
   // ~~~~~~~~~~~~~~~
-  gitRepositoryUrl?: string | null;
+  gitRepositorySource?: string | null;
   gitBranch?: string | null;
   gitTag?: string | null;
   gitCommitHash?: string | null;

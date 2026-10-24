@@ -379,9 +379,6 @@ class ExecutionCreate(CamelInBaseModel):
 
     # Version control
     # ---------------
-    git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
-    ]
     git_repository_source: Annotated[
         str | None, Field(None, description="Original repository value from GIT_CONFIG")
     ]
@@ -1089,9 +1086,6 @@ class ExecutionOut(CamelOutBaseModel):
 
     # Version control
     # ---------------
-    git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
-    ]
     git_repository_source: Annotated[
         str | None, Field(None, description="Original repository value from GIT_CONFIG")
     ]

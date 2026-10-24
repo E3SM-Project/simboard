@@ -613,7 +613,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         run_start_date=metadata.get("run_start_date"),
         run_end_date=metadata.get("run_end_date"),
         compiler=metadata.get("compiler"),
-        git_repository_url=metadata.get("git_repository_url"),
+        git_repository_source=metadata.get("git_repository_source"),
         git_branch=metadata.get("git_branch"),
         git_tag=metadata.get("git_tag"),
         git_commit_hash=metadata.get("git_commit_hash"),

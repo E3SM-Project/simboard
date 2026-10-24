@@ -408,7 +408,7 @@ def _create_execution_record(
         key_features="Original features",
         known_issues="Original issues",
         notes_markdown="Original notes",
-        git_repository_url="https://example.com/original",
+        git_repository_source="https://example.com/original",
         git_branch="main",
         git_tag="v1.0",
         git_commit_hash="abc123",
@@ -1514,7 +1514,7 @@ class TestUpdateCase:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -1572,7 +1572,7 @@ class TestUpdateCase:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -3606,7 +3606,8 @@ class TestUpdateExecution:
         assert data["campaign"] == payload["campaign"]
         assert data["notesMarkdown"] == payload["notesMarkdown"]
         assert data["compiler"] == "gcc"
-        assert data["gitRepositoryUrl"] == "https://example.com/original"
+        assert data["gitRepositorySource"] == "https://example.com/original"
+        assert "gitRepositoryUrl" not in data
         assert data["gitTag"] == "v1.0"
         assert data["hpcUsername"] == "test-user"
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
@@ -3622,7 +3623,7 @@ class TestUpdateExecution:
         assert updated_execution.campaign == payload["campaign"]
         assert updated_execution.notes_markdown == payload["notesMarkdown"]
         assert updated_execution.compiler == "gcc"
-        assert updated_execution.git_repository_url == "https://example.com/original"
+        assert updated_execution.git_repository_source == "https://example.com/original"
         assert updated_execution.git_tag == "v1.0"
         assert updated_execution.last_updated_by == normal_user_sync["id"]
         assert updated_execution.updated_at > original_updated_at
@@ -4153,7 +4154,7 @@ class TestUpdateExecution:
         "payload",
         [
             {"compiler": "intel"},
-            {"gitRepositoryUrl": "https://example.com/updated"},
+            {"gitRepositorySource": "https://example.com/updated"},
             {"gitBranch": "feature/test"},
             {"gitTag": "v2.0"},
             {"gitCommitHash": "deadbeef"},
