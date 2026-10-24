@@ -1504,6 +1504,45 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.errors[0]["error_type"] == "ValidationError"
 
 
+@pytest.mark.parametrize(
+    "source,url",
+    [
+        (
+            "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+            "https://github.com/mr-gabrielrios/E3SM.git",
+        ),
+        ("/global/homes/m/mchinita/E3SM_SCREAM_pm_oct_2023/scream", None),
+        ("../E3SM", None),
+        ("ssh://git@private.example/owner/repo.git", None),
+        ("ssh://git@github.com:2222/owner/repo.git", None),
+        ("git@github.com:owner/../repo.git", None),
+        ("git@github.com:owner/repo.git?query", None),
+        ("https://github.com/owner/repo.git", "https://github.com/owner/repo.git"),
+    ],
+)
+def test_repository_provenance_survives_archive_validation(tmp_path, db, source, url):
+    case = stage_continuation_case(tmp_path)
+    for execution_dir in case.iterdir():
+        config = execution_dir / f"GIT_CONFIG.{execution_dir.name}.gz"
+        with gzip.open(config, "wt") as stream:
+            stream.write(f'[remote "origin"]\n    url = {source}\n')
+    parsed, _ = main_parser(case, tmp_path / "parsed", strict_validation=True)
+    # The fixture must actually contain rewritten source files.
+    assert parsed and all(item.git_repository_url == source for item in parsed)
+    result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+    assert result.errors == []
+    assert result.executions
+    for execution in result.executions:
+        assert execution.git_repository_source == source
+        assert (
+            str(execution.git_repository_url) if execution.git_repository_url else None
+        ) == url
+        restored = ExecutionCreate.model_validate_json(
+            execution.model_dump_json(by_alias=True)
+        )
+        assert restored.git_repository_source == source
+
+
 class TestNormalizeGitUrl:
     """Tests for the _normalize_git_url helper function.
 
@@ -1516,16 +1555,16 @@ class TestNormalizeGitUrl:
         expected = "https://github.com/E3SM-Project/E3SM.git"
         assert _normalize_git_url(ssh_url) == expected
 
-    def test_converts_ssh_gitlab_url_to_https(self) -> None:
-        """Test conversion of SSH GitLab URL to HTTPS."""
+    def test_does_not_guess_gitlab_mapping(self) -> None:
+        """Only explicitly recognized hosts receive web URL mappings."""
         ssh_url = "git@gitlab.com:owner/repo.git"
-        expected = "https://gitlab.com/owner/repo.git"
+        expected = None
         assert _normalize_git_url(ssh_url) == expected
 
     def test_converts_ssh_url_with_nested_path(self) -> None:
         """Test conversion of SSH URL with nested repository path."""
         ssh_url = "git@github.com:organization/group/nested/repo.git"
-        expected = "https://github.com/organization/group/nested/repo.git"
+        expected = None
         assert _normalize_git_url(ssh_url) == expected
 
     def test_preserves_https_url(self) -> None:
@@ -1553,16 +1592,16 @@ class TestNormalizeGitUrl:
         assert _normalize_git_url(ssh_url) == expected
 
     def test_handles_malformed_ssh_url_gracefully(self) -> None:
-        """Test that malformed SSH URLs are returned as-is."""
+        """Malformed SSH remotes have no known web URL."""
         # Malformed SSH URL (no colon separator)
         malformed_url = "git@github.com"
-        # Should return original since it can't be split on colon
-        assert _normalize_git_url(malformed_url) == malformed_url
+        # Keep the original only in source provenance.
+        assert _normalize_git_url(malformed_url) is None
 
     def test_handles_other_git_formats(self) -> None:
-        """Test that non-SSH non-HTTP URLs are returned as-is."""
+        """Local file URLs have no web URL."""
         file_url = "file:///path/to/repo.git"
-        assert _normalize_git_url(file_url) == file_url
+        assert _normalize_git_url(file_url) is None
 
     def test_ssh_url_conversion_integrated_in_ingest(self, db: Session) -> None:
         """Test SSH URL conversion through the full ingest pipeline.

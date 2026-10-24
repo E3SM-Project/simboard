@@ -101,6 +101,43 @@ after selection also fails the record. Explicit `--sources archive` and
 `--sources staging` remain strict: every selected mapping must be readable.
 These rules do not change source-directory bootstrap.
 
+### Git repository repair (#427)
+
+Deploy the repository-source migration and updated backend/client before repair.
+`gitRepositorySource` preserves the original `GIT_CONFIG` repository value;
+`gitRepositoryUrl` remains an optional HTTP(S) web URL. Only recognized GitHub
+SCP-style and `ssh://git@github.com/owner/repo` remotes map to HTTPS. Local paths
+and unsupported SSH remotes retain source provenance with a null web URL.
+Custom SSH ports and malformed remotes never receive guessed web URLs.
+
+The raw source is returned under the same access controls as other execution
+metadata. It can contain internal paths. Do not ingest repository configurations
+containing embedded credentials; this field preserves source text, not a redacted
+display value. Other malformed values and unsupported non-SSH URL schemes remain
+subject to the existing URL validation rules.
+
+After bootstrapping source-directory mappings, preview a scoped repair:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields git-repository --sources archive --case-name exact-case-name --hpc-username exact-user --dry-run'
+```
+
+Repair reads archived `GIT_CONFIG`, not the stored URL, and updates source and URL
+as a pair. Missing source values, conflicting directories, or stale expected
+values fail safely. Fill-only mode skips a pair that would replace existing
+metadata. Use `--overwrite` to preview corrections, including clearing an
+incorrect URL for a local source. Apply requires separate live-write authorization;
+replace `--dry-run` with `--apply` only after reviewing the intended changes.
+Changes enter metadata history; repeating a successful repair makes no changes.
+
+Duplicate ingestion does not repair existing records. Executions never created
+must instead be replayed after deployment. Other schema failures may still block
+those executions; a successful Git scalar check does not establish full recovery.
+The migration leaves existing source values null rather than inventing provenance.
+Downgrading drops the new source column and loses its stored provenance.
+
 ### Component-set repair (#425)
 
 Deploy the component-set schema migration, API, ingestion clients, and frontend

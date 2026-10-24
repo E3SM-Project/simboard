@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlsplit
 
 from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
-from app.features.ingestion.ingest import _normalize_path_candidate
+from app.features.ingestion.ingest import _normalize_git_url, _normalize_path_candidate
 from app.features.ingestion.parsers.parser import (
     FILE_SPECS,
     _find_casedocs_dirs,
@@ -56,6 +56,7 @@ FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
     "component-set": ("compset_long_name", "compset_alias"),
+    "git-repository": ("git_repository_source", "git_repository_url"),
 }
 
 
@@ -79,6 +80,7 @@ def main() -> int:
             "simulation-dates",
             "run-script",
             "component-set",
+            "git-repository",
         ],
         required=True,
     )
@@ -141,10 +143,13 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     """
     keys = ["case_docs_env_case", "e3sm_timing"]
 
-    if "simulation-dates" in fields:
-        keys.extend(["case_docs_env_run", "cpl_log"])
-    if "component-set" in fields:
-        keys.append("readme_case")
+    for group, source_keys in (
+        ("simulation-dates", ["case_docs_env_run", "cpl_log"]),
+        ("component-set", ["readme_case"]),
+        ("git-repository", ["git_config"]),
+    ):
+        if group in fields:
+            keys.extend(source_keys)
 
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
@@ -165,6 +170,8 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     parsed = _parse_all_files(str(path), files)
     if "component-set" in fields and not parsed.compset_long_name:
         raise ValueError(f"Missing XML COMPSET: {path}")
+    if "git-repository" in fields and not parsed.git_repository_url:
+        raise ValueError(f"Missing repository source: {path}")
 
     if before != [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]:
         raise ValueError(f"Source changed while reading: {path}")
@@ -519,6 +526,11 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                     compset_long_name=parsed.compset_long_name,
                     compset_alias=parsed.compset_alias,
                 )
+            if "git-repository" in args.fields:
+                observations[-1].update(
+                    git_repository_source=parsed.git_repository_url,
+                    git_repository_url=_normalize_git_url(parsed.git_repository_url),
+                )
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
@@ -535,7 +547,7 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             if name == "compset_alias" and o[name] is not None
             else o[name]
             for o in observations
-            if o[name] is not None or name == "compset_alias"
+            if o[name] is not None or name in ("compset_alias", "git_repository_url")
         }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
@@ -545,7 +557,8 @@ def _consistent_values(observations: list[dict], names: list[str]) -> dict:
             values[name] = next(
                 o[name]
                 for o in observations
-                if o[name] is not None or name == "compset_alias"
+                if o[name] is not None
+                or name in ("compset_alias", "git_repository_url")
             )
 
     if not values:

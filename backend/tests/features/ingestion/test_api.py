@@ -2527,8 +2527,19 @@ class TestIngestFromUploadEndpoint:
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Filename is required"
 
+    @pytest.mark.parametrize(
+        "source,url",
+        [
+            (
+                "ssh://git@github.com/E3SM-Project/E3SM.git",
+                "https://github.com/E3SM-Project/E3SM.git",
+            ),
+            ("/global/homes/user/E3SM", None),
+            ("git@private.example:owner/repo.git", None),
+        ],
+    )
     def test_persist_executions_with_git_repository_url(
-        self, client, db: Session, tmp_path
+        self, client, db: Session, tmp_path, source, url
     ):
         """Test that executions with git_repository_url are persisted correctly."""
         machine = db.query(Machine).first()
@@ -2555,7 +2566,8 @@ class TestIngestFromUploadEndpoint:
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
-                    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM.git",
+                    "gitRepositoryUrl": url,
+                    "gitRepositorySource": source,
                 }
             )
         ]
@@ -2576,9 +2588,9 @@ class TestIngestFromUploadEndpoint:
         execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
         assert execution is not None
-        assert (
-            execution.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
-        )
+        db.refresh(execution)
+        assert execution.git_repository_url == url
+        assert execution.git_repository_source == source
 
     def test_persist_executions_with_hpc_username(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()

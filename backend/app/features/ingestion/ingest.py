@@ -1,5 +1,6 @@
 """Module for ingesting simulation archives and mapping to DB schemas."""
 
+import re
 import shlex
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -87,6 +88,7 @@ class ExecutionCreateDraft:
     last_updated_by: UUID | None
     case_hash: str | None = None
     compute_type: Literal["cpu", "gpu"] | None = None
+    git_repository_source: str | None = None
 
 
 def ingest_archive(
@@ -740,7 +742,7 @@ def _find_existing_execution(
 
 
 def _normalize_git_url(url: str | None) -> str | None:
-    """Convert SSH git URL to HTTPS format.
+    """Map recognized GitHub SSH remotes to HTTPS without guessing other mappings.
 
     Parameters
     ----------
@@ -750,7 +752,8 @@ def _normalize_git_url(url: str | None) -> str | None:
     Returns
     -------
     str | None
-        Normalized HTTPS URL or None if input is None/empty.
+        HTTP(S) URL, or None for empty input, local paths, or unsupported SSH.
+        Other malformed values remain subject to normal URL validation.
 
     Examples
     --------
@@ -771,16 +774,19 @@ def _normalize_git_url(url: str | None) -> str | None:
         return url
 
     # Convert SSH format: git@github.com:owner/repo.git → https://github.com/owner/repo.git
-    if url.startswith("git@"):
-        try:
-            # Extract host and path from git@host:path format
-            # Remove 'git@'.
-            host_and_path = url[4:]
-            host, path = host_and_path.split(":", 1)
-            return f"https://{host}/{path}"
-        except ValueError:
-            logger.warning(f"Could not normalize git URL: {url}")
-            return url
+    match = re.fullmatch(
+        r"(?:git@github\.com:|ssh://git@github\.com/)([\w.-]+/[\w.-]+)", url
+    )
+    if match and all(part not in (".", "..") for part in match[1].split("/")):
+        return f"https://github.com/{match[1]}"
+
+    # Unsupported remotes and local paths have provenance but no known web URL.
+    if (
+        url.startswith(("ssh://", "git@", "file://", "/", "./", "../", "~/"))
+        or re.fullmatch(r"[^\s/:]+@[^\s/:]+:.+", url)
+        or ("://" not in url and "/" in url)
+    ):
+        return None
 
     # For any other format, return as-is
     return url
@@ -833,6 +839,7 @@ def _build_execution_create_draft(
         compiler=parsed_execution.compiler,
         compute_type=compute_type,
         git_repository_url=git_repository_url,
+        git_repository_source=parsed_execution.git_repository_url,
         git_branch=parsed_execution.git_branch,
         git_tag=parsed_execution.git_tag,
         git_commit_hash=parsed_execution.git_commit_hash,

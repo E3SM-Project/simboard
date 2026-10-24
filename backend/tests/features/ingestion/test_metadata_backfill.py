@@ -57,6 +57,49 @@ def _unreadable_execution(*args):
 
 
 @pytest.mark.parametrize(
+    "source,url",
+    [
+        ("/global/homes/user/E3SM", None),
+        ("ssh://git@github.com/owner/repo.git", "https://github.com/owner/repo.git"),
+    ],
+)
+def test_repository_repair_reads_archive_provenance(tmp_path, source, url):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    config = execution / f"GIT_CONFIG.{execution.name}.gz"
+    with gzip.open(config, "wt") as stream:
+        stream.write(f'[remote "origin"]\n    url = {source}\n')
+    parsed = _read_execution(execution, "chrysalis", ["git-repository"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"git_repository_url": "https://untrusted.example/"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record,
+        Namespace(machine="chrysalis", sources="archive", fields=["git-repository"]),
+    )
+    assert values == {"git_repository_source": source, "git_repository_url": url}
+    config.unlink()
+    with pytest.raises(ValueError, match="Missing repository source"):
+        _read_execution(execution, "chrysalis", ["git-repository"])
+
+
+def test_repository_repair_rejects_conflicting_null_url():
+    with pytest.raises(ValueError, match="Conflicting source values"):
+        metadata._consistent_values(
+            [
+                {"git_repository_url": None},
+                {"git_repository_url": "https://github.com/owner/repo"},
+            ],
+            ["git_repository_url"],
+        )
+
+
+@pytest.mark.parametrize(
     "argument,alias",
     [("-compset F20TR-GHG", "F20TR-GHG"), ("--compset=1850_EAM_ELM", None), ("", None)],
 )
