@@ -212,8 +212,8 @@ export const CompareWorkspace = ({
 
     const configBits = [
       execution.compsetLongName || null,
-      execution.gridName || null,
-      execution.gridResolution || null,
+      execution.gridAlias || null,
+      execution.gridLongName || null,
     ]
       .filter(Boolean)
       .join(' • ');
@@ -255,8 +255,8 @@ export const CompareWorkspace = ({
       makeMetricRow('Case Name', 'caseName', ''),
       makeMetricRow('Model Version', 'gitTag', ''),
       makeMetricRow('Compset Long Name', 'compsetLongName', ''),
-      makeMetricRow('Grid Name', 'gridName', ''),
-      makeMetricRow('Grid Resolution', 'gridResolution', ''),
+      makeMetricRow('Grid Alias', 'gridAlias', ''),
+      makeMetricRow('Grid Long Name', 'gridLongName', ''),
       makeMetricRow('Initialization Type', 'initializationType', ''),
       makeMetricRow('Compiler', 'compiler', ''),
     ],

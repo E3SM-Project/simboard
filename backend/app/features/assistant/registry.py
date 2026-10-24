@@ -40,13 +40,13 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Compset alias",
     ),
-    "execution.grid_name": CitationRegistryEntry(
+    "execution.grid_alias": CitationRegistryEntry(
         source_type="execution_field",
-        label="Grid name",
+        label="Grid alias",
     ),
-    "execution.grid_resolution": CitationRegistryEntry(
+    "execution.grid_long_name": CitationRegistryEntry(
         source_type="execution_field",
-        label="Grid resolution",
+        label="Grid long name",
     ),
     "execution.status": CitationRegistryEntry(
         source_type="execution_field",

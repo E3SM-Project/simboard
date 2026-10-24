@@ -7,7 +7,7 @@ from app.features.ingestion.parsers.utils import _open_text
 
 def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     """
-    Parse a README.case file and extract creation date, resolution, and compset alias.
+    Parse a README.case file and extract creation date, grid alias, and compset alias.
 
     Parameters
     ----------
@@ -17,14 +17,14 @@ def parse_readme_case(path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict[str, str | None]
-        Dictionary with keys: 'creation_date', 'grid_name', 'compset_alias'.
+        Dictionary with keys: 'creation_date', 'grid_alias', 'compset_alias'.
     """
     path = Path(path)
     text = _open_text(path)
     lines = text.splitlines()
 
     creation_date = _extract_timestamp(lines)
-    grid_name = _extract_flag_value(lines, "--res")
+    grid_alias = _extract_flag_value(lines, "--res", "-res")
     compset = _extract_flag_value(lines, "--compset", "-compset")
     # CIME's config_compsets.xsd defines aliases as XML NCNames. Long names
     # start with a time specifier (e.g. 1850/20TR) or use colon-labelled
@@ -38,7 +38,7 @@ def parse_readme_case(path: str | Path) -> dict[str, str | None]:
 
     return {
         "creation_date": creation_date,
-        "grid_name": grid_name,
+        "grid_alias": grid_alias,
         "compset_alias": compset_alias,
     }
 

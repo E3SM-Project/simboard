@@ -995,11 +995,11 @@ export const ExecutionDetailsView = ({
                     <FieldRow label="Compset Alias">
                       <ReadonlyInput value={execution.compsetAlias ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Grid Name">
-                      <ReadonlyInput value={execution.gridName ?? undefined} />
+                    <FieldRow label="Grid Alias">
+                      <ReadonlyInput value={execution.gridAlias ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Grid Resolution">
-                      <ReadonlyInput value={execution.gridResolution ?? undefined} />
+                    <FieldRow label="Grid Long Name">
+                      <ReadonlyInput value={execution.gridLongName ?? undefined} />
                     </FieldRow>
                     <FieldRow label="Initialization Type">
                       <ReadonlyInput value={execution.initializationType ?? undefined} />

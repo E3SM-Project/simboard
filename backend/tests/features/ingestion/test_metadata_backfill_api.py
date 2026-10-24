@@ -25,6 +25,89 @@ def _payload(machine, case, execution, **kwargs):
     )
 
 
+@pytest.mark.parametrize("alias", [None, "arcticx4"])
+def test_grid_repair_pair_dry_run_apply_and_repeat(db, alias):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.grid_alias = "wrong-alias"
+    execution.grid_long_name = "wrong-spec"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["grid"],
+        values={"grid_long_name": "a%arcticx4_l%r05", "grid_alias": alias},
+        expected={"grid_long_name": "wrong-spec", "grid_alias": "wrong-alias"},
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.grid_long_name == "wrong-spec"
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.grid_long_name == "a%arcticx4_l%r05"
+    assert execution.grid_alias == alias
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    changes = {row.field_name: row.new_value for row in db.query(MetadataChange).all()}
+    assert changes["grid_alias"] == alias
+    assert changes["grid_long_name"] == "a%arcticx4_l%r05"
+
+
+def test_grid_repair_checks_unchanged_pair_member(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["grid"],
+        values={"grid_long_name": "new-spec", "grid_alias": None},
+        expected=stored_values(execution),
+        overwrite=True,
+        dry_run=False,
+    )
+    execution.grid_alias = "concurrent-change"
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+
+    assert exc.value.status_code == 409
+    db.refresh(execution)
+    assert execution.grid_long_name != "new-spec"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"grid_alias": None},
+        {"grid_long_name": "spec"},
+        {"grid_long_name": None, "grid_alias": None},
+        {"grid_long_name": "   ", "grid_alias": None},
+    ],
+)
+def test_grid_repair_requires_explicit_valid_pair(db, values):
+    _, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="grid"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["grid"],
+            values=values,
+            expected=stored_values(execution),
+        )
+
+
 @pytest.mark.parametrize("operation", ["read", "write"])
 def test_backfill_rejects_normal_user(db, operation):
     user, machine, case, execution = _owners(db)
