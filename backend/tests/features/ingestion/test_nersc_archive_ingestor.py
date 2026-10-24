@@ -1433,7 +1433,7 @@ def test_discovery_persistence_failure_prevents_ingestion(
     assert ingestion_calls == []
 
 
-def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_validation(
+def test_all_accepted_results_persist_before_limit_and_deferred_revalidates(
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
@@ -1511,9 +1511,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     assert (
         _run_ingestor(
             config,
-            metadata_locator=lambda *_: pytest.fail(
-                "stored result must bypass validation"
-            ),
+            metadata_locator=lambda *_: {},
             post_request_fn=ingest_case,
             discovery_post_request_fn=persist_results,
         )
@@ -1521,7 +1519,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     )
     assert len(ingested_paths) == 2
     assert set(ingested_paths) == {str(case_a.resolve()), str(case_b.resolve())}
-    assert len(persisted_batches) == 1
+    assert len(persisted_batches) == 2
 
 
 def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
@@ -2045,7 +2043,7 @@ def test_staging_scan_excludes_batches_and_unrelated_layouts(
     )
     assert set(validated) == (
         {str(case / execution_id) for case in case_paths}
-        if known_state == "fresh"
+        if known_state != "processed"
         else set()
     )
     assert set(ingested) == (
@@ -2054,7 +2052,7 @@ def test_staging_scan_excludes_batches_and_unrelated_layouts(
         else set()
     )
     assert {result.case_identity for result in discovered} == (
-        set(identities.values()) if known_state == "fresh" else set()
+        set(identities.values()) if known_state != "processed" else set()
     )
     assert {entry.execution_path for entry in sources} == {
         str(case / execution_id) for case in case_paths

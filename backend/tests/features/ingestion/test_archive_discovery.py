@@ -28,12 +28,107 @@ from app.scripts.ingestion.archive_layout import (
     _build_case_path_filter,
     _build_walk_dir_filter,
 )
-from tests.fixtures.continuation_case import stage_continuation_case
+from tests.fixtures.continuation_case import (
+    ENV_BUILD,
+    ENV_CASE,
+    EXECUTIONS,
+    stage_continuation_case,
+)
 
 _build_case_scan_results = discovery_module._build_case_scan_results
 _build_ingestion_candidates = discovery_module._build_ingestion_candidates
 _discover_case_executions = discovery_module._discover_case_executions
 _validate_execution_dir = discovery_module._validate_execution_dir
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_schema_preflight_tracks_invalid_execution_and_accepts_corrected_metadata(
+    tmp_path, cached
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_id = next(iter(EXECUTIONS))
+    grid_file = next((case / invalid_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+    with gzip.open(grid_file, "wt") as stream:
+        stream.write('<config><entry id="COMPILER" value="intel" /></config>')
+    results = []
+    logs = {}
+    stats = discovery_module._new_discovery_stats()
+    grouped = _discover_case_executions(
+        case,
+        discovery_results=results,
+        case_collection_data=logs,
+        stats=stats,
+        discovery_results_by_key=(
+            {(str(case.resolve()), invalid_id): "accepted"} if cached else {}
+        ),
+    )
+
+    assert grouped[str(case.resolve())] == sorted(set(EXECUTIONS) - {invalid_id})
+    result = next(result for result in results if result.execution_id == invalid_id)
+    assert result.outcome == "rejected_invalid"
+    assert result.errors[0]["field"] == "grid_long_name"
+    assert result.errors[0]["code"] == "string_type"
+    assert result.errors[0]["message"] == "Input should be a valid string"
+    decision = logs[str(case.resolve())].rejected_decisions[0]
+    assert decision.to_log_fields()["errors"] == result.errors
+    assert stats["rejected_invalid_execution_ids"] == 1
+    candidates = _build_ingestion_candidates(
+        _build_case_scan_results(grouped), _fresh_state(), None
+    )
+    assert candidates[0].new_execution_ids == sorted(set(EXECUTIONS) - {invalid_id})
+
+    with gzip.open(grid_file, "wt") as stream:
+        stream.write(ENV_BUILD)
+    results = []
+    grouped = _discover_case_executions(case, discovery_results=results)
+
+    assert grouped[str(case.resolve())] == sorted(EXECUTIONS)
+    assert all(result.outcome == "accepted" and not result.errors for result in results)
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_preflight_allows_request_username_and_tracks_missing_timing_lid(
+    tmp_path, invalid
+):
+    case = stage_continuation_case(tmp_path)
+    execution_id = next(iter(EXECUTIONS))
+    execution = case / execution_id
+    xml = next(execution.glob("CaseDocs.*/env_case.xml.*.gz"))
+    with gzip.open(xml, "wt") as stream:
+        stream.write(
+            "\n".join(
+                line for line in ENV_CASE.splitlines() if 'id="REALUSER"' not in line
+            )
+        )
+    if invalid:
+        next(execution.glob("e3sm_timing.*")).write_text("Case : case\n")
+    results = []
+    grouped = _discover_case_executions(case, discovery_results=results)
+
+    assert (execution_id in grouped[str(case.resolve())]) is not invalid
+    result = next(result for result in results if result.execution_id == execution_id)
+    assert result.outcome == ("rejected_incomplete" if invalid else "accepted")
+    if invalid:
+        assert result.errors[0]["code"] == "missing_required_value"
+    else:
+        assert result.errors == []
+
+
+def test_preflight_tracks_missing_case_identity(tmp_path):
+    case = stage_continuation_case(tmp_path)
+    execution_id = next(iter(EXECUTIONS))
+    xml = next((case / execution_id).glob("CaseDocs.*/env_case.xml.*.gz"))
+    with gzip.open(xml, "wt") as stream:
+        stream.write(
+            "\n".join(line for line in ENV_CASE.splitlines() if 'id="MACH"' not in line)
+        )
+    results = []
+    _discover_case_executions(case, discovery_results=results)
+
+    result = next(result for result in results if result.execution_id == execution_id)
+    assert result.outcome == "rejected_invalid"
+    assert result.errors[0]["field"] == "machine"
+    assert result.errors[0]["code"] == "missing_required_value"
 
 
 @pytest.mark.parametrize("invalid", [False, True])
@@ -126,7 +221,7 @@ def test_single_execution_rejects_excluded_archive_month(tmp_path) -> None:
             "accepted",
             None,
             {"101.1-1"},
-            {"execution_dirs_accepted": 1},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "102.1-1",
@@ -203,8 +298,6 @@ def test_collect_case_execution_records_each_decision_source(
         processed[str(case_dir.resolve())].add(execution_id)
 
     def metadata_locator(_: str) -> object:
-        if stored_outcome == "accepted":
-            pytest.fail("stored discovery outcomes must bypass validation")
         if error is not None:
             raise error
         return {}
@@ -231,6 +324,7 @@ def test_collect_case_execution_records_each_decision_source(
     assert stats == {key: expected.get(key, 0) for key in stats}
 
     expected_results = {
+        "101.1-1": [(execution_id, "accepted")],
         "102.1-1": [(execution_id, "accepted")],
         "103.1-1": [(execution_id, "accepted")],
         "104.1-1": [(execution_id, "accepted")],
@@ -295,8 +389,8 @@ def test_staging_readiness_checks_current_status_before_acceptance(
 
     deferred = scan_mode == "staging" and terminal is None
     assert grouped == ({} if deferred else {case_identity: {execution.name}})
-    assert validations == ([] if deferred or cached else [str(execution)])
-    assert len(results) == int(not deferred and not cached)
+    assert validations == ([] if deferred else [str(execution)])
+    assert len(results) == int(not deferred)
     assert logs[case_identity].rejected_decisions == []
     decisions = logs[case_identity].deferred_decisions
     assert [decision.reason for decision in decisions] == (
@@ -306,7 +400,7 @@ def test_staging_readiness_checks_current_status_before_acceptance(
 
 
 @pytest.mark.parametrize("cached", [False, True])
-def test_missing_case_status_preserves_validation_and_cached_acceptance(
+def test_missing_case_status_requires_validation_despite_cached_acceptance(
     tmp_path, cached
 ) -> None:
     case = stage_continuation_case(tmp_path)
@@ -324,10 +418,10 @@ def test_missing_case_status_preserves_validation_and_cached_acceptance(
         ),
     )
 
-    assert (execution.name in grouped[str(case.resolve())]) is cached
+    assert execution.name not in grouped[str(case.resolve())]
     assert [
         result.outcome for result in results if result.execution_id == execution.name
-    ] == ([] if cached else ["rejected_incomplete"])
+    ] == ["rejected_incomplete"]
     assert logs[str(case.resolve())].deferred_decisions == []
 
 
@@ -1552,18 +1646,20 @@ def test_discovery_results_capture_typed_outcomes_but_not_transient_errors(
     ]
 
 
-def test_stored_accepted_discovery_result_bypasses_validation(tmp_path: Path) -> None:
+def test_stored_accepted_discovery_result_requires_validation(tmp_path: Path) -> None:
     archive_root = tmp_path / "archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
 
+    validated = []
     grouped = _discover_case_executions(
         archive_root,
-        metadata_locator=lambda *_: pytest.fail("validation should be bypassed"),
+        metadata_locator=lambda path: validated.append(path),
         discovery_results_by_key={(str(case_dir.resolve()), "100.1-1"): "accepted"},
     )
 
     assert grouped == {str(case_dir.resolve()): ["100.1-1"]}
+    assert validated == [str(case_dir / "100.1-1")]
 
 
 @pytest.mark.parametrize(
@@ -1731,6 +1827,7 @@ def test_validate_execution_dir_compacts_incomplete_archive_errors(
         "error_count": 2,
         "error_codes": ["missing_required_file"],
         "missing_file_specs": ["README.case..*.gz", "env_run.xml..*"],
+        "errors": decision.errors,
     }
     assert stats["skipped_incomplete"] == 1
 
@@ -1773,6 +1870,7 @@ def test_validate_execution_dir_compacts_archive_validation_errors(
         "error_count": 2,
         "error_codes": ["missing_required_file", "multiple_matching_files"],
         "missing_file_specs": ["env_run.xml..*"],
+        "errors": decision.errors,
     }
     assert stats["skipped_invalid"] == 1
 

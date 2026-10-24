@@ -247,7 +247,7 @@ def _handle_ingest_run(
                 },
             )
             log_event_fn("case_ingested", {"case_path": candidate.case_path})
-            _record_successful_case(state, candidate)
+            _record_successful_case(state, candidate, body.get("errors", []))
             continue
 
         failure_count += 1

@@ -668,7 +668,7 @@ def test_archive_rejections_are_revalidated_and_processed_staging_is_skipped(
             raise IncompleteArchiveError([])
         if path.endswith("102.1-1"):
             raise ArchiveValidationError([])
-        pytest.fail("accepted or processed execution should not be revalidated")
+        return {}
 
     @logs.logged_main
     def main():
@@ -683,7 +683,7 @@ def test_archive_rejections_are_revalidated_and_processed_staging_is_skipped(
         return 0
 
     assert main() == 0
-    assert len(validated) == 4
+    assert len(validated) == 6
     record = records(output)[0]
     assert record["executions"] == {
         "total": 6,
@@ -707,7 +707,7 @@ def test_archive_rejections_are_revalidated_and_processed_staging_is_skipped(
         }
     }
     assert main() == 0
-    assert len(validated) == 4
+    assert len(validated) == 6
     record = records(output)[1]
     assert record["executions"]["skipped"] == 1
     assert record["executions"]["selected"] == 0

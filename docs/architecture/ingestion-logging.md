@@ -130,7 +130,7 @@ not combine the two populations or infer public counts from validation totals.
 | `submission_qualified_cases` | `cases.eligible`; cases eligible before the limit. |
 | `selected_submission_cases` | `cases.selected`; cases selected after the limit. |
 | `execution_dirs_scanned` | Matching execution directories examined by discovery, including cached outcomes. |
-| `execution_dirs_accepted` | Examined directories retained as valid, including cached accepted outcomes; not submission success. |
+| `execution_dirs_accepted` | Examined directories retained after current metadata and schema validation; not submission success. |
 | `skipped_incomplete` / `skipped_invalid` | Discovery validation/cache rejections for missing or invalid metadata. |
 | `skipped_transient` | Discovery filesystem-access failures; not persisted. |
 | `accepted_execution_ids` / per-case `accepted` | Final selection observation mapped to `executions.selected`. |

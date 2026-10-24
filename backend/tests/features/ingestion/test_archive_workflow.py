@@ -277,6 +277,34 @@ def test_success_separates_response_details_from_outcome(tmp_path: Path) -> None
     assert report.ingestion_failure_count == 0
 
 
+def test_partial_response_does_not_mark_failed_execution_processed(tmp_path):
+    candidate = _candidate(tmp_path / "case")
+    state = _fresh_state()
+    errors = [
+        {
+            "execution_dir": str(tmp_path / "case" / "100.1-1"),
+            "field": "grid_long_name",
+            "code": "string_type",
+        }
+    ]
+
+    assert (
+        _handle_ingest_run(
+            [candidate],
+            _config(tmp_path),
+            "http://backend/ingest",
+            state,
+            sleep_fn=lambda *_: None,
+            post_request_fn=lambda *args, **kwargs: {
+                "status_code": 201,
+                "body": {"created_count": 1, "errors": errors},
+            },
+        )
+        == 0
+    )
+    assert state["cases"][candidate.case_path]["processed_execution_ids"] == []
+
+
 def test_persist_discovery_results_passes_explicit_run_configuration(
     tmp_path: Path,
 ) -> None:

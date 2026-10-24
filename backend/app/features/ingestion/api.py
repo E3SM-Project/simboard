@@ -13,6 +13,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -27,7 +28,6 @@ from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
 from app.features.catalog.schemas import ExecutionCreate
-from app.features.ingestion.enums import ExecutionDiscoveryOutcome
 from app.features.ingestion.ingest import (
     CaseIdentity,
     IngestArchiveResult,
@@ -181,7 +181,7 @@ def persist_execution_discovery_results(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> ExecutionDiscoveryResultsResponse:
-    """Refresh rejected discovery results without downgrading accepted validation."""
+    """Refresh discovery outcomes and errors after current metadata validation."""
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -204,6 +204,7 @@ def persist_execution_discovery_results(
                         "case_identity": result.case_identity,
                         "execution_id": result.execution_id,
                         "outcome": result.outcome,
+                        "errors": result.errors,
                     }
                     for _, result in sorted(unique_results.items())
                 ]
@@ -236,10 +237,7 @@ def persist_execution_discovery_results(
 
         for identity, requested in unique_results.items():
             stored = stored_by_identity.get(identity)
-            if stored is None or (
-                stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
-                and stored.outcome != requested.outcome
-            ):
+            if stored is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
@@ -248,6 +246,7 @@ def persist_execution_discovery_results(
                     ),
                 )
             stored.outcome = requested.outcome
+            stored.errors = requested.errors
 
     return ExecutionDiscoveryResultsResponse(
         inserted_count=inserted_count,
@@ -260,6 +259,7 @@ def persist_execution_discovery_results(
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
+        200: {"description": "No executions created; duplicate-only or empty no-op."},
         201: {"description": "Ingestion successful, executions created."},
         400: {"description": "Invalid input or archive file."},
         403: {"description": "Forbidden: only administrators can ingest from paths."},
@@ -270,6 +270,7 @@ def persist_execution_discovery_results(
 )
 def ingest_from_path(
     payload: IngestFromPathRequest,
+    response: Response,
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
@@ -322,7 +323,7 @@ def ingest_from_path(
             selected_execution_ids=payload.selected_execution_ids,
         )
 
-    response = _process_ingestion(
+    result = _process_ingestion(
         ingest_result=ingest_result,
         source_type=IngestionSourceType.HPC_PATH,
         source_reference=str(archive_path),
@@ -339,7 +340,14 @@ def ingest_from_path(
         db=db,
     )
 
-    return response
+    if result.created_count:
+        response.status_code = status.HTTP_201_CREATED
+    elif result.errors:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    else:
+        response.status_code = status.HTTP_200_OK
+
+    return result
 
 
 @router.post(
@@ -731,6 +739,7 @@ def _build_ingestion_state_response(
                 case_identity=result.case_identity,
                 execution_id=result.execution_id,
                 outcome=result.outcome,
+                errors=result.errors or [],
             )
         )
 
@@ -739,6 +748,25 @@ def _build_ingestion_state_response(
         cases=cases,
         discovery_results=dict(discovery_results),
     )
+
+
+def _successful_processed_execution_ids(
+    execution_ids: list[str] | None, errors: list[dict[str, str]]
+) -> list[str] | None:
+    """Keep failure audits from marking rejected executions successfully processed."""
+    if execution_ids is None:
+        return None
+    rejected_ids = {
+        Path(error["execution_dir"]).name
+        for error in errors
+        if "execution_dir" in error
+    }
+
+    return [
+        execution_id
+        for execution_id in execution_ids
+        if execution_id not in rejected_ids
+    ]
 
 
 def _compute_execution_fingerprint(execution_ids: list[str]) -> str:
@@ -935,7 +963,9 @@ def _process_ingestion(
             duplicate_count=ingest_result.duplicate_count,
             error_count=error_count,
             archive_sha256=archive_sha256,
-            processed_execution_ids=processed_execution_ids,
+            processed_execution_ids=_successful_processed_execution_ids(
+                processed_execution_ids, ingest_result.errors
+            ),
         )
         ingestion = Ingestion(
             **ingestion_create.model_dump(),

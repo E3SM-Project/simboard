@@ -4,29 +4,30 @@ import shlex
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.common.model_dates import ModelDate, normalize_model_date
+from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.catalog.enums import ArtifactKind, CaseSimulationType, ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ArtifactCreate, ExecutionCreate
-from app.features.ingestion.parsers.parser import main_parser
+from app.features.ingestion.parsers.parser import (
+    ArchiveValidationError,
+    _locate_metadata_files,
+    _parse_all_files,
+    main_parser,
+)
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.utils import parse_machine_name, resolve_machine_by_name
 
 logger = _setup_custom_logger(__name__)
 
-_STRING_ADAPTER = TypeAdapter(str)
-_LONG_NAME_ADAPTER = TypeAdapter(Annotated[str, Field(min_length=1, pattern=r"\S")])
-_DATE_ADAPTER = TypeAdapter(ModelDate)
-_DATETIME_ADAPTER = TypeAdapter(datetime)
 CaseIdentity = tuple[str, UUID, str]
 
 
@@ -132,11 +133,13 @@ def ingest_archive(
         Path(output_dir) if isinstance(output_dir, str) else output_dir
     )
 
+    errors: list[dict[str, str]] = []
     parsed_executions, skipped_count = main_parser(
         archive_path_resolved,
         output_dir_resolved,
         strict_validation=strict_validation,
         selected_execution_ids=selected_execution_ids,
+        validation_errors=errors,
     )
 
     if not parsed_executions:
@@ -147,11 +150,11 @@ def ingest_archive(
             created_count=0,
             duplicate_count=0,
             skipped_count=skipped_count,
+            errors=errors,
         )
 
     executions: list[ExecutionCreate] = []
     duplicate_count = 0
-    errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
     case_identities: set[CaseIdentity] = set()
@@ -208,6 +211,39 @@ def ingest_archive(
     )
 
     return result
+
+
+def validate_execution_directory(execution_dir: str) -> None:
+    """Parse and validate ingestion metadata without database access or writes."""
+    parsed = _parse_all_files(execution_dir, _locate_metadata_files(execution_dir))
+    errors = [
+        {
+            "execution_dir": execution_dir,
+            "field": field_name,
+            "code": "missing_required_value",
+            "message": f"{field_name} is required for ingestion.",
+        }
+        # HPC username may come from the submission request instead of metadata.
+        for field_name in ("case_name", "machine")
+        if not (getattr(parsed, field_name) or "").strip()
+    ]
+    if errors:
+        raise ArchiveValidationError(errors)
+    try:
+        _prevalidate_execution_create(parsed)
+        _build_path_artifacts(parsed)
+    except ValidationError as exc:
+        raise ArchiveValidationError(
+            [
+                {
+                    "execution_dir": execution_dir,
+                    "field": ".".join(map(str, error["loc"])),
+                    "code": error["type"],
+                    "message": error["msg"],
+                }
+                for error in exc.errors()
+            ]
+        ) from exc
 
 
 def _process_execution_for_ingest(
@@ -540,56 +576,9 @@ def _prevalidate_execution_create(
 
 def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     """Validate the draft fields that must succeed before case creation."""
-    for field_name in (
-        "execution_id",
-        "compset_long_name",
-        "grid_long_name",
-        "initialization_type",
-    ):
-        adapter = (
-            _LONG_NAME_ADAPTER
-            if field_name in ("compset_long_name", "grid_long_name")
-            else _STRING_ADAPTER
-        )
-        _validate_draft_field(adapter, field_name, getattr(draft, field_name))
-
-    if draft.compset_alias is not None:
-        _validate_draft_field(_STRING_ADAPTER, "compset_alias", draft.compset_alias)
-
-    if draft.grid_alias is not None:
-        _validate_draft_field(_STRING_ADAPTER, "grid_alias", draft.grid_alias)
-
-    _validate_draft_field(
-        _DATE_ADAPTER, "simulation_start_date", draft.simulation_start_date
-    )
-    if draft.simulation_end_date is not None:
-        _validate_draft_field(
-            _DATE_ADAPTER, "simulation_end_date", draft.simulation_end_date
-        )
-
-    if draft.git_repository_source is not None:
-        _validate_draft_field(
-            _STRING_ADAPTER, "git_repository_source", draft.git_repository_source
-        )
-
-
-def _validate_draft_field(adapter: TypeAdapter, field_name: str, value: object) -> None:
-    """Retain field context when a scalar type adapter rejects a draft value."""
-    try:
-        adapter.validate_python(value)
-    except ValidationError as exc:
-        raise ValidationError.from_exception_data(
-            exc.title,
-            [
-                {
-                    "type": error["type"],
-                    "loc": (field_name, *error["loc"]),
-                    "input": error["input"],
-                    "ctx": error.get("ctx", {}),
-                }
-                for error in exc.errors(include_url=False)
-            ],
-        ) from exc
+    # This validation-only case ID is never persisted. Validate again with the
+    # resolved case ID on the server before creating the execution.
+    _validate_execution_create(replace(draft, case_id=UUID(int=0)))
 
 
 def _get_or_create_case(

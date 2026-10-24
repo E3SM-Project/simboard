@@ -127,7 +127,18 @@ def test_post_discovery_results_request_preserves_wire_contract(
         "perlmutter",
         results=[
             ExecutionDiscoveryResult("case-a", "100.1-1", "accepted"),
-            ExecutionDiscoveryResult("case-b", "200.1-1", "rejected_invalid"),
+            ExecutionDiscoveryResult(
+                "case-b",
+                "200.1-1",
+                "rejected_invalid",
+                errors=[
+                    {
+                        "field": "grid_long_name",
+                        "code": "string_type",
+                        "message": "Input should be a valid string",
+                    }
+                ],
+            ),
         ],
         timeout_seconds=12,
     )
@@ -147,11 +158,19 @@ def test_post_discovery_results_request_preserves_wire_contract(
                 "case_identity": "case-a",
                 "execution_id": "100.1-1",
                 "outcome": "accepted",
+                "errors": [],
             },
             {
                 "case_identity": "case-b",
                 "execution_id": "200.1-1",
                 "outcome": "rejected_invalid",
+                "errors": [
+                    {
+                        "field": "grid_long_name",
+                        "code": "string_type",
+                        "message": "Input should be a valid string",
+                    }
+                ],
             },
         ],
     }

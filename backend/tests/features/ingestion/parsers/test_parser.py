@@ -716,7 +716,7 @@ class TestMainParser:
             )
 
         assert parsed_execution is None
-        assert errors == []
+        assert errors == validation_errors
         assert skipped == 1
         mock_warning.assert_called_once_with(
             "Skipping invalid run in '%s': %s",
@@ -798,7 +798,9 @@ class TestMainParser:
             )
 
         assert parsed_execution is None
-        assert errors == []
+        assert errors == [
+            parser._build_file_not_found_validation_error(exec_dir, missing_file)
+        ]
         assert skipped == 1
         mock_warning.assert_called_once_with(
             "Skipping incomplete run in '%s': %s",
