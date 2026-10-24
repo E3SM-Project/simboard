@@ -158,6 +158,7 @@ def main_parser(
     *,
     strict_validation: bool = False,
     selected_execution_ids: list[str] | None = None,
+    validation_errors: list[dict[str, str]] | None = None,
 ) -> tuple[list[ParsedExecution], int]:
     """Main entrypoint for parser workflow.
 
@@ -177,6 +178,8 @@ def main_parser(
         Directory to extract and process files.
     selected_execution_ids : list[str] | None
         Only parse matching execution directory names; None parses all executions.
+    validation_errors : list[dict[str, str]] | None
+        Optional collector for structured rejections when skipping invalid runs.
 
     Returns
     -------
@@ -213,7 +216,7 @@ def main_parser(
     results: list[ParsedExecution] = []
     skipped_count = 0
 
-    validation_errors: list[dict[str, str]] = []
+    parser_errors: list[dict[str, str]] = []
     selected_ids = (
         None if selected_execution_ids is None else set(selected_execution_ids)
     )
@@ -232,18 +235,17 @@ def main_parser(
                 _process_execution_dir(exec_dir, strict_validation=strict_validation)
             )
             skipped_count += exec_skipped_count
-            validation_errors.extend(exec_validation_errors)
+            parser_errors.extend(exec_validation_errors)
 
             if parsed_execution is not None:
                 results.append(parsed_execution)
 
-    if validation_errors:
-        raise ArchiveValidationError(validation_errors)
+    if parser_errors and strict_validation:
+        raise ArchiveValidationError(parser_errors)
+    if validation_errors is not None:
+        validation_errors.extend(parser_errors)
 
-    if skipped_count:
-        logger.info(
-            f"Skipped {skipped_count} incomplete run(s) missing required files."
-        )
+    logger.info(f"Skipped {skipped_count} incomplete run(s) missing required files.")
 
     logger.info("Completed parsing all execution directories.")
 
@@ -261,7 +263,7 @@ def _process_execution_dir(
             return None, exc.errors, 0
 
         logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
-        return None, [], 1
+        return None, exc.errors, 1
     except ArchiveValidationError as exc:
         if strict_validation:
             return None, exc.errors, 0
@@ -271,13 +273,13 @@ def _process_execution_dir(
             exec_dir,
             "; ".join(error["message"] for error in exc.errors),
         )
-        return None, [], 1
+        return None, exc.errors, 1
     except FileNotFoundError as exc:
         if strict_validation:
             return None, [_build_file_not_found_validation_error(exec_dir, exc)], 0
 
         logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
-        return None, [], 1
+        return None, [_build_file_not_found_validation_error(exec_dir, exc)], 1
 
 
 def _extract_archive(archive_path: str, output_dir: str) -> None:

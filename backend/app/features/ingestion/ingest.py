@@ -133,11 +133,13 @@ def ingest_archive(
         Path(output_dir) if isinstance(output_dir, str) else output_dir
     )
 
+    errors: list[dict[str, str]] = []
     parsed_executions, skipped_count = main_parser(
         archive_path_resolved,
         output_dir_resolved,
         strict_validation=strict_validation,
         selected_execution_ids=selected_execution_ids,
+        validation_errors=errors,
     )
 
     if not parsed_executions:
@@ -148,11 +150,11 @@ def ingest_archive(
             created_count=0,
             duplicate_count=0,
             skipped_count=skipped_count,
+            errors=errors,
         )
 
     executions: list[ExecutionCreate] = []
     duplicate_count = 0
-    errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
     case_identities: set[CaseIdentity] = set()

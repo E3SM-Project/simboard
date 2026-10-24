@@ -302,6 +302,56 @@ def test_missing_xml_grid_fails_before_case_creation(client, db, tmp_path, value
 
 
 @pytest.mark.parametrize("all_invalid", [False, True])
+@pytest.mark.parametrize("failure", ["missing", "ambiguous", "missing_lid"])
+def test_path_parser_rejections_preserve_errors_and_partial_ingestion(
+    client, db, tmp_path, all_invalid, failure
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_ids = set(EXECUTIONS) if all_invalid else {next(iter(EXECUTIONS))}
+    for execution_id in invalid_ids:
+        execution = case / execution_id
+        if failure == "missing_lid":
+            next(execution.glob("e3sm_timing.*")).write_text("Case : case\n")
+        else:
+            metadata = next(execution.glob("CaseDocs.*/env_build.xml.*.gz"))
+            if failure == "missing":
+                metadata.unlink()
+            else:
+                metadata.with_name("env_build.xml.extra.gz").write_bytes(
+                    metadata.read_bytes()
+                )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={
+            "archive_path": str(case),
+            "machine_name": "chrysalis",
+            "selected_execution_ids": list(EXECUTIONS),
+        },
+    )
+
+    assert response.status_code == (400 if all_invalid else 201), response.text
+    body = response.json()
+    assert body["created_count"] == len(EXECUTIONS) - len(invalid_ids)
+    assert len(body["errors"]) == len(invalid_ids)
+    expected_code = {
+        "missing": "missing_required_file",
+        "ambiguous": "multiple_matching_files",
+        "missing_lid": "missing_required_value",
+    }[failure]
+    assert all(
+        error["code"] == expected_code and error["message"] for error in body["errors"]
+    )
+    assert {
+        Path(error["execution_dir"]).name for error in body["errors"]
+    } == invalid_ids
+    audit = db.query(Ingestion).one()
+    assert audit.status == ("failed" if all_invalid else "partial")
+    assert audit.error_count == len(invalid_ids)
+    assert set(audit.processed_execution_ids) == set(EXECUTIONS) - invalid_ids
+    assert db.query(Execution).count() == body["created_count"]
+
+
+@pytest.mark.parametrize("all_invalid", [False, True])
 @pytest.mark.parametrize("transport", ["path", "hpc-upload"])
 def test_hpc_validation_preserves_audit_and_only_tracks_successful_ids(
     client, db, tmp_path, all_invalid, transport
