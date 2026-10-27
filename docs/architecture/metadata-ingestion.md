@@ -291,7 +291,7 @@ Example NERSC path for `COMPLETED` status cases:
 | NERSC / Perlmutter | Local path submission           | Cron                           | `/global/cfs/projectdirs/e3sm/performance_archive`    | `/global/cfs/projectdirs/e3sm/OLD_PERF`     |
 | LCRC / Chrysalis   | Remote automated archive upload | Sandia Jenkins                 | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive` | `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF`  |
 | SNL / Compy        | Remote automated archive upload | Sandia Jenkins                 | `/compyfs/performance_archive`                        | `/compyfs/OLD_PERF`                         |
-| ALCF / Aurora      | Remote automated archive upload | ALCF GitLab job, daily at 7 AM | `/lus/flare/projects/E3SM_Dec/performance_archive`    | `TODO`                                      |
+| ALCF / Aurora      | Remote automated archive upload | To be confirmed (see [Aurora Ingestion](../operations/aurora-ingestion.md)) | To be confirmed | To be confirmed |
 | OLCF / Frontier    | Remote automated archive upload | Local cron job                 | `/lustre/orion/proj-shared/cli115`                    | `/lustre/orion/cli115/proj-shared/OLD_PERF` |
 
 ## Collection and Submission Modes
