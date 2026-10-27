@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
+import { IiceComparisonBar } from '@/components/layout/IiceComparisonBar';
 import { NavBar } from '@/components/layout/NavBar';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
 import { useMachines } from '@/features/machines/hooks/useMachines';
@@ -58,6 +59,7 @@ const App = () => {
         selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
         setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
       />
+      <IiceComparisonBar />
       <Toaster />
     </BrowserRouter>
   );

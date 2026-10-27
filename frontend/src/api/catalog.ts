@@ -1,6 +1,7 @@
 import { api } from '@/api/api';
 import type {
   CaseDetailOut,
+  CaseDiagnosticsViewersOut,
   CaseFilterOptionsOut,
   CasePageOut,
   CaseUpdate,
@@ -158,6 +159,19 @@ export const getCaseFilterOptions = async (
 export const getCaseById = async (id: string): Promise<CaseDetailOut> => {
   const res = await api.get<CaseDetailOut>(`${CASES_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
+  });
+
+  return res.data;
+};
+
+/**
+ * Discovered e3sm_diags and mpas-analysis viewers for a case. The backend
+ * reads the diagnostics archive's directory indexes, so the first call for a
+ * case can take a few seconds; allow more than the default 10 s timeout.
+ */
+export const getCaseDiagnosticsViewers = async (id: string): Promise<CaseDiagnosticsViewersOut> => {
+  const res = await api.get<CaseDiagnosticsViewersOut>(`${CASES_URL}/${id}/diagnostics/viewers`, {
+    timeout: 30000,
   });
 
   return res.data;
