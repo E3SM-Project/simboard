@@ -6,8 +6,8 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 [[ $# == 1 && ( $1 == true || $1 == false ) ]] || fail 'Expected dry-run mode: true or false'
 requested_dry_run=$1
 case "${machine:-}" in
-  chrysalis|compy|perlmutter) selected_machine=$machine ;;
-  *) fail 'machine must be chrysalis, compy, or perlmutter' ;;
+  aurora|chrysalis|compy|perlmutter) selected_machine=$machine ;;
+  *) fail 'machine must be aurora, chrysalis, compy, or perlmutter' ;;
 esac
 [[ ${env:-} == dev || ${env:-} == prod ]] || fail 'env must be dev or prod'
 selected_scan_mode=${scan_mode:-}

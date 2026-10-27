@@ -15,7 +15,7 @@ def run_make(args: list[str], env: dict[str, str]) -> subprocess.CompletedProces
     )
 
 
-@pytest.mark.parametrize("machine", ["chrysalis", "compy", "perlmutter"])
+@pytest.mark.parametrize("machine", ["aurora", "chrysalis", "compy", "perlmutter"])
 @pytest.mark.parametrize("mode", ["archive", "staging"])
 @pytest.mark.parametrize(
     "target,dry", [("ingest-dry-run", "true"), ("ingest-apply", "false")]
@@ -147,7 +147,7 @@ def test_invalid_machine_inputs(args: list[str], message: str) -> None:
 
 
 @pytest.mark.parametrize("target", ["ingest-dry-run", "ingest-apply"])
-@pytest.mark.parametrize("machine", ["chrysalis", "compy", "perlmutter"])
+@pytest.mark.parametrize("machine", ["aurora", "chrysalis", "compy", "perlmutter"])
 @pytest.mark.parametrize("mode_args", [[], ["scan_mode="], ["scan_mode=invalid"]])
 def test_scan_mode_required(target: str, machine: str, mode_args: list[str]) -> None:
     env = os.environ.copy()
@@ -184,7 +184,7 @@ def test_perlmutter_offline_defaults_and_exit_status(tmp_path: Path) -> None:
     assert "Error 7" in result.stderr
 
 
-@pytest.mark.parametrize("machine", ["chrysalis", "compy", "perlmutter"])
+@pytest.mark.parametrize("machine", ["aurora", "chrysalis", "compy", "perlmutter"])
 @pytest.mark.parametrize("mode", ["archive", "staging"])
 @pytest.mark.parametrize("lower_bound", [None, "2024-01"])
 @pytest.mark.parametrize("entrypoint", ["make", "site"])
@@ -257,15 +257,18 @@ def test_site_defaults_and_historical_override(
             check=False,
         )
     assert result.returncode == 0, result.stderr
-    site_root = {
+    # Aurora deliberately ships no filesystem defaults: the native runner must
+    # supply reviewed roots, so the unconfigured values are empty.
+    site_roots = {
         "chrysalis": "/lcrc/group/e3sm/PERF_Chrysalis",
         "compy": "/compyfs",
         "perlmutter": "/global/cfs/cdirs/e3sm",
-    }[machine]
+    }
+    site_root = site_roots.get(machine)
     assert capture.read_text().splitlines() == [
         machine,
-        f"{site_root}/performance_archive",
-        f"{site_root}/OLD_PERF",
+        f"{site_root}/performance_archive" if site_root else "",
+        f"{site_root}/OLD_PERF" if site_root else "",
         (lower_bound or "2025-01") if mode == "archive" else "unset",
     ]
 
