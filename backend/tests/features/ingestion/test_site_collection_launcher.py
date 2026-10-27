@@ -472,7 +472,9 @@ def test_diagnostics_launcher_dispatch_and_environment(
 def test_cron_template_schedules_diagnostics_independently() -> None:
     template = (_launcher_path().parent / "templates/crontab.example").read_text()
     jobs = [
-        line for line in template.splitlines() if line.endswith("chrysalis diagnostics")
+        line
+        for line in template.splitlines()
+        if line.endswith("__SIMBOARD_SITE__ diagnostics")
     ]
     assert len(jobs) == 2
     for job, environment in zip(jobs, ("dev", "prod"), strict=True):
@@ -697,16 +699,27 @@ def test_launcher_loads_credentials_for_default_remote_state_dry_run(
     )
 
 
-def test_site_configs_define_their_ingestors() -> None:
+@pytest.mark.parametrize(
+    "site,module,machine,diagnostics",
+    [
+        ("aurora", "hpc_upload_archive_ingestor", "aurora", "false"),
+        ("chrysalis", "hpc_upload_archive_ingestor", "chrysalis", "true"),
+        ("perlmutter", "nersc_archive_ingestor", "perlmutter", "false"),
+    ],
+)
+def test_site_configs_define_their_ingestors(
+    site: str, module: str, machine: str, diagnostics: str
+) -> None:
     sites_dir = _launcher_path().parent
     env = os.environ.copy()
     result = subprocess.run(
         [
             "bash",
             "-c",
-            'source "$1"; printf "%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" "$MACHINE_NAME"',
+            'source "$1"; printf "%s\\n%s\\n%s\\n" "$SIMBOARD_INGESTOR_MODULE" '
+            '"$MACHINE_NAME" "$SIMBOARD_DIAGNOSTICS_ENABLED"',
             "bash",
-            str(sites_dir / "configs/chrysalis.config"),
+            str(sites_dir / f"configs/{site}.config"),
         ],
         capture_output=True,
         check=False,
@@ -716,8 +729,9 @@ def test_site_configs_define_their_ingestors() -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "app.scripts.ingestion.hpc_upload_archive_ingestor",
-        "chrysalis",
+        f"app.scripts.ingestion.{module}",
+        machine,
+        diagnostics,
     ]
 
 
@@ -819,11 +833,44 @@ def test_ingestion_initializers_create_non_overwritable_site_files(
     )
 
     assert result.returncode == 0, result.stderr
-    assert crontab_file.read_text(encoding="utf-8") == (
-        repository_root
-        / "backend/app/scripts/ingestion/sites/templates/crontab.example"
-    ).read_text(encoding="utf-8")
+    crontab = crontab_file.read_text(encoding="utf-8")
+    executable = [
+        line for line in crontab.splitlines() if line and not line.startswith("#")
+    ]
+    assert "__SIMBOARD" not in crontab
+    for job in ("staging", "archive", "diagnostics"):
+        assert any(f"chrysalis {job}" in line for line in executable)
     assert crontab_file.stat().st_mode & 0o777 == 0o640
+
+    # A site without a reviewed diagnostics archive gets no diagnostics jobs,
+    # and nothing in its schedule may still name another site.
+    aurora_operations = tmp_path / "aurora-simboard" / "operations"
+    aurora_operations.mkdir(parents=True)
+    result = subprocess.run(
+        [
+            "make",
+            "ops-init-cron",
+            "site=aurora",
+            f"SIMBOARD_ROOT={aurora_operations.parent}",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repository_root,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    aurora_crontab = (aurora_operations / "aurora.crontab").read_text(encoding="utf-8")
+    aurora_jobs = [
+        line
+        for line in aurora_crontab.splitlines()
+        if line and not line.startswith("#")
+    ]
+    assert "__SIMBOARD" not in aurora_crontab
+    assert "chrysalis" not in "\n".join(aurora_jobs)
+    assert any("aurora staging" in line for line in aurora_jobs)
+    assert any("aurora archive" in line for line in aurora_jobs)
+    assert not any(" diagnostics" in line for line in aurora_jobs)
+    assert (aurora_operations / "aurora.crontab").stat().st_mode & 0o777 == 0o640
 
     result = subprocess.run(
         [

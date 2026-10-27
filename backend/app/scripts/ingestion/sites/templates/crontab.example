@@ -45,13 +45,13 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # =============================================================================
 # Staging scans
 # =============================================================================
-# Replace `chrysalis` with the site-config name. Scan current performance output
-# every 15 minutes for each API environment.
+# The initializer replaces __SIMBOARD_SITE__ with the selected config name.
+# Scan current performance output every 15 minutes for each API environment.
 
 # Development
-5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
+5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ staging
 # Production
-5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis staging
+5,20,35,50 * * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ staging
 
 # =============================================================================
 # Archive scans
@@ -62,10 +62,11 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # use YYYY or YYYY-MM.
 
 # Development
-0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
+0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ archive
 # Production
-0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis archive
+0 12 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ archive
 
+# __SIMBOARD_DIAGNOSTICS_BEGIN__
 # =============================================================================
 # Diagnostics scans
 # =============================================================================
@@ -76,6 +77,7 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # diagnostics_archives.py; ingestion year/case limits do not apply.
 
 # Development
-0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
+0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ diagnostics
 # Production
-0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
+0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" __SIMBOARD_SITE__ diagnostics
+# __SIMBOARD_DIAGNOSTICS_END__
