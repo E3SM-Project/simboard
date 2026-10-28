@@ -190,11 +190,8 @@ Before installing, save the current account's crontab in a protected location
 and merge unrelated entries into the reviewed file: `crontab <file>` replaces
 the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
 `/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
-Leave the global `DRY_RUN=false` setting commented during initial validation.
-Diagnostics entries inherit this setting and scan offline when it is unset or
-`true`. Log archiving also inherits it and only previews actions when it is unset
-or `true`. Run offline diagnostics discovery and preview log archiving before
-enabling scheduled writes.
+Leave `DRY_RUN=false` commented during validation: diagnostics runs offline and
+log archiving only previews actions.
 
 After reviewing the merged file, install it:
 
@@ -209,11 +206,10 @@ mode. Supply approved API credentials before enabling live linking.
 
 Review `operations/raw_logs/simboard-ingestion-*.log` and diagnostics logs. After
 both workflows pass validation and live ingestion and linking are approved,
-uncomment global `DRY_RUN=false` to enable live staging/archive, diagnostics, and
-log archiving jobs, then reinstall the reviewed file. Log archiving deletes raw
-sources only after verifying their archive. If approvals differ, use per-job
-`DRY_RUN` overrides instead. Use `MAX_CASES_PER_RUN` for a bounded first live
-ingestion run; this limit does not apply to diagnostics.
+preview log archiving, then uncomment global `DRY_RUN=false` to enable submissions,
+linking, and verified raw-log deletion. Reinstall the reviewed file; use per-job
+`DRY_RUN=true` overrides for tasks not yet approved. Use `MAX_CASES_PER_RUN` to
+bound the first live ingestion run; it does not limit diagnostics.
 
 After installation, verify `crontab -l` matches the reviewed schedules and new
 root, retains unrelated entries, and has no obsolete duplicate jobs in the
@@ -239,35 +235,26 @@ The copied crontab:
 - runs diagnostics every six hours at 02:00, 08:00, 14:00, and 20:00 UTC
   with separate locks and the shared top-level run mode;
 - archives completed launcher logs weekly on Sunday at 01:00 UTC, using the
-  deployment's backend Python and the shared top-level run mode. Review
-  `operations/simboard-log-archiving.log` after each run.
-
-Diagnostics entries inherit the top-level `DRY_RUN` setting, just like ingestion.
-Unset or `true` performs an offline diagnostics scan. Set `DRY_RUN=false` only
-after validating ingestion, diagnostics, and log archiving; it enables live
-submissions, linking, and verified raw-log deletion. Supply valid API credentials
-before enabling live ingestion and diagnostics. Log archiving needs no API access.
+  deployment's backend Python and shared `DRY_RUN` setting.
 
 ### Weekly launcher-log archiving
 
-`backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py` reads
-`operations/raw_logs/` and writes `YYYYMMDD-YYYYMMDD.tar.gz` archives into
-`operations/history_logs/`, grouped by Sunday–Saturday UTC weeks. Both directories
-must already exist; run `make ops-provision` to create them with the deployment's
-access policy. The script does not depend on the current working directory.
+`sites/operations/archive_ingestion_logs.py` archives `operations/raw_logs/` into
+Sunday–Saturday UTC `YYYYMMDD-YYYYMMDD.tar.gz` files in `operations/history_logs/`.
+Run `make ops-provision` to create both directories with the correct access policy.
 
-The default `LOG_RETENTION_DAYS=7` keeps raw logs for at least seven days. A whole
-calendar week becomes eligible only after its end passes the retention cutoff,
-so weekly scheduling normally keeps roughly 7–14 days of completed raw logs.
-Set a nonnegative integer `LOG_RETENTION_DAYS` in the copied crontab to override
-retention. Even zero excludes the current, unfinished week.
-
-Only recognized launcher filenames with valid dates and a final
-`event=launcher_finished exit_code=...` marker qualify. Completed failed runs
-qualify too. Incomplete logs, legacy filenames, unrelated files, and symlinks
-remain untouched and are reported for manual review. Logs from crashed runs may
-lack a completion marker and therefore need operator review rather than
-automatic cleanup.
+- **Retention:** `LOG_RETENTION_DAYS=7` by default; override with a nonnegative
+  integer in cron. Weeks qualify only after their end passes the retention cutoff.
+  Weekly scheduling normally retains 7–14 days of raw logs; zero still excludes
+  the current week.
+- **Eligibility:** Recognized launcher logs must end with
+  `event=launcher_finished exit_code=...`, including failed runs. Incomplete,
+  invalid, legacy, unrelated, and symlink inputs remain untouched for manual review.
+- **Safety:** Live runs lock, verify, and atomically publish each archive before
+  deleting unchanged sources. Identical members are not duplicated; conflicts
+  preserve sources and stop the run. Allow space for both old and new archives.
+- **Mode:** Unset or true `DRY_RUN` previews only. Set `DRY_RUN=false` to apply;
+  `--dry-run` always forces a read-only preview. No API credentials are needed.
 
 Preview from any directory:
 
@@ -278,37 +265,17 @@ export SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
   --dry-run
 ```
 
-After reviewing the preview, run with `DRY_RUN=false` and without `--dry-run` to
-apply changes. The script accepts the same boolean spellings as diagnostics and
-rejects invalid values. `--dry-run` always forces a read-only preview, including
-when cron exports `DRY_RUN=false`. Optional `--source-dir` and `--archive-dir`
-override paths; provide both when `SIMBOARD_ROOT` is unset.
+To apply, remove `--dry-run` and set `DRY_RUN=false`. For isolated tests, pass
+`--source-dir` and `--archive-dir`; both are required without `SIMBOARD_ROOT`.
 
-Live runs hold an exclusive lock in `history_logs/`. Each update builds and
-verifies a temporary archive beside its destination, then atomically publishes
-it before deleting unchanged source logs. Identical existing members are not
-duplicated. Same-name content conflicts fail without deleting the conflicting
-source or replacing that week's archive. Compression, verification, and
-publication failures preserve the previous archive and affected sources.
+Review `operations/simboard-log-archiving.log` after each run. Errors stop later
+weeks; resolve the error, preview, and retry. Failed publication preserves existing
+archives and sources; retries safely handle interrupted cleanup. Never remove the
+lock file to bypass a running job. Remove leftover hidden `.tmp` files only after
+confirming no archiver is running, and avoid overlapping repository refreshes.
 
-Failures stop the run; later weeks wait until the error is resolved. On failure,
-inspect `operations/simboard-log-archiving.log`, resolve reported conflicts or
-permissions, and rerun the preview before retrying. A retry safely
-handles sources left after an interrupted cleanup. Do not remove the persistent
-lock file to bypass a running job. A forcibly terminated process may leave a
-hidden `.tmp` archive; inspect and remove it only after confirming no archiver
-is running. Replacement requires space for both the existing and new archive.
-
-Inspect archive members without extracting them into `raw_logs/`:
-
-```bash
-tar -tzf "${SIMBOARD_ROOT}/operations/history_logs/<YYYYMMDD-YYYYMMDD>.tar.gz"
-```
-
-This utility only archives logs. API summarization is a separate task. Archives
-are not automatically expired, so historical storage still needs a separate
-retention policy. The cron entry is offset from repository refresh, not dependent
-on its completion; avoid manual refreshes while archiving is running.
+Use `tar -tzf <archive>` to inspect members without extracting into `raw_logs/`.
+Archives do not expire automatically. API summarization is a separate task.
 
 ### Reference: configuration files and variables
 
@@ -360,8 +327,8 @@ before enabling live ingestion; do not reuse NERSC host paths inside Spin.
    `quality_assurance/` without replacing existing deployment-local files.
 2. Update the copied crontab with `make ops-init-cron` only after
    backing up the existing file; the initializer refuses to overwrite it.
-   Alternatively, merge the template's diagnostics and log-archiving entries and provisioning-log
-   path manually, preserving local schedules and `SIMBOARD_ROOT`. Diagnostics
+   Alternatively, merge the template's diagnostics, log-archiving, and
+   provisioning-log changes, preserving local schedules and `SIMBOARD_ROOT`. Diagnostics
    entries enable live linking, so confirm API credentials before installation.
 3. Let existing `SBCS-*` lock files remain until no scheduler invocation uses
    the previous launcher or refresh helper. New helpers acquire an existing
@@ -370,10 +337,9 @@ before enabling live ingestion; do not reuse NERSC host paths inside Spin.
 4. New launcher logs are written only to `raw_logs/`; retain or remove old
    top-level `SBCS-*.log` files according to the site's retention policy after
    confirming the updated crontab is active.
-5. Preview weekly log archiving before enabling its live cron task. Existing
-   copied crontabs do not gain the new entry automatically. Remove obsolete
-   `log_redux.py` invocations; manually review any logs previously moved into
-   `history_logs/deleted/` rather than assuming they were archived.
+5. Merge the weekly archiving entry and preview before enabling live mode.
+   Remove old `log_redux.py` jobs; logs in `history_logs/deleted/` need manual
+   review, not an assumption that they were archived.
 
 ### Manual machine-based ingestion
 
