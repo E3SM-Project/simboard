@@ -58,8 +58,8 @@ help:
 	@echo '  make ops-configure-access site=<site> SIMBOARD_ROOT=<path> operators="<users>" [apply=true] # Preview or apply operator ACLs'
 	@echo ""
 	@echo "  Ingestion:"
-	@echo "  make ingest-dry-run machine=<chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging> # General ingestion without writes"
-	@echo "  make ingest-apply machine=<chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
+	@echo "  make ingest-dry-run machine=<aurora|chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging> # General ingestion without writes"
+	@echo "  make ingest-apply machine=<aurora|chrysalis|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
 	@echo "    Chrysalis: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
 	@echo "    execution_dir=<absolute-path> selects one execution without completing snapshot checkpoints"
@@ -214,6 +214,7 @@ INGESTION_DEV_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.dev.sh.example
 INGESTION_PROD_ENV_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/env.prod.sh.example
 INGESTION_CRONTAB_TEMPLATE := $(INGESTION_TEMPLATES_DIR)/crontab.example
 INGESTION_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_api_environment.sh
+INGESTION_SCHEDULER_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_scheduler_file.sh
 V3_ENV_INITIALIZER := $(INGESTION_OPERATIONS_DIR)/initialize_v3_environment.sh
 V3_ENV_TEMPLATE := $(BACKEND_DIR)/app/scripts/ingestion/v3_data/lcrc-v3.env.example
 INGESTION_PROVISION_SCRIPT := $(INGESTION_OPERATIONS_DIR)/provision_operations.sh
@@ -314,7 +315,8 @@ ops-init-cron:
 		echo "$$cron_file already exists; refusing to overwrite it." >&2; \
 		exit 1; \
 	fi; \
-	bash "$(INGESTION_ACCESS_POLICY)" "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file" || exit $$?; \
+	diagnostics_enabled=$$(bash -c 'source "$$1"; printf "%s" "$${SIMBOARD_DIAGNOSTICS_ENABLED:-false}"' bash "$(INGESTION_SITE_CONFIGS_DIR)/$(site).config") || exit $$?; \
+	bash "$(INGESTION_SCHEDULER_INITIALIZER)" "$(INGESTION_CRONTAB_TEMPLATE)" "$$cron_file" "$(site)" "$$diagnostics_enabled" || exit $$?; \
 	echo "Created $$cron_file."; \
 	echo "Set SIMBOARD_ROOT in the copied file, then install it with crontab $$cron_file."
 

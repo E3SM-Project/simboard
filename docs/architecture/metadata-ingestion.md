@@ -291,7 +291,7 @@ Example NERSC path for `COMPLETED` status cases:
 | NERSC / Perlmutter | Local path submission           | Cron                           | `/global/cfs/projectdirs/e3sm/performance_archive`    | `/global/cfs/projectdirs/e3sm/OLD_PERF`     |
 | LCRC / Chrysalis   | Remote automated archive upload | Sandia Jenkins                 | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive` | `/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF`  |
 | SNL / Compy        | Remote automated archive upload | Sandia Jenkins                 | `/compyfs/performance_archive`                        | `/compyfs/OLD_PERF`                         |
-| ALCF / Aurora      | Remote automated archive upload | ALCF GitLab job, daily at 7 AM | `/lus/flare/projects/E3SM_Dec/performance_archive`    | `TODO`                                      |
+| ALCF / Aurora      | Remote automated archive upload | To be confirmed (see [Aurora Ingestion](../operations/aurora-ingestion.md)) | `/lus/flare/projects/E3SMinput/baselines/performance_archive` | `/lus/flare/projects/E3SMinput/baselines/performance_archive/OLD_PERF` |
 | OLCF / Frontier    | Remote automated archive upload | Local cron job                 | `/lustre/orion/proj-shared/cli115`                    | `/lustre/orion/cli115/proj-shared/OLD_PERF` |
 
 ## Collection and Submission Modes
@@ -478,8 +478,10 @@ rejects machines absent from its machine catalog; missing machine metadata is no
 replaced with the scanner's configured machine.
 
 NERSC staging scans only discover `<root>/<username>/<case>/<execution_id>`.
-They exclude top-level `performance_archive_*` batches and `pace-exps-*`
-directories and do not recurse into other layouts below a case directory.
+They exclude top-level `performance_archive_*` batches, `pace-exps-*`
+directories, and an `OLD_PERF` archive root nested in staging, and do not
+recurse into other layouts below a case directory. Remote-upload staging scans
+apply the same top-level exclusions.
 Processed batches temporarily remaining under the staging root are ignored;
 archive scans discover them after they move to `OLD_PERF_ARCHIVE_ROOT/YYYY-MM/`,
 subject to the existing archive range and status rules.
