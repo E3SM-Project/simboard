@@ -253,17 +253,26 @@ def test_site_defaults_and_historical_override(
             check=False,
         )
     assert result.returncode == 0, result.stderr
-    # Aurora deliberately ships no filesystem defaults: the native runner must
-    # supply reviewed roots, so the unconfigured values are empty.
+    # Aurora nests OLD_PERF inside its staging root, as PACE's collector does.
     site_roots = {
-        "chrysalis": "/lcrc/group/e3sm/PERF_Chrysalis",
-        "perlmutter": "/global/cfs/cdirs/e3sm",
+        "aurora": (
+            "/lus/flare/projects/E3SMinput/baselines/performance_archive",
+            "/lus/flare/projects/E3SMinput/baselines/performance_archive/OLD_PERF",
+        ),
+        "chrysalis": (
+            "/lcrc/group/e3sm/PERF_Chrysalis/performance_archive",
+            "/lcrc/group/e3sm/PERF_Chrysalis/OLD_PERF",
+        ),
+        "perlmutter": (
+            "/global/cfs/cdirs/e3sm/performance_archive",
+            "/global/cfs/cdirs/e3sm/OLD_PERF",
+        ),
     }
-    site_root = site_roots.get(machine)
+    staging_root, archive_root = site_roots[machine]
     assert capture.read_text().splitlines() == [
         machine,
-        f"{site_root}/performance_archive" if site_root else "",
-        f"{site_root}/OLD_PERF" if site_root else "",
+        staging_root,
+        archive_root,
         (lower_bound or "2025-01") if mode == "archive" else "unset",
     ]
 

@@ -35,6 +35,7 @@ import urllib.request
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
@@ -52,7 +53,10 @@ from app.scripts.ingestion.archive_client import (
     _timeout_request_error,
     _url_request_error,
 )
-from app.scripts.ingestion.archive_discovery import _scan_archive
+from app.scripts.ingestion.archive_discovery import (
+    _prune_staging_pace_dirnames,
+    _scan_archive,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     ArchiveCheckpointPersistenceCallback,
     CaseSubmissionCallback,
@@ -114,6 +118,16 @@ def _case_submission_callback(
         if post_request_fn is None
         else post_request_fn
     )
+
+
+def _default_dir_pruner(
+    config: IngestorConfig,
+    additional_dir_pruner: Callable[[str, list[str]], None] | None,
+) -> Callable[[str, list[str]], None] | None:
+    """Skip PACE-owned staging trees unless the caller supplies its own pruner."""
+    if additional_dir_pruner is not None or config.scan_mode != "staging":
+        return additional_dir_pruner
+    return partial(_prune_staging_pace_dirnames, archive_root=config.archive_root)
 
 
 def _prepare_run_state(
@@ -201,6 +215,7 @@ def _run_ingestor(
             "case_simulation_type requires the built-in HPC upload transport"
         )
     post_request_fn = _case_submission_callback(post_request_fn)
+    additional_dir_pruner = _default_dir_pruner(config, additional_dir_pruner)
 
     if not _validate_run_preconditions(config, log_event_fn=_log_event):
         return 1

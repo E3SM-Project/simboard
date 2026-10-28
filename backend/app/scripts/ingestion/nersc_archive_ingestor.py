@@ -41,7 +41,10 @@ from app.scripts.ingestion.archive_client import (
     _fetch_ingestion_state,
     _post_ingestion_request,
 )
-from app.scripts.ingestion.archive_discovery import EXECUTION_DIR_PATTERN, _scan_archive
+from app.scripts.ingestion.archive_discovery import (
+    _prune_staging_walk_dirnames,
+    _scan_archive,
+)
 from app.scripts.ingestion.archive_ingestor_core import (
     ArchiveCheckpointPersistenceCallback,
     CaseSubmissionCallback,
@@ -103,27 +106,6 @@ def _case_submission_callback(
 ) -> CaseSubmissionCallback:
     """Resolve the NERSC path-ingestion transport for this run."""
     return _post_ingestion_request if post_request_fn is None else post_request_fn
-
-
-def _prune_staging_walk_dirnames(
-    dirpath: str, dirnames: list[str], *, archive_root: Path
-) -> None:
-    """Limit NERSC staging walks to username/case/execution directories."""
-    depth = len(Path(dirpath).relative_to(archive_root).parts)
-    if depth == 0:
-        dirnames[:] = [
-            name
-            for name in dirnames
-            if not name.startswith(("performance_archive_", "pace-exps-"))
-        ]
-    if depth < 2:
-        dirnames[:] = [
-            name for name in dirnames if not EXECUTION_DIR_PATTERN.fullmatch(name)
-        ]
-    else:
-        dirnames[:] = [
-            name for name in dirnames if EXECUTION_DIR_PATTERN.fullmatch(name)
-        ]
 
 
 def _prepare_run_state(
