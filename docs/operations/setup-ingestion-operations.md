@@ -291,8 +291,9 @@ duplicated. Same-name content conflicts fail without deleting the conflicting
 source or replacing that week's archive. Compression, verification, and
 publication failures preserve the previous archive and affected sources.
 
-On failure, inspect `operations/simboard-log-archiving.log`, resolve reported
-conflicts or permissions, and rerun the preview before retrying. A retry safely
+Failures stop the run; later weeks wait until the error is resolved. On failure,
+inspect `operations/simboard-log-archiving.log`, resolve reported conflicts or
+permissions, and rerun the preview before retrying. A retry safely
 handles sources left after an interrupted cleanup. Do not remove the persistent
 lock file to bypass a running job. A forcibly terminated process may leave a
 hidden `.tmp` archive; inspect and remove it only after confirming no archiver

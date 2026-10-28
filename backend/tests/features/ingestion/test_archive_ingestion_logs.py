@@ -128,10 +128,12 @@ def test_week_and_retention_boundaries(directories, day, now, retention, expecte
 
 
 @pytest.mark.parametrize("exit_code", [0, 7])
-def test_completed_success_and_failure_are_archived(directories, exit_code):
+@pytest.mark.parametrize("mode", ["staging", "archive", "unknown"])
+def test_completed_success_and_failure_are_archived(directories, exit_code, mode):
     source, archive = directories
     path = _log(
         source,
+        prefix=f"simboard-ingestion-{mode}-test-offline",
         contents=COMPLETION.replace(b"exit_code=0", f"exit_code={exit_code}".encode()),
     )
     archiver.archive_logs(source, archive, now=NOW, dry_run=False)
@@ -178,12 +180,15 @@ def test_updates_preserve_members_and_remove_identical_duplicates(directories):
 def test_conflict_preserves_source_and_archive(directories):
     source, archive = directories
     path = _log(source)
+    later = _log(source, "20261011")
     destination = archive / "20261004-20261010.tar.gz"
     _tar(destination, {path.name: b"different"})
     before = destination.read_bytes()
     with pytest.raises(ValueError, match="Conflicting archive member"):
         archiver.archive_logs(source, archive, now=NOW, dry_run=False)
     assert path.exists()
+    assert later.exists()
+    assert not (archive / "20261011-20261017.tar.gz").exists()
     assert destination.read_bytes() == before
 
 

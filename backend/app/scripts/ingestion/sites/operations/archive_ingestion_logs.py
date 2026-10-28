@@ -18,7 +18,7 @@ from typing import BinaryIO
 from uuid import uuid4
 
 FILENAME_PATTERN = re.compile(
-    r"simboard-(?:ingestion-(?:staging|archive)|diagnostics)-"
+    r"simboard-(?:ingestion-(?:staging|archive|unknown)|diagnostics)-"
     r"[a-z0-9_-]+-[a-zA-Z0-9._-]+-(?P<date>[0-9]{8})_[0-9]{6}-[0-9]+\.log"
 )
 COMPLETION_PATTERN = re.compile(
@@ -88,7 +88,7 @@ def archive_logs(
     today = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date()
     cutoff = today - timedelta(days=retention_days)
     with _archive_lock(archive_dir, dry_run):
-        weeks = _eligible_logs(source_dir, min(cutoff, today))
+        weeks = _eligible_logs(source_dir, cutoff)
         for sunday, logs in sorted(weeks.items()):
             saturday = sunday + timedelta(days=6)
             destination = archive_dir / f"{sunday:%Y%m%d}-{saturday:%Y%m%d}.tar.gz"
