@@ -192,7 +192,9 @@ the entire account's crontab. Set the copied file's `SIMBOARD_ROOT` to
 `/lcrc/group/e3sm/simboard` and review its dev/prod environment selections.
 Leave the global `DRY_RUN=false` setting commented during initial validation.
 Diagnostics entries inherit this setting and scan offline when it is unset or
-`true`. Run offline diagnostics discovery before enabling scheduled scans.
+`true`. Log archiving also inherits it and only previews actions when it is unset
+or `true`. Run offline diagnostics discovery and preview log archiving before
+enabling scheduled writes.
 
 After reviewing the merged file, install it:
 
@@ -207,8 +209,9 @@ mode. Supply approved API credentials before enabling live linking.
 
 Review `operations/raw_logs/simboard-ingestion-*.log` and diagnostics logs. After
 both workflows pass validation and live ingestion and linking are approved,
-uncomment global `DRY_RUN=false` to enable live staging/archive and diagnostics
-jobs, then reinstall the reviewed file. If approvals differ, use per-job
+uncomment global `DRY_RUN=false` to enable live staging/archive, diagnostics, and
+log archiving jobs, then reinstall the reviewed file. Log archiving deletes raw
+sources only after verifying their archive. If approvals differ, use per-job
 `DRY_RUN` overrides instead. Use `MAX_CASES_PER_RUN` for a bounded first live
 ingestion run; this limit does not apply to diagnostics.
 
@@ -234,12 +237,77 @@ The copied crontab:
   archive jobs for one environment also use separate locks and may run at the
   same time; and
 - runs diagnostics every six hours at 02:00, 08:00, 14:00, and 20:00 UTC
-  with separate locks and the shared top-level run mode.
+  with separate locks and the shared top-level run mode;
+- archives completed launcher logs weekly on Sunday at 01:00 UTC, using the
+  deployment's backend Python and the shared top-level run mode. Review
+  `operations/simboard-log-archiving.log` after each run.
 
 Diagnostics entries inherit the top-level `DRY_RUN` setting, just like ingestion.
 Unset or `true` performs an offline diagnostics scan. Set `DRY_RUN=false` only
-after validating both ingestion and diagnostics; it enables live submissions and
-linking for all jobs. Supply valid API credentials before enabling live mode.
+after validating ingestion, diagnostics, and log archiving; it enables live
+submissions, linking, and verified raw-log deletion. Supply valid API credentials
+before enabling live ingestion and diagnostics. Log archiving needs no API access.
+
+### Weekly launcher-log archiving
+
+`backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py` reads
+`operations/raw_logs/` and writes `YYYYMMDD-YYYYMMDD.tar.gz` archives into
+`operations/history_logs/`, grouped by Sunday–Saturday UTC weeks. Both directories
+must already exist; run `make ops-provision` to create them with the deployment's
+access policy. The script does not depend on the current working directory.
+
+The default `LOG_RETENTION_DAYS=7` keeps raw logs for at least seven days. A whole
+calendar week becomes eligible only after its end passes the retention cutoff,
+so weekly scheduling normally keeps roughly 7–14 days of completed raw logs.
+Set a nonnegative integer `LOG_RETENTION_DAYS` in the copied crontab to override
+retention. Even zero excludes the current, unfinished week.
+
+Only recognized launcher filenames with valid dates and a final
+`event=launcher_finished exit_code=...` marker qualify. Completed failed runs
+qualify too. Incomplete logs, legacy filenames, unrelated files, and symlinks
+remain untouched and are reported for manual review. Logs from crashed runs may
+lack a completion marker and therefore need operator review rather than
+automatic cleanup.
+
+Preview from any directory:
+
+```bash
+export SIMBOARD_ROOT=/lcrc/group/e3sm/simboard
+"${SIMBOARD_ROOT}/repository/simboard/backend/.venv/bin/python" \
+  "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py" \
+  --dry-run
+```
+
+After reviewing the preview, run with `DRY_RUN=false` and without `--dry-run` to
+apply changes. The script accepts the same boolean spellings as diagnostics and
+rejects invalid values. `--dry-run` always forces a read-only preview, including
+when cron exports `DRY_RUN=false`. Optional `--source-dir` and `--archive-dir`
+override paths; provide both when `SIMBOARD_ROOT` is unset.
+
+Live runs hold an exclusive lock in `history_logs/`. Each update builds and
+verifies a temporary archive beside its destination, then atomically publishes
+it before deleting unchanged source logs. Identical existing members are not
+duplicated. Same-name content conflicts fail without deleting the conflicting
+source or replacing that week's archive. Compression, verification, and
+publication failures preserve the previous archive and affected sources.
+
+On failure, inspect `operations/simboard-log-archiving.log`, resolve reported
+conflicts or permissions, and rerun the preview before retrying. A retry safely
+handles sources left after an interrupted cleanup. Do not remove the persistent
+lock file to bypass a running job. A forcibly terminated process may leave a
+hidden `.tmp` archive; inspect and remove it only after confirming no archiver
+is running. Replacement requires space for both the existing and new archive.
+
+Inspect archive members without extracting them into `raw_logs/`:
+
+```bash
+tar -tzf "${SIMBOARD_ROOT}/operations/history_logs/<YYYYMMDD-YYYYMMDD>.tar.gz"
+```
+
+This utility only archives logs. API summarization is a separate task. Archives
+are not automatically expired, so historical storage still needs a separate
+retention policy. The cron entry is offset from repository refresh, not dependent
+on its completion; avoid manual refreshes while archiving is running.
 
 ### Reference: configuration files and variables
 
@@ -248,11 +316,12 @@ linking for all jobs. Supply valid API credentials before enabling live mode.
 | `sites/configs/<site>.config`   | `SIMBOARD_INGESTOR_MODULE`, `SIMBOARD_DEFAULT_ARCHIVE_YEAR_START`, `PERF_ARCHIVE_ROOT`, `OLD_PERF_ARCHIVE_ROOT`, `MACHINE_NAME`                                      |
 | `operations/`                   | Deployment-local workspace, created with `make ops-provision`; stores protected environment files, locks, the top-level provisioning log, and copied crontabs |
 | `operations/raw_logs/`          | Per-launcher-run logs; apply the site's retention policy without recording secrets                                                                                   |
+| `operations/history_logs/`      | Verified weekly launcher-log archives and the archiver's process lock |
 | `operations/quality_assurance/` | One-off validation artifacts reviewed by operators, never recurring job output                                                                                       |
 | `repository/simboard`           | Deployment checkout, cloned and prepared by `make ops-provision`, then updated by `make ops-refresh`                                                   |
 | `operations/env.dev.sh`         | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                         |
 | `operations/env.prod.sh`        | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                          |
-| Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
+| Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `LOG_RETENTION_DAYS`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
 | Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`                                                                                                        |
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
@@ -286,11 +355,11 @@ invocations. The targeted v3 runner supplies these site values itself as
 described above. Validate with a dry run
 before enabling live ingestion; do not reuse NERSC host paths inside Spin.
 
-1. Run `make ops-provision` to add `raw_logs/` and
+1. Run `make ops-provision` to add `raw_logs/`, `history_logs/`, and
    `quality_assurance/` without replacing existing deployment-local files.
 2. Update the copied crontab with `make ops-init-cron` only after
    backing up the existing file; the initializer refuses to overwrite it.
-   Alternatively, merge the template's diagnostics entries and provisioning-log
+   Alternatively, merge the template's diagnostics and log-archiving entries and provisioning-log
    path manually, preserving local schedules and `SIMBOARD_ROOT`. Diagnostics
    entries enable live linking, so confirm API credentials before installation.
 3. Let existing `SBCS-*` lock files remain until no scheduler invocation uses
@@ -300,6 +369,10 @@ before enabling live ingestion; do not reuse NERSC host paths inside Spin.
 4. New launcher logs are written only to `raw_logs/`; retain or remove old
    top-level `SBCS-*.log` files according to the site's retention policy after
    confirming the updated crontab is active.
+5. Preview weekly log archiving before enabling its live cron task. Existing
+   copied crontabs do not gain the new entry automatically. Remove obsolete
+   `log_redux.py` invocations; manually review any logs previously moved into
+   `history_logs/deleted/` rather than assuming they were archived.
 
 ### Manual machine-based ingestion
 

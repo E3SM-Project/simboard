@@ -3,6 +3,7 @@
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from shutil import which
 
@@ -482,6 +483,57 @@ def test_cron_template_schedules_diagnostics_independently() -> None:
         assert "&&" not in job
 
 
+@pytest.mark.parametrize("dry_run", [None, "true", "false", "invalid"])
+def test_cron_template_archives_logs_with_shared_run_mode(
+    tmp_path: Path, dry_run: str | None
+) -> None:
+    template = (_launcher_path().parent / "templates/crontab.example").read_text()
+    jobs = [line for line in template.splitlines() if line.startswith("0 1 * * 0 ")]
+    assert len(jobs) == 1
+    assert "CRON_TZ=UTC" in template
+    command = jobs[0].split(maxsplit=5)[5]
+    assert "DRY_RUN=" not in command
+    root = tmp_path / "deployment with spaces"
+    operations = root / "operations"
+    source = operations / "raw_logs"
+    history = operations / "history_logs"
+    source.mkdir(parents=True)
+    history.mkdir()
+    log = source / "simboard-ingestion-staging-test-offline-20200104_120000-1.log"
+    log.write_text("[2020-01-04T12:00:00Z] event=launcher_finished exit_code=0\n")
+    backend = root / "repository/simboard/backend"
+    runtime = backend / ".venv/bin"
+    runtime.mkdir(parents=True)
+    (runtime / "python").symlink_to(sys.executable)
+    scripts = backend / "app/scripts/ingestion/sites/operations"
+    scripts.mkdir(parents=True)
+    (scripts / "archive_ingestion_logs.py").symlink_to(
+        _launcher_path().parent / "operations/archive_ingestion_logs.py"
+    )
+    env = {**os.environ, "SIMBOARD_ROOT": str(root), "LOG_RETENTION_DAYS": "7"}
+    env.pop("DRY_RUN", None)
+    if dry_run is not None:
+        env["DRY_RUN"] = dry_run
+    result = subprocess.run(
+        ["bash", "-c", command],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    output = (operations / "simboard-log-archiving.log").read_text()
+    assert result.returncode == (1 if dry_run == "invalid" else 0), output
+    assert log.exists() is (dry_run != "false")
+    assert bool(list(history.glob("*.tar.gz"))) is (dry_run == "false")
+    if dry_run in {None, "true"}:
+        assert "Would archive" in output
+        assert not list(history.iterdir())
+    elif dry_run == "invalid":
+        assert "DRY_RUN must be a boolean" in output
+
+
 @pytest.mark.parametrize(
     ("scan_mode", "legacy_lock_contended", "expected_returncode"),
     [
@@ -955,16 +1007,19 @@ def test_operations_provisioning_creates_and_preserves_operations_directory(
     assert operations_dir.is_dir()
     assert operations_dir.stat().st_mode & 0o777 == 0o750
     assert (operations_dir / "raw_logs").stat().st_mode & 0o777 == 0o750
+    assert (operations_dir / "history_logs").stat().st_mode & 0o777 == 0o750
     assert (operations_dir / "quality_assurance").stat().st_mode & 0o777 == 0o750
     assert "Configured simboard group access for operations artifacts" in result.stdout
     assert chgrp_capture_path.read_text(encoding="utf-8").splitlines() == [
         f"simboard {operations_dir}",
         f"simboard {operations_dir / 'raw_logs'}",
+        f"simboard {operations_dir / 'history_logs'}",
         f"simboard {operations_dir / 'quality_assurance'}",
     ]
     assert chmod_capture_path.read_text(encoding="utf-8").splitlines() == [
         f"2750 {operations_dir}",
         f"2750 {operations_dir / 'raw_logs'}",
+        f"2750 {operations_dir / 'history_logs'}",
         f"2750 {operations_dir / 'quality_assurance'}",
     ]
     env["CHGRP_FAIL"] = "true"

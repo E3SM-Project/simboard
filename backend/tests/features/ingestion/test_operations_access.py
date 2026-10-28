@@ -3,6 +3,7 @@
 import os
 import pwd
 import subprocess
+import sys
 from pathlib import Path
 from shutil import which
 
@@ -527,8 +528,34 @@ def test_provision_preserves_acl_policy(deployment: tuple[Path, str]) -> None:
     assert result.returncode == 0, result.stderr
     assert acl(operations) == before
     assert not capture.exists()
-    for name in ("raw_logs", "quality_assurance"):
+    for name in ("raw_logs", "history_logs", "quality_assurance"):
         assert_private_access(operations / name, operator, "rwx")
+
+
+def test_log_archives_inherit_operator_access(deployment: tuple[Path, str]) -> None:
+    root, operator = deployment
+    result = configure(root, operator, "true")
+    assert result.returncode == 0, result.stderr
+    source = root / "operations/raw_logs"
+    history = root / "operations/history_logs"
+    source.mkdir(mode=0o770)
+    history.mkdir(mode=0o770)
+    log = source / "simboard-ingestion-staging-test-offline-20200104_120000-1.log"
+    log.write_text("[2020-01-04T12:00:00Z] event=launcher_finished exit_code=0\n")
+    result = run(
+        sys.executable,
+        SCRIPTS / "archive_ingestion_logs.py",
+        env={
+            **os.environ,
+            "SIMBOARD_ROOT": str(root),
+            "DRY_RUN": "false",
+            "LOG_RETENTION_DAYS": "7",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert not log.exists()
+    assert_private_access(history / "20191229-20200104.tar.gz", operator, "rw-")
+    assert_private_access(history / ".archive_ingestion_logs.lock", operator, "rw-")
 
 
 def test_refresh_lock_inherits_operator_access(
