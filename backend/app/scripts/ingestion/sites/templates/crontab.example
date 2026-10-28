@@ -40,6 +40,8 @@ SIMBOARD_ROOT=/path/to/simboard_root
 
 # The launcher defaults to a dry run. Uncomment only after reviewing dry-run
 # logs and enabling live ingestion and diagnostics linking for this scheduler.
+# This also enables verified log archiving and raw-log deletion. Override an
+# individual command with DRY_RUN=true to keep that task in preview mode.
 # DRY_RUN=false
 
 # =============================================================================
@@ -79,3 +81,13 @@ SIMBOARD_ROOT=/path/to/simboard_root
 0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.dev.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
 # Production
 0 2,8,14,20 * * * SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh" chrysalis diagnostics
+
+# =============================================================================
+# Launcher log archiving
+# =============================================================================
+# Run weekly at 01:00 UTC on Sunday, offset from the repository refresh.
+# Inherit DRY_RUN: true or unset only previews; false archives completed weeks
+# and deletes verified, unchanged raw logs. No API credentials are needed.
+# Keep at least seven days of raw logs; optionally override this default below.
+# LOG_RETENTION_DAYS=7
+0 1 * * 0 "${SIMBOARD_ROOT}/repository/simboard/backend/.venv/bin/python" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py" >> "${SIMBOARD_ROOT}/operations/simboard-log-archiving.log" 2>&1
