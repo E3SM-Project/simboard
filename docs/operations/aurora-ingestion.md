@@ -6,24 +6,45 @@ SimBoard over HTTPS. The SimBoard side is in place: the `aurora` machine is
 seeded, `aurora.config` selects the upload ingestor, and Make, the launcher, and
 the scheduler template all accept `aurora`.
 
-What is not yet decided is site-specific and must be confirmed on Aurora before
-anything is scheduled.
+## How PACE lays out Aurora's archive
 
-## What still has to be confirmed on Aurora
+PACE's collector on Aurora is
+`/lus/flare/projects/E3SMinput/baselines/performance_archive/pace_archive_aurora.sh`.
+Each run it:
+
+1. Moves completed executions out of `<user>/<case>/<execution-id>/` into a new
+   top-level `performance_archive_<timestamp>/` batch.
+2. Uploads that batch to PACE with `pace-upload3`, which works in a
+   `pace-exps-<user>-<timestamp>/` tree.
+3. Moves the batch to `OLD_PERF/<YYYY-MM>/`.
+
+| Root | Path |
+| --- | --- |
+| Staging (`PERF_ARCHIVE_ROOT`) | `/lus/flare/projects/E3SMinput/baselines/performance_archive` |
+| Archive (`OLD_PERF_ARCHIVE_ROOT`) | `/lus/flare/projects/E3SMinput/baselines/performance_archive/OLD_PERF` |
+
+`aurora.config` uses these as defaults. Unlike Chrysalis, the archive root is
+inside the staging root. Staging scans therefore skip `OLD_PERF`, top-level
+`performance_archive_*` batches, and `pace-exps-*` trees; those executions are
+either already archived or still on their way to `OLD_PERF`.
+
+A batch whose upload is interrupted stays at the top level instead of moving to
+`OLD_PERF`. Neither scan mode reads it. Move it into `OLD_PERF/<YYYY-MM>/`, as
+the collector would have, to have the archive scan pick it up.
+
+Because staging output only lives until the next PACE run, the archive scan of
+`OLD_PERF` is the authoritative source for Aurora. Staging scans add runs that
+PACE has not processed yet.
+
+## Still to confirm on Aurora
 
 | Item | Why it is open |
 | --- | --- |
-| Staging root (`PERF_ARCHIVE_ROOT`) | Earlier planning notes list `/lus/flare/projects/E3SM_Dec/performance_archive`, sourced from a PACE reference. Current E3SM machine configuration sets `SAVE_TIMING_DIR` to `/lus/flare/projects/E3SMinput/baselines`, which would place records under `.../E3SMinput/baselines/performance_archive`. These disagree. |
-| Archive root (`OLD_PERF_ARCHIVE_ROOT`) | Not recorded anywhere public. |
-| Scheduler | Planning notes describe an ALCF GitLab scheduled job; its project, schedule, and runner are not public. |
-| Scheduler identity | Which account owns the job, with at least one backup operator. |
-| API credentials | A dedicated SimBoard service account for Aurora, stored as a protected GitLab variable or protected file. |
-| Network egress | Whether the runner can reach the SimBoard API. |
+| Scheduler | Which host and account run `pace_archive_aurora.sh`, and whether SimBoard's job can run the same way. |
+| Scheduler identity | Which account owns the SimBoard job, with at least one backup operator. |
+| API credentials | A dedicated SimBoard service account for Aurora, stored as a protected variable or protected file. |
+| Network egress | Whether the scheduling host can reach the SimBoard API over HTTPS. |
 | Diagnostics | Whether Aurora publishes zppy diagnostics, and where. |
-
-Because the two candidate staging roots disagree, `aurora.config` ships with no
-filesystem defaults. A run without explicit roots fails with
-`PERF_ARCHIVE_ROOT is required` instead of scanning a guessed location.
 
 Diagnostics scheduling is disabled for Aurora
 (`SIMBOARD_DIAGNOSTICS_ENABLED=false`), so `make ops-init-cron site=aurora`
@@ -35,26 +56,41 @@ public URL.
 
 Use a personal account for this step; it reads the archive and uploads nothing.
 
-1. Inspect the layout and confirm it matches
-   `<root>/<user>/<case>/<execution-id>/`, and, for archived snapshots,
-   `<root>/YYYY-MM/performance_archive_*/[COMPLETED/]<user>/<case>/<execution-id>/`.
-
-2. Provision a deployment and run an offline dry run:
+1. Provision a deployment and run an offline archive dry run:
 
    ```bash
    make ops-provision SIMBOARD_ROOT=<deployment-root>
    cd <deployment-root>/repository/simboard
    DRY_RUN_USE_REMOTE_STATE=false \
-   PERF_ARCHIVE_ROOT=<verified staging root> \
-   make ingest-dry-run machine=aurora env=dev scan_mode=staging \
+   make ingest-dry-run machine=aurora env=dev scan_mode=archive \
      SIMBOARD_ROOT=<deployment-root>
    ```
 
    The run summary in `operations/raw_logs/` reports cases found and executions
-   accepted, and no requests are made.
+   accepted or rejected, with reasons, and no requests are made.
 
-3. Pick three executions already visible in PACE and confirm the dry run finds
-   each with the same execution ID, case name, and user.
+2. Repeat with `scan_mode=staging` and confirm only `<user>/<case>/<execution-id>`
+   directories are scanned.
+
+3. Compare the archive dry run's accepted executions with PACE's Aurora
+   experiments. SimBoard validates more strictly than PACE, so some PACE-visible
+   runs may be rejected; the rejection reasons say why.
+
+## Load existing PACE history
+
+`OLD_PERF` holds every batch PACE has processed on Aurora, and the site's
+default archive lower bound (`2025-01`) covers all of it. After the service
+account is in place:
+
+1. Run a bounded live upload to development and compare the records with PACE:
+
+   ```bash
+   make ingest-apply machine=aurora env=dev scan_mode=archive \
+     SIMBOARD_ROOT=<deployment-root> MAX_CASES_PER_RUN=5
+   ```
+
+2. Run the full archive scan against development, then production. Completed
+   snapshots are checkpointed, so reruns skip them.
 
 ## Enable scheduled ingestion
 
@@ -63,32 +99,20 @@ After validation and an agreed owner:
 1. Create the Aurora service account and token (see
    [HPC API Token Authentication](hpc-api-token-authentication.md)), then
    `make ops-init-env site=aurora SIMBOARD_ROOT=<deployment-root>`.
-2. Run a dry run with remote state against development.
-3. Run a bounded live upload to development and compare the records with PACE:
-
-   ```bash
-   PERF_ARCHIVE_ROOT=<verified staging root> \
-   make ingest-apply machine=aurora env=dev scan_mode=staging \
-     SIMBOARD_ROOT=<deployment-root> MAX_CASES_PER_RUN=5
-   ```
-
-4. Schedule the launcher with the verified roots exported in the job
-   environment. For cron, `make ops-init-cron site=aurora` renders the schedule.
-   For a GitLab schedule, invoke the same command:
+2. Schedule the launcher. For cron, `make ops-init-cron site=aurora` renders the
+   schedule. For another scheduler, invoke the same command:
 
    ```bash
    SIMBOARD_ROOT=<deployment-root> \
    SIMBOARD_ENV_FILE=<deployment-root>/operations/env.dev.sh \
-   PERF_ARCHIVE_ROOT=<verified staging root> \
-   OLD_PERF_ARCHIVE_ROOT=<verified archive root> \
    <deployment-root>/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh \
-     aurora staging
+     aurora archive
    ```
 
    The launcher requires `flock`.
 
-The scan is read-only, so it can run alongside the existing PACE collection
-against the same directory.
+The scans are read-only, so they can run alongside PACE's collector against the
+same directories.
 
 ## Ownership
 
