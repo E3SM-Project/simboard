@@ -85,6 +85,7 @@ import {
   type ValidationDetail,
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
+import { DiagnosticsRunsCard } from '@/features/diagnostics/components/DiagnosticsRunsCard';
 import { toast } from '@/hooks/use-toast';
 import {
   getExecutionDiscoveryContext,
@@ -1547,6 +1548,10 @@ export const CaseDetailsPage = ({
           onOpenChange={setIsHistoryOpen}
         />
       </section>
+
+      {caseRecord.links.some((link) => link.kind === 'diagnostic') ? (
+        <DiagnosticsRunsCard caseId={caseRecord.id} caseName={caseRecord.name} />
+      ) : null}
     </div>
   );
 };
