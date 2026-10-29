@@ -21,7 +21,7 @@ class SharedSet:
     name: str
     title: str
     plots: tuple[Plot, ...]  # as the first run published them
-    missing: int
+    missing: int  # published by some runs but not all
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,10 @@ def shared_sets(catalogs: list[Catalog]) -> list[SharedSet]:
             p for p in plot_set.plots if all(p.key in keys for keys in others)
         )
         if plots:
-            missing = len(plot_set.plots) - len(plots)
+            # Plots any run published in this set that are not shared.
+            missing = len(set().union(*others, _keys(first, plot_set.name))) - len(
+                plots
+            )
             shared.append(SharedSet(plot_set.name, plot_set.title, plots, missing))
     return shared
 
