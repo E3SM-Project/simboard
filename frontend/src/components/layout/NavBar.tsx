@@ -25,6 +25,11 @@ const navItems = [
     description: 'Primary case-centric discovery and detail pages',
   },
   {
+    label: 'Diagnostics',
+    href: '/diagnostics',
+    description: 'Compare E3SM Diags and MPAS-Analysis runs side by side',
+  },
+  {
     label: 'Upload',
     href: '/upload',
     description: 'Manually upload a compressed case archive',

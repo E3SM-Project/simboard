@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.health import router as health_router
 from app.api.meta import router as meta_router
@@ -13,6 +14,7 @@ from app.features.assistant.api import (
     execution_router as execution_assistant_router,
 )
 from app.features.catalog.api import case_router, diagnostics_router, execution_router
+from app.features.diagnostics.api import router as diagnostics_compare_router
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.pace.api import router as pace_router
@@ -39,9 +41,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Diagnostics comparisons run to hundreds of kilobytes of repetitive JSON.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     # Register routers.
     app.include_router(execution_router, prefix=API_BASE)
     app.include_router(diagnostics_router, prefix=API_BASE)
+    app.include_router(diagnostics_compare_router, prefix=API_BASE)
     app.include_router(execution_assistant_router, prefix=API_BASE)
     app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)

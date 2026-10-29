@@ -162,6 +162,8 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 
 interface CaseDetailsPageProps {
   renderCompareSection?: (options: { caseId: string; onClose: () => void }) => React.ReactNode;
+  /** Diagnostics for a case with a diagnostics link; supplied by the routes layer. */
+  renderDiagnostics?: (options: { caseId: string; caseName: string }) => React.ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -383,6 +385,7 @@ const mergeRowFieldErrors = (
 
 export const CaseDetailsPage = ({
   renderCompareSection,
+  renderDiagnostics,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
@@ -1932,6 +1935,10 @@ export const CaseDetailsPage = ({
           ) : null}
         </div>
       </section>
+
+      {renderDiagnostics && caseRecord.links.some((link) => link.kind === 'diagnostic')
+        ? renderDiagnostics({ caseId: caseRecord.id, caseName: caseRecord.name })
+        : null}
     </div>
   );
 };
