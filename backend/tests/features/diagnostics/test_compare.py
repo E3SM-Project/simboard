@@ -45,6 +45,12 @@ class TestSharedSets:
         ]
         assert shared.missing == 1
 
+    def test_missing_counts_plots_any_run_lacks(self):
+        a = run(HIST, e3sm(LAT_LON[:2]))
+        b = run(PICTL, e3sm(LAT_LON[1:]))
+        (shared,) = shared_sets([a, b])
+        assert len(shared.plots) == 1 and shared.missing == 2
+
     def test_unreadable_runs_are_left_out(self):
         a = run(HIST, e3sm(LAT_LON))
         broken = run(PICTL, error="catalog_unavailable")
