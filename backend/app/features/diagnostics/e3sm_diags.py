@@ -228,4 +228,4 @@ def read_catalog(
         if page.body and (plots := parse_set_page(page.body, name)):
             sets.append(PlotSet(name, title, tuple(plots)))
 
-    return Catalog(viewer, "e3sm_diags", image_base, tuple(sets), budget.truncated)
+    return Catalog(viewer, "e3sm_diags", image_base, tuple(sets), budget.partial)

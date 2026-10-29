@@ -27,7 +27,7 @@ class DiagnosticsSourceOut(CamelOutBaseModel):
     root_url: str
     label: str | None = None
     runs: list[DiagnosticsRunOut]
-    truncated: bool = False
+    partial: bool = False
     error: str | None = None
 
 
@@ -54,7 +54,7 @@ class CompareRunOut(CamelOutBaseModel):
     label: str
     tool: Tool | None = None
     image_base_url: str
-    truncated: bool = False
+    partial: bool = False
     error: str | None = None
 
 

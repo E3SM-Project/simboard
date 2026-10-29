@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.features.diagnostics.archive import ABSENT, FetchResult
+from app.features.diagnostics.archive import ABSENT, FAILED, FetchResult
 from app.features.diagnostics.mpas_analysis import (
     case_name,
     is_run_url,
@@ -161,3 +161,14 @@ class TestReadCatalog:
 )
 def test_split_description(desc, expected):
     assert split_description(desc) == expected
+
+
+def test_a_failed_gallery_makes_the_catalog_partial():
+    def fetch(url, _remaining=30.0):
+        if url == RUN + "ocean/index.html":
+            return FetchResult(body=fixture("ocean_index"))
+        return FAILED
+
+    catalog = read_catalog(RUN, fetch)
+    assert catalog.partial and catalog.error is None
+    assert [s.name for s in catalog.sets] == ["ocean"]

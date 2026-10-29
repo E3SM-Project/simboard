@@ -88,7 +88,7 @@ class TestDiscoverRuns:
     def test_finds_every_run(self):
         result = discover_runs(ROOT, fetch)
 
-        assert result.error is None and not result.truncated
+        assert result.error is None and not result.partial
         assert [r.url.removeprefix(ROOT + "/") for r in result.runs] == [
             "e3sm_diags/atm_monthly_180x360_aave/model_vs_obs_1985-2014/viewer/",
             "e3sm_diags/atm_monthly_180x360_aave/model_vs_obs_1995-2024/viewer/",
@@ -140,7 +140,7 @@ class TestDiscoverRuns:
 
     def test_budget_truncates_and_keeps_what_it_found(self):
         result = discover_runs(ROOT, fetch, max_requests=2)
-        assert result.truncated
+        assert result.partial
         assert len(result.runs) == 2
 
     def test_cache_skips_errors(self):

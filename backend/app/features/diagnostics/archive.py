@@ -93,6 +93,11 @@ class Budget:
     def remaining(self) -> float:
         return max(0.0, self.deadline - time.monotonic())
 
+    @property
+    def partial(self) -> bool:
+        """Something was not read: the budget ran out or a fetch failed."""
+        return self.truncated or self.failed
+
     def fetch(self, fetch: Fetcher, url: str) -> FetchResult | None:
         """Fetch ``url`` if budget remains; ``None`` once it is spent."""
         if self.requests_made >= self.max_requests or self.remaining <= 0:
