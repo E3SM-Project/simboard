@@ -49,6 +49,14 @@ class TestAllowlist:
             "https://portal.nersc.gov/project/m9999/x",
             "https://portal.nersc.gov/project/m2136x/x",
             "ftp://web.lcrc.anl.gov/public/e3sm/x",
+            "https://web.lcrc.anl.gov/public/e3sm/../private/x",
+            "https://web.lcrc.anl.gov/public/e3sm/%2e%2e/private/x",
+            "https://web.lcrc.anl.gov/public/e3sm/a/./b",
+            "https://web.lcrc.anl.gov/public/e3sm/a\\..\\b",
+            "https://user@web.lcrc.anl.gov/public/e3sm/x",
+            "https://web.lcrc.anl.gov:8443/public/e3sm/x",
+            "https://web.lcrc.anl.gov/public/e3sm/x?redirect=1",
+            "https://web.lcrc.anl.gov.evil.example/public/e3sm/x",
             "",
         ],
     )
@@ -225,3 +233,17 @@ class TestTTLCache:
 def test_fetch_result_failed_flag():
     assert FetchResult(outcome=FetchOutcome.FAILED).failed
     assert not FetchResult(body="x").failed
+
+
+def test_fetches_wait_for_a_free_slot_and_give_up_at_the_deadline():
+    from app.features.diagnostics import archive
+
+    client = httpx.Client(transport=httpx.MockTransport(lambda _r: httpx.Response(404)))
+    fetch = http_fetcher(client)
+    with patch.object(
+        archive, "_IN_FLIGHT", archive.threading.BoundedSemaphore(1)
+    ) as slots:
+        slots.acquire()
+        assert fetch(ROOT + "/e3sm_diags/", 0.05).failed
+        slots.release()
+        assert fetch(ROOT + "/e3sm_diags/", 0.05).outcome is FetchOutcome.ABSENT
