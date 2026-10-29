@@ -164,15 +164,16 @@ def http_fetcher(client: httpx.Client) -> Fetcher:
     """A fetcher over ``client`` that enforces the rules in the module docstring."""
 
     def fetch(url: str, remaining: float) -> FetchResult:
+        # Waiting for a slot spends the same budget as the read itself.
+        deadline = time.monotonic() + remaining
         if not _IN_FLIGHT.acquire(timeout=max(0.0, remaining)):
             return FAILED
         try:
-            return _fetch(url, remaining)
+            return _fetch(url, deadline)
         finally:
             _IN_FLIGHT.release()
 
-    def _fetch(url: str, remaining: float) -> FetchResult:
-        deadline = time.monotonic() + remaining
+    def _fetch(url: str, deadline: float) -> FetchResult:
         target = url
         for _ in range(_MAX_REDIRECTS + 1):
             if time.monotonic() >= deadline:
