@@ -247,3 +247,30 @@ def test_fetches_wait_for_a_free_slot_and_give_up_at_the_deadline():
         assert fetch(ROOT + "/e3sm_diags/", 0.05).failed
         slots.release()
         assert fetch(ROOT + "/e3sm_diags/", 0.05).outcome is FetchOutcome.ABSENT
+
+
+def test_waiting_for_a_slot_counts_against_the_deadline():
+    from app.features.diagnostics import archive
+
+    requested = []
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda r: requested.append(r) or httpx.Response(404)
+        )
+    )
+    clock = {"now": 0.0}
+
+    class SlowSlot:
+        def acquire(self, timeout):
+            clock["now"] += timeout  # the slot frees just as time runs out
+            return True
+
+        def release(self):
+            pass
+
+    with (
+        patch.object(archive, "_IN_FLIGHT", SlowSlot()),
+        patch(CLOCK, side_effect=lambda: clock["now"]),
+    ):
+        assert http_fetcher(client)(ROOT + "/e3sm_diags/", 5.0).failed
+    assert requested == []
