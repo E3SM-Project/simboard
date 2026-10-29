@@ -5,7 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { comparePath, type CompareRun, isRunUrl } from '@/features/diagnostics/compareState';
+import {
+  comparePath,
+  type CompareRun,
+  isRunUrl,
+  MAX_COMPARED_RUNS,
+} from '@/features/diagnostics/compareState';
 
 const LCRC = 'https://web.lcrc.anl.gov/public/e3sm/diagnostic_output';
 const NERSC = 'https://portal.nersc.gov/project/m2136';
@@ -72,6 +77,9 @@ export const StartPage = () => {
   const compare = () => {
     const filled = runs.filter((run) => run.url.trim());
     if (filled.length < 2) return setProblem('Add at least two runs.');
+    if (filled.length > MAX_COMPARED_RUNS) {
+      return setProblem(`Compare at most ${MAX_COMPARED_RUNS} runs at a time.`);
+    }
     const bad = filled.find((run) => !isRunUrl(run.url));
     if (bad) {
       return setProblem(
@@ -121,7 +129,11 @@ export const StartPage = () => {
           {problem ? <p className="text-sm text-red-600">{problem}</p> : null}
           <div className="flex gap-2">
             <Button onClick={compare}>Compare</Button>
-            <Button variant="outline" onClick={() => setRuns([...runs, EMPTY_RUN])}>
+            <Button
+              variant="outline"
+              onClick={() => setRuns([...runs, EMPTY_RUN])}
+              disabled={runs.length >= MAX_COMPARED_RUNS}
+            >
               <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               Add run
             </Button>

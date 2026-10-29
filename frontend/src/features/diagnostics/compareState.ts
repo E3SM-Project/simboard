@@ -19,6 +19,9 @@ export interface CompareState {
 
 export const COMPARE_PATH = '/diagnostics/compare';
 
+/** The most runs one comparison accepts (the API's limit). */
+export const MAX_COMPARED_RUNS = 12;
+
 const SEPARATOR = '|';
 
 export const parseCompareState = (params: URLSearchParams): CompareState => {

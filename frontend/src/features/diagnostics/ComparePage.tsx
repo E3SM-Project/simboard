@@ -12,6 +12,7 @@ import {
   type CompareState,
   displayLabel,
   imageUrl,
+  MAX_COMPARED_RUNS,
   parseCompareState,
 } from '@/features/diagnostics/compareState';
 import type {
@@ -56,7 +57,7 @@ export const ComparePage = () => {
   const query = useQuery({
     queryKey: ['diagnostics', 'compare', state.runs, state.set],
     queryFn: () => compareRuns(state.runs, state.set),
-    enabled: state.runs.length > 0,
+    enabled: state.runs.length > 0 && state.runs.length <= MAX_COMPARED_RUNS,
     staleTime: 10 * 60_000,
     placeholderData: keepPreviousData,
   });
@@ -123,6 +124,16 @@ export const ComparePage = () => {
       toast({ title: 'Could not copy the link', variant: 'destructive' });
     }
   };
+
+  if (state.runs.length > MAX_COMPARED_RUNS) {
+    return (
+      <Shell>
+        <p className="text-sm text-red-600">
+          This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time.
+        </p>
+      </Shell>
+    );
+  }
 
   if (state.runs.length === 0) {
     return (
