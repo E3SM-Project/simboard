@@ -29,6 +29,6 @@ def read_catalog_cached(url: str, label: str = "") -> Catalog:
     if cached := _cache.get(key):
         return cached
     catalog = with_http_fetcher(lambda fetch: read_catalog(url, fetch, label))
-    if catalog.error is None and not catalog.truncated:
+    if catalog.error is None and not catalog.partial:
         _cache.put(key, catalog)
     return catalog

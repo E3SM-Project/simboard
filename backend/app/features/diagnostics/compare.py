@@ -35,8 +35,12 @@ class Group:
 
 
 def shared_sets(catalogs: list[Catalog]) -> list[SharedSet]:
-    """Sets and plots every readable run has, in the first run's order."""
-    usable = [c for c in catalogs if c.error is None and c.sets]
+    """Sets and plots every readable run has, in the first run's order.
+
+    A run that read cleanly but published nothing comparable still counts,
+    and so leaves nothing shared.
+    """
+    usable = [c for c in catalogs if c.error is None]
     if not usable:
         return []
     first, *rest = usable

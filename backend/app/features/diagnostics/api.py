@@ -86,7 +86,7 @@ def compare_runs(payload: CompareRequest, request: Request, response: Response):
                 label=run.label,
                 tool=c.tool,
                 image_base_url=c.image_base_url,
-                truncated=c.truncated,
+                partial=c.partial,
                 error=c.error,
             )
             for run, c in zip(payload.runs, catalogs, strict=True)
@@ -113,7 +113,7 @@ def _summary(shared: compare.SharedSet) -> SetSummaryOut:
 
 
 def _detail(shared: compare.SharedSet, catalogs: list[Catalog]) -> SetDetailOut:
-    tool = next(c.tool for c in catalogs if c.error is None and c.sets)
+    tool = next(c.tool for c in catalogs if c.error is None)
     panels = compare.panels(tool, shared.name)
 
     def compared(plot: Plot) -> ComparedPlotOut:

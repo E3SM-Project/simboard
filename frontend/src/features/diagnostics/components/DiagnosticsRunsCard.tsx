@@ -191,8 +191,10 @@ const Source = ({ source, ...actions }: SourceProps) => {
         {source.rootUrl}
         <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
       </a>
-      {source.truncated ? (
-        <p className="text-xs text-amber-700">Only the first runs could be listed.</p>
+      {source.partial ? (
+        <p className="text-xs text-amber-700">
+          Some runs may be missing: part of the archive could not be read.
+        </p>
       ) : null}
       {groupRuns(source.runs).map((group) => (
         <Group key={group.title} group={group} {...actions} />
