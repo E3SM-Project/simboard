@@ -158,10 +158,13 @@ class Settings(BaseSettings):
 
     # --- Diagnostics comparison ---
     # SimBoard reads published diagnostics pages over HTTP and follows links
-    # they contain, so it only ever reads under these public E3SM web roots.
+    # they contain, so it only ever reads under these public E3SM web roots
+    # (m2136 and m3412 are E3SM's NERSC project allocations).
     diagnostics_allowed_url_prefixes: str | list[str] = [
         "https://portal.nersc.gov/cfs/e3sm",
-        "https://portal.nersc.gov/project",
+        "https://portal.nersc.gov/project/e3sm",
+        "https://portal.nersc.gov/project/m2136",
+        "https://portal.nersc.gov/project/m3412",
         "https://web.lcrc.anl.gov/public/e3sm",
     ]
     # Per request, then for a whole read. Listing a case's runs is a dozen
