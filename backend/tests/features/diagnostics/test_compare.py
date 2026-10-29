@@ -50,6 +50,9 @@ class TestSharedSets:
         broken = run(PICTL, error="catalog_unavailable")
         assert len(shared_sets([a, broken])[0].plots) == 3
 
+    def test_a_readable_run_with_no_plots_leaves_nothing_shared(self):
+        assert shared_sets([run(HIST, e3sm(LAT_LON)), run(PICTL)]) == []
+
     def test_nothing_readable_is_nothing_shared(self):
         assert shared_sets([run(HIST, error="x")]) == []
 
@@ -155,6 +158,21 @@ class TestReadCatalogCached:
         assert catalog_module.read_catalog(
             "https://h.test/x", lambda *_: None
         ).error == ("unrecognized_url")
+
+    def test_partial_reads_are_not_cached(self):
+        calls = []
+
+        def fake(url, fetch, label=""):
+            calls.append(url)
+            return Catalog(url, "e3sm_diags", url, partial=True)
+
+        with (
+            patch.object(catalog_module, "read_catalog", fake),
+            patch.object(catalog_module, "with_http_fetcher", lambda read: read(None)),
+        ):
+            catalog_module.read_catalog_cached(HIST)
+            catalog_module.read_catalog_cached(HIST)
+        assert len(calls) == 2
 
     def test_mpas_labels_are_part_of_the_key(self):
         calls = []

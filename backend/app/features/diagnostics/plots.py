@@ -45,5 +45,7 @@ class Catalog:
     tool: Tool | None
     image_base_url: str
     sets: tuple[PlotSet, ...] = ()
-    truncated: bool = False
+    # Some pages were not read (budget spent or a fetch failed), so plots may
+    # be missing. Partial catalogs are shown but never cached.
+    partial: bool = False
     error: str | None = None

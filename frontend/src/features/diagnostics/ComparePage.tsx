@@ -17,6 +17,7 @@ import {
 import type {
   ComparedPlotOut,
   CompareOut,
+  CompareRunOut,
   GroupOut,
   PanelOut,
   PanelView,
@@ -82,12 +83,14 @@ export const ComparePage = () => {
   const views = Object.keys(detail?.panels ?? {}) as PanelView[];
   const view = views.includes(state.view) ? state.view : 'test';
 
-  // Keep the URL naming exactly what is shown.
+  // Keep the URL naming exactly what is shown. While another set loads, the
+  // previous response is still on screen and must not pull the URL back.
   useEffect(() => {
+    if (query.isPlaceholderData) return;
     if (detail && activePlot && (state.set !== detail.name || state.plot !== activePlot.key)) {
       update({ set: detail.name, plot: activePlot.key });
     }
-  }, [activePlot, detail, state.plot, state.set, update]);
+  }, [activePlot, detail, query.isPlaceholderData, state.plot, state.set, update]);
 
   const step = useCallback(
     (delta: number) => {
@@ -139,7 +142,9 @@ export const ComparePage = () => {
     );
   }
 
+  const names = (runs: CompareRunOut[]) => runs.map((r) => displayLabel(r)).join(', ');
   const failed = data?.runs.filter((r) => r.error) ?? [];
+  const partial = data?.runs.filter((r) => !r.error && r.partial) ?? [];
 
   return (
     <Shell>
@@ -172,10 +177,13 @@ export const ComparePage = () => {
       ) : data ? (
         <>
           {failed.length > 0 ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Left out, could not be read:{' '}
-              {failed.map((r) => r.label.replace(/^!/, '') || r.url).join(', ')}.
-            </p>
+            <Notice>Left out, could not be read: {names(failed)}.</Notice>
+          ) : null}
+          {partial.length > 0 ? (
+            <Notice>
+              Only partly read, so some shared plots may be missing: {names(partial)}. Reload to try
+              again.
+            </Notice>
           ) : null}
 
           {data.sets.length === 0 ? (
@@ -322,6 +330,12 @@ export const ComparePage = () => {
     </Shell>
   );
 };
+
+const Notice = ({ children }: { children: React.ReactNode }) => (
+  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+    {children}
+  </p>
+);
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <div className="mx-auto w-full max-w-[1600px] space-y-4 px-6 py-6">{children}</div>

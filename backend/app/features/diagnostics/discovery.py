@@ -56,7 +56,7 @@ class DiagnosticsRun:
 class Discovery:
     root_url: str
     runs: tuple[DiagnosticsRun, ...]
-    truncated: bool = False
+    partial: bool = False
     error: str | None = None
 
 
@@ -145,9 +145,9 @@ def discover_runs(
 ) -> Discovery:
     """Every E3SM Diags and MPAS-Analysis run published under ``root_url``.
 
-    Runs found before the budget runs out are kept and the result is marked
-    ``truncated``. An unreachable archive is an ``error`` only when it leaves
-    nothing, so one bad subdirectory does not hide the others.
+    If the budget runs out or a listing fails, the runs found are kept and the
+    result is marked ``partial``. An unreachable archive is an ``error`` only
+    when it leaves nothing, so one bad subdirectory does not hide the others.
     """
     if not is_allowed_url(root_url):
         return Discovery(root_url, (), error="url_not_allowed")
@@ -158,7 +158,7 @@ def discover_runs(
     )
     runs = _e3sm_runs(root_url, fetch, budget) + _mpas_runs(root_url, fetch, budget)
     error = "archive_unavailable" if budget.failed and not runs else None
-    return Discovery(root_url, tuple(runs), budget.truncated, error)
+    return Discovery(root_url, tuple(runs), budget.partial, error)
 
 
 _cache: TTLCache[Discovery] = TTLCache()
@@ -169,6 +169,6 @@ def discover_runs_cached(root_url: str) -> Discovery:
     if cached := _cache.get(root_url):
         return cached
     result = with_http_fetcher(lambda fetch: discover_runs(root_url, fetch))
-    if result.error is None and not result.truncated:
+    if result.error is None and not result.partial:
         _cache.put(root_url, result)
     return result

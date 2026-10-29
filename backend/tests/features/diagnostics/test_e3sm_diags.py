@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.features.diagnostics.archive import ABSENT, FetchResult
+from app.features.diagnostics.archive import ABSENT, FAILED, FetchResult
 from app.features.diagnostics.e3sm_diags import (
     normalize_url,
     parse_filename,
@@ -137,7 +137,7 @@ class TestReadCatalog:
         fetch, calls = site(self.PAGES)
         catalog = read_catalog(VIEWER, fetch)
 
-        assert catalog.error is None and not catalog.truncated
+        assert catalog.error is None and not catalog.partial
         assert catalog.image_base_url == VIEWER.removesuffix("viewer/")
         assert [(s.name, s.title) for s in catalog.sets] == [
             ("lat_lon", "Latitude-Longitude contour maps")
@@ -158,7 +158,7 @@ class TestReadCatalog:
 
     def test_stops_at_the_request_budget(self):
         fetch, calls = site(self.PAGES)
-        assert read_catalog(VIEWER, fetch, max_requests=2).truncated
+        assert read_catalog(VIEWER, fetch, max_requests=2).partial
         assert len(calls) == 2
 
     def test_stops_at_the_deadline(self):
@@ -173,5 +173,18 @@ class TestReadCatalog:
             "app.features.diagnostics.archive.time.monotonic",
             side_effect=lambda: clock["now"],
         ):
-            assert read_catalog(VIEWER, slow, deadline_seconds=12.0).truncated
+            assert read_catalog(VIEWER, slow, deadline_seconds=12.0).partial
         assert len(calls) == 3
+
+
+def test_a_failed_set_page_makes_the_catalog_partial():
+    def fetch(url, _remaining=30.0):
+        if url == VIEWER + "index.html":
+            return FetchResult(body=fixture("viewer_index"))
+        if url == VIEWER + "lat_lon/index.html":
+            return FetchResult(body=fixture("lat_lon_index"))
+        return FAILED
+
+    catalog = read_catalog(VIEWER, fetch)
+    assert catalog.partial and catalog.error is None
+    assert [s.name for s in catalog.sets] == ["lat_lon"]

@@ -209,5 +209,5 @@ def read_catalog(
         if page.body and (plots := parse_gallery(page.body, component, case)):
             sets.append(PlotSet(component, title, tuple(plots)))
 
-    error = None if sets or budget.truncated else "catalog_unavailable"
-    return Catalog(run, "mpas_analysis", run, tuple(sets), budget.truncated, error)
+    error = None if sets or budget.partial else "catalog_unavailable"
+    return Catalog(run, "mpas_analysis", run, tuple(sets), budget.partial, error)

@@ -18,7 +18,7 @@ export interface DiagnosticsSourceOut {
   rootUrl: string;
   label: string | null;
   runs: DiagnosticsRunOut[];
-  truncated: boolean;
+  partial: boolean;
   error: string | null;
 }
 
@@ -33,7 +33,8 @@ export interface CompareRunOut {
   label: string;
   tool: DiagnosticsTool | null;
   imageBaseUrl: string;
-  truncated: boolean;
+  /** Some of the run's pages could not be read, so plots may be missing. */
+  partial: boolean;
   error: string | null;
 }
 
