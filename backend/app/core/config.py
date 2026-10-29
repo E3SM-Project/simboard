@@ -173,6 +173,7 @@ class Settings(BaseSettings):
     diagnostics_discovery_deadline_seconds: float = 8.0
     diagnostics_catalog_deadline_seconds: float = 20.0
     diagnostics_max_requests: int = 64
+    diagnostics_max_concurrent_requests: int = 8
     diagnostics_max_page_bytes: int = 2_000_000
     diagnostics_cache_ttl_seconds: float = 600.0
     diagnostics_cache_max_entries: int = 200

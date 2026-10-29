@@ -70,7 +70,8 @@ def compare_runs(payload: CompareRequest, request: Request, response: Response):
     the first), its variables with each run's image path. Plots only some
     runs published are left out and counted in ``missing``.
     """
-    with ThreadPoolExecutor(max_workers=len(payload.runs)) as pool:
+    # Archive fetches are also capped process-wide in archive.http_fetcher.
+    with ThreadPoolExecutor(max_workers=min(len(payload.runs), 4)) as pool:
         catalogs = list(
             pool.map(lambda run: read_catalog_cached(run.url, run.label), payload.runs)
         )
