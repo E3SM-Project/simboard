@@ -73,7 +73,6 @@ import {
   type ValidationDetail,
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
-import { DiagnosticsRunsCard } from '@/features/diagnostics/components/DiagnosticsRunsCard';
 import { toast } from '@/hooks/use-toast';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
 import { useReadableCase } from '@/lib/catalog/hooks/useReadableCase';
@@ -163,6 +162,8 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 
 interface CaseDetailsPageProps {
   renderCompareSection?: (options: { caseId: string; onClose: () => void }) => React.ReactNode;
+  /** Diagnostics for a case with a diagnostics link; supplied by the routes layer. */
+  renderDiagnostics?: (options: { caseId: string; caseName: string }) => React.ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -384,6 +385,7 @@ const mergeRowFieldErrors = (
 
 export const CaseDetailsPage = ({
   renderCompareSection,
+  renderDiagnostics,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
@@ -1934,9 +1936,9 @@ export const CaseDetailsPage = ({
         </div>
       </section>
 
-      {caseRecord.links.some((link) => link.kind === 'diagnostic') ? (
-        <DiagnosticsRunsCard caseId={caseRecord.id} caseName={caseRecord.name} />
-      ) : null}
+      {renderDiagnostics && caseRecord.links.some((link) => link.kind === 'diagnostic')
+        ? renderDiagnostics({ caseId: caseRecord.id, caseName: caseRecord.name })
+        : null}
     </div>
   );
 };
