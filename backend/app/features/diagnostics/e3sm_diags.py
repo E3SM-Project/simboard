@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from html.parser import HTMLParser
+from typing import NamedTuple
 from urllib.parse import unquote, urljoin, urlsplit
 
 from app.core.config import settings
@@ -23,6 +24,59 @@ SEASONS = ("ANN", "DJF", "MAM", "JJA", "SON")
 # Sets with no comparable images: ``table`` is text, ``taylor`` and ``cmip6``
 # are single summaries, and ``tropical_subseasonal`` publishes an archive.
 UNSUPPORTED_SETS = frozenset({"table", "taylor", "cmip6", "tropical_subseasonal"})
+
+# Each E3SM Diags image stacks the test run, the reference and their
+# difference in one 1275 px wide PNG. These windows onto each panel, as
+# (width, height, top, left) in image pixels, follow IICE's stylesheet.
+IMAGE_WIDTH = 1275
+
+
+class Panel(NamedTuple):
+    width: int
+    height: int
+    top: int
+    left: int
+
+
+_STANDARD = {
+    "test": Panel(1050, 505, 60, 165),
+    "ref": Panel(1050, 505, 555, 165),
+    "diff": Panel(1050, 495, 1055, 165),
+}
+PANELS: dict[str, dict[str, Panel]] = {
+    "lat_lon": _STANDARD,
+    "zonal_mean_2d": _STANDARD,
+    "zonal_mean_2d_stratosphere": _STANDARD,
+    "meridional_mean_2d": _STANDARD,
+    "polar": {
+        "test": Panel(680, 595, 35, 300),
+        "ref": Panel(680, 535, 580, 300),
+        "diff": Panel(680, 535, 1085, 300),
+    },
+    "cosp_histogram": {
+        "test": Panel(1075, 545, 60, 90),
+        "ref": Panel(1075, 490, 590, 90),
+        "diff": Panel(1075, 495, 1060, 90),
+    },
+    "annual_cycle_zonal_mean": {
+        "test": Panel(1050, 505, 60, 150),
+        "ref": Panel(1050, 505, 555, 150),
+        "diff": Panel(1050, 495, 1040, 150),
+    },
+    "enso_diags": {
+        "test": Panel(1050, 525, 40, 165),
+        "ref": Panel(1050, 465, 565, 165),
+        "diff": Panel(1050, 505, 1058, 165),
+    },
+    "zonal_mean_xy": {
+        "test": Panel(1120, 760, 60, 50),
+        "diff": Panel(1120, 760, 820, 50),
+    },
+    "diurnal_cycle": {
+        "test": Panel(1080, 510, 105, 150),
+        "ref": Panel(1080, 510, 615, 150),
+    },
+}
 
 _SET_LINK_RE = re.compile(r"^([a-z0-9_]+)/index\.html$")
 _MODEL_VS_MODEL = frozenset({"model_vs_model", "model-vs-model"})

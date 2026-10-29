@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.health import router as health_router
 from app.api.meta import router as meta_router
@@ -39,6 +40,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Diagnostics comparisons run to hundreds of kilobytes of repetitive JSON.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     # Register routers.
     app.include_router(execution_router, prefix=API_BASE)
