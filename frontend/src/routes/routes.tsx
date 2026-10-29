@@ -5,6 +5,7 @@ import { AuthCallback } from '@/auth/AuthCallback';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { aboutRoutes } from '@/features/about/routes';
 import { catalogRoutes } from '@/features/catalog/routes';
+import { diagnosticsRoutes } from '@/features/diagnostics/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
@@ -23,6 +24,7 @@ export const AppRoutes = (props: RoutesProps) => {
     ...homeRoutes(props),
     ...aboutRoutes(),
     ...catalogRoutes(props),
+    ...diagnosticsRoutes(),
 
     {
       element: <ProtectedRoute />,
