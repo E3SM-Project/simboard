@@ -46,6 +46,8 @@ class TestAllowlist:
             "https://web.lcrc.anl.gov/private/e3sm/x",
             "https://web.lcrc.anl.gov/public/e3sm-private/x",
             "https://portal.nersc.gov/cfs/private/e3sm/x",
+            "https://portal.nersc.gov/project/m9999/x",
+            "https://portal.nersc.gov/project/m2136x/x",
             "ftp://web.lcrc.anl.gov/public/e3sm/x",
             "",
         ],
