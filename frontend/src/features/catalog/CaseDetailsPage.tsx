@@ -73,6 +73,7 @@ import {
   type ValidationDetail,
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
+import { DiagnosticsRunsCard } from '@/features/diagnostics/components/DiagnosticsRunsCard';
 import { toast } from '@/hooks/use-toast';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
 import { useReadableCase } from '@/lib/catalog/hooks/useReadableCase';
@@ -1932,6 +1933,10 @@ export const CaseDetailsPage = ({
           ) : null}
         </div>
       </section>
+
+      {caseRecord.links.some((link) => link.kind === 'diagnostic') ? (
+        <DiagnosticsRunsCard caseId={caseRecord.id} caseName={caseRecord.name} />
+      ) : null}
     </div>
   );
 };
