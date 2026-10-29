@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, TypeVar
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -36,6 +36,10 @@ T = TypeVar("T")
 
 _USER_AGENT = "simboard-diagnostics/1.0"
 _MAX_REDIRECTS = 3
+# Outbound archive requests in flight across the whole process, however many
+# users or runs are asking: keeps a burst from tying up workers or hammering
+# the public servers.
+_IN_FLIGHT = threading.BoundedSemaphore(settings.diagnostics_max_concurrent_requests)
 
 
 class FetchOutcome(Enum):
@@ -68,15 +72,37 @@ Fetcher = Callable[[str, float], FetchResult]
 
 
 def is_allowed_url(url: str) -> bool:
-    """True when ``url`` is HTTPS and under one of the allowed web roots."""
-    parts = urlsplit(url)
-    if parts.scheme != "https" or not parts.netloc:
+    """True when ``url`` is plain HTTPS under one of the allowed web roots.
+
+    The path is checked segment by segment after decoding, so ``..`` (or
+    ``%2e%2e``) cannot climb out of an allowed root on a server that
+    normalizes paths. Credentials, ports, queries and fragments are refused.
+    """
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port
+    except ValueError:
         return False
-    normalized = url.rstrip("/") + "/"
-    return any(
-        normalized.startswith(prefix + "/")
-        for prefix in settings.diagnostics_allowed_url_prefixes_list
-    )
+    if (
+        parts.scheme != "https"
+        or parts.username
+        or port
+        or parts.query
+        or parts.fragment
+    ):
+        return False
+    segments = unquote(parts.path).split("/")
+    if any(segment in (".", "..") or "\\" in segment for segment in segments):
+        return False
+
+    path = parts.path.rstrip("/") + "/"
+    for prefix in settings.diagnostics_allowed_url_prefixes_list:
+        allowed = urlsplit(prefix)
+        if parts.hostname == allowed.hostname and path.startswith(
+            allowed.path.rstrip("/") + "/"
+        ):
+            return True
+    return False
 
 
 class Budget:
@@ -138,6 +164,14 @@ def http_fetcher(client: httpx.Client) -> Fetcher:
     """A fetcher over ``client`` that enforces the rules in the module docstring."""
 
     def fetch(url: str, remaining: float) -> FetchResult:
+        if not _IN_FLIGHT.acquire(timeout=max(0.0, remaining)):
+            return FAILED
+        try:
+            return _fetch(url, remaining)
+        finally:
+            _IN_FLIGHT.release()
+
+    def _fetch(url: str, remaining: float) -> FetchResult:
         deadline = time.monotonic() + remaining
         target = url
         for _ in range(_MAX_REDIRECTS + 1):
