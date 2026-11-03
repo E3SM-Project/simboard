@@ -73,12 +73,12 @@ export const ProductionCasesTable = () => {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-              <TableHead>HPC Username</TableHead>
-              <TableHead>Machine</TableHead>
-              <TableHead>Executions</TableHead>
-              <TableHead>Case Group</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead>Details</TableHead>
+              <TableHead>Case Group</TableHead>
+              <TableHead>Machine</TableHead>
+              <TableHead>HPC Username</TableHead>
+              <TableHead>Executions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -94,14 +94,6 @@ export const ProductionCasesTable = () => {
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.name} lines={1} />
                   </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.hpcUsername} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.machineName} lines={1} />
-                  </TableCell>
-                  <TableCell>{caseRecord.executionCount}</TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
                   <TableCell>{new Date(caseRecord.updatedAt).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Button asChild className="h-8 gap-1 px-2" size="sm" variant="outline">
@@ -116,6 +108,14 @@ export const ProductionCasesTable = () => {
                       </Link>
                     </Button>
                   </TableCell>
+                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.machineName} lines={1} />
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.hpcUsername} lines={1} />
+                  </TableCell>
+                  <TableCell>{caseRecord.executionCount}</TableCell>
                 </TableRow>
               ))
             )}

@@ -249,12 +249,12 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-                <TableHead>HPC Username</TableHead>
-                <TableHead>Machines</TableHead>
-                <TableHead>Executions</TableHead>
-                <TableHead>Case Group</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead>Details</TableHead>
+                <TableHead>Case Group</TableHead>
+                <TableHead>Machine</TableHead>
+                <TableHead>HPC Username</TableHead>
+                <TableHead>Executions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -263,14 +263,6 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.name} lines={1} />
                   </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.hpcUsernameSummary} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.machineSummary} lines={1} />
-                  </TableCell>
-                  <TableCell>{caseRecord.executionCount}</TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
                   <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
@@ -286,6 +278,14 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                       </Link>
                     </Button>
                   </TableCell>
+                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.machineSummary} lines={1} />
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <TableCellText value={caseRecord.hpcUsernameSummary} lines={1} />
+                  </TableCell>
+                  <TableCell>{caseRecord.executionCount}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
