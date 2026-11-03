@@ -97,6 +97,7 @@ async function run() {
     window.innerWidth === expectedWidth,
     `Expected viewport ${expectedWidth}, got ${window.innerWidth}`,
   );
+  await checkCasesFilters();
   for (const role of ['anonymous', 'editor', 'loading-admin', 'admin']) {
     const user =
       role === 'anonymous'
@@ -356,7 +357,6 @@ async function run() {
   history.click();
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
-  await checkCasesFilters();
 }
 
 async function checkCasesFilters() {
@@ -410,6 +410,26 @@ async function checkCasesFilters() {
   const label = search.closest('.space-y-2')!.querySelector('label')!;
   check(getComputedStyle(label).textTransform === 'none', 'Sentence-case filter labels');
   check(document.documentElement.scrollWidth <= window.innerWidth, 'No Cases horizontal overflow');
+
+  const groupHelp = document.querySelector<HTMLButtonElement>('[aria-label="About case groups"]')!;
+  groupHelp.focus({ preventScroll: true });
+  await waitFor(() => groupHelp.getAttribute('aria-describedby'));
+  const tooltip = document.getElementById(groupHelp.getAttribute('aria-describedby')!)!;
+  check(tooltip?.getAttribute('role') === 'tooltip', 'Keyboard focus opens the tooltip');
+  check(
+    tooltip.textContent?.includes('members of an ensemble run'),
+    'Case Group tooltip explains ensemble grouping',
+  );
+  check(
+    tooltip.textContent?.includes('browse those cases together'),
+    'Case Group tooltip explains its use',
+  );
+  check(
+    groupHelp.getAttribute('aria-describedby') === tooltip.id,
+    'Tooltip is linked to its keyboard trigger',
+  );
+  groupHelp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitFor(() => groupHelp.getAttribute('data-state') === 'closed');
 
   filters[0].click();
   await waitFor(() => document.querySelector('[role="option"][data-value="v3.HR"]'));

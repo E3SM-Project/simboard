@@ -1,6 +1,6 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Copy, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Info, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   formatCaseDate,
   formatCaseHashLabel,
@@ -719,12 +720,14 @@ export const CasesPage = () => {
 
   const renderSelectField = ({
     label,
+    description,
     value,
     placeholder,
     options,
     onValueChange,
   }: {
     label: string;
+    description?: string;
     value: string;
     placeholder: string;
     options: SelectOption[];
@@ -737,7 +740,25 @@ export const CasesPage = () => {
 
     return (
       <div className="space-y-2">
-        <label className="text-xs font-medium text-slate-500">{label}</label>
+        <div className="flex h-4 items-center gap-1">
+          <label className="text-xs font-medium text-slate-500">{label}</label>
+          {description ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="About case groups"
+                    className="rounded-sm text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">{description}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
         <SearchableFilterSelect
           label={label}
           value={value}
@@ -908,6 +929,8 @@ export const CasesPage = () => {
 
                   {renderSelectField({
                     label: 'Case group',
+                    description:
+                      'A shared label for related cases, such as members of an ensemble run. Select a group to browse those cases together.',
                     value: caseGroupFilter,
                     placeholder: 'All case groups',
                     options: caseGroupOptions,
