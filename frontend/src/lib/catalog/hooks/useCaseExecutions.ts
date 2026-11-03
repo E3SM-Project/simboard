@@ -14,6 +14,8 @@ export const useCaseExecutions = (
   const query = useInfiniteQuery({
     queryKey: catalogQueryKeys.executions.caseInfinite(caseId ?? '', params),
     queryFn: ({ pageParam }) => listExecutions({ ...params, page: pageParam }),
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === caseId ? previousData : undefined,
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.page * lastPage.pageSize < lastPage.total ? lastPage.page + 1 : undefined,

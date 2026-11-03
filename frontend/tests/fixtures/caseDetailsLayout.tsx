@@ -283,6 +283,58 @@ async function run() {
     'Sorting retains selection',
   );
 
+  const runAscKey = [
+    'executions',
+    'case',
+    record.id,
+    'infinite',
+    {
+      caseId: record.id,
+      pageSize: 100,
+      sortBy: 'run_activity',
+      sortOrder: 'asc',
+    },
+  ];
+  client.removeQueries({ queryKey: runAscKey, exact: true });
+  client.setQueryDefaults(runAscKey, { initialData: undefined });
+  const originalAdapter = api.defaults.adapter;
+  let finishFetch = () => {};
+  let fetchStarted = false;
+  const pendingFetch = new Promise<void>((resolve) => {
+    finishFetch = resolve;
+  });
+  api.defaults.adapter = async (config) => {
+    fetchStarted = true;
+    await pendingFetch;
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { items: executions, total: 3, page: 1, pageSize: 100 },
+    };
+  };
+  const pendingSortButton = document.querySelectorAll('th')[3].querySelector('button')!;
+  pendingSortButton.focus();
+  pendingSortButton.click();
+  await waitFor(() => fetchStarted);
+  check(
+    document.querySelector('h1')?.textContent === record.name,
+    'Sorting does not replace the page with a loader',
+  );
+  check(
+    document.querySelector('table')?.tBodies[0].rows.length === 3,
+    'Rows stay visible while sort data loads',
+  );
+  check(document.activeElement === pendingSortButton, 'Sort header keeps keyboard focus');
+  check(
+    document.body.textContent?.includes('Comparison fixture'),
+    'Comparison stays visible while sorting',
+  );
+  finishFetch();
+  await waitFor(() => client.getQueryState(runAscKey)?.status === 'success');
+  api.defaults.adapter = originalAdapter;
+
   const edit = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Edit',
   )!;

@@ -813,7 +813,11 @@ export const CaseDetailsPage = ({
     );
   }
 
-  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== caseId)) {
+  if (
+    loading ||
+    (executionsLoading && allExecutions.length === 0) ||
+    (caseRecord != null && caseRecord.id !== caseId)
+  ) {
     return <LoadingState kind="page" label="Loading case details" />;
   }
 
