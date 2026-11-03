@@ -85,6 +85,11 @@ async function waitFor(checkReady: () => unknown) {
 }
 
 async function run() {
+  const expectedWidth = Number(new URLSearchParams(location.search).get('width'));
+  check(
+    window.innerWidth === expectedWidth,
+    `Expected viewport ${expectedWidth}, got ${window.innerWidth}`,
+  );
   for (const role of ['anonymous', 'editor', 'loading-admin', 'admin']) {
     const user =
       role === 'anonymous'
@@ -144,13 +149,17 @@ async function run() {
       (element) => element.textContent === 'Notes',
     );
     check(
-      notes?.nextElementSibling!.getBoundingClientRect().height! < 50,
+      (notes?.nextElementSibling?.getBoundingClientRect().height ?? Infinity) < 50,
       'Empty notes stay compact',
     );
     const resources = document.querySelector('a[href="https://example.test/docs"]');
     check(
-      resources && resources.getBoundingClientRect().width < 400,
+      resources && resources.getBoundingClientRect().width < Math.min(400, window.innerWidth - 48),
       'Single resource stays compact',
+    );
+    check(
+      document.documentElement.scrollWidth <= window.innerWidth,
+      'No page-wide horizontal overflow',
     );
     check(requests.length === 0, 'History must not fetch before opening');
     const history = [...document.querySelectorAll('button')].find((element) =>
@@ -232,14 +241,14 @@ async function run() {
 
 run()
   .then(() => {
-    const output = document.createElement('output');
+    const output = parent.document.createElement('output');
     output.id = 'test-result';
     output.textContent = 'passed';
-    document.body.append(output);
+    parent.document.body.append(output);
   })
   .catch((error) => {
-    const output = document.createElement('output');
+    const output = parent.document.createElement('output');
     output.id = 'test-result';
     output.textContent = error.stack;
-    document.body.append(output);
+    parent.document.body.append(output);
   });

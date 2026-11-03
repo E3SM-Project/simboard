@@ -4,7 +4,10 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import test from 'node:test';
+import { clearTimeout, setTimeout } from 'node:timers';
+import { URL } from 'node:url';
 
 import { createServer } from 'vite';
 
@@ -33,12 +36,17 @@ test(
         {
           name: 'case-layout-fixture',
           configureServer(vite) {
-            vite.middlewares.use('/__case-layout', async (_request, response, next) => {
+            vite.middlewares.use('/__case-layout', async (request, response, next) => {
               try {
-                const html = await vite.transformIndexHtml(
-                  '/__case-layout',
-                  '<div id="root"></div><script type="module" src="/tests/fixtures/caseDetailsLayout.tsx"></script>',
-                );
+                const url = new URL(request.url, 'http://localhost');
+                const width = Number(url.searchParams.get('width'));
+                const html =
+                  url.pathname === '/fixture'
+                    ? await vite.transformIndexHtml(
+                        '/__case-layout',
+                        '<div id="root"></div><script type="module" src="/tests/fixtures/caseDetailsLayout.tsx"></script>',
+                      )
+                    : `<!doctype html><iframe width="${width}" height="1000" style="border:0" src="/__case-layout/fixture?width=${width}"></iframe>`;
                 response.setHeader('Content-Type', 'text/html');
                 response.end(html);
               } catch (error) {
@@ -65,26 +73,38 @@ test(
             `--user-data-dir=${profile}`,
             '--dump-dom',
             '--virtual-time-budget=30000',
-            `http://127.0.0.1:${address.port}/__case-layout`,
+            `http://127.0.0.1:${address.port}/__case-layout?width=${width}`,
           ]);
           let stdout = '';
           let stderr = '';
-          const timer = setTimeout(() => child.kill(), 90_000);
+          let timedOut = false;
+          const timer = setTimeout(() => {
+            timedOut = true;
+            child.kill();
+          }, 90_000);
           child.stdout.on('data', (chunk) => {
             stdout += chunk;
           });
           child.stderr.on('data', (chunk) => {
             stderr += chunk;
           });
-          child.on('error', reject);
+          child.on('error', (error) => {
+            clearTimeout(timer);
+            reject(error);
+          });
           child.on('close', (code) => {
             clearTimeout(timer);
-            if (code !== 0) reject(new Error(`Chrome exited ${code}: ${stderr}`));
-            else resolve(stdout + stderr);
+            if (timedOut) reject(new Error(`Chrome timed out after 90 seconds: ${stderr}`));
+            else if (code !== 0) reject(new Error(`Chrome exited ${code}: ${stderr}`));
+            else resolve({ stdout, stderr });
           });
         });
 
-        assert.equal(output.match(/<output id="test-result">([\s\S]*?)<\/output>/)?.[1], 'passed');
+        assert.equal(
+          output.stdout.match(/<output id="test-result">([\s\S]*?)<\/output>/)?.[1],
+          'passed',
+          `Viewport ${width}: ${output.stderr}`,
+        );
       }
     } finally {
       await server.close();

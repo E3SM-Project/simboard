@@ -891,7 +891,7 @@ export const CasesPage = () => {
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]">
                   <div className="space-y-2">
                     <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                       Search
