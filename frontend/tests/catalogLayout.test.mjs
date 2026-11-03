@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,10 +10,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
 let server;
+let cacheDir;
 
 before(async () => {
+  cacheDir = await mkdtemp(path.join(tmpdir(), 'simboard-ssr-'));
   server = await createServer({
     mode: 'test',
+    cacheDir,
     define: { 'import.meta.env.VITE_API_BASE_URL': JSON.stringify('https://api.example.test') },
     server: { middlewareMode: true, watch: null },
     appType: 'custom',
@@ -23,6 +29,7 @@ before(async () => {
 
 after(async () => {
   await server?.close();
+  if (cacheDir) await rm(cacheDir, { recursive: true, force: true });
 });
 
 test('Case Group stays visible without opening or counting as an advanced filter', async () => {

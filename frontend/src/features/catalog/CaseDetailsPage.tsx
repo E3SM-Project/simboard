@@ -1086,8 +1086,6 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
-            <PerformanceSourceDirectories directories={caseRecord.sourceDirectories} />
-
             {formState ? (
               <div className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1296,20 +1294,6 @@ export const CaseDetailsPage = ({
             ) : null}
           </CardContent>
         </Card>
-      </section>
-
-      <section>
-        <MetadataHistory
-          entries={history.data}
-          total={history.total}
-          loading={history.loading}
-          loadingMore={history.isFetchingNextPage}
-          loaded={history.loaded}
-          error={history.error}
-          canLoadMore={history.hasNextPage}
-          onLoadMore={() => void history.fetchNextPage()}
-          onOpenChange={setIsHistoryOpen}
-        />
       </section>
 
       <section ref={executionsSectionRef} className="space-y-4">
@@ -1944,6 +1928,29 @@ export const CaseDetailsPage = ({
             </div>
           ) : null}
         </div>
+      </section>
+
+      {!authLoading && user?.is_superuser === true ? (
+        <details className="rounded-xl border border-slate-200 p-5">
+          <summary className="cursor-pointer text-sm font-semibold">Developer Details</summary>
+          <div className="mt-4">
+            <PerformanceSourceDirectories directories={caseRecord.sourceDirectories} />
+          </div>
+        </details>
+      ) : null}
+
+      <section>
+        <MetadataHistory
+          entries={history.data}
+          total={history.total}
+          loading={history.loading}
+          loadingMore={history.isFetchingNextPage}
+          loaded={history.loaded}
+          error={history.error}
+          canLoadMore={history.hasNextPage}
+          onLoadMore={() => void history.fetchNextPage()}
+          onOpenChange={setIsHistoryOpen}
+        />
       </section>
     </div>
   );
