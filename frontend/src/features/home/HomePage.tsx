@@ -245,7 +245,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           </Button>
         </div>
         <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
-          <Table className="table-fixed">
+          <Table className="min-w-[1100px] table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>

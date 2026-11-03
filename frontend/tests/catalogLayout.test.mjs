@@ -114,7 +114,10 @@ test('homepage puts workflows after cases and statistics above the footer', asyn
 
     const caseTables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/g)].slice(0, 2);
     assert.equal(caseTables.length, 2);
-    for (const [, table] of caseTables) {
+    for (const [markup, table] of caseTables) {
+      assert.match(markup, /<table\b[^>]*class="[^"]*\bmin-w-\[1100px\] table-fixed\b/);
+      const tablePosition = html.indexOf(markup);
+      assert.match(html.slice(0, tablePosition), /<div class="relative w-full overflow-auto">$/);
       const headers = [...table.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map((match) => match[1]);
       assert.deepEqual(headers, [
         'Case Name',

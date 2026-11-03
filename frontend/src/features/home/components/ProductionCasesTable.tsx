@@ -69,7 +69,7 @@ export const ProductionCasesTable = () => {
         />
       ) : null}
       <div className="overflow-x-auto">
-        <Table className="table-fixed">
+        <Table className="min-w-[1100px] table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
