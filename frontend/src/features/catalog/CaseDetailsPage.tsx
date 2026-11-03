@@ -3,7 +3,9 @@ import axios from 'axios';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowUpDown,
   ChevronDown,
+  ChevronUp,
   ExternalLink,
   Info,
   Search,
@@ -42,6 +44,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
+  type ExecutionDateSort,
   type ExecutionSummaryGroupFilter,
   formatCaseDate,
   formatCaseHashLabel,
@@ -51,6 +54,7 @@ import {
   groupExecutionSummaries,
   matchesExecutionGroupFilter,
   MISSING_CASE_HASH_LABEL,
+  sortCaseExecutions,
 } from '@/features/catalog/caseUtils';
 import {
   CaseArtifactsTable,
@@ -178,16 +182,38 @@ const getRunActivityTime = ({ details }: GroupExecution) => {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 };
 
-const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
-  [...executions].sort((left, right) => {
-    const leftRunActivityTime = getRunActivityTime(left);
-    const rightRunActivityTime = getRunActivityTime(right);
-    if (leftRunActivityTime !== rightRunActivityTime) {
-      return rightRunActivityTime - leftRunActivityTime;
-    }
+const DateSortHeader = ({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: ExecutionDateSort['key'];
+  sort: ExecutionDateSort;
+  onSort: (key: ExecutionDateSort['key']) => void;
+  className?: string;
+}) => {
+  const direction =
+    sort.key === sortKey ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+  const Icon =
+    direction === 'none' ? ArrowUpDown : direction === 'ascending' ? ChevronUp : ChevronDown;
 
-    return right.summary.executionId.localeCompare(left.summary.executionId);
-  });
+  return (
+    <TableHead className={className} aria-sort={direction}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort by ${label}, currently ${direction === 'none' ? 'not sorted' : direction}`}
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </button>
+    </TableHead>
+  );
+};
 
 type ExecutionViewMode = 'grouped' | 'flat';
 type EditableFormState = {
@@ -399,6 +425,10 @@ export const CaseDetailsPage = ({
     machineName && hpcUsername && caseName ? { machineName, hpcUsername, caseName } : null;
   const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
   const caseId = fetchedCaseRecord?.id;
+  const [dateSort, setDateSort] = useState<ExecutionDateSort>({
+    key: 'simulation',
+    direction: 'asc',
+  });
   const {
     data: allExecutions,
     error: executionsError,
@@ -408,7 +438,10 @@ export const CaseDetailsPage = ({
     isFetchingNextPage,
     refetch: refetchExecutions,
     total: executionTotal,
-  } = useCaseExecutions(caseId, { sortBy: 'run_activity', sortOrder: 'desc' });
+  } = useCaseExecutions(caseId, {
+    sortBy: dateSort.key === 'simulation' ? 'simulation_start_date' : 'run_activity',
+    sortOrder: dateSort.direction,
+  });
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
@@ -445,12 +478,10 @@ export const CaseDetailsPage = ({
     () =>
       rawExecutionGroups.map((group) => ({
         ...group,
-        executions: sortExecutionsByRunDate(
-          group.executions.map((execution) => ({
-            summary: execution,
-            details: executionDetailsById.get(execution.id),
-          })),
-        ),
+        executions: group.executions.map((execution) => ({
+          summary: execution,
+          details: executionDetailsById.get(execution.id),
+        })),
       })),
     [rawExecutionGroups, executionDetailsById],
   );
@@ -509,26 +540,32 @@ export const CaseDetailsPage = ({
   }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      artifactFilteredExecutionGroups.filter((group) => {
-        if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
-          return false;
-        }
+      artifactFilteredExecutionGroups
+        .filter((group) => {
+          if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
+            return false;
+          }
 
-        if (normalizedCaseHashQuery.length === 0) {
-          return true;
-        }
+          if (normalizedCaseHashQuery.length === 0) {
+            return true;
+          }
 
-        if (group.isFallback) {
-          return MISSING_CASE_HASH_LABEL.toLowerCase().includes(normalizedCaseHashQuery);
-        }
+          if (group.isFallback) {
+            return MISSING_CASE_HASH_LABEL.toLowerCase().includes(normalizedCaseHashQuery);
+          }
 
-        return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
-      }),
-    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery],
+          return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
+        })
+        .map((group) => ({ ...group, executions: sortCaseExecutions(group.executions, dateSort) })),
+    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery, dateSort],
   );
   const filteredFlatExecutions = useMemo(
-    () => sortExecutionsByRunDate(filteredExecutionGroups.flatMap((group) => group.executions)),
-    [filteredExecutionGroups],
+    () =>
+      sortCaseExecutions(
+        filteredExecutionGroups.flatMap((group) => group.executions),
+        dateSort,
+      ),
+    [filteredExecutionGroups, dateSort],
   );
   const visibleExecutionIds = useMemo(
     () => new Set(filteredFlatExecutions.map(({ summary }) => summary.id)),
@@ -922,6 +959,13 @@ export const CaseDetailsPage = ({
   const resetGroupFilters = () => {
     setGroupFilterMode('all');
     setCaseHashQuery('');
+  };
+
+  const toggleDateSort = (key: ExecutionDateSort['key']) => {
+    setDateSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
   };
 
   const clearArtifactExecutionFilter = () => {
@@ -1541,9 +1585,19 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
-                            <TableHead>Simulation dates</TableHead>
+                            <DateSortHeader
+                              label="Simulation dates"
+                              sortKey="simulation"
+                              sort={dateSort}
+                              onSort={toggleDateSort}
+                            />
                             <TableHead>Initialization</TableHead>
-                            <TableHead>Run dates (latest first)</TableHead>
+                            <DateSortHeader
+                              label="Run dates"
+                              sortKey="run"
+                              sort={dateSort}
+                              onSort={toggleDateSort}
+                            />
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
                           </TableRow>
@@ -1750,9 +1804,13 @@ export const CaseDetailsPage = ({
                                                     Select
                                                   </TableHead>
                                                   {showSimulationDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Simulation dates
-                                                    </TableHead>
+                                                    <DateSortHeader
+                                                      label="Simulation dates"
+                                                      sortKey="simulation"
+                                                      sort={dateSort}
+                                                      onSort={toggleDateSort}
+                                                      className="bg-white"
+                                                    />
                                                   ) : null}
                                                   {showInitializationColumn ? (
                                                     <TableHead className="bg-white">
@@ -1760,9 +1818,13 @@ export const CaseDetailsPage = ({
                                                     </TableHead>
                                                   ) : null}
                                                   {showRunDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Run dates
-                                                    </TableHead>
+                                                    <DateSortHeader
+                                                      label="Run dates"
+                                                      sortKey="run"
+                                                      sort={dateSort}
+                                                      onSort={toggleDateSort}
+                                                      className="bg-white"
+                                                    />
                                                   ) : null}
                                                   <TableHead className="bg-white">
                                                     Execution ID
@@ -1875,6 +1937,9 @@ export const CaseDetailsPage = ({
               <p className="text-sm text-slate-600">
                 Loaded metadata for {allExecutions.length} of {executionTotal} executions. Search
                 and grouping include all case executions.
+                {dateSort.key === 'run'
+                  ? ' Run-date order is partial until remaining metadata loads.'
+                  : ''}
               </p>
               <Button
                 type="button"

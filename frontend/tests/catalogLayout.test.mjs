@@ -143,3 +143,56 @@ test('homepage puts workflows after cases and statistics above the footer', asyn
     client.clear();
   }
 });
+
+test('simulation date sorting handles year zero, ties, and does not mutate input', async () => {
+  const { sortCaseExecutions } = await server.ssrLoadModule('/src/features/catalog/caseUtils.ts');
+  const executions = Object.freeze([
+    { summary: { id: 'c', simulationStartDate: '2018-06-15' } },
+    { summary: { id: 'b', simulationStartDate: '0000-01-01' } },
+    { summary: { id: 'a', simulationStartDate: '0000-01-01' } },
+  ]);
+
+  assert.deepEqual(
+    sortCaseExecutions(executions, { key: 'simulation', direction: 'asc' }).map(
+      ({ summary }) => summary.id,
+    ),
+    ['a', 'b', 'c'],
+  );
+  assert.deepEqual(
+    sortCaseExecutions(executions, { key: 'simulation', direction: 'desc' }).map(
+      ({ summary }) => summary.id,
+    ),
+    ['c', 'a', 'b'],
+  );
+  assert.deepEqual(
+    executions.map(({ summary }) => summary.id),
+    ['c', 'b', 'a'],
+  );
+});
+
+test('run date sorting uses end/start fallback and keeps missing or invalid dates last', async () => {
+  const { sortCaseExecutions } = await server.ssrLoadModule('/src/features/catalog/caseUtils.ts');
+  const executions = [
+    { summary: { id: 'missing' } },
+    { summary: { id: 'invalid' }, details: { runEndDate: 'bad-date' } },
+    {
+      summary: { id: 'later' },
+      details: { runStartDate: '2026-01-01T00:00:00Z', runEndDate: '2026-01-03T00:00:00Z' },
+    },
+    { summary: { id: 'earlier' }, details: { runStartDate: '2026-01-02T00:00:00Z' } },
+  ];
+
+  assert.deepEqual(
+    sortCaseExecutions(executions, { key: 'run', direction: 'asc' }).map(
+      ({ summary }) => summary.id,
+    ),
+    ['earlier', 'later', 'invalid', 'missing'],
+  );
+  assert.deepEqual(
+    sortCaseExecutions(executions, { key: 'run', direction: 'desc' }).map(
+      ({ summary }) => summary.id,
+    ),
+    ['later', 'earlier', 'invalid', 'missing'],
+  );
+  assert.deepEqual(sortCaseExecutions([], { key: 'run', direction: 'asc' }), []);
+});

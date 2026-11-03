@@ -23,7 +23,7 @@ api.defaults.adapter = async (config) => {
     data: { items: [], total: 0, page: 1, pageSize: 10 },
   };
 };
-const executions = [1, 2].map((number) => ({
+const executions = [1, 2, 3].map((number) => ({
   id: `execution-${number}`,
   executionId: `run-${number}`,
   caseHash: 'test-hash',
@@ -31,8 +31,8 @@ const executions = [1, 2].map((number) => ({
   simulationStartDate: `000${number}-01-01`,
   simulationEndDate: `000${number + 1}-01-01`,
   initializationType: number === 1 ? 'hybrid' : 'startup',
-  runStartDate: `2026-10-0${number}T12:00:00Z`,
-  runEndDate: `2026-10-0${number}T13:00:00Z`,
+  runStartDate: number === 3 ? null : `2026-10-0${number}T12:00:00Z`,
+  runEndDate: number === 3 ? null : `2026-10-0${number}T13:00:00Z`,
 }));
 const record = {
   id: 'case-1',
@@ -55,7 +55,7 @@ const record = {
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
 client.setQueryDefaults(['executions', 'case'], {
   initialData: {
-    pages: [{ items: executions, total: 2, page: 1, pageSize: 100 }],
+    pages: [{ items: executions, total: 3, page: 1, pageSize: 100 }],
     pageParams: [1],
   },
 });
@@ -182,18 +182,47 @@ async function run() {
   const table = document.querySelector('table')!;
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Simulation dates|Initialization|Run dates (latest first)|Execution ID|Case Hash',
+      'Select|Simulation dates|Initialization|Run dates|Execution ID|Case Hash',
     'Flat execution column order',
   );
   const row = table.tBodies[0].rows[0];
-  check(row.cells[1].textContent === '0002-01-01 → 0003-01-01', 'Simulation dates match column');
-  check(row.cells[2].textContent === 'startup', 'Initialization value stays unchanged');
-  check(row.cells[3].textContent === '2026-10-02 → 2026-10-02', 'Run dates match column');
-  check(row.cells[4].textContent === 'run-2', 'Latest execution stays first');
+  check(row.cells[1].textContent === '0001-01-01 → 0002-01-01', 'Simulation dates match column');
+  check(row.cells[2].textContent === 'hybrid', 'Initialization value stays unchanged');
+  check(row.cells[3].textContent === '2026-10-01 → 2026-10-01', 'Run dates match column');
+  check(row.cells[4].textContent === 'run-1', 'Oldest simulation stays first');
   check(row.cells[5].textContent === 'test-hash', 'Hash matches column');
   check(
-    row.cells[4].querySelector('a')?.getAttribute('href')?.endsWith('/run-2'),
+    row.cells[4].querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
     'Execution link retained',
+  );
+
+  const simulationHeader = table.querySelectorAll('th')[1];
+  const runHeader = table.querySelectorAll('th')[3];
+  check(
+    simulationHeader.getAttribute('aria-sort') === 'ascending',
+    'Simulation sort starts ascending',
+  );
+  check(!table.textContent?.includes('first)'), 'No oldest/latest-first header text');
+  simulationHeader.querySelector('button')!.click();
+  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-3');
+  check(
+    simulationHeader.getAttribute('aria-sort') === 'descending',
+    'Simulation sort toggles descending',
+  );
+  runHeader.querySelector('button')!.click();
+  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-1');
+  check(runHeader.getAttribute('aria-sort') === 'ascending', 'Run sort starts ascending');
+  runHeader.querySelector('button')!.click();
+  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-2');
+  check(table.tBodies[0].rows[2].cells[4].textContent === 'run-3', 'Missing run dates remain last');
+  const activeQuery = client
+    .getQueryCache()
+    .getAll()
+    .find((query) => query.queryKey[0] === 'executions' && query.getObserversCount() > 0);
+  const params = activeQuery!.queryKey[4] as { sortBy: string; sortOrder: string };
+  check(
+    params.sortBy === 'run_activity' && params.sortOrder === 'desc',
+    'Fetch uses selected sort',
   );
 
   for (const checkbox of table.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')) {
@@ -221,6 +250,25 @@ async function run() {
   check(
     groupTable.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
     'Grouping retains selection',
+  );
+  check(
+    groupTable.querySelectorAll('th')[3].getAttribute('aria-sort') === 'descending',
+    'Grouping retains run sort',
+  );
+  groupTable.querySelectorAll('th')[1].querySelector('button')!.click();
+  await waitFor(() => groupTable.tBodies[0].rows[0].cells[4].textContent === 'run-1');
+  const flat = [...document.querySelectorAll('button')].find(
+    (element) => element.textContent === 'All executions',
+  )!;
+  flat.click();
+  await waitFor(() => !document.querySelector('table table'));
+  check(
+    document.querySelectorAll('th')[1].getAttribute('aria-sort') === 'ascending',
+    'Flat view retains grouped simulation sort',
+  );
+  check(
+    document.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
+    'Sorting retains selection',
   );
 
   const edit = [...document.querySelectorAll('button')].find(
