@@ -19,7 +19,7 @@ const v2Viewer = (run: string) => `${LCRC}/ac.forsyth2/E3SMv2/${run}/${CLIMO}`;
 const v1Viewer = (run: string) => `${NERSC}/E3SMv1/e3sm_diags/${run}/${CLIMO}`;
 const CRYO_DIAGS = `${LCRC}/wlin/E3SMv2/cryo/20210713.CRYO1850.ne30pg2_SOwISC12to60E2r4.IB_bugfixes.chrysalis/e3sm_diags/180x360_aave`;
 
-/** The comparisons IICE shipped as examples, kept as one-click starting points. */
+/** The example comparisons shipped with IICE (E3SM's standalone intercomparison tool), kept as one-click starting points. */
 const EXAMPLES: { name: string; runs: CompareRun[] }[] = [
   {
     name: 'E3SM Diags: E3SMv1 and v2, historical and AMIP',
