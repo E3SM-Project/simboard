@@ -737,9 +737,7 @@ export const CasesPage = () => {
 
     return (
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-          {label}
-        </label>
+        <label className="text-xs font-medium text-slate-500">{label}</label>
         <SearchableFilterSelect
           label={label}
           value={value}
@@ -890,12 +888,10 @@ export const CasesPage = () => {
 
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                      Search
-                    </label>
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1.5fr)_repeat(4,minmax(200px,1fr))]">
+                  <div className="space-y-2 sm:col-span-2 xl:col-span-1">
+                    <label className="text-xs font-medium text-slate-500">Search</label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input
@@ -911,7 +907,7 @@ export const CasesPage = () => {
                   </div>
 
                   {renderSelectField({
-                    label: 'Case Group',
+                    label: 'Case group',
                     value: caseGroupFilter,
                     placeholder: 'All case groups',
                     options: caseGroupOptions,
@@ -930,7 +926,7 @@ export const CasesPage = () => {
                   })}
 
                   {renderSelectField({
-                    label: 'HPC Username',
+                    label: 'HPC username',
                     value: executionFilters.hpcUsername,
                     placeholder: 'All HPC usernames',
                     options: hpcUsernameOptions,
@@ -952,7 +948,7 @@ export const CasesPage = () => {
                   })}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <CollapsibleTrigger asChild>
                     <Button
                       variant="outline"
@@ -971,26 +967,28 @@ export const CasesPage = () => {
                       />
                     </Button>
                   </CollapsibleTrigger>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => void handleCopySearch()}
-                    disabled={canonicalSearchParams.size === 0}
-                    className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
-                    aria-label="Copy search link"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy search
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={clearAllFilters}
-                    disabled={!hasActiveFilters}
-                    className="h-10 rounded-xl px-4 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    Clear all
-                  </Button>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => void handleCopySearch()}
+                      disabled={canonicalSearchParams.size === 0}
+                      className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                      aria-label="Copy search link"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy search
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={clearAllFilters}
+                      disabled={!hasActiveFilters}
+                      className="h-10 rounded-xl px-4 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      Clear all
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1048,9 +1046,7 @@ export const CasesPage = () => {
                   key={`${filter.key}-${filter.value}`}
                   className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm shadow-slate-200/30"
                 >
-                  <span className="mr-2 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-                    {filter.label}
-                  </span>
+                  <span className="mr-2 text-xs font-medium text-slate-500">{filter.label}</span>
                   <span className="font-medium">{filter.value}</span>
                   <button
                     type="button"

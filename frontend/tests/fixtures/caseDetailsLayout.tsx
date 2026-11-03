@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import { api } from '../../src/api/api';
 import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
+import { CasesPage } from '../../src/features/catalog/CasesPage';
 import '../../src/index.css';
 
 const client = new QueryClient({
@@ -74,6 +75,12 @@ function FixtureCasePage() {
 
 function check(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
+}
+
+function LocationProbe() {
+  const location = useLocation();
+
+  return <output id="filter-url">{location.search}</output>;
 }
 
 async function waitFor(checkReady: () => unknown) {
@@ -237,6 +244,96 @@ async function run() {
   history.click();
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
+  await checkCasesFilters();
+}
+
+async function checkCasesFilters() {
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 100, page: 2, pageSize: 25 },
+  });
+  client.setQueryDefaults(['cases', 'filter-options'], {
+    initialData: { caseGroups: ['v3.HR'], machines: [], hpcUsernames: [], campaigns: [] },
+  });
+  root.render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/cases?page=2']}>
+        <CasesPage />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => document.querySelector('[aria-label="Case group"]'));
+  const search = document.querySelector<HTMLInputElement>('[placeholder="Search case name…"]')!;
+  const filters = [...document.querySelectorAll<HTMLButtonElement>('button[role="combobox"]')];
+  check(filters.length === 4, 'Four primary dropdowns');
+  const searchBounds = search.getBoundingClientRect();
+  const bounds = filters.map((element) => element.getBoundingClientRect());
+  if (window.innerWidth >= 1280) {
+    check(
+      bounds.every((rect) => rect.top === searchBounds.top && rect.width >= 200),
+      'Five roomy fields on desktop',
+    );
+    check(searchBounds.width > bounds[0].width, 'Search is wider than dropdowns');
+  } else if (window.innerWidth >= 640) {
+    check(searchBounds.bottom < bounds[0].top, 'Search spans its own row');
+    check(
+      bounds[0].top === bounds[1].top &&
+        bounds[2].top === bounds[3].top &&
+        bounds[2].top > bounds[0].top,
+      'Two dropdowns per intermediate row',
+    );
+  } else {
+    check(
+      bounds.every((rect, index) => rect.top > (index ? bounds[index - 1].top : searchBounds.top)),
+      'One field per mobile row',
+    );
+  }
+  const more = [...document.querySelectorAll('button')].find(
+    (element) => element.textContent === 'More filters',
+  )!;
+  check(
+    more.getBoundingClientRect().top > Math.max(...bounds.map((rect) => rect.bottom)),
+    'Actions below filters',
+  );
+  const label = search.closest('.space-y-2')!.querySelector('label')!;
+  check(getComputedStyle(label).textTransform === 'none', 'Sentence-case filter labels');
+  check(document.documentElement.scrollWidth <= window.innerWidth, 'No Cases horizontal overflow');
+
+  filters[0].click();
+  await waitFor(() => document.querySelector('[role="option"][data-value="v3.HR"]'));
+  document.querySelector<HTMLDivElement>('[role="option"][data-value="v3.HR"]')!.click();
+  await waitFor(() =>
+    document.getElementById('filter-url')?.textContent?.includes('caseGroup=v3.HR'),
+  );
+  check(
+    !document.getElementById('filter-url')!.textContent!.includes('page='),
+    'Filter changes reset pagination',
+  );
+  check(
+    more.getAttribute('aria-expanded') === 'false',
+    'Case Group does not expand advanced filters',
+  );
+
+  let copied = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async (value: string) => {
+        copied = value;
+      },
+    },
+  });
+  document.querySelector<HTMLButtonElement>('[aria-label="Copy search link"]')!.click();
+  await waitFor(() => copied.includes('caseGroup=v3.HR'));
+  more.click();
+  await waitFor(() => document.querySelector('[aria-label="Campaign"]'));
+  const clear = [...document.querySelectorAll('button')].find(
+    (element) => element.textContent === 'Clear all',
+  )!;
+  clear.click();
+  await waitFor(() => document.getElementById('filter-url')?.textContent === '');
+  check(filters[0].textContent?.includes('All case groups'), 'Clear all resets Case Group');
+  check(more.getAttribute('aria-expanded') === 'false', 'Clear all collapses advanced filters');
 }
 
 run()

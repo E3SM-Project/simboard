@@ -19,7 +19,7 @@ const chrome = [
 ].find((candidate) => candidate && existsSync(candidate));
 
 test(
-  'case details layout and admin visibility in browser',
+  'catalog layouts, filters, and admin visibility in browser',
   {
     skip: chrome ? false : 'Chrome unavailable; set CHROME_BIN to run browser coverage',
     timeout: 120_000,
@@ -61,7 +61,7 @@ test(
     try {
       await server.listen();
       const address = server.httpServer.address();
-      for (const width of [1280, 390]) {
+      for (const width of [1280, 900, 390]) {
         const output = await new Promise((resolve, reject) => {
           const child = spawn(chrome, [
             '--headless',

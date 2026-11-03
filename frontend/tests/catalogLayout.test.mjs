@@ -53,9 +53,9 @@ test('Case Group stays visible without opening or counting as an advanced filter
       ),
     );
 
-    assert.match(html, /Case Group/);
+    assert.match(html, /Case group/);
     assert.match(html, /v3\.HR/);
-    assert.ok(html.indexOf('Case Group') < html.indexOf('More filters'));
+    assert.ok(html.indexOf('Case group') < html.indexOf('More filters'));
     assert.doesNotMatch(html, /More filters \(1\)/);
     assert.doesNotMatch(html, /All campaigns/);
   } finally {
