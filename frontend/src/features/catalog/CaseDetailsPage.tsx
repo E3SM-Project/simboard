@@ -1541,11 +1541,11 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
+                            <TableHead>Initialization</TableHead>
                             <TableHead>Run dates (latest first)</TableHead>
                             <TableHead>Execution ID</TableHead>
-                            <TableHead>Case Hash</TableHead>
-                            <TableHead>Initialization</TableHead>
                             <TableHead>Simulation dates</TableHead>
+                            <TableHead>Case Hash</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1560,6 +1560,12 @@ export const CaseDetailsPage = ({
                                   }
                                   onCheckedChange={() => toggleExecutionSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
+                                />
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <TableCellText
+                                  value={details?.initializationType ?? '—'}
+                                  lines={1}
                                 />
                               </TableCell>
                               <TableCell className="align-top">
@@ -1586,6 +1592,9 @@ export const CaseDetailsPage = ({
                                 </Link>
                               </TableCell>
                               <TableCell className="align-top">
+                                {formatExecutionDateRange(summary)}
+                              </TableCell>
+                              <TableCell className="align-top">
                                 <span
                                   className="font-mono text-xs text-slate-700"
                                   title={summary.caseHash ?? MISSING_CASE_HASH_LABEL}
@@ -1594,15 +1603,6 @@ export const CaseDetailsPage = ({
                                     ? formatCaseHashLabel(summary.caseHash)
                                     : MISSING_CASE_HASH_LABEL}
                                 </span>
-                              </TableCell>
-                              <TableCell className="align-top">
-                                <TableCellText
-                                  value={details?.initializationType ?? '—'}
-                                  lines={1}
-                                />
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {formatExecutionDateRange(summary)}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1749,22 +1749,22 @@ export const CaseDetailsPage = ({
                                                   <TableHead className="w-12 bg-white">
                                                     Select
                                                   </TableHead>
-                                                  <TableHead className="bg-white">
-                                                    Execution ID
-                                                  </TableHead>
                                                   {showInitializationColumn ? (
                                                     <TableHead className="bg-white">
                                                       Initialization
                                                     </TableHead>
                                                   ) : null}
-                                                  {showSimulationDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Simulation dates
-                                                    </TableHead>
-                                                  ) : null}
                                                   {showRunDatesColumn ? (
                                                     <TableHead className="bg-white">
                                                       Run dates
+                                                    </TableHead>
+                                                  ) : null}
+                                                  <TableHead className="bg-white">
+                                                    Execution ID
+                                                  </TableHead>
+                                                  {showSimulationDatesColumn ? (
+                                                    <TableHead className="bg-white">
+                                                      Simulation dates
                                                     </TableHead>
                                                   ) : null}
                                                 </TableRow>
@@ -1790,29 +1790,12 @@ export const CaseDetailsPage = ({
                                                         aria-label={`Select ${summary.executionId} for compare`}
                                                       />
                                                     </TableCell>
-                                                    <TableCell className="align-top">
-                                                      <Link
-                                                        to={executionDetailsPath({
-                                                          ...readableIdentity,
-                                                          executionId: summary.executionId,
-                                                        })}
-                                                        state={{ from: currentPath }}
-                                                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                                                      >
-                                                        {summary.executionId}
-                                                      </Link>
-                                                    </TableCell>
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">
                                                         <TableCellText
                                                           value={details?.initializationType ?? '—'}
                                                           lines={1}
                                                         />
-                                                      </TableCell>
-                                                    ) : null}
-                                                    {showSimulationDatesColumn ? (
-                                                      <TableCell className="align-top">
-                                                        {formatExecutionDateRange(summary)}
                                                       </TableCell>
                                                     ) : null}
                                                     {showRunDatesColumn ? (
@@ -1832,6 +1815,23 @@ export const CaseDetailsPage = ({
                                                             —
                                                           </span>
                                                         )}
+                                                      </TableCell>
+                                                    ) : null}
+                                                    <TableCell className="align-top">
+                                                      <Link
+                                                        to={executionDetailsPath({
+                                                          ...readableIdentity,
+                                                          executionId: summary.executionId,
+                                                        })}
+                                                        state={{ from: currentPath }}
+                                                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                                                      >
+                                                        {summary.executionId}
+                                                      </Link>
+                                                    </TableCell>
+                                                    {showSimulationDatesColumn ? (
+                                                      <TableCell className="align-top">
+                                                        {formatExecutionDateRange(summary)}
                                                       </TableCell>
                                                     ) : null}
                                                   </TableRow>

@@ -53,36 +53,39 @@ test(
     try {
       await server.listen();
       const address = server.httpServer.address();
-      const output = await new Promise((resolve, reject) => {
-        const child = spawn(chrome, [
-          '--headless',
-          '--enable-logging=stderr',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-default-browser-check',
-          `--user-data-dir=${profile}`,
-          '--dump-dom',
-          '--virtual-time-budget=30000',
-          `http://127.0.0.1:${address.port}/__case-layout`,
-        ]);
-        let stdout = '';
-        let stderr = '';
-        const timer = setTimeout(() => child.kill(), 90_000);
-        child.stdout.on('data', (chunk) => {
-          stdout += chunk;
+      for (const width of [1280, 390]) {
+        const output = await new Promise((resolve, reject) => {
+          const child = spawn(chrome, [
+            '--headless',
+            '--enable-logging=stderr',
+            '--disable-gpu',
+            `--window-size=${width},1000`,
+            '--no-first-run',
+            '--no-default-browser-check',
+            `--user-data-dir=${profile}`,
+            '--dump-dom',
+            '--virtual-time-budget=30000',
+            `http://127.0.0.1:${address.port}/__case-layout`,
+          ]);
+          let stdout = '';
+          let stderr = '';
+          const timer = setTimeout(() => child.kill(), 90_000);
+          child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+          });
+          child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+          });
+          child.on('error', reject);
+          child.on('close', (code) => {
+            clearTimeout(timer);
+            if (code !== 0) reject(new Error(`Chrome exited ${code}: ${stderr}`));
+            else resolve(stdout + stderr);
+          });
         });
-        child.stderr.on('data', (chunk) => {
-          stderr += chunk;
-        });
-        child.on('error', reject);
-        child.on('close', (code) => {
-          clearTimeout(timer);
-          if (code !== 0) reject(new Error(`Chrome exited ${code}: ${stderr}`));
-          else resolve(stdout + stderr);
-        });
-      });
 
-      assert.equal(output.match(/<output id="test-result">([\s\S]*?)<\/output>/)?.[1], 'passed');
+        assert.equal(output.match(/<output id="test-result">([\s\S]*?)<\/output>/)?.[1], 'passed');
+      }
     } finally {
       await server.close();
       await rm(profile, { recursive: true, force: true, maxRetries: 3 });
