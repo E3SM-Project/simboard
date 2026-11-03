@@ -230,7 +230,6 @@ export const CasesPage = () => {
   const [legacyMachineId, setLegacyMachineId] = useState(initialSearchState.legacyMachineId);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(() =>
     [
-      initialSearchState.caseGroupFilter,
       initialSearchState.executionFilters.campaign,
       initialSearchState.executionFilters.initializationType,
       initialSearchState.executionFilters.compiler,
@@ -322,7 +321,6 @@ export const CasesPage = () => {
     setPagination(next.pagination);
     setShowAdvancedFilters(
       [
-        next.caseGroupFilter,
         next.executionFilters.campaign,
         next.executionFilters.initializationType,
         next.executionFilters.compiler,
@@ -467,9 +465,8 @@ export const CasesPage = () => {
         executionFilters.initializationType,
         executionFilters.compiler,
         executionFilters.gitTag,
-        caseGroupFilter,
       ].filter(Boolean).length,
-    [caseGroupFilter, executionFilters],
+    [executionFilters],
   );
   const activeFilterPills = useMemo(() => {
     const filters: ActiveFilterPill[] = [];
@@ -894,7 +891,7 @@ export const CasesPage = () => {
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_220px_220px_220px]">
+                <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                   <div className="space-y-2">
                     <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                       Search
@@ -912,6 +909,17 @@ export const CasesPage = () => {
                       />
                     </div>
                   </div>
+
+                  {renderSelectField({
+                    label: 'Case Group',
+                    value: caseGroupFilter,
+                    placeholder: 'All case groups',
+                    options: caseGroupOptions,
+                    onValueChange: (value) => {
+                      setCaseGroupFilter(value);
+                      table.setPageIndex(0);
+                    },
+                  })}
 
                   {renderSelectField({
                     label: 'Machine',
@@ -988,7 +996,7 @@ export const CasesPage = () => {
 
               <CollapsibleContent>
                 <div className="mt-4 border-t border-slate-200 pt-4">
-                  <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+                  <div>
                     <div className="space-y-4">
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-slate-900">Execution context</p>
@@ -1024,27 +1032,6 @@ export const CasesPage = () => {
                           placeholder: 'All tags',
                           options: gitTagOptions,
                           onValueChange: (value) => setExecutionFilter('gitTag', value),
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Case metadata</p>
-                        <p className="text-xs text-slate-500">
-                          Narrow the result set using case-level metadata.
-                        </p>
-                      </div>
-                      <div className="grid gap-3">
-                        {renderSelectField({
-                          label: 'Case group',
-                          value: caseGroupFilter,
-                          placeholder: 'All case groups',
-                          options: caseGroupOptions,
-                          onValueChange: (value) => {
-                            setCaseGroupFilter(value);
-                            table.setPageIndex(0);
-                          },
                         })}
                       </div>
                     </div>
