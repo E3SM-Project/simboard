@@ -181,7 +181,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         </div>
       ) : null}
 
-      <section className="mx-auto flex w-full max-w-7xl flex-col gap-8 rounded-2xl border border-muted bg-white p-8 shadow-sm md:flex-row md:items-start md:justify-between md:p-10">
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 rounded-2xl border border-muted bg-white p-6 shadow-sm md:flex-row md:items-start md:justify-between md:p-8">
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
@@ -203,78 +203,16 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
               <Link to="/about">About SimBoard</Link>
             </Button>
           </div>
-
-          <div className="border-t border-muted pt-5">
-            <p className="text-sm font-medium text-foreground">Catalog at a glance</p>
-            <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
-              <div>
-                <dt className="text-sm text-muted-foreground">Cases</dt>
-                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-                  {totalCases}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">Executions</dt>
-                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-                  {overview?.totalExecutions ?? 0}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">Compute systems</dt>
-                <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-                  {machines.length}{' '}
-                  <span className="text-base font-normal text-muted-foreground">
-                    across {sites.length} {sites.length === 1 ? 'site' : 'sites'}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-5 text-sm text-muted-foreground">
-              Last submission:{' '}
-              <span className="font-medium text-foreground">
-                {latestSubmission ? new Date(latestSubmission).toLocaleDateString() : 'N/A'}
-              </span>
-            </p>
-          </div>
         </div>
 
-        <div className="hidden md:flex md:max-w-sm md:flex-col md:items-center md:justify-center md:self-center">
-          <div className="flex w-full items-center justify-center rounded-2xl border border-muted bg-muted/15 px-8 py-10">
+        <div className="hidden md:flex md:w-56 md:shrink-0 md:items-start lg:w-72">
+          <div className="flex w-full items-center justify-center rounded-2xl border border-muted bg-muted/15 p-4">
             <img
               src="/logos/e3sm-logo.jpg"
               alt="E3SM logo"
               className="max-h-48 w-full object-contain"
             />
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-10 w-full max-w-7xl space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Common Workflows</h2>
-          <p className="text-muted-foreground">
-            Jump from the catalog overview into the primary SimBoard tasks.
-          </p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {workflows.map((workflow) => {
-            const Icon = workflow.icon;
-            return (
-              <div
-                key={workflow.title}
-                className="flex h-full flex-col gap-4 rounded-xl border border-muted bg-white p-5 shadow-sm"
-              >
-                <div className="flex items-center gap-2 text-foreground">
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold">{workflow.title}</h3>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">{workflow.description}</p>
-                <Button asChild variant="secondary" className="mt-auto self-start">
-                  <Link to={workflow.to}>{workflow.action}</Link>
-                </Button>
-              </div>
-            );
-          })}
         </div>
       </section>
 
@@ -354,6 +292,35 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           </Table>
         </div>
       </section>
+      <section className="mx-auto mt-10 w-full max-w-7xl space-y-4">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold">Common Workflows</h2>
+          <p className="text-muted-foreground">
+            Jump from the catalog overview into the primary SimBoard tasks.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {workflows.map((workflow) => {
+            const Icon = workflow.icon;
+            return (
+              <div
+                key={workflow.title}
+                className="flex h-full flex-col gap-4 rounded-xl border border-muted bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-center gap-2 text-foreground">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold">{workflow.title}</h3>
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">{workflow.description}</p>
+                <Button asChild variant="secondary" className="mt-auto self-start">
+                  <Link to={workflow.to}>{workflow.action}</Link>
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-8">
         <div className="space-y-1">
           <h2 className="text-2xl font-bold">Sites and Machines</h2>
@@ -388,6 +355,39 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
           />
         </div>
       </section>
+      <section className="mx-auto mt-10 w-full max-w-7xl rounded-xl border border-muted p-6">
+        <h2 className="text-lg font-semibold text-foreground">Catalog at a glance</h2>
+        <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
+          <div>
+            <dt className="text-sm text-muted-foreground">Cases</dt>
+            <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+              {totalCases}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Executions</dt>
+            <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+              {overview?.totalExecutions ?? 0}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Compute systems</dt>
+            <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+              {machines.length}{' '}
+              <span className="text-base font-normal text-muted-foreground">
+                across {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+              </span>
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-5 text-sm text-muted-foreground">
+          Last submission:{' '}
+          <span className="font-medium text-foreground">
+            {latestSubmission ? new Date(latestSubmission).toLocaleDateString() : 'N/A'}
+          </span>
+        </p>
+      </section>
+
       <footer className="mx-auto mt-12 w-full max-w-7xl border-t border-muted pt-6">
         <div className="flex flex-col gap-6 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">

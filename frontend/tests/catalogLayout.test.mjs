@@ -55,3 +55,47 @@ test('Case Group stays visible without opening or counting as an advanced filter
     client.clear();
   }
 });
+
+test('homepage puts workflows after cases and statistics above the footer', async () => {
+  const { HomePage } = await server.ssrLoadModule('/src/features/home/HomePage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryData(['catalog', 'overview'], {
+    totalCases: 42,
+    totalExecutions: 84,
+    recentCases: [],
+    machineCounts: {},
+  });
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 6 },
+  });
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, null, createElement(HomePage, { machines: [], sites: [] })),
+      ),
+    );
+    const headings = [
+      'Explore E3SM Simulations',
+      '>Production Cases<',
+      '>Recent Cases<',
+      '>Common Workflows<',
+      '>Sites and Machines<',
+      '>Catalog at a glance<',
+      '<footer',
+    ].map((text) => html.indexOf(text));
+
+    assert.ok(headings.every((position) => position >= 0));
+    assert.deepEqual(
+      headings,
+      [...headings].sort((left, right) => left - right),
+    );
+    assert.match(html, />42<\/dd>/);
+    assert.match(html, />84<\/dd>/);
+  } finally {
+    client.clear();
+  }
+});
