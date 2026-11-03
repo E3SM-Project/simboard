@@ -104,10 +104,8 @@ const DetailField = ({
   mono?: boolean;
   title?: string;
 }) => (
-  <div className="min-w-0 space-y-1" title={title}>
-    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
-      {label}
-    </div>
+  <div className="min-w-0 space-y-0.5" title={title}>
+    <div className="text-xs font-medium text-slate-500">{label}</div>
     <div
       className={`truncate font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}
     >
@@ -1054,7 +1052,7 @@ export const CaseDetailsPage = ({
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <DetailField label="Executions" value={caseRecord.executions.length} />
-              <DetailField label="Case Hash groups" value={caseHashGroupCount} />
+              <DetailField label="Case hash groups" value={caseHashGroupCount} />
               <div
                 className="min-w-0"
                 title={
@@ -1354,9 +1352,7 @@ export const CaseDetailsPage = ({
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)]">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      View
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">View</div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-md">
                       <Button
                         type="button"
@@ -1380,9 +1376,7 @@ export const CaseDetailsPage = ({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Filters
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Filters</div>
                     <div className="flex flex-wrap gap-2">
                       {GROUP_FILTER_OPTIONS.map((option) => (
                         <Button
@@ -1406,9 +1400,7 @@ export const CaseDetailsPage = ({
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Search
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Search</div>
                     <div className="relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input
@@ -1422,9 +1414,7 @@ export const CaseDetailsPage = ({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Actions
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Actions</div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
@@ -1788,7 +1778,7 @@ export const CaseDetailsPage = ({
                                         className="border-t border-slate-200 px-4 py-3"
                                       >
                                         <div className="mb-3 flex items-center justify-between gap-3">
-                                          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                                          <p className="text-xs font-medium text-slate-500">
                                             Executions in group
                                           </p>
                                           <p className="text-xs text-slate-500">

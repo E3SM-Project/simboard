@@ -148,6 +148,18 @@ async function run() {
       headings.filter((text) => text === 'Case Metadata').length === 1,
       'One Case Metadata heading',
     );
+    for (const text of ['Executions', 'Case hash groups', 'Machines', 'HPC users']) {
+      const label = [...document.querySelectorAll('div')].find(
+        (element) => element.childElementCount === 0 && element.textContent === text,
+      );
+      check(label, `Metadata label exists: ${text}`);
+      const style = getComputedStyle(label!);
+      check(style.textTransform === 'none', `Metadata label uses sentence case: ${text}`);
+      check(
+        style.letterSpacing === 'normal' || style.letterSpacing === '0px',
+        `Metadata label has normal spacing: ${text}`,
+      );
+    }
     check(
       document.body.textContent?.includes('Page updated:'),
       'Page update timestamp near header',
