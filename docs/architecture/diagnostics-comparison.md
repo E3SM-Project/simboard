@@ -1,8 +1,13 @@
 # Diagnostics Comparison Architecture
 
-Side-by-side comparison of published E3SM Diags and MPAS-Analysis output,
-replacing the standalone IICE tool. SimBoard never touches model data: it reads
-the HTML and PNGs each tool already published, on the public E3SM web servers.
+Side-by-side comparison of published E3SM Diags and MPAS-Analysis output. This
+reimplements the core comparison flow of [IICE](https://github.com/E3SM-Project/IICE),
+E3SM's standalone web tool for intercomparing diagnostics runs. SimBoard never
+touches model data: it reads the HTML and PNGs each tool already published, on
+the public E3SM web servers.
+Where IICE conventions are kept — its example comparisons, the `!case` label for
+older MPAS-Analysis layouts, the panel crop windows and stylesheet widths — the
+code and user docs say so at the point of use.
 
 ```text
 case diagnostic link ─► discovery ─► runs ─┐
@@ -16,7 +21,7 @@ pasted run address  ────────────────────
 | `archive.py` | Every HTTP read. Allowlisted URL prefixes (`diagnostics_allowed_url_prefixes`), re-checked on each redirect hop; a request budget and deadline per read; a body size cap; a TTL cache. A missing page (`ABSENT`) is kept distinct from an unreachable server (`FAILED`) so outages are never cached as "no runs". |
 | `discovery.py` | Lists the runs under a case's zppy root from Apache directory listings, following only zppy's `e3sm_diags/<sub>/model_vs_*_Y1-Y2/viewer/` and `mpas_analysis/ts_*_climo_*/` layout. |
 | `e3sm_diags.py` | Reads `viewer/index.html` and each set page's `data-preview` images. Also holds the panel windows used to crop the stacked test/reference/difference composites. |
-| `mpas_analysis.py` | Reads the `ocean/` and `sea_ice/` galleries: image, caption, section, and a description that is a season and/or region. Supports older layouts and IICE's `!case` label. |
+| `mpas_analysis.py` | Reads the `ocean/` and `sea_ice/` galleries: image, caption, section, and a description that is a season and/or region. Supports older layouts and the `!case` label convention from IICE. |
 | `plots.py` | The shared `Catalog` / `PlotSet` / `Plot` model both readers produce. |
 | `catalog.py` | Picks the reader from the URL; caches complete reads. |
 | `compare.py` | Keeps the plots every run shares and groups a variable's seasons and regions. |
@@ -37,7 +42,7 @@ in `tests/fixtures/diagnostics/`.
 `DiagnosticsRunsCard` (case page) and `ComparisonBar` stage runs in
 localStorage (`comparisonBasket.ts`). `ComparePage` renders the compare
 response; all of its state is in the URL (`compareState.ts`). `StartPage`
-takes pasted addresses and links IICE's examples.
+takes pasted addresses and opens the example comparisons shipped with IICE.
 
 ## Not yet
 

@@ -2,7 +2,9 @@
 
 SimBoard shows E3SM Diags and MPAS-Analysis plots from several runs side by
 side: a historical run against a pre-industrial control, AMIP against coupled,
-or one case at two periods.
+or one case at two periods. The comparison follows the approach of
+[IICE](https://github.com/E3SM-Project/IICE), E3SM's standalone intercomparison
+tool, including its example comparisons and label conventions.
 
 > This feature is new and still changing.
 
@@ -21,12 +23,12 @@ pages. Select **Compare** in the bar.
 
 Open **Diagnostics** in the top menu and paste each run's address: an E3SM
 Diags `.../viewer/` page or an MPAS-Analysis run directory. Labels are
-optional. The page also opens the examples IICE shipped with one click.
+optional. The page also opens the examples shipped with IICE, E3SM's
+standalone intercomparison tool, with one click.
 
 Addresses must be public E3SM web content on `portal.nersc.gov` or
 `web.lcrc.anl.gov`. Some older MPAS-Analysis runs do not show their case name
-in the address; as in IICE, give them a label starting with `!` followed by the
-case name, for example `!ECwISC30to60E2r1.CRYO1850.N2dependent yrs 1-10`.
+in the address; as in IICE, give them a label starting with `!` followed by thecase name, for example `!ECwISC30to60E2r1.CRYO1850.N2dependent yrs 1-10`.
 
 ## The comparison
 

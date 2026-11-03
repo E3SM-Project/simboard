@@ -58,7 +58,7 @@ export const comparePath = (runs: CompareRun[]): string =>
 
 /**
  * A run label as people see it. A leading ``!`` marks an MPAS case-name
- * override (as in IICE) and is not shown.
+ * override (an IICE convention) and is not shown.
  */
 export const displayLabel = (run: CompareRun): string => run.label.replace(/^!/, '') || run.url;
 
