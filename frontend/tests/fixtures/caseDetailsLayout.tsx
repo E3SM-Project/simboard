@@ -182,17 +182,17 @@ async function run() {
   const table = document.querySelector('table')!;
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Initialization|Run dates (latest first)|Execution ID|Simulation dates|Case Hash',
+      'Select|Simulation dates|Initialization|Run dates (latest first)|Execution ID|Case Hash',
     'Flat execution column order',
   );
   const row = table.tBodies[0].rows[0];
-  check(row.cells[1].textContent === 'startup', 'Initialization value stays unchanged');
-  check(row.cells[2].textContent === '2026-10-02 → 2026-10-02', 'Run dates match column');
-  check(row.cells[3].textContent === 'run-2', 'Latest execution stays first');
-  check(row.cells[4].textContent === '0002-01-01 → 0003-01-01', 'Simulation dates match column');
+  check(row.cells[1].textContent === '0002-01-01 → 0003-01-01', 'Simulation dates match column');
+  check(row.cells[2].textContent === 'startup', 'Initialization value stays unchanged');
+  check(row.cells[3].textContent === '2026-10-02 → 2026-10-02', 'Run dates match column');
+  check(row.cells[4].textContent === 'run-2', 'Latest execution stays first');
   check(row.cells[5].textContent === 'test-hash', 'Hash matches column');
   check(
-    row.cells[3].querySelector('a')?.getAttribute('href')?.endsWith('/run-2'),
+    row.cells[4].querySelector('a')?.getAttribute('href')?.endsWith('/run-2'),
     'Execution link retained',
   );
 
@@ -215,7 +215,7 @@ async function run() {
   const groupTable = document.querySelector('table table')!;
   check(
     [...groupTable.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Initialization|Run dates|Execution ID|Simulation dates',
+      'Select|Simulation dates|Initialization|Run dates|Execution ID',
     'Grouped execution column order',
   );
   check(

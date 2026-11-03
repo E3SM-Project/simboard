@@ -1541,10 +1541,10 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
+                            <TableHead>Simulation dates</TableHead>
                             <TableHead>Initialization</TableHead>
                             <TableHead>Run dates (latest first)</TableHead>
                             <TableHead>Execution ID</TableHead>
-                            <TableHead>Simulation dates</TableHead>
                             <TableHead>Case Hash</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -1561,6 +1561,9 @@ export const CaseDetailsPage = ({
                                   onCheckedChange={() => toggleExecutionSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
                                 />
+                              </TableCell>
+                              <TableCell className="align-top">
+                                {formatExecutionDateRange(summary)}
                               </TableCell>
                               <TableCell className="align-top">
                                 <TableCellText
@@ -1590,9 +1593,6 @@ export const CaseDetailsPage = ({
                                 >
                                   {summary.executionId}
                                 </Link>
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {formatExecutionDateRange(summary)}
                               </TableCell>
                               <TableCell className="align-top">
                                 <span
@@ -1749,6 +1749,11 @@ export const CaseDetailsPage = ({
                                                   <TableHead className="w-12 bg-white">
                                                     Select
                                                   </TableHead>
+                                                  {showSimulationDatesColumn ? (
+                                                    <TableHead className="bg-white">
+                                                      Simulation dates
+                                                    </TableHead>
+                                                  ) : null}
                                                   {showInitializationColumn ? (
                                                     <TableHead className="bg-white">
                                                       Initialization
@@ -1762,11 +1767,6 @@ export const CaseDetailsPage = ({
                                                   <TableHead className="bg-white">
                                                     Execution ID
                                                   </TableHead>
-                                                  {showSimulationDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Simulation dates
-                                                    </TableHead>
-                                                  ) : null}
                                                 </TableRow>
                                               </TableHeader>
                                               <TableBody>
@@ -1790,6 +1790,11 @@ export const CaseDetailsPage = ({
                                                         aria-label={`Select ${summary.executionId} for compare`}
                                                       />
                                                     </TableCell>
+                                                    {showSimulationDatesColumn ? (
+                                                      <TableCell className="align-top">
+                                                        {formatExecutionDateRange(summary)}
+                                                      </TableCell>
+                                                    ) : null}
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">
                                                         <TableCellText
@@ -1829,11 +1834,6 @@ export const CaseDetailsPage = ({
                                                         {summary.executionId}
                                                       </Link>
                                                     </TableCell>
-                                                    {showSimulationDatesColumn ? (
-                                                      <TableCell className="align-top">
-                                                        {formatExecutionDateRange(summary)}
-                                                      </TableCell>
-                                                    ) : null}
                                                   </TableRow>
                                                 ))}
                                               </TableBody>
