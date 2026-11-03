@@ -188,7 +188,7 @@ export const CaseArtifactsTable = ({
 
   return (
     <section className="space-y-4" aria-labelledby="artifacts-heading">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+      <div className="space-y-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <h3 id="artifacts-heading" className="text-lg font-semibold text-slate-950">
             Artifacts
@@ -197,7 +197,10 @@ export const CaseArtifactsTable = ({
             {totalArtifactCount} records · {artifacts.length} unique values
           </p>
         </div>
-        <p className="text-sm text-slate-500">Unique values mapped to executions.</p>
+        <p className="text-sm text-slate-500">
+          Files, directories, and scripts recorded for executions in this case. Each row shows a
+          unique value and its linked executions.
+        </p>
       </div>
 
       {artifacts.length > 0 ? (
@@ -239,9 +242,9 @@ export const CaseArtifactsTable = ({
           </div>
 
           {visibleArtifacts.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white [&>div]:max-h-[28rem]">
               <Table className="min-w-[680px]">
-                <TableHeader className="bg-slate-50">
+                <TableHeader className="sticky top-0 z-10 bg-slate-50">
                   <TableRow className="hover:bg-slate-50">
                     <TableHead className="w-40 bg-slate-50" aria-sort={getAriaSort('kind')}>
                       <SortHeader

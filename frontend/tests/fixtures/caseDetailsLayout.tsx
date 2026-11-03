@@ -7,6 +7,7 @@ import { api } from '../../src/api/api';
 import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
+import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
 import '../../src/index.css';
 
 const client = new QueryClient({
@@ -357,6 +358,95 @@ async function run() {
   history.click();
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
+  await checkArtifactsScrolling();
+}
+
+async function checkArtifactsScrolling() {
+  const artifacts = Array.from({ length: 30 }, (_, index) => ({
+    id: `artifact-${index}`,
+    kind: 'output' as const,
+    label: `Artifact ${String(index).padStart(2, '0')}`,
+    uri: `https://example.test/output/${index}`,
+    executionIds: ['run-1'],
+  }));
+  let selectedIds: string[] = [];
+  root.render(
+    <CaseArtifactsTable
+      artifacts={artifacts}
+      totalArtifactCount={artifacts.length}
+      onFilterExecutionIds={(ids) => {
+        selectedIds = ids;
+      }}
+    />,
+  );
+  await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 30);
+
+  const table = document.querySelector('table')!;
+  const scroller = table.parentElement!;
+  const description =
+    document.getElementById('artifacts-heading')!.parentElement!.nextElementSibling!;
+  check(
+    description.textContent?.includes(
+      'Files, directories, and scripts recorded for executions in this case.',
+    ),
+    'Artifacts description explains the recorded resources',
+  );
+  check(
+    description.textContent?.includes('linked executions') && !scroller.contains(description),
+    'Artifacts description stays above the scroll area',
+  );
+  const limit = 28 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  check(
+    scroller.clientHeight <= limit && scroller.scrollHeight > scroller.clientHeight,
+    'Long artifact tables scroll within 28rem',
+  );
+  const search = document.querySelector<HTMLInputElement>(
+    '[aria-label="Search artifact names or paths"]',
+  )!;
+  check(
+    !scroller.contains(search) &&
+      !scroller.contains(document.querySelector('[aria-label="Filter artifacts by type"]')),
+    'Search and type filters stay outside artifact scrolling',
+  );
+
+  scroller.scrollTop = 200;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  check(scroller.scrollTop > 0, 'Artifact rows can scroll vertically');
+  check(
+    Math.abs(table.tHead!.getBoundingClientRect().top - scroller.getBoundingClientRect().top) <= 1,
+    'Artifact header stays at the top while scrolling',
+  );
+  if (window.innerWidth < 680) {
+    scroller.scrollLeft = 100;
+    check(scroller.scrollLeft > 0, 'Artifacts retain horizontal scrolling on mobile');
+  }
+
+  const artifactSort = table.querySelectorAll('th')[1].querySelector('button')!;
+  artifactSort.click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  artifactSort.click();
+  await waitFor(() => table.tBodies[0].rows[0].cells[1].textContent?.includes('Artifact 29'));
+  table
+    .querySelector<HTMLButtonElement>('[aria-label="Filter executions linked to Artifact 29"]')!
+    .click();
+  check(selectedIds.join() === 'run-1', 'Artifact execution filtering still works');
+
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    search,
+    'Artifact 00',
+  );
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitFor(() => table.tBodies[0].rows.length === 1);
+  check(
+    scroller.clientHeight < limit && scroller.scrollHeight <= scroller.clientHeight,
+    'Filtered short tables size naturally',
+  );
+
+  root.render(
+    <CaseArtifactsTable artifacts={[]} totalArtifactCount={0} onFilterExecutionIds={() => {}} />,
+  );
+  await waitFor(() => document.body.textContent?.includes('No execution artifacts available.'));
+  check(!document.querySelector('table'), 'Empty artifacts do not reserve table space');
 }
 
 async function checkCasesFilters() {
