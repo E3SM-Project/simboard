@@ -830,6 +830,7 @@ class SharedConfigurationFieldOut(CamelOutBaseModel):
     value: str | None = None
     varies: bool = False
     incomplete: bool = False
+    has_differences: bool = False
 
 
 class CaseHashConfigurationOut(CamelOutBaseModel):

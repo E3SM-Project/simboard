@@ -1342,6 +1342,28 @@ class TestGetCase:
         assert data["links"] == []
         assert data["artifacts"] == []
 
+    def test_detail_and_list_agree_on_latest_execution_with_tied_dates(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "tied-latest-run")
+        ingestion = _create_ingestion(db, case.machine_id, normal_user_sync["id"])
+        for execution_id in ["run-a", "run-B", "run_a"]:
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                execution_id=execution_id,
+                execution_status=ExecutionStatus.COMPLETED,
+            )
+            execution.run_end_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        db.commit()
+        detail = client.get(f"{API_BASE}/cases/{case.id}").json()
+        listing = client.get(f"{API_BASE}/cases", params={"name": case.name}).json()
+        assert detail["latestExecution"]["executionId"] == "run_a"
+        assert detail["latestExecution"] == listing["items"][0]["latestExecution"]
+
     def test_detail_aggregates_include_executions_beyond_one_page(
         self, client, db: Session, normal_user_sync
     ):

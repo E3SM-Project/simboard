@@ -1123,7 +1123,9 @@ export const CaseDetailsPage = ({
                         >
                           {caseRecord.latestExecution.executionId}
                         </Link>
-                      ) : null}
+                      ) : (
+                        <span className="text-xs">{caseRecord.latestExecution.executionId}</span>
+                      )}
                     </>
                   ) : (
                     'Unavailable'

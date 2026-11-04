@@ -208,6 +208,16 @@ async function run() {
     );
     check(!stats.textContent?.includes('Case hash groups'), 'Hash count removed from summary');
     check(!stats.textContent?.includes('Executions'), 'Execution count removed from summary');
+    if (role === 'anonymous') {
+      (stats.firstElementChild as HTMLElement).focus();
+      await waitFor(() => document.querySelector('[role="tooltip"]'));
+      check(
+        document.querySelector('[role="tooltip"]')?.textContent ===
+          'Simulation time covered across all executions. Overlaps count once; gaps do not count.',
+        'Coverage tooltip explains union semantics',
+      );
+      (stats.firstElementChild as HTMLElement).blur();
+    }
     const notes = [...document.querySelectorAll('label')].find(
       (element) => element.textContent === 'Notes',
     );
@@ -437,7 +447,7 @@ async function checkConfigurationComparison() {
     latestExecution: null,
     sharedConfiguration: {
       compset_alias: { value: 'shared-alias', varies: false, incomplete: false },
-      grid_alias: { value: null, varies: true, incomplete: true },
+      grid_alias: { value: null, varies: true, incomplete: true, hasDifferences: true },
       git_tag: { value: null, varies: false, incomplete: true },
       compset_long_name: {
         value: firstConfiguration.compset_long_name.source!.value,
@@ -477,6 +487,14 @@ async function checkConfigurationComparison() {
   check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
   check(summary.textContent?.includes('Varies by Case Hash'), 'Summary flags differing values');
   check(summary.textContent?.includes('Unavailable'), 'Summary marks missing model tag');
+  check(
+    summary.textContent?.includes('Some executions unavailable'),
+    'Summary distinguishes missing observations from disagreement',
+  );
+  check(
+    summary.textContent?.includes('Changes within Case Hash'),
+    'Summary flags within-hash differences',
+  );
   const details = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
   check(!details.open, 'Configuration details start collapsed');
   details.querySelector('summary')!.click();
@@ -538,11 +556,12 @@ async function checkConfigurationComparison() {
     configurationGroups: configured.configurationGroups!.slice(0, 1),
     sharedConfiguration: {
       ...configured.sharedConfiguration,
-      grid_alias: { value: 'grid-one', varies: false, incomplete: false },
+      grid_alias: { value: 'grid-one', varies: false, incomplete: false, hasDifferences: true },
     },
   };
   root.render(
     <MemoryRouter>
+      <CaseConfigurationSummary record={agreeing} />
       <CaseConfigurationDetails record={agreeing} identity={identity} />
     </MemoryRouter>,
   );
@@ -554,6 +573,15 @@ async function checkConfigurationComparison() {
   check(
     document.querySelector('[data-configuration-group]'),
     'Agreement retains full per-hash details',
+  );
+  const agreeingSummary = document.querySelector('[aria-label="Shared configuration"]')!;
+  check(
+    agreeingSummary.textContent?.includes('Changes within Case Hash'),
+    'Agreeing baselines still flag within-hash changes',
+  );
+  check(
+    !agreeingSummary.textContent?.includes('Varies by Case Hash'),
+    'Within-hash changes do not imply differing baselines',
   );
 }
 

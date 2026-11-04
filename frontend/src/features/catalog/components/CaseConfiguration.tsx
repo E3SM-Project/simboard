@@ -37,8 +37,11 @@ export const CaseConfigurationSummary = ({ record }: { record: CaseDetailOut }) 
           <dd className="break-words font-semibold text-slate-950 [overflow-wrap:anywhere]">
             {summary?.varies ? 'Varies by Case Hash' : (summary?.value ?? 'Unavailable')}
           </dd>
-          {summary?.incomplete && summary.value != null ? (
+          {summary?.incomplete && (summary.value != null || summary.varies) ? (
             <p className="text-xs text-muted-foreground">Some executions unavailable</p>
+          ) : null}
+          {summary?.hasDifferences ? (
+            <p className="text-xs text-muted-foreground">Changes within Case Hash</p>
           ) : null}
         </div>
       );

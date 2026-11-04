@@ -34,6 +34,37 @@ def test_baselines_are_per_field_with_provenance_and_differences():
     assert grid.source.value == "grid"
     assert grid.missing_execution_ids == ["a"]
     assert grid.differences[0].value == "later-grid"
+    assert result["shared_configuration"]["compset_alias"].has_differences
+    assert not result["shared_configuration"]["compset_alias"].varies
+
+
+def test_missing_group_is_not_silently_treated_as_agreement():
+    result = summarize_case_executions(
+        [_run("a", "one"), _run("b", "two", compset_alias="   ")]
+    )
+    shared = result["shared_configuration"]["compset_alias"]
+    assert shared.value is None
+    assert shared.varies
+    assert shared.incomplete
+    assert not shared.has_differences
+    assert (
+        result["configuration_groups"][1].configuration["compset_alias"].source is None
+    )
+
+
+def test_configuration_run_end_fallback_and_input_order_independence():
+    first = _run("a", "hash", run_end_date=_date(1))
+    second = _run("b", "hash", run_start_date=_date(1), grid_alias="other")
+    third = _run("c", "hash", run_start_date=_date(2), grid_alias="later")
+    forward = summarize_case_executions([first, second, third])
+    backward = summarize_case_executions([third, second, first])
+    assert forward == backward
+    assert (
+        forward["configuration_groups"][0]
+        .configuration["grid_alias"]
+        .source.execution_id
+        == "a"
+    )
 
 
 def test_shared_values_missing_groups_and_hashless_identity():

@@ -228,7 +228,7 @@ def _completed_execution_summary_subquery(db: Session):
                     latest_run_activity.desc().nullslast(),
                     Execution.run_end_date.desc().nullslast(),
                     Execution.run_start_date.desc().nullslast(),
-                    Execution.execution_id.desc(),
+                    Execution.execution_id.collate("C").desc(),
                 ),
             )
             .label("latest_execution_rank"),

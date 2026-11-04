@@ -110,6 +110,7 @@ export interface SharedConfigurationFieldOut {
   value: string | null;
   varies: boolean;
   incomplete: boolean;
+  hasDifferences?: boolean;
 }
 
 export interface CaseHashConfigurationOut {

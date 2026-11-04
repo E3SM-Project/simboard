@@ -117,7 +117,7 @@ def _summarize_field(executions: list[Execution], field: str) -> ConfigurationFi
     result = ConfigurationFieldOut()
     for execution in executions:
         value = getattr(execution, field)
-        if not value:
+        if not value or not value.strip():
             result.missing_execution_ids.append(execution.execution_id)
             continue
         observation = ConfigurationObservationOut(
@@ -148,6 +148,7 @@ def _shared_field(
         incomplete=any(
             group.configuration[field].missing_execution_ids for group in groups
         ),
+        has_differences=any(group.configuration[field].differences for group in groups),
     )
 
 
