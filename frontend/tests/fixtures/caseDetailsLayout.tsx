@@ -9,6 +9,8 @@ import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
 import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
 import '../../src/index.css';
+import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
+import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -216,6 +218,7 @@ async function run() {
     simulationHeader.getAttribute('aria-sort') === 'ascending',
     'Simulation sort starts ascending',
   );
+  check(!runHeader.hasAttribute('aria-sort'), 'Unsorted run header omits aria-sort');
   check(!table.textContent?.includes('first)'), 'No oldest/latest-first header text');
   simulationHeader.querySelector('button')!.click();
   await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-3');
@@ -226,6 +229,7 @@ async function run() {
   runHeader.querySelector('button')!.click();
   await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-1');
   check(runHeader.getAttribute('aria-sort') === 'ascending', 'Run sort starts ascending');
+  check(!simulationHeader.hasAttribute('aria-sort'), 'Previously sorted header omits aria-sort');
   runHeader.querySelector('button')!.click();
   await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-2');
   check(table.tBodies[0].rows[2].cells[4].textContent === 'run-3', 'Missing run dates remain last');
@@ -359,6 +363,76 @@ async function run() {
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
   await checkArtifactsScrolling();
+  await checkExecutionPlaceholders();
+}
+
+async function checkExecutionPlaceholders() {
+  for (const caseId of ['placeholder-case', 'other-case']) {
+    client.setQueryDefaults(catalogQueryKeys.executions.case(caseId), { initialData: undefined });
+  }
+  const params = {
+    caseId: 'placeholder-case',
+    pageSize: 100,
+    sortBy: 'simulation_start',
+    sortOrder: 'asc' as const,
+  };
+  client.setQueryData(catalogQueryKeys.executions.caseInfinite(params.caseId, params), {
+    pages: [{ items: executions, total: 3, page: 1, pageSize: 100 }],
+    pageParams: [1],
+  });
+  const originalAdapter = api.defaults.adapter;
+  let finishFetch = () => {};
+  const pendingFetch = new Promise<void>((resolve) => {
+    finishFetch = resolve;
+  });
+  api.defaults.adapter = async (config) => {
+    await pendingFetch;
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { items: [], total: 0, page: 1, pageSize: 100 },
+    };
+  };
+
+  try {
+    root.render(
+      <QueryClientProvider client={client}>
+        <ExecutionProbe caseId={params.caseId} sortOrder="asc" />
+      </QueryClientProvider>,
+    );
+    await waitFor(
+      () => document.querySelector('output')?.textContent === 'placeholder-case:asc:3:false',
+    );
+    root.render(
+      <QueryClientProvider client={client}>
+        <ExecutionProbe caseId={params.caseId} sortOrder="desc" />
+      </QueryClientProvider>,
+    );
+    await waitFor(
+      () => document.querySelector('output')?.textContent === 'placeholder-case:desc:3:true',
+    );
+    root.render(
+      <QueryClientProvider client={client}>
+        <ExecutionProbe caseId="other-case" sortOrder="desc" />
+      </QueryClientProvider>,
+    );
+    await waitFor(
+      () => document.querySelector('output')?.textContent === 'other-case:desc:0:false',
+    );
+  } finally {
+    finishFetch();
+    api.defaults.adapter = originalAdapter;
+  }
+}
+
+function ExecutionProbe({ caseId, sortOrder }: { caseId: string; sortOrder: 'asc' | 'desc' }) {
+  const query = useCaseExecutions(caseId, { sortBy: 'simulation_start', sortOrder });
+
+  return (
+    <output>{`${caseId}:${sortOrder}:${query.data.length}:${query.isPlaceholderData}`}</output>
+  );
 }
 
 async function checkArtifactsScrolling() {
@@ -413,8 +487,12 @@ async function checkArtifactsScrolling() {
   await new Promise((resolve) => setTimeout(resolve, 20));
   check(scroller.scrollTop > 0, 'Artifact rows can scroll vertically');
   check(
-    Math.abs(table.tHead!.getBoundingClientRect().top - scroller.getBoundingClientRect().top) <= 1,
-    'Artifact header stays at the top while scrolling',
+    [...table.querySelectorAll('th')].every(
+      (cell) =>
+        Math.abs(cell.getBoundingClientRect().top - scroller.getBoundingClientRect().top) <= 1 &&
+        getComputedStyle(cell).backgroundColor === 'rgb(248, 250, 252)',
+    ),
+    'Artifact header cells stay at the top with opaque backgrounds while scrolling',
   );
   if (window.innerWidth < 680) {
     scroller.scrollLeft = 100;
@@ -501,7 +579,7 @@ async function checkCasesFilters() {
   check(getComputedStyle(label).textTransform === 'none', 'Sentence-case filter labels');
   check(document.documentElement.scrollWidth <= window.innerWidth, 'No Cases horizontal overflow');
 
-  const groupHelp = document.querySelector<HTMLButtonElement>('[aria-label="About case groups"]')!;
+  const groupHelp = document.querySelector<HTMLButtonElement>('[aria-label="About Case group"]')!;
   groupHelp.focus({ preventScroll: true });
   await waitFor(() => groupHelp.getAttribute('aria-describedby'));
   const tooltip = document.getElementById(groupHelp.getAttribute('aria-describedby')!)!;
@@ -537,16 +615,16 @@ async function checkCasesFilters() {
   );
 
   let copied = '';
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: {
-      writeText: async (value: string) => {
-        copied = value;
-      },
-    },
-  });
-  document.querySelector<HTMLButtonElement>('[aria-label="Copy search link"]')!.click();
-  await waitFor(() => copied.includes('caseGroup=v3.HR'));
+  const originalWriteText = navigator.clipboard.writeText;
+  try {
+    navigator.clipboard.writeText = async (value: string) => {
+      copied = value;
+    };
+    document.querySelector<HTMLButtonElement>('[aria-label="Copy search link"]')!.click();
+    await waitFor(() => copied.includes('caseGroup=v3.HR'));
+  } finally {
+    navigator.clipboard.writeText = originalWriteText;
+  }
   more.click();
   await waitFor(() => document.querySelector('[aria-label="Campaign"]'));
   const clear = [...document.querySelectorAll('button')].find(

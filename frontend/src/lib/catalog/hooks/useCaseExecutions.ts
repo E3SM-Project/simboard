@@ -15,7 +15,12 @@ export const useCaseExecutions = (
     queryKey: catalogQueryKeys.executions.caseInfinite(caseId ?? '', params),
     queryFn: ({ pageParam }) => listExecutions({ ...params, page: pageParam }),
     placeholderData: (previousData, previousQuery) =>
-      previousQuery?.queryKey[2] === caseId ? previousData : undefined,
+      caseId &&
+      catalogQueryKeys.executions
+        .case(caseId)
+        .every((part, index) => previousQuery?.queryKey[index] === part)
+        ? previousData
+        : undefined,
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.page * lastPage.pageSize < lastPage.total ? lastPage.page + 1 : undefined,

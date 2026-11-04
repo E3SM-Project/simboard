@@ -244,9 +244,12 @@ export const CaseArtifactsTable = ({
           {visibleArtifacts.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white [&>div]:max-h-[28rem]">
               <Table className="min-w-[680px]">
-                <TableHeader className="sticky top-0 z-10 bg-slate-50">
+                <TableHeader className="bg-slate-50">
                   <TableRow className="hover:bg-slate-50">
-                    <TableHead className="w-40 bg-slate-50" aria-sort={getAriaSort('kind')}>
+                    <TableHead
+                      className="sticky top-0 z-10 w-40 bg-slate-50"
+                      aria-sort={getAriaSort('kind')}
+                    >
                       <SortHeader
                         activeSortKey={sortKey}
                         onSort={handleSort}
@@ -256,7 +259,10 @@ export const CaseArtifactsTable = ({
                         Type
                       </SortHeader>
                     </TableHead>
-                    <TableHead className="bg-slate-50" aria-sort={getAriaSort('artifact')}>
+                    <TableHead
+                      className="sticky top-0 z-10 bg-slate-50"
+                      aria-sort={getAriaSort('artifact')}
+                    >
                       <SortHeader
                         activeSortKey={sortKey}
                         onSort={handleSort}
@@ -266,7 +272,10 @@ export const CaseArtifactsTable = ({
                         Artifact
                       </SortHeader>
                     </TableHead>
-                    <TableHead className="w-48 bg-slate-50" aria-sort={getAriaSort('executions')}>
+                    <TableHead
+                      className="sticky top-0 z-10 w-48 bg-slate-50"
+                      aria-sort={getAriaSort('executions')}
+                    >
                       <SortHeader
                         activeSortKey={sortKey}
                         onSort={handleSort}

@@ -748,7 +748,7 @@ export const CasesPage = () => {
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    aria-label="About case groups"
+                    aria-label={`About ${label}`}
                     className="rounded-sm text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <Info className="h-3.5 w-3.5" aria-hidden="true" />

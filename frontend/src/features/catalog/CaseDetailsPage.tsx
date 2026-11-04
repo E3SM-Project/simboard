@@ -199,7 +199,7 @@ const DateSortHeader = ({
     direction === 'none' ? ArrowUpDown : direction === 'ascending' ? ChevronUp : ChevronDown;
 
   return (
-    <TableHead className={className} aria-sort={direction}>
+    <TableHead className={className} aria-sort={direction === 'none' ? undefined : direction}>
       <button
         type="button"
         className="inline-flex items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
