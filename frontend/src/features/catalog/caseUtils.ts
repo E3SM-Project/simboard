@@ -1,9 +1,19 @@
 import { format } from 'date-fns';
 
-import type { ExecutionListItemOut, ExecutionSummaryOut } from '@/types';
+import type { ExecutionListItemOut, ExecutionSummaryOut, SimulationCoverageOut } from '@/types';
 import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
+
+export const formatSimulationCoverage = (coverage?: SimulationCoverageOut) => {
+  const years = coverage?.years;
+  const value =
+    years == null
+      ? 'Unavailable'
+      : new Intl.NumberFormat('en', { maximumFractionDigits: 3 }).format(years);
+
+  return `${value}${coverage?.partial ? ' (partial)' : ''}`;
+};
 
 export interface ExecutionSummaryGroup {
   key: string;

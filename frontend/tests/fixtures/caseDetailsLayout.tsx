@@ -7,11 +7,17 @@ import { api } from '../../src/api/api';
 import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
+import { formatSimulationCoverage } from '../../src/features/catalog/caseUtils';
 import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
+import {
+  CaseConfigurationDetails,
+  CaseConfigurationSummary,
+} from '../../src/features/catalog/components/CaseConfiguration';
 import { HomePage } from '../../src/features/home/HomePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
+import type { CaseDetailOut, ConfigurationFieldOut } from '../../src/types';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -55,6 +61,13 @@ const record = {
   links: [{ id: 'link-1', kind: 'docs', label: 'Case docs', url: 'https://example.test/docs' }],
   sourceDirectories: [{ id: 'source-1', kind: 'archive', path: '/archive/test.case' }],
   executions,
+  sharedConfiguration: {
+    compset_alias: { value: 'SHARED-COMPSET', varies: false, incomplete: false },
+    grid_alias: { value: 'SHARED-GRID', varies: false, incomplete: false },
+    git_tag: { value: 'v3', varies: false, incomplete: false },
+  },
+  simulationCoverage: { years: 1234.5, partial: true, excludedExecutionCount: 1 },
+  latestExecution: { executionId: 'run-105', runEndDate: '2026-11-02T12:00:00Z' },
 };
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
 client.setQueryDefaults(['executions', 'case'], {
@@ -138,7 +151,9 @@ async function run() {
     await waitFor(() => document.querySelector('h1')?.textContent === record.name);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const developer = document.querySelector('details');
+    const developer = [...document.querySelectorAll('details')].find(
+      (element) => element.querySelector('summary')?.textContent === 'Developer Details',
+    );
     check(Boolean(developer) === (role === 'admin'), `Developer Details visibility: ${role}`);
     if (developer) {
       check(!developer.open, 'Developer Details must start collapsed');
@@ -154,7 +169,7 @@ async function run() {
       headings.filter((text) => text === 'Case Metadata').length === 1,
       'One Case Metadata heading',
     );
-    for (const text of ['Executions', 'Case hash groups', 'Machines', 'HPC users']) {
+    for (const text of ['Simulated years covered', 'Latest execution', 'Machines', 'HPC users']) {
       const label = [...document.querySelectorAll('div')].find(
         (element) => element.childElementCount === 0 && element.textContent === text,
       );
@@ -170,6 +185,29 @@ async function run() {
       document.body.textContent?.includes('Page updated:'),
       'Page update timestamp near header',
     );
+    const metadata = document.querySelector('[aria-label="Shared configuration"]')!;
+    check(
+      metadata.textContent?.includes('SHARED-COMPSET'),
+      'Shared alias appears beneath metadata',
+    );
+    check(metadata.textContent?.includes('SHARED-GRID'), 'Shared grid appears beneath metadata');
+    check(metadata.textContent?.includes('v3'), 'Existing model tag appears in summary');
+    const stats = metadata.nextElementSibling!;
+    check(
+      stats.textContent?.startsWith('Simulated years covered'),
+      'Coverage is first summary statistic',
+    );
+    check(
+      stats.textContent?.includes('1,234.5 (partial)'),
+      'Use server coverage, not loaded execution intervals',
+    );
+    check(stats.textContent?.includes('2026-11-02'), 'Latest run date differs from page update');
+    check(
+      stats.querySelector('a')?.getAttribute('href')?.endsWith('/run-105'),
+      'Latest run can be outside loaded page',
+    );
+    check(!stats.textContent?.includes('Case hash groups'), 'Hash count removed from summary');
+    check(!stats.textContent?.includes('Executions'), 'Execution count removed from summary');
     const notes = [...document.querySelectorAll('label')].find(
       (element) => element.textContent === 'Notes',
     );
@@ -366,6 +404,157 @@ async function run() {
   check(requests[0].includes('/history'), 'Opening history fetches history only');
   await checkArtifactsScrolling();
   await checkExecutionPlaceholders();
+  await checkConfigurationComparison();
+}
+
+async function checkConfigurationComparison() {
+  const observation = (value: string, executionId: string, runDate: string | null) => ({
+    value,
+    executionId,
+    executionUuid: executionId,
+    runDate,
+  });
+  const field = (value: string | null, executionId: string): ConfigurationFieldOut => ({
+    source: value == null ? null : observation(value, executionId, '2026-01-01T00:00:00Z'),
+    differences: [],
+    missingExecutionIds: value == null ? [executionId] : [],
+  });
+  const firstConfiguration = {
+    compset_alias: field('shared-alias', 'run-1'),
+    grid_alias: field('grid-one', 'run-1'),
+    git_tag: field(null, 'run-1'),
+    compset_long_name: field('LONG_'.repeat(100), 'run-1'),
+    grid_long_name: field('grid-long', 'run-1'),
+  };
+  firstConfiguration.grid_alias.differences.push(observation('later-grid', 'run-2', null));
+  const configured: CaseDetailOut = {
+    ...record,
+    createdAt: record.updatedAt,
+    simulationType: 'production',
+    executions: [],
+    links: [],
+    sourceDirectories: [],
+    latestExecution: null,
+    sharedConfiguration: {
+      compset_alias: { value: 'shared-alias', varies: false, incomplete: false },
+      grid_alias: { value: null, varies: true, incomplete: true },
+      git_tag: { value: null, varies: false, incomplete: true },
+      compset_long_name: {
+        value: firstConfiguration.compset_long_name.source!.value,
+        varies: false,
+        incomplete: false,
+      },
+      grid_long_name: { value: 'grid-long', varies: false, incomplete: false },
+    },
+    configurationGroups: [
+      {
+        key: 'one',
+        caseHash: 'hash-'.repeat(40),
+        executionIds: ['run-1', 'run-2'],
+        configuration: firstConfiguration,
+        coverage: { years: 20, partial: false, excludedExecutionCount: 0 },
+      },
+      {
+        key: 'missing:run-3',
+        caseHash: null,
+        executionIds: ['run-3'],
+        configuration: { ...firstConfiguration, grid_alias: field(null, 'run-3') },
+        coverage: { years: null, partial: true, excludedExecutionCount: 1 },
+      },
+    ],
+  };
+  const identity = { machineName: 'chrysalis', hpcUsername: 'test.user', caseName: record.name };
+  root.render(
+    <MemoryRouter>
+      <div className="min-w-0 p-6">
+        <CaseConfigurationSummary record={configured} />
+        <CaseConfigurationDetails record={configured} identity={identity} />
+      </div>
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelector('[data-case-configuration]'));
+  const summary = document.querySelector('[aria-label="Shared configuration"]')!;
+  check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
+  check(summary.textContent?.includes('Varies by Case Hash'), 'Summary flags differing values');
+  check(summary.textContent?.includes('Unavailable'), 'Summary marks missing model tag');
+  const details = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
+  check(!details.open, 'Configuration details start collapsed');
+  details.querySelector('summary')!.click();
+  const comparison = details.querySelector('[data-configuration-differences]')!;
+  check(
+    comparison.querySelectorAll('tbody tr').length === 1,
+    'Comparison contains only differing fields',
+  );
+  check(
+    comparison.querySelector('tbody th')?.textContent === 'Grid alias',
+    'Missing values count as a difference',
+  );
+  check(
+    !comparison.textContent?.includes('Compset alias'),
+    'Shared fields excluded from comparison',
+  );
+  check(
+    comparison.textContent?.includes('Missing Case Hash: run-3'),
+    'Hashless execution keeps identity',
+  );
+  check(comparison.textContent?.includes('Unavailable'), 'Missing value stays explicit');
+  check(
+    comparison.querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
+    'Baseline links to its source',
+  );
+  const changes = comparison.querySelector<HTMLDetailsElement>('tbody td details')!;
+  changes.querySelector('summary')!.click();
+  check(changes.textContent?.includes('later-grid'), 'Later differences remain available');
+  check(changes.textContent?.includes('Run date unavailable'), 'Undated provenance stays explicit');
+  const group = details.querySelector<HTMLDetailsElement>('[data-configuration-group]')!;
+  group.querySelector('summary')!.click();
+  check(
+    group.textContent?.includes('Simulated years covered: 20'),
+    'Per-hash coverage remains available',
+  );
+  check(
+    group.textContent?.includes('LONG_'.repeat(100)),
+    'Full shared configuration remains available',
+  );
+  check(
+    document.documentElement.scrollWidth <= window.innerWidth,
+    'Expanded config has no page-wide overflow',
+  );
+  check(
+    formatSimulationCoverage({ years: 0, partial: false, excludedExecutionCount: 0 }) === '0',
+    'Zero coverage is valid',
+  );
+  check(
+    formatSimulationCoverage({ years: null, partial: true, excludedExecutionCount: 1 }) ===
+      'Unavailable (partial)',
+    'Unknown coverage is not zero',
+  );
+  check(
+    formatSimulationCoverage(undefined) === 'Unavailable',
+    'Older response does not fabricate coverage',
+  );
+  const agreeing = {
+    ...configured,
+    configurationGroups: configured.configurationGroups!.slice(0, 1),
+    sharedConfiguration: {
+      ...configured.sharedConfiguration,
+      grid_alias: { value: 'grid-one', varies: false, incomplete: false },
+    },
+  };
+  root.render(
+    <MemoryRouter>
+      <CaseConfigurationDetails record={agreeing} identity={identity} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => !document.querySelector('[data-configuration-differences]'));
+  check(
+    document.body.textContent?.includes('No configuration differences'),
+    'Agreement does not produce a redundant comparison table',
+  );
+  check(
+    document.querySelector('[data-configuration-group]'),
+    'Agreement retains full per-hash details',
+  );
 }
 
 async function checkExecutionPlaceholders() {

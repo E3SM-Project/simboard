@@ -49,6 +49,7 @@ import {
   formatCaseDate,
   formatCaseHashLabel,
   formatExecutionDateRange,
+  formatSimulationCoverage,
   getDefaultExpandedGroupKeys,
   getExecutionDateWindow,
   groupExecutionSummaries,
@@ -60,6 +61,10 @@ import {
   CaseArtifactsTable,
   type CaseArtifactValue,
 } from '@/features/catalog/components/CaseArtifactsTable';
+import {
+  CaseConfigurationDetails,
+  CaseConfigurationSummary,
+} from '@/features/catalog/components/CaseConfiguration';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
@@ -1054,9 +1059,25 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
+            <CaseConfigurationSummary record={caseRecord} />
+
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <DetailField label="Executions" value={caseRecord.executions.length} />
-              <DetailField label="Case hash groups" value={caseHashGroupCount} />
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div tabIndex={0}>
+                      <DetailField
+                        label="Simulated years covered"
+                        value={formatSimulationCoverage(caseRecord.simulationCoverage)}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Simulation time covered across all executions. Overlaps count once; gaps do not
+                    count.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <div
                 className="min-w-0"
                 title={
@@ -1077,7 +1098,43 @@ export const CaseDetailsPage = ({
               >
                 <DetailField label="HPC users" value={hpcUsernameSummary} />
               </div>
+              <DetailField
+                label="Latest execution"
+                title="Latest completed execution by run end, with run start fallback."
+                value={
+                  caseRecord.latestExecution ? (
+                    <>
+                      <div>
+                        {caseRecord.latestExecution.runEndDate ||
+                        caseRecord.latestExecution.runStartDate
+                          ? formatCaseDate(
+                              caseRecord.latestExecution.runEndDate ??
+                                caseRecord.latestExecution.runStartDate,
+                            )
+                          : 'Run date unavailable'}
+                      </div>
+                      {readableIdentity ? (
+                        <Link
+                          className="text-xs underline"
+                          to={executionDetailsPath({
+                            ...readableIdentity,
+                            executionId: caseRecord.latestExecution.executionId,
+                          })}
+                        >
+                          {caseRecord.latestExecution.executionId}
+                        </Link>
+                      ) : null}
+                    </>
+                  ) : (
+                    'Unavailable'
+                  )
+                }
+              />
             </div>
+
+            {readableIdentity ? (
+              <CaseConfigurationDetails record={caseRecord} identity={readableIdentity} />
+            ) : null}
 
             <div className="border-t border-slate-200 pt-3">
               <div className="space-y-3">
