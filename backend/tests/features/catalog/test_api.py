@@ -948,7 +948,133 @@ class TestListCases:
         # Search and execution filters keep only the matching campaign.
         assert execution_facets["campaigns"] == ["campaign-a"]
 
-    def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
+    @pytest.mark.parametrize(
+        ("now", "cutoff"),
+        [
+            (
+                datetime(2026, 11, 4, 12, tzinfo=timezone.utc),
+                datetime(2026, 5, 4, 12, tzinfo=timezone.utc),
+            ),
+            (
+                datetime(2026, 8, 31, 12, tzinfo=timezone.utc),
+                datetime(2026, 2, 28, 12, tzinfo=timezone.utc),
+            ),
+            (
+                datetime(2024, 8, 31, 12, tzinfo=timezone.utc),
+                datetime(2024, 2, 29, 12, tzinfo=timezone.utc),
+            ),
+        ],
+    )
+    def test_recent_execution_filters_before_pagination(
+        self, client, db: Session, normal_user_sync, admin_user_sync, now, cutoff
+    ):
+        machine = db.query(Machine).first()
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        cases = {}
+        executions = []
+        scenarios = [
+            ("boundary", ExecutionStatus.COMPLETED, cutoff, None),
+            (
+                "end-fallback",
+                ExecutionStatus.COMPLETED,
+                cutoff - timedelta(days=1),
+                cutoff,
+            ),
+            (
+                "old",
+                ExecutionStatus.COMPLETED,
+                cutoff - timedelta(microseconds=1),
+                None,
+            ),
+            ("missing", ExecutionStatus.COMPLETED, None, None),
+            ("newer", ExecutionStatus.COMPLETED, now, None),
+            *[
+                (status.value, status, now, now)
+                for status in ExecutionStatus
+                if status != ExecutionStatus.COMPLETED
+            ],
+        ]
+        for name, execution_status, start, end in scenarios:
+            case = _create_case(db, name)
+            case.simulation_type = CaseSimulationType.PRODUCTION
+            cases[name] = case
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=name,
+                execution_status=execution_status,
+            )
+            execution.run_start_date = start
+            execution.run_end_date = end
+            executions.append(execution)
+        development = _create_case(db, "development")
+        development.simulation_type = CaseSimulationType.DEVELOPMENT
+        execution = _create_execution_record(
+            db,
+            case=development,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="development",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        execution.run_end_date = now
+        # A newer undated run must not hide a dated completed run.
+        _create_execution_record(
+            db,
+            case=cases["boundary"],
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="boundary-undated",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        db.commit()
+
+        params = {
+            "simulation_type": "production",
+            "recent_execution": True,
+            "sort_by": "latest_run_activity",
+            "page_size": 1,
+        }
+        expected = [
+            "newer",
+            *sorted(["boundary", "end-fallback"], key=lambda name: cases[name].id),
+        ]
+        with patch("app.features.catalog.api.datetime") as clock:
+            clock.now.return_value = now
+            pages = [
+                client.get(f"{API_BASE}/cases", params={**params, "page": page}).json()
+                for page in range(1, 5)
+            ]
+            assert [page["total"] for page in pages] == [3] * 4
+            assert [
+                item["name"] for page in pages for item in page["items"]
+            ] == expected
+            for case in cases.values():
+                case.updated_at = now + timedelta(days=1)
+            for execution in executions:
+                execution.created_at = now + timedelta(days=1)
+                execution.updated_at = now + timedelta(days=1)
+            db.commit()
+            refreshed = client.get(f"{API_BASE}/cases", params=params).json()
+            assert refreshed["total"] == 3
+            assert refreshed["items"][0]["id"] == pages[0]["items"][0]["id"]
+            assert (
+                refreshed["items"][0]["latestExecution"]
+                == pages[0]["items"][0]["latestExecution"]
+            )
+            unfiltered = client.get(
+                f"{API_BASE}/cases", params={"simulation_type": "production"}
+            ).json()
+            assert unfiltered["total"] == len(scenarios)
+            assert "old" in {item["name"] for item in unfiltered["items"]}
+            assert "missing" in {item["name"] for item in unfiltered["items"]}
+
+    def test_overview_is_fixed_size_and_stable_without_dates(self, client, db: Session):
         cases = [_create_case(db, f"overview-{index}") for index in range(7)]
         for index, case in enumerate(cases):
             case.updated_at = datetime(2026, 1, index + 1, tzinfo=timezone.utc)
@@ -957,17 +1083,12 @@ class TestListCases:
         data = client.get(f"{API_BASE}/cases/overview").json()
         assert data["totalCases"] == 7
         assert data["totalExecutions"] == 0
-        assert data["totalExecutions"] == 0
         assert data["latestSubmission"] is None
         assert data["machineCounts"] == {str(cases[0].machine_id): 7}
         assert [item["name"] for item in data["recentCases"]] == [
-            "overview-6",
-            "overview-5",
-            "overview-4",
-            "overview-3",
-            "overview-2",
-            "overview-1",
+            case.name for case in sorted(cases, key=lambda case: case.id)[:6]
         ]
+        assert all(item["latestExecution"] is None for item in data["recentCases"])
 
     def test_overview_orders_by_latest_execution_activity(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -979,16 +1100,19 @@ class TestListCases:
         active_case.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         inactive_case.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
-        _create_execution_record(
+        execution = _create_execution_record(
             db,
             case=active_case,
             ingestion_id=ingestion.id,
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             execution_id="new-activity",
+            execution_status=ExecutionStatus.COMPLETED,
             created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
             updated_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         )
+        execution.run_start_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        execution.run_end_date = datetime(2025, 1, 2, tzinfo=timezone.utc)
         db.commit()
 
         data = client.get(f"{API_BASE}/cases/overview").json()
@@ -997,7 +1121,23 @@ class TestListCases:
             "old-case-with-new-run",
             "newer-inactive-case",
         ]
-        assert data["recentCases"][0]["updatedAt"] == "2026-03-01T00:00:00Z"
+        assert data["recentCases"][0]["updatedAt"] == "2026-01-01T00:00:00Z"
+        assert (
+            data["recentCases"][0]["latestExecution"]["runEndDate"]
+            == "2025-01-02T00:00:00Z"
+        )
+        execution.created_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        execution.updated_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        inactive_case.updated_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        db.commit()
+        refreshed = client.get(f"{API_BASE}/cases/overview").json()
+        assert [item["id"] for item in refreshed["recentCases"]] == [
+            item["id"] for item in data["recentCases"]
+        ]
+        assert (
+            refreshed["recentCases"][0]["latestExecution"]
+            == data["recentCases"][0]["latestExecution"]
+        )
 
 
 class TestListCaseNames:

@@ -85,7 +85,8 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
     ...caseRecord,
     machineSummary: caseRecord.machineName,
     hpcUsernameSummary: caseRecord.hpcUsername,
-    lastUpdated: caseRecord.updatedAt,
+    lastExecution:
+      caseRecord.latestExecution?.runEndDate ?? caseRecord.latestExecution?.runStartDate,
   }));
   const machineCaseCounts = new Map<Machine['id'], number>(
     Object.entries(overview?.machineCounts ?? {}),
@@ -219,9 +220,10 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Production Cases</h2>
+            <h2 className="text-2xl font-bold">Recent Production Cases</h2>
             <p className="text-muted-foreground">
-              Production-classified simulations across all machines.
+              Production-classified simulations with a completed execution in the last six calendar
+              months.
             </p>
           </div>
           <Button asChild variant="secondary">
@@ -249,7 +251,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-                <TableHead>Last Updated</TableHead>
+                <TableHead>Last Execution</TableHead>
                 <TableHead>Details</TableHead>
                 <TableHead>Case Group</TableHead>
                 <TableHead>Machine</TableHead>
@@ -263,7 +265,11 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                   <TableCell className="align-top">
                     <TableCellText value={caseRecord.name} lines={1} />
                   </TableCell>
-                  <TableCell>{new Date(caseRecord.lastUpdated).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {caseRecord.lastExecution
+                      ? new Date(caseRecord.lastExecution).toLocaleDateString()
+                      : '—'}
+                  </TableCell>
                   <TableCell>
                     <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
                       <Link
