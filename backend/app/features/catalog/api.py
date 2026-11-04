@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, and_, asc, desc, distinct, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -88,6 +89,10 @@ def list_cases(
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
     simulation_type: CaseSimulationType | None = Query(None),
+    recent_execution: bool = Query(
+        False,
+        description="Only cases with a completed run in the last six calendar months.",
+    ),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -114,10 +119,15 @@ def list_cases(
         created_by=created_by,
         simulation_type=simulation_type,
     )
-    total = query.order_by(None).count()
     latest_execution = _completed_execution_summary_subquery(db)
     execution_count = _case_execution_count_subquery(db)
     rows_query = _case_list_projection(query, execution_count, latest_execution)
+
+    if recent_execution:
+        cutoff = datetime.now(timezone.utc) - relativedelta(months=6)
+        rows_query = rows_query.filter(latest_execution.c.latest_run_activity >= cutoff)
+
+    total = rows_query.order_by(None).count()
     ordering = _case_list_ordering(
         sort_by, sort_order, execution_count, latest_execution
     )
@@ -127,6 +137,7 @@ def list_cases(
         .limit(page_size)
         .all()
     )
+
     return CasePageOut(
         items=[_case_list_item_from_row(row) for row in rows],
         total=total,
@@ -313,36 +324,14 @@ def get_catalog_overview(
     machine_counts: dict[UUID, int] = {
         machine_id: count for machine_id, count in machine_count_rows
     }
-    execution_count = (
-        db.query(func.count(Execution.id))
-        .filter(Execution.case_id == Case.id)
-        .correlate(Case)
-        .scalar_subquery()
-    )
-    latest_simulation_activity = (
-        db.query(func.max(func.greatest(Execution.created_at, Execution.updated_at)))
-        .filter(Execution.case_id == Case.id)
-        .correlate(Case)
-        .scalar_subquery()
-    )
-    latest_activity = func.greatest(
-        Case.updated_at,
-        func.coalesce(latest_simulation_activity, Case.updated_at),
+    execution_count = _case_execution_count_subquery(db)
+    latest_execution = _completed_execution_summary_subquery(db)
+    ordering = _case_list_ordering(
+        "latest_run_activity", "desc", execution_count, latest_execution
     )
     rows = (
-        db.query(
-            Case.id,
-            Case.name,
-            Case.case_group,
-            Case.machine_id,
-            Machine.name.label("machine_name"),
-            Case.hpc_username,
-            execution_count.label("execution_count"),
-            Case.created_at,
-            latest_activity.label("updated_at"),
-        )
-        .join(Machine, Machine.id == Case.machine_id)
-        .order_by(latest_activity.desc(), Case.id.asc())
+        _case_list_projection(db.query(Case), execution_count, latest_execution)
+        .order_by(*ordering)
         .limit(6)
         .all()
     )
@@ -351,7 +340,7 @@ def get_catalog_overview(
         total_executions=total_executions,
         latest_submission=latest_submission,
         machine_counts=machine_counts,
-        recent_cases=[CaseListItemOut(**row._asdict()) for row in rows],
+        recent_cases=[_case_list_item_from_row(row) for row in rows],
     )
 
 

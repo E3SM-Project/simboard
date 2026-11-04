@@ -26,6 +26,7 @@ export const ProductionCasesTable = () => {
     page: 1,
     pageSize: 6,
     simulationType: 'production',
+    recentExecution: true,
     sortBy: 'latest_run_activity',
     sortOrder: 'desc',
   });
@@ -73,7 +74,7 @@ export const ProductionCasesTable = () => {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-              <TableHead>Last Updated</TableHead>
+              <TableHead>Last Execution</TableHead>
               <TableHead>Details</TableHead>
               <TableHead>Case Group</TableHead>
               <TableHead>Machine</TableHead>
@@ -85,39 +86,47 @@ export const ProductionCasesTable = () => {
             {cases.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No production cases are currently available.
+                  No production cases have a completed execution in the last six calendar months.
                 </TableCell>
               </TableRow>
             ) : (
-              cases.map((caseRecord) => (
-                <TableRow key={caseRecord.id}>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.name} lines={1} />
-                  </TableCell>
-                  <TableCell>{new Date(caseRecord.updatedAt).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Button asChild className="h-8 gap-1 px-2" size="sm" variant="outline">
-                      <Link
-                        to={caseDetailsPath({
-                          machineName: caseRecord.machineName,
-                          hpcUsername: caseRecord.hpcUsername,
-                          caseName: caseRecord.name,
-                        })}
-                      >
-                        Open <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.machineName} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.hpcUsername} lines={1} />
-                  </TableCell>
-                  <TableCell>{caseRecord.executionCount}</TableCell>
-                </TableRow>
-              ))
+              cases.map((caseRecord) => {
+                const lastExecution =
+                  caseRecord.latestExecution?.runEndDate ??
+                  caseRecord.latestExecution?.runStartDate;
+
+                return (
+                  <TableRow key={caseRecord.id}>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.name} lines={1} />
+                    </TableCell>
+                    <TableCell>
+                      {lastExecution ? new Date(lastExecution).toLocaleDateString() : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild className="h-8 gap-1 px-2" size="sm" variant="outline">
+                        <Link
+                          to={caseDetailsPath({
+                            machineName: caseRecord.machineName,
+                            hpcUsername: caseRecord.hpcUsername,
+                            caseName: caseRecord.name,
+                          })}
+                        >
+                          Open <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                    <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.machineName} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.hpcUsername} lines={1} />
+                    </TableCell>
+                    <TableCell>{caseRecord.executionCount}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

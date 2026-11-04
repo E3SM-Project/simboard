@@ -8,6 +8,7 @@ import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
 import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
+import { HomePage } from '../../src/features/home/HomePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
@@ -100,6 +101,7 @@ async function run() {
     window.innerWidth === expectedWidth,
     `Expected viewport ${expectedWidth}, got ${window.innerWidth}`,
   );
+  await checkHomepage();
   await checkCasesFilters();
   for (const role of ['anonymous', 'editor', 'loading-admin', 'admin']) {
     const user =
@@ -525,6 +527,78 @@ async function checkArtifactsScrolling() {
   );
   await waitFor(() => document.body.textContent?.includes('No execution artifacts available.'));
   check(!document.querySelector('table'), 'Empty artifacts do not reserve table space');
+}
+
+async function checkHomepage() {
+  const cases = Array.from({ length: 6 }, (_, index) => ({
+    id: `home-${index}`,
+    name: `production.case.${index}`,
+    caseGroup: 'v3.HR',
+    machineName: 'chrysalis',
+    hpcUsername: 'test.user',
+    executionCount: 7,
+    updatedAt: '2030-01-01T12:00:00Z',
+    latestExecution: {
+      runEndDate: '2026-10-02T12:00:00Z',
+      runStartDate: '2026-10-01T12:00:00Z',
+    },
+  }));
+  const productionParams = {
+    page: 1,
+    pageSize: 6,
+    simulationType: 'production',
+    recentExecution: true,
+    sortBy: 'latest_run_activity',
+    sortOrder: 'desc',
+  };
+  client.setQueryData(['cases', 'page', productionParams], {
+    items: cases,
+    total: 10,
+    page: 1,
+    pageSize: 6,
+  });
+  client.setQueryData(['catalog', 'overview'], {
+    totalCases: 10,
+    totalExecutions: 70,
+    recentCases: cases,
+    machineCounts: {},
+  });
+  root.render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter key="homepage">
+        <Routes>
+          <Route path="/" element={<HomePage machines={[]} sites={[]} />} />
+          <Route path="/cases" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => document.querySelector('h1')?.textContent === 'Explore E3SM Simulations');
+  for (const table of [...document.querySelectorAll('table')].slice(0, 2)) {
+    check(table.tBodies[0].rows.length === 6, 'Homepage case tables show six cases');
+    check(
+      table.tHead?.rows[0].cells[1].textContent === 'Last Execution',
+      'Homepage uses execution dates',
+    );
+    check(
+      table.tBodies[0].rows[0].cells[1].textContent ===
+        new Date(cases[0].latestExecution.runEndDate).toLocaleDateString(),
+      'Homepage does not display audit dates',
+    );
+    if (window.innerWidth < 1100) {
+      const scroller = table.parentElement!;
+      scroller.scrollLeft = 100;
+      check(scroller.scrollLeft > 0, 'Homepage tables scroll horizontally on narrow screens');
+    }
+  }
+  const browse = [...document.querySelectorAll('a')].find(
+    (link) => link.textContent === 'Browse Production Cases',
+  )!;
+  browse.click();
+  await waitFor(
+    () => document.querySelector('#filter-url')?.textContent === '?simulationType=production',
+  );
+  client.removeQueries({ queryKey: ['cases', 'page', productionParams], exact: true });
 }
 
 async function checkCasesFilters() {

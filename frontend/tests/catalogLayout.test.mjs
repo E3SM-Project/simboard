@@ -63,85 +63,132 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
-test('homepage puts workflows after cases and statistics above the footer', async () => {
-  const { HomePage } = await server.ssrLoadModule('/src/features/home/HomePage.tsx');
-  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
-  const client = new QueryClient();
-  const caseRecord = {
-    id: 'case-1',
-    name: 'test.case',
-    caseGroup: 'v3.HR',
-    machineName: 'chrysalis',
-    hpcUsername: 'test.user',
-    executionCount: 7,
-    updatedAt: '2026-10-01T12:00:00Z',
-  };
-  client.setQueryData(['catalog', 'overview'], {
-    totalCases: 42,
-    totalExecutions: 84,
-    recentCases: [caseRecord],
-    machineCounts: {},
+for (const latestExecution of [
+  { runEndDate: '2026-09-02T12:00:00Z', runStartDate: '2026-09-01T12:00:00Z' },
+  { runEndDate: null, runStartDate: '2026-09-01T12:00:00Z' },
+  { runEndDate: null, runStartDate: null },
+  null,
+]) {
+  test(`homepage uses execution dates and preserves layout: ${JSON.stringify(latestExecution)}`, async () => {
+    const { HomePage } = await server.ssrLoadModule('/src/features/home/HomePage.tsx');
+    const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+    const client = new QueryClient();
+    const caseRecord = {
+      id: 'case-1',
+      name: 'test.case',
+      caseGroup: 'v3.HR',
+      machineName: 'chrysalis',
+      hpcUsername: 'test.user',
+      executionCount: 7,
+      updatedAt: '2026-10-01T12:00:00Z',
+      latestExecution,
+    };
+    client.setQueryData(['catalog', 'overview'], {
+      totalCases: 42,
+      totalExecutions: 84,
+      recentCases: [caseRecord],
+      machineCounts: {},
+    });
+    client.setQueryDefaults(['cases', 'page'], {
+      initialData: { items: [caseRecord], total: 1, page: 1, pageSize: 6 },
+    });
+
+    try {
+      const html = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(MemoryRouter, null, createElement(HomePage, { machines: [], sites: [] })),
+        ),
+      );
+      const headings = [
+        'Explore E3SM Simulations',
+        '>Recent Production Cases<',
+        '>Recent Cases<',
+        '>Common Workflows<',
+        '>Sites and Machines<',
+        '>Catalog at a glance<',
+        '<footer',
+      ].map((text) => html.indexOf(text));
+
+      assert.ok(headings.every((position) => position >= 0));
+      assert.deepEqual(
+        headings,
+        [...headings].sort((left, right) => left - right),
+      );
+      assert.match(html, />42<\/dd>/);
+      assert.match(html, />84<\/dd>/);
+      assert.match(html, /href="\/cases\?simulationType=production"/);
+      assert.doesNotMatch(html, />Production Cases<|Last Updated/);
+      const productionQuery = client
+        .getQueryCache()
+        .find({ queryKey: ['cases', 'page'], exact: false });
+      assert.deepEqual(productionQuery.queryKey[2], {
+        page: 1,
+        pageSize: 6,
+        simulationType: 'production',
+        recentExecution: true,
+        sortBy: 'latest_run_activity',
+        sortOrder: 'desc',
+      });
+
+      const caseTables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/g)].slice(0, 2);
+      assert.equal(caseTables.length, 2);
+      for (const [markup, table] of caseTables) {
+        assert.match(markup, /<table\b[^>]*class="[^"]*\bmin-w-\[1100px\] table-fixed\b/);
+        const tablePosition = html.indexOf(markup);
+        assert.match(html.slice(0, tablePosition), /<div class="relative w-full overflow-auto">$/);
+        const headers = [...table.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map((match) => match[1]);
+        assert.deepEqual(headers, [
+          'Case Name',
+          'Last Execution',
+          'Details',
+          'Case Group',
+          'Machine',
+          'HPC Username',
+          'Executions',
+        ]);
+        const cells = [...table.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((match) =>
+          match[1].replace(/<[^>]*>/g, '').trim(),
+        );
+        assert.deepEqual(cells, [
+          caseRecord.name,
+          latestExecution?.runEndDate || latestExecution?.runStartDate
+            ? new Date(
+                latestExecution.runEndDate ?? latestExecution.runStartDate,
+              ).toLocaleDateString()
+            : '—',
+          'Open',
+          caseRecord.caseGroup,
+          caseRecord.machineName,
+          caseRecord.hpcUsername,
+          '7',
+        ]);
+        assert.match(table, /href="\/cases\/chrysalis\/test.user\/test.case"/);
+      }
+    } finally {
+      client.clear();
+    }
   });
+}
+
+test('recent production cases explain an empty result', async () => {
+  const { ProductionCasesTable } = await server.ssrLoadModule(
+    '/src/features/home/components/ProductionCasesTable.tsx',
+  );
+  const client = new QueryClient();
   client.setQueryDefaults(['cases', 'page'], {
-    initialData: { items: [caseRecord], total: 1, page: 1, pageSize: 6 },
+    initialData: { items: [], total: 0, page: 1, pageSize: 6 },
   });
 
   try {
     const html = renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(MemoryRouter, null, createElement(HomePage, { machines: [], sites: [] })),
-      ),
+      createElement(QueryClientProvider, { client }, createElement(ProductionCasesTable)),
     );
-    const headings = [
-      'Explore E3SM Simulations',
-      '>Production Cases<',
-      '>Recent Cases<',
-      '>Common Workflows<',
-      '>Sites and Machines<',
-      '>Catalog at a glance<',
-      '<footer',
-    ].map((text) => html.indexOf(text));
-
-    assert.ok(headings.every((position) => position >= 0));
-    assert.deepEqual(
-      headings,
-      [...headings].sort((left, right) => left - right),
+    assert.match(
+      html,
+      /No production cases have a completed execution in the last six calendar months\./,
     );
-    assert.match(html, />42<\/dd>/);
-    assert.match(html, />84<\/dd>/);
-
-    const caseTables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/g)].slice(0, 2);
-    assert.equal(caseTables.length, 2);
-    for (const [markup, table] of caseTables) {
-      assert.match(markup, /<table\b[^>]*class="[^"]*\bmin-w-\[1100px\] table-fixed\b/);
-      const tablePosition = html.indexOf(markup);
-      assert.match(html.slice(0, tablePosition), /<div class="relative w-full overflow-auto">$/);
-      const headers = [...table.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map((match) => match[1]);
-      assert.deepEqual(headers, [
-        'Case Name',
-        'Last Updated',
-        'Details',
-        'Case Group',
-        'Machine',
-        'HPC Username',
-        'Executions',
-      ]);
-      const cells = [...table.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((match) =>
-        match[1].replace(/<[^>]*>/g, '').trim(),
-      );
-      assert.deepEqual(cells, [
-        caseRecord.name,
-        new Date(caseRecord.updatedAt).toLocaleDateString(),
-        'Open',
-        caseRecord.caseGroup,
-        caseRecord.machineName,
-        caseRecord.hpcUsername,
-        '7',
-      ]);
-      assert.match(table, /href="\/cases\/chrysalis\/test.user\/test.case"/);
-    }
   } finally {
     client.clear();
   }
