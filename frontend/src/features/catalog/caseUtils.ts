@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 
-import type { ExecutionSummaryOut } from '@/types';
+import type { ExecutionListItemOut, ExecutionSummaryOut } from '@/types';
 import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
@@ -14,6 +14,16 @@ export interface ExecutionSummaryGroup {
 }
 
 export type ExecutionSummaryGroupFilter = 'all' | 'multiRun' | 'missing';
+
+export interface ExecutionDateSort {
+  key: 'simulation' | 'run';
+  direction: 'asc' | 'desc';
+}
+
+interface ExecutionWithDates {
+  summary: ExecutionSummaryOut;
+  details?: Pick<ExecutionListItemOut, 'runStartDate' | 'runEndDate'>;
+}
 
 export interface ExecutionDateWindow {
   startDate: string | null;
@@ -70,6 +80,42 @@ export const sortExecutionSummaries = (executions: ExecutionSummaryOut[]) =>
   [...executions].sort((left, right) =>
     compareModelDates(right.simulationStartDate, left.simulationStartDate),
   );
+
+export const sortCaseExecutions = <T extends ExecutionWithDates>(
+  executions: T[],
+  sort: ExecutionDateSort,
+): T[] =>
+  [...executions].sort((left, right) => {
+    let comparison: number;
+    if (sort.key === 'simulation') {
+      comparison = compareModelDates(
+        left.summary.simulationStartDate,
+        right.summary.simulationStartDate,
+      );
+    } else {
+      const leftTime = getExecutionRunTime(left);
+      const rightTime = getExecutionRunTime(right);
+      if (leftTime == null || rightTime == null) {
+        if (leftTime != null) return -1;
+        if (rightTime != null) return 1;
+        comparison = 0;
+      } else {
+        comparison = leftTime - rightTime;
+      }
+    }
+
+    return (
+      comparison * (sort.direction === 'asc' ? 1 : -1) ||
+      left.summary.id.localeCompare(right.summary.id)
+    );
+  });
+
+const getExecutionRunTime = ({ details }: ExecutionWithDates): number | null => {
+  const date = details?.runEndDate ?? details?.runStartDate;
+  const timestamp = date ? new Date(date).getTime() : NaN;
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
 
 export const formatCaseHashLabel = (caseHash: string | null, maxLength = 18) => {
   if (!caseHash) return MISSING_CASE_HASH_LABEL;

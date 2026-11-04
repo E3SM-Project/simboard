@@ -3,7 +3,9 @@ import axios from 'axios';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowUpDown,
   ChevronDown,
+  ChevronUp,
   ExternalLink,
   Info,
   Search,
@@ -42,6 +44,7 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
+  type ExecutionDateSort,
   type ExecutionSummaryGroupFilter,
   formatCaseDate,
   formatCaseHashLabel,
@@ -51,6 +54,7 @@ import {
   groupExecutionSummaries,
   matchesExecutionGroupFilter,
   MISSING_CASE_HASH_LABEL,
+  sortCaseExecutions,
 } from '@/features/catalog/caseUtils';
 import {
   CaseArtifactsTable,
@@ -100,10 +104,8 @@ const DetailField = ({
   mono?: boolean;
   title?: string;
 }) => (
-  <div className="min-w-0 space-y-1" title={title}>
-    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
-      {label}
-    </div>
+  <div className="min-w-0 space-y-0.5" title={title}>
+    <div className="text-xs font-medium text-slate-500">{label}</div>
     <div
       className={`truncate font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}
     >
@@ -178,16 +180,38 @@ const getRunActivityTime = ({ details }: GroupExecution) => {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 };
 
-const sortExecutionsByRunDate = (executions: GroupExecution[]) =>
-  [...executions].sort((left, right) => {
-    const leftRunActivityTime = getRunActivityTime(left);
-    const rightRunActivityTime = getRunActivityTime(right);
-    if (leftRunActivityTime !== rightRunActivityTime) {
-      return rightRunActivityTime - leftRunActivityTime;
-    }
+const DateSortHeader = ({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: ExecutionDateSort['key'];
+  sort: ExecutionDateSort;
+  onSort: (key: ExecutionDateSort['key']) => void;
+  className?: string;
+}) => {
+  const direction =
+    sort.key === sortKey ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+  const Icon =
+    direction === 'none' ? ArrowUpDown : direction === 'ascending' ? ChevronUp : ChevronDown;
 
-    return right.summary.executionId.localeCompare(left.summary.executionId);
-  });
+  return (
+    <TableHead className={className} aria-sort={direction === 'none' ? undefined : direction}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort by ${label}, currently ${direction === 'none' ? 'not sorted' : direction}`}
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </button>
+    </TableHead>
+  );
+};
 
 type ExecutionViewMode = 'grouped' | 'flat';
 type EditableFormState = {
@@ -349,10 +373,10 @@ const renderResourceLink = (link: ExternalLinkOut) => (
     href={link.url}
     target="_blank"
     rel="noreferrer"
-    className="group flex w-full items-start justify-between gap-3 rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+    className="group inline-flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
     aria-label={`${link.label || link.url} (${RESOURCE_KIND_DESCRIPTIONS[link.kind]})`}
   >
-    <div className="min-w-0 space-y-1">
+    <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <p className="break-all text-sm font-medium leading-5 text-slate-900">
           {link.label || link.url}
@@ -364,9 +388,8 @@ const renderResourceLink = (link: ExternalLinkOut) => (
           {RESOURCE_GROUP_LABELS[link.kind]}
         </Badge>
       </div>
-      <p className="text-xs text-slate-500">{RESOURCE_KIND_DESCRIPTIONS[link.kind]}</p>
     </div>
-    <div className="flex shrink-0 items-center gap-1 pt-0.5 text-slate-400 transition-colors group-hover:text-slate-600 group-focus-visible:text-slate-600">
+    <div className="flex shrink-0 items-center gap-1 text-slate-400 transition-colors group-hover:text-slate-600 group-focus-visible:text-slate-600">
       <ExternalLink className="h-3.5 w-3.5" />
       <span className="sr-only">Opens in a new tab</span>
     </div>
@@ -400,6 +423,10 @@ export const CaseDetailsPage = ({
     machineName && hpcUsername && caseName ? { machineName, hpcUsername, caseName } : null;
   const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
   const caseId = fetchedCaseRecord?.id;
+  const [dateSort, setDateSort] = useState<ExecutionDateSort>({
+    key: 'simulation',
+    direction: 'asc',
+  });
   const {
     data: allExecutions,
     error: executionsError,
@@ -409,7 +436,10 @@ export const CaseDetailsPage = ({
     isFetchingNextPage,
     refetch: refetchExecutions,
     total: executionTotal,
-  } = useCaseExecutions(caseId, { sortBy: 'run_activity', sortOrder: 'desc' });
+  } = useCaseExecutions(caseId, {
+    sortBy: dateSort.key === 'simulation' ? 'simulation_start_date' : 'run_activity',
+    sortOrder: dateSort.direction,
+  });
   const location = useLocation();
   const compareSectionRef = useRef<HTMLDivElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
@@ -446,12 +476,10 @@ export const CaseDetailsPage = ({
     () =>
       rawExecutionGroups.map((group) => ({
         ...group,
-        executions: sortExecutionsByRunDate(
-          group.executions.map((execution) => ({
-            summary: execution,
-            details: executionDetailsById.get(execution.id),
-          })),
-        ),
+        executions: group.executions.map((execution) => ({
+          summary: execution,
+          details: executionDetailsById.get(execution.id),
+        })),
       })),
     [rawExecutionGroups, executionDetailsById],
   );
@@ -510,26 +538,32 @@ export const CaseDetailsPage = ({
   }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      artifactFilteredExecutionGroups.filter((group) => {
-        if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
-          return false;
-        }
+      artifactFilteredExecutionGroups
+        .filter((group) => {
+          if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
+            return false;
+          }
 
-        if (normalizedCaseHashQuery.length === 0) {
-          return true;
-        }
+          if (normalizedCaseHashQuery.length === 0) {
+            return true;
+          }
 
-        if (group.isFallback) {
-          return MISSING_CASE_HASH_LABEL.toLowerCase().includes(normalizedCaseHashQuery);
-        }
+          if (group.isFallback) {
+            return MISSING_CASE_HASH_LABEL.toLowerCase().includes(normalizedCaseHashQuery);
+          }
 
-        return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
-      }),
-    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery],
+          return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
+        })
+        .map((group) => ({ ...group, executions: sortCaseExecutions(group.executions, dateSort) })),
+    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery, dateSort],
   );
   const filteredFlatExecutions = useMemo(
-    () => sortExecutionsByRunDate(filteredExecutionGroups.flatMap((group) => group.executions)),
-    [filteredExecutionGroups],
+    () =>
+      sortCaseExecutions(
+        filteredExecutionGroups.flatMap((group) => group.executions),
+        dateSort,
+      ),
+    [filteredExecutionGroups, dateSort],
   );
   const visibleExecutionIds = useMemo(
     () => new Set(filteredFlatExecutions.map(({ summary }) => summary.id)),
@@ -779,7 +813,11 @@ export const CaseDetailsPage = ({
     );
   }
 
-  if (loading || executionsLoading || (caseRecord != null && caseRecord.id !== caseId)) {
+  if (
+    loading ||
+    (executionsLoading && allExecutions.length === 0) ||
+    (caseRecord != null && caseRecord.id !== caseId)
+  ) {
     return <LoadingState kind="page" label="Loading case details" />;
   }
 
@@ -862,14 +900,6 @@ export const CaseDetailsPage = ({
   const activeExecutionCount =
     viewMode === 'grouped' ? filteredExecutionGroups.length : filteredExecutionCount;
   const totalExecutionCount = viewMode === 'grouped' ? executionGroups.length : executionTotal;
-  const summaryHeadline =
-    caseRecord.executions.length === 0
-      ? '0 executions'
-      : allRunsMissingCaseHash
-        ? `${caseRecord.executions.length} executions, all without Case Hash`
-        : `${caseRecord.executions.length} executions in ${caseHashGroupCount} Case Hash ${
-            caseHashGroupCount === 1 ? 'group' : 'groups'
-          }`;
   const executionsIntro = allRunsMissingCaseHash
     ? 'Every execution in this case is missing a Case Hash, so grouped view shows one fallback group.'
     : 'Grouped view clusters executions by Case Hash. Different hashes under one case name usually mean the case was recreated or cloned, and missing-hash executions stay in a fallback group.';
@@ -933,6 +963,13 @@ export const CaseDetailsPage = ({
     setCaseHashQuery('');
   };
 
+  const toggleDateSort = (key: ExecutionDateSort['key']) => {
+    setDateSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
   const clearArtifactExecutionFilter = () => {
     setArtifactExecutionIds(null);
   };
@@ -958,6 +995,9 @@ export const CaseDetailsPage = ({
             </Link>
           </Button>
           <h1 className="text-2xl font-bold">{caseRecord.name}</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Page updated: {formatCaseDate(caseRecord.updatedAt)}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
           {canEdit && isEditing ? (
@@ -1006,12 +1046,7 @@ export const CaseDetailsPage = ({
         <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
           <CardContent className="space-y-4 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                  Case summary
-                </p>
-                <h2 className="text-lg font-semibold text-slate-950">{summaryHeadline}</h2>
-              </div>
+              <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
               <div className="flex flex-wrap gap-2">
                 {caseRecord.caseGroup ? (
                   <Badge variant="outline">{caseRecord.caseGroup}</Badge>
@@ -1019,15 +1054,11 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-3">
-              <div className="min-w-[7rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
-                <DetailField label="Executions" value={caseRecord.executions.length} />
-              </div>
-              <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
-                <DetailField label="Case Hash groups" value={caseHashGroupCount} />
-              </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <DetailField label="Executions" value={caseRecord.executions.length} />
+              <DetailField label="Case hash groups" value={caseHashGroupCount} />
               <div
-                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white/80 px-3 py-2"
+                className="min-w-0"
                 title={
                   caseRecord.machineNames.length > 1
                     ? caseRecord.machineNames.join(', ')
@@ -1037,7 +1068,7 @@ export const CaseDetailsPage = ({
                 <DetailField label="Machines" value={machineSummary} />
               </div>
               <div
-                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white/80 px-3 py-2"
+                className="min-w-0"
                 title={
                   caseRecord.hpcUsernames.length > 1
                     ? caseRecord.hpcUsernames.join(', ')
@@ -1045,9 +1076,6 @@ export const CaseDetailsPage = ({
                 }
               >
                 <DetailField label="HPC users" value={hpcUsernameSummary} />
-              </div>
-              <div className="min-w-[9rem] rounded-lg border border-slate-200 bg-white/80 px-3 py-2">
-                <DetailField label="Last updated" value={formatCaseDate(caseRecord.updatedAt)} />
               </div>
             </div>
 
@@ -1075,7 +1103,9 @@ export const CaseDetailsPage = ({
                     rowErrors={combinedLinkRowErrors}
                   />
                 ) : resourceLinks.length > 0 ? (
-                  <div className="space-y-2">{resourceLinks.map(renderResourceLink)}</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {resourceLinks.map(renderResourceLink)}
+                  </div>
                 ) : (
                   <p className="text-sm text-slate-500">No linked resources yet.</p>
                 )}
@@ -1090,7 +1120,7 @@ export const CaseDetailsPage = ({
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
+                <h2 className="text-lg font-semibold text-slate-950">Case Notes</h2>
                 <p className="text-sm text-muted-foreground">
                   Shared notes for this case identity. Applies across executions in this case.
                 </p>
@@ -1102,81 +1132,83 @@ export const CaseDetailsPage = ({
               </div>
             </div>
 
-            <PerformanceSourceDirectories directories={caseRecord.sourceDirectories} />
-
             {formState ? (
               <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor={isEditing ? 'case-group' : undefined}
-                    className="block text-xs text-muted-foreground"
-                  >
-                    Case Group
-                  </Label>
-                  {isEditing ? (
-                    <>
-                      <Input
-                        id="case-group"
-                        className="max-w-sm"
-                        value={formState.caseGroup}
-                        onChange={(event) => updateField('caseGroup', event.target.value)}
-                        aria-describedby="case-group-help"
-                        placeholder="No case group"
-                      />
-                      <p id="case-group-help" className="text-xs text-muted-foreground">
-                        Changing Case Group applies to all executions in this case. Clearing it
-                        allows future ingestion to populate it again.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm font-medium text-slate-950">
-                      {caseRecord.caseGroup ?? 'Unset'}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label className="block text-xs text-muted-foreground">Case classification</Label>
-                  {isEditing ? (
-                    <Select
-                      value={formState.simulationType ?? 'unset'}
-                      onValueChange={(value) => {
-                        setSaveError(null);
-                        setFormState((current) =>
-                          current
-                            ? {
-                                ...current,
-                                simulationType:
-                                  value === 'unset' ? null : (value as CaseSimulationTypeValue),
-                              }
-                            : current,
-                        );
-                      }}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor={isEditing ? 'case-group' : undefined}
+                      className="block text-xs text-muted-foreground"
                     >
-                      <SelectTrigger aria-label="Case classification" className="max-w-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unset">Unset</SelectItem>
-                        <SelectItem value="development">Development</SelectItem>
-                        <SelectItem value="production">Production</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm font-medium capitalize text-slate-950">
-                      {caseRecord.simulationType ?? 'Unset'}
-                    </p>
-                  )}
-                  {hasAmbiguousDiagnosticsTiers ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
-                      SimBoard cannot determine one observed tier.
-                    </div>
-                  ) : hasDiagnosticsMismatch ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      Case classification is {caseRecord.simulationType}, but diagnostics provenance
-                      is {diagnosticsTierLabel}.
-                    </div>
-                  ) : null}
+                      Case Group
+                    </Label>
+                    {isEditing ? (
+                      <>
+                        <Input
+                          id="case-group"
+                          className="max-w-sm"
+                          value={formState.caseGroup}
+                          onChange={(event) => updateField('caseGroup', event.target.value)}
+                          aria-describedby="case-group-help"
+                          placeholder="No case group"
+                        />
+                        <p id="case-group-help" className="text-xs text-muted-foreground">
+                          Changing Case Group applies to all executions in this case. Clearing it
+                          allows future ingestion to populate it again.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium text-slate-950">
+                        {caseRecord.caseGroup ?? 'Unset'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="block text-xs text-muted-foreground">
+                      Case classification
+                    </Label>
+                    {isEditing ? (
+                      <Select
+                        value={formState.simulationType ?? 'unset'}
+                        onValueChange={(value) => {
+                          setSaveError(null);
+                          setFormState((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  simulationType:
+                                    value === 'unset' ? null : (value as CaseSimulationTypeValue),
+                                }
+                              : current,
+                          );
+                        }}
+                      >
+                        <SelectTrigger aria-label="Case classification" className="max-w-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unset">Unset</SelectItem>
+                          <SelectItem value="development">Development</SelectItem>
+                          <SelectItem value="production">Production</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-sm font-medium capitalize text-slate-950">
+                        {caseRecord.simulationType ?? 'Unset'}
+                      </p>
+                    )}
+                    {hasAmbiguousDiagnosticsTiers ? (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
+                        SimBoard cannot determine one observed tier.
+                      </div>
+                    ) : hasDiagnosticsMismatch ? (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        Case classification is {caseRecord.simulationType}, but diagnostics
+                        provenance is {diagnosticsTierLabel}.
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <div>
                   {isEditing ? (
@@ -1191,7 +1223,14 @@ export const CaseDetailsPage = ({
                       <Label className="mb-1 block text-xs text-muted-foreground">
                         Description
                       </Label>
-                      <MarkdownContent content={caseRecord.description} />
+                      <MarkdownContent
+                        content={caseRecord.description}
+                        className={
+                          caseRecord.description?.trim()
+                            ? undefined
+                            : 'w-fit border-0 bg-transparent p-0'
+                        }
+                      />
                     </>
                   )}
                 </div>
@@ -1210,7 +1249,14 @@ export const CaseDetailsPage = ({
                         <Label className="mb-1 block text-xs text-muted-foreground">
                           Key Features
                         </Label>
-                        <MarkdownContent content={caseRecord.keyFeatures} />
+                        <MarkdownContent
+                          content={caseRecord.keyFeatures}
+                          className={
+                            caseRecord.keyFeatures?.trim()
+                              ? undefined
+                              : 'w-fit border-0 bg-transparent p-0'
+                          }
+                        />
                       </>
                     )}
                   </div>
@@ -1227,7 +1273,14 @@ export const CaseDetailsPage = ({
                         <Label className="mb-1 block text-xs text-muted-foreground">
                           Known Issues
                         </Label>
-                        <MarkdownContent content={caseRecord.knownIssues} />
+                        <MarkdownContent
+                          content={caseRecord.knownIssues}
+                          className={
+                            caseRecord.knownIssues?.trim()
+                              ? undefined
+                              : 'w-fit border-0 bg-transparent p-0'
+                          }
+                        />
                       </>
                     )}
                   </div>
@@ -1247,7 +1300,11 @@ export const CaseDetailsPage = ({
                       <Label className="mb-1 block text-xs text-muted-foreground">Notes</Label>
                       <MarkdownContent
                         content={caseRecord.notesMarkdown}
-                        className="min-h-[160px]"
+                        className={
+                          caseRecord.notesMarkdown?.trim()
+                            ? undefined
+                            : 'w-fit border-0 bg-transparent p-0'
+                        }
                       />
                     </>
                   )}
@@ -1285,20 +1342,6 @@ export const CaseDetailsPage = ({
         </Card>
       </section>
 
-      <section>
-        <MetadataHistory
-          entries={history.data}
-          total={history.total}
-          loading={history.loading}
-          loadingMore={history.isFetchingNextPage}
-          loaded={history.loaded}
-          error={history.error}
-          canLoadMore={history.hasNextPage}
-          onLoadMore={() => void history.fetchNextPage()}
-          onOpenChange={setIsHistoryOpen}
-        />
-      </section>
-
       <section ref={executionsSectionRef} className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1313,9 +1356,7 @@ export const CaseDetailsPage = ({
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)]">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      View
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">View</div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-md">
                       <Button
                         type="button"
@@ -1339,9 +1380,7 @@ export const CaseDetailsPage = ({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Filters
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Filters</div>
                     <div className="flex flex-wrap gap-2">
                       {GROUP_FILTER_OPTIONS.map((option) => (
                         <Button
@@ -1365,9 +1404,7 @@ export const CaseDetailsPage = ({
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Search
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Search</div>
                     <div className="relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input
@@ -1381,9 +1418,7 @@ export const CaseDetailsPage = ({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Actions
-                    </div>
+                    <div className="text-xs font-medium text-slate-500">Actions</div>
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
@@ -1544,11 +1579,21 @@ export const CaseDetailsPage = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
-                            <TableHead>Run dates (latest first)</TableHead>
+                            <DateSortHeader
+                              label="Simulation dates"
+                              sortKey="simulation"
+                              sort={dateSort}
+                              onSort={toggleDateSort}
+                            />
+                            <TableHead>Initialization</TableHead>
+                            <DateSortHeader
+                              label="Run dates"
+                              sortKey="run"
+                              sort={dateSort}
+                              onSort={toggleDateSort}
+                            />
                             <TableHead>Execution ID</TableHead>
                             <TableHead>Case Hash</TableHead>
-                            <TableHead>Initialization</TableHead>
-                            <TableHead>Simulation dates</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1563,6 +1608,15 @@ export const CaseDetailsPage = ({
                                   }
                                   onCheckedChange={() => toggleExecutionSelection(summary.id)}
                                   aria-label={`Select ${summary.executionId} for compare`}
+                                />
+                              </TableCell>
+                              <TableCell className="align-top">
+                                {formatExecutionDateRange(summary)}
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <TableCellText
+                                  value={details?.initializationType ?? '—'}
+                                  lines={1}
                                 />
                               </TableCell>
                               <TableCell className="align-top">
@@ -1597,15 +1651,6 @@ export const CaseDetailsPage = ({
                                     ? formatCaseHashLabel(summary.caseHash)
                                     : MISSING_CASE_HASH_LABEL}
                                 </span>
-                              </TableCell>
-                              <TableCell className="align-top">
-                                <TableCellText
-                                  value={details?.initializationType ?? '—'}
-                                  lines={1}
-                                />
-                              </TableCell>
-                              <TableCell className="align-top">
-                                {formatExecutionDateRange(summary)}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1737,7 +1782,7 @@ export const CaseDetailsPage = ({
                                         className="border-t border-slate-200 px-4 py-3"
                                       >
                                         <div className="mb-3 flex items-center justify-between gap-3">
-                                          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                                          <p className="text-xs font-medium text-slate-500">
                                             Executions in group
                                           </p>
                                           <p className="text-xs text-slate-500">
@@ -1752,24 +1797,32 @@ export const CaseDetailsPage = ({
                                                   <TableHead className="w-12 bg-white">
                                                     Select
                                                   </TableHead>
-                                                  <TableHead className="bg-white">
-                                                    Execution ID
-                                                  </TableHead>
+                                                  {showSimulationDatesColumn ? (
+                                                    <DateSortHeader
+                                                      label="Simulation dates"
+                                                      sortKey="simulation"
+                                                      sort={dateSort}
+                                                      onSort={toggleDateSort}
+                                                      className="bg-white"
+                                                    />
+                                                  ) : null}
                                                   {showInitializationColumn ? (
                                                     <TableHead className="bg-white">
                                                       Initialization
                                                     </TableHead>
                                                   ) : null}
-                                                  {showSimulationDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Simulation dates
-                                                    </TableHead>
-                                                  ) : null}
                                                   {showRunDatesColumn ? (
-                                                    <TableHead className="bg-white">
-                                                      Run dates
-                                                    </TableHead>
+                                                    <DateSortHeader
+                                                      label="Run dates"
+                                                      sortKey="run"
+                                                      sort={dateSort}
+                                                      onSort={toggleDateSort}
+                                                      className="bg-white"
+                                                    />
                                                   ) : null}
+                                                  <TableHead className="bg-white">
+                                                    Execution ID
+                                                  </TableHead>
                                                 </TableRow>
                                               </TableHeader>
                                               <TableBody>
@@ -1793,29 +1846,17 @@ export const CaseDetailsPage = ({
                                                         aria-label={`Select ${summary.executionId} for compare`}
                                                       />
                                                     </TableCell>
-                                                    <TableCell className="align-top">
-                                                      <Link
-                                                        to={executionDetailsPath({
-                                                          ...readableIdentity,
-                                                          executionId: summary.executionId,
-                                                        })}
-                                                        state={{ from: currentPath }}
-                                                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                                                      >
-                                                        {summary.executionId}
-                                                      </Link>
-                                                    </TableCell>
+                                                    {showSimulationDatesColumn ? (
+                                                      <TableCell className="align-top">
+                                                        {formatExecutionDateRange(summary)}
+                                                      </TableCell>
+                                                    ) : null}
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">
                                                         <TableCellText
                                                           value={details?.initializationType ?? '—'}
                                                           lines={1}
                                                         />
-                                                      </TableCell>
-                                                    ) : null}
-                                                    {showSimulationDatesColumn ? (
-                                                      <TableCell className="align-top">
-                                                        {formatExecutionDateRange(summary)}
                                                       </TableCell>
                                                     ) : null}
                                                     {showRunDatesColumn ? (
@@ -1837,6 +1878,18 @@ export const CaseDetailsPage = ({
                                                         )}
                                                       </TableCell>
                                                     ) : null}
+                                                    <TableCell className="align-top">
+                                                      <Link
+                                                        to={executionDetailsPath({
+                                                          ...readableIdentity,
+                                                          executionId: summary.executionId,
+                                                        })}
+                                                        state={{ from: currentPath }}
+                                                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                                                      >
+                                                        {summary.executionId}
+                                                      </Link>
+                                                    </TableCell>
                                                   </TableRow>
                                                 ))}
                                               </TableBody>
@@ -1878,6 +1931,9 @@ export const CaseDetailsPage = ({
               <p className="text-sm text-slate-600">
                 Loaded metadata for {allExecutions.length} of {executionTotal} executions. Search
                 and grouping include all case executions.
+                {dateSort.key === 'run'
+                  ? ' Run-date order is partial until remaining metadata loads.'
+                  : ''}
               </p>
               <Button
                 type="button"
@@ -1931,6 +1987,29 @@ export const CaseDetailsPage = ({
             </div>
           ) : null}
         </div>
+      </section>
+
+      {!authLoading && user?.is_superuser === true ? (
+        <details className="rounded-xl border border-slate-200 p-5">
+          <summary className="cursor-pointer text-sm font-semibold">Developer Details</summary>
+          <div className="mt-4">
+            <PerformanceSourceDirectories directories={caseRecord.sourceDirectories} />
+          </div>
+        </details>
+      ) : null}
+
+      <section>
+        <MetadataHistory
+          entries={history.data}
+          total={history.total}
+          loading={history.loading}
+          loadingMore={history.isFetchingNextPage}
+          loaded={history.loaded}
+          error={history.error}
+          canLoadMore={history.hasNextPage}
+          onLoadMore={() => void history.fetchNextPage()}
+          onOpenChange={setIsHistoryOpen}
+        />
       </section>
     </div>
   );
