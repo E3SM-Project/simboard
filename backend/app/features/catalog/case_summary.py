@@ -1,6 +1,7 @@
 """Case-detail aggregates over all executions, independent of row pagination."""
 
 import calendar
+import re
 from datetime import datetime, timezone
 
 from app.common.model_dates import normalize_model_date
@@ -13,6 +14,7 @@ from app.features.catalog.schemas import (
     LatestExecutionSummaryOut,
     SharedConfigurationFieldOut,
     SimulationCoverageOut,
+    SimulationDurationOut,
 )
 
 CONFIGURATION_FIELDS = (
@@ -22,6 +24,7 @@ CONFIGURATION_FIELDS = (
     "grid_long_name",
     "git_tag",
     "git_commit_hash",
+    "source_code_path",
 )
 
 
@@ -45,6 +48,7 @@ def summarize_case_executions(executions: list[Execution]) -> dict:
                     for field in CONFIGURATION_FIELDS
                 },
                 coverage=simulation_coverage(members),
+                simulated_duration=simulation_duration(members),
             )
         )
 
@@ -54,6 +58,7 @@ def summarize_case_executions(executions: list[Execution]) -> dict:
             field: _shared_field(groups, field) for field in CONFIGURATION_FIELDS
         },
         "simulation_coverage": simulation_coverage(executions),
+        "simulated_duration": simulation_duration(executions),
         "latest_execution": _latest_execution(executions),
     }
 
@@ -95,6 +100,94 @@ def simulation_coverage(executions: list[Execution]) -> SimulationCoverageOut:
     )
 
 
+def simulation_duration(executions: list[Execution]) -> SimulationDurationOut:
+    """Sum recorded [start, end) intervals without merging overlaps or retries.
+
+    Absent calendars follow the existing Gregorian storage contract. Unfinished
+    runs are excluded: their end dates may describe configured stops, not progress.
+    """
+    days = 0
+    months = 0.0
+    calendars: set[str] = set()
+    included = 0
+    calendar_assumed = False
+    for execution in executions:
+        extra = execution.extra or {}
+        recorded_calendar = extra.get("simulation_calendar")
+        model_calendar = _model_calendar(recorded_calendar or "gregorian")
+        if model_calendar is None or execution.status != ExecutionStatus.COMPLETED:
+            continue
+        try:
+            start_day, start_month = _model_coordinates(
+                execution.simulation_start_date, model_calendar
+            )
+            end_day, end_month = _model_coordinates(
+                execution.simulation_end_date, model_calendar
+            )
+            if end_day < start_day:
+                continue
+        except ValueError:
+            continue
+        days += end_day - start_day
+        months += end_month - start_month
+        calendars.add(model_calendar)
+        included += 1
+        calendar_assumed |= not recorded_calendar
+
+    excluded = len(executions) - included
+    single_calendar = included > 0 and len(calendars) == 1
+
+    return SimulationDurationOut(
+        days=days if included else None,
+        months=round(months, 8) if single_calendar else None,
+        years=round(months / 12, 8) if single_calendar else None,
+        calendars=sorted(calendars),
+        calendar_assumed=calendar_assumed,
+        partial=excluded > 0,
+        excluded_execution_count=excluded,
+    )
+
+
+def _model_calendar(value: object) -> str | None:
+    aliases = {
+        "gregorian": "gregorian",
+        "proleptic_gregorian": "gregorian",
+        "noleap": "noleap",
+        "no_leap": "noleap",
+        "365_day": "noleap",
+        "360_day": "360_day",
+    }
+
+    return aliases.get(value.strip().lower()) if isinstance(value, str) else None
+
+
+def _model_coordinates(value: object, model_calendar: str) -> tuple[int, float]:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value
+    ):
+        raise ValueError("Missing or invalid simulation date")
+    year, month, day = map(int, value.split("-"))
+    if not 1 <= month <= 12:
+        raise ValueError("Invalid model month")
+    lengths = [calendar.monthrange(year, m)[1] for m in range(1, 13)]
+    if model_calendar == "noleap":
+        lengths[1] = 28
+    elif model_calendar == "360_day":
+        lengths = [30] * 12
+    if not 1 <= day <= lengths[month - 1]:
+        raise ValueError("Invalid day for model calendar")
+    # Count leap years in [0, year), including astronomical year zero.
+    preceding_days = (
+        365 * year + (year + 3) // 4 - (year + 99) // 100 + (year + 399) // 400
+    )
+    if model_calendar != "gregorian":
+        preceding_days = year * sum(lengths)
+    ordinal = preceding_days + sum(lengths[: month - 1]) + day - 1
+    fractional_month = year * 12 + month - 1 + (day - 1) / lengths[month - 1]
+
+    return ordinal, fractional_month
+
+
 def _configuration_order(execution: Execution) -> tuple:
     run_date = execution.run_start_date or execution.run_end_date
 
@@ -116,7 +209,13 @@ def _timestamp(value: datetime | None) -> float:
 def _summarize_field(executions: list[Execution], field: str) -> ConfigurationFieldOut:
     result = ConfigurationFieldOut()
     for execution in executions:
-        value = getattr(execution, field)
+        value = (
+            (execution.extra or {}).get(field)
+            if field == "source_code_path"
+            else getattr(execution, field)
+        )
+        if not isinstance(value, str):
+            value = None
         if not value or not value.strip():
             result.missing_execution_ids.append(execution.execution_id)
             continue

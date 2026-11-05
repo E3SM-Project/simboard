@@ -7,6 +7,7 @@ import pytest
 
 from app.features.catalog.case_summary import (
     simulation_coverage,
+    simulation_duration,
     summarize_case_executions,
 )
 from app.features.catalog.enums import ExecutionStatus
@@ -159,6 +160,124 @@ def test_partial_and_unavailable_coverage():
     assert partial.partial
 
 
+def test_duration_counts_overlaps_and_hash_totals_independently():
+    runs = [
+        _run("a", "one", extra={"simulation_calendar": "NO_LEAP"}),
+        _run("b", "one", extra={"simulation_calendar": "365_day"}),
+        _run("c", "two", extra={"simulation_calendar": "noleap"}),
+    ]
+    result = summarize_case_executions(runs)
+    assert result["simulated_duration"].days == 30 * 365
+    assert result["simulated_duration"].years == 30
+    assert result["simulation_coverage"].years == 10
+    assert [
+        group.simulated_duration.years for group in result["configuration_groups"]
+    ] == [20, 10]
+    assert summarize_case_executions(list(reversed(runs))) == result
+
+
+@pytest.mark.parametrize(
+    ("model_calendar", "start", "end", "days", "months"),
+    [
+        ("GREGORIAN", "0000-01-01", "0001-01-01", 366, 12),
+        ("proleptic_gregorian", "2000-02-01", "2000-03-01", 29, 1),
+        ("noleap", "2000-02-01", "2000-03-01", 28, 1),
+        ("360_day", "2000-02-01", "2000-03-01", 30, 1),
+        ("noleap", "2001-01-01", "2001-01-08", 7, 7 / 31),
+        ("gregorian", "2000-02-29", "2000-02-29", 0, 0),
+    ],
+)
+def test_duration_model_calendars(model_calendar, start, end, days, months):
+    result = simulation_duration(
+        [
+            _run(
+                "a",
+                "hash",
+                simulation_start_date=start,
+                simulation_end_date=end,
+                extra={"simulation_calendar": model_calendar},
+            )
+        ]
+    )
+    assert result.days == days
+    assert result.months == pytest.approx(months)
+    assert result.years == pytest.approx(months / 12)
+    assert not result.partial
+
+
+def test_duration_unknown_invalid_and_unfinished_runs():
+    valid = _run("valid", "hash", extra={"simulation_calendar": "gregorian"})
+    runs = [
+        _run("unsupported", "hash", extra={"simulation_calendar": "julian"}),
+        _run("missing", "hash", simulation_end_date=None, extra=valid.extra),
+        _run("reversed", "hash", simulation_end_date="1849-01-01", extra=valid.extra),
+        _run(
+            "invalid-noleap",
+            "hash",
+            simulation_start_date="2000-02-29",
+            simulation_end_date="2000-03-01",
+            extra={"simulation_calendar": "noleap"},
+        ),
+        _run("planned", "hash", status=ExecutionStatus.RUNNING, extra=valid.extra),
+    ]
+    excluded = simulation_duration(runs)
+    assert excluded.days is None
+    assert excluded.excluded_execution_count == len(runs)
+    assert excluded.partial
+    partial = simulation_duration([valid, *runs])
+    assert partial.years == 10
+    assert partial.excluded_execution_count == len(runs)
+    assert (
+        simulation_duration(
+            [_run("failed", "hash", status=ExecutionStatus.FAILED)]
+        ).days
+        is None
+    )
+    assert simulation_duration([]).days is None
+    assert not simulation_duration([]).partial
+
+
+def test_duration_flags_legacy_gregorian_storage_assumption():
+    result = simulation_duration([_run("legacy", "hash")])
+    assert result.years == 10
+    assert result.calendar_assumed
+    assert result.calendars == ["gregorian"]
+    explicit = simulation_duration(
+        [_run("explicit", "hash", extra={"simulation_calendar": "gregorian"})]
+    )
+    assert not explicit.calendar_assumed
+
+
+def test_duration_mixed_calendars_exposes_days_not_equivalent_years():
+    result = simulation_duration(
+        [
+            _run("a", "hash", extra={"simulation_calendar": "gregorian"}),
+            _run("b", "hash", extra={"simulation_calendar": "noleap"}),
+        ]
+    )
+    assert result.days == 7302
+    assert result.months is None
+    assert result.years is None
+    assert result.calendars == ["gregorian", "noleap"]
+    assert not result.partial
+
+
+def test_source_code_path_and_model_hash_have_configuration_provenance():
+    result = summarize_case_executions(
+        [
+            _run(
+                "a",
+                "hash",
+                git_commit_hash="model-hash",
+                extra={"source_code_path": "/model/source"},
+            )
+        ]
+    )
+    configuration = result["configuration_groups"][0].configuration
+    assert configuration["source_code_path"].source.value == "/model/source"
+    assert configuration["git_commit_hash"].source.value == "model-hash"
+
+
 def test_latest_completed_uses_activity_not_input_order_or_audit_dates():
     runs = [
         _run("a", "hash", run_end_date=_date(1)),
@@ -187,6 +306,15 @@ def test_empty_case_and_camel_case_serialization():
     }
     assert detail["sharedConfiguration"]["compset_alias"]["value"] is None
     assert detail["latestExecution"] is None
+    assert detail["simulatedDuration"] == {
+        "days": None,
+        "months": None,
+        "years": None,
+        "calendars": [],
+        "calendarAssumed": False,
+        "partial": False,
+        "excludedExecutionCount": 0,
+    }
 
 
 def _run(execution_id, case_hash, **overrides):

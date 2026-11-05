@@ -807,6 +807,23 @@ class SimulationCoverageOut(CamelOutBaseModel):
     excluded_execution_count: int = 0
 
 
+class SimulationDurationOut(CamelOutBaseModel):
+    """Cumulative execution time, not the union of simulated date ranges.
+
+    Months use each date's zero-based day divided by its model month length.
+    Mixed calendars expose days only. Absent calendars use the stored Gregorian
+    date convention and explicitly flag that assumption.
+    """
+
+    days: int | None = None
+    months: float | None = None
+    years: float | None = None
+    calendars: list[str] = Field(default_factory=list)
+    calendar_assumed: bool = False
+    partial: bool = False
+    excluded_execution_count: int = 0
+
+
 class ConfigurationObservationOut(CamelOutBaseModel):
     """An execution's configuration value and ordering timestamp."""
 
@@ -841,6 +858,9 @@ class CaseHashConfigurationOut(CamelOutBaseModel):
     execution_ids: list[str]
     configuration: dict[str, ConfigurationFieldOut]
     coverage: SimulationCoverageOut
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
+    )
 
 
 class CaseDetailOut(CaseSummaryOut):
@@ -854,6 +874,9 @@ class CaseDetailOut(CaseSummaryOut):
     )
     simulation_coverage: SimulationCoverageOut = Field(
         default_factory=SimulationCoverageOut
+    )
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
     )
     latest_execution: LatestExecutionSummaryOut | None = None
 
