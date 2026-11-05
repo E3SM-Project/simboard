@@ -10,6 +10,8 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
+  CASE_CONFIGURATION_FIELDS as CONFIGURATION_FIELDS,
+  type CaseHashConfigurationDifference,
   describeSimulatedDuration,
   formatCaseDate,
   formatCaseHashLabel,
@@ -27,15 +29,6 @@ import type {
 } from '@/types';
 
 // Compare stored technical metadata only; extraction belongs to #443.
-const CONFIGURATION_FIELDS = [
-  ['compset_alias', 'Compset Alias'],
-  ['compset_long_name', 'Compset Long Name'],
-  ['grid_alias', 'Grid Alias'],
-  ['grid_long_name', 'Grid Long Name'],
-  ['source_code_path', 'Source code path'],
-  ['git_commit_hash', 'Model hash'],
-  ['git_tag', 'Model tag'],
-] as const;
 
 export const CaseConfigurationSummary = ({
   record,
@@ -198,6 +191,51 @@ export const CaseConfigurationDetails = ({
         </Table>
       </div>
     </details>
+  );
+};
+
+export const CaseHashConfigurationDifferences = ({
+  differences,
+}: {
+  differences: CaseHashConfigurationDifference[];
+}) => {
+  if (differences.length === 0) return null;
+
+  return (
+    <dl
+      className="mt-2 space-y-1 text-xs text-muted-foreground"
+      aria-label="Configuration differences"
+    >
+      {differences.map((difference) => (
+        <div key={difference.field} className="min-w-0">
+          <dt className="font-medium">{difference.label}</dt>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <dd className="flex min-w-0 items-center gap-1" tabIndex={0}>
+                  <span className="sr-only">Baseline value: </span>
+                  <span className="min-w-0 flex-1 truncate">{difference.baselineValue}</span>
+                  <span aria-hidden="true" className="shrink-0">
+                    →
+                  </span>
+                  <span className="sr-only">This group&apos;s value: </span>
+                  <mark className="min-w-0 flex-1 truncate rounded-sm bg-amber-100 font-medium text-amber-950">
+                    {difference.value}
+                  </mark>
+                </dd>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm break-all text-xs">
+                <p>
+                  Baseline ({formatCaseHashLabel(difference.baselineHash)}):{' '}
+                  {difference.baselineValue}
+                </p>
+                <p>This group&apos;s value: {difference.value}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ))}
+    </dl>
   );
 };
 

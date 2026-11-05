@@ -32,6 +32,266 @@ after(async () => {
   if (cacheDir) await rm(cacheDir, { recursive: true, force: true });
 });
 
+test('execution discovery distinguishes known metadata without inferring changes from hashes', async () => {
+  const {
+    getExecutionDiscoveryContext,
+    getExecutionSummary,
+    matchesExecutionSearch,
+    hasCaseHashContext,
+  } = await server.ssrLoadModule('/src/lib/catalog/executionDiscovery.ts');
+  const candidate = (id, details = {}, caseHash = 'same') => ({
+    summary: {
+      id,
+      executionId: `run-${id}`,
+      caseHash,
+      simulationStartDate: '0001-01-01',
+      simulationEndDate: null,
+    },
+    details,
+  });
+  const first = candidate('1', {
+    machineName: 'Machine A',
+    initializationType: 'branch',
+    compsetAlias: 'COMMON',
+    runStartDate: '2026-10-01T12:00:00Z',
+  });
+  const unknown = candidate('2', { machineName: 'Unknown', initializationType: null });
+  const uniform = getExecutionDiscoveryContext([first, unknown]);
+  assert.deepEqual(uniform.varyingFields, []);
+  assert.equal(getExecutionSummary(first, uniform).context, '');
+  assert.equal(getExecutionSummary(unknown, uniform).simulationPeriod, '0001-01-01 → —');
+  assert.equal(hasCaseHashContext([first.summary, unknown.summary]), false);
+  const second = candidate(
+    '3',
+    {
+      machineName: 'Machine B',
+      initializationType: 'hybrid',
+      compsetAlias: 'COMMON',
+      runStartDate: '2026-10-02T12:00:00Z',
+    },
+    'other',
+  );
+  const missing = candidate('4', {}, null);
+  const discovery = getExecutionDiscoveryContext([first, second, missing]);
+  assert.deepEqual(discovery.varyingFields, ['machineName', 'initializationType']);
+  assert.match(
+    getExecutionSummary(second, discovery).context,
+    /Run: 2026-10-02 · Machine: Machine B · Initialization: hybrid · Hash: other/,
+  );
+  assert.equal(getExecutionSummary(missing, discovery).context, 'Missing Case Hash');
+  assert.doesNotMatch(getExecutionSummary(first, discovery).context, /COMMON|configuration/i);
+  for (const query of ['run-3', 'Machine B', 'hybrid', '0001-01-01', 'other']) {
+    assert.equal(matchesExecutionSearch(second, discovery, query), true);
+  }
+  assert.equal(matchesExecutionSearch(missing, discovery, 'missing case hash'), true);
+  assert.equal(matchesExecutionSearch(first, uniform, 'same'), true);
+  assert.equal(matchesExecutionSearch(first, uniform, 'COMMON'), true);
+  assert.equal(matchesExecutionSearch(first, uniform, '2026-10-01'), true);
+  assert.equal(
+    matchesExecutionSearch(
+      { ...first, details: { compsetLongName: 'UNIFORM_LONG_COMPSET' } },
+      uniform,
+      'UNIFORM_LONG_COMPSET',
+    ),
+    true,
+  );
+  assert.deepEqual(getExecutionDiscoveryContext([]).varyingFields, []);
+  assert.equal(hasCaseHashContext([missing.summary]), false);
+  assert.equal(hasCaseHashContext([first.summary, missing.summary]), true);
+});
+
+test('case selection cap and display order preserve reference through edits', async () => {
+  const { toggleCaseExecution, reconcileExecutionOrder } = await server.ssrLoadModule(
+    '/src/lib/catalog/executionDiscovery.ts',
+  );
+  let ids = [];
+  for (const id of ['a', 'b', 'c', 'd', 'e', 'f']) ids = toggleCaseExecution(ids, id);
+  assert.deepEqual(ids, ['a', 'b', 'c', 'd', 'e']);
+  ids = toggleCaseExecution(ids, 'b');
+  ids = toggleCaseExecution(ids, 'f');
+  assert.deepEqual(ids, ['a', 'c', 'd', 'e', 'f']);
+  const order = reconcileExecutionOrder(['c', 'a', 'd', 'e', 'b'], ids);
+  assert.deepEqual(order, ['c', 'a', 'd', 'e', 'f']);
+  assert.deepEqual(reconcileExecutionOrder(order, ['a', 'f']), ['a', 'f']);
+  assert.deepEqual(reconcileExecutionOrder(order, []), []);
+  assert.deepEqual(toggleCaseExecution(['a'], 'a'), []);
+});
+
+test('execution durations and run dates handle year zero, missing dates, and ranges', async () => {
+  const { formatExecutionDuration } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const { formatRunDateRange } = await server.ssrLoadModule(
+    '/src/lib/catalog/executionDiscovery.ts',
+  );
+  for (const [start, end, expected] of [
+    ['2015-01-01', '2015-01-02', '1 day'],
+    ['0000-02-28', '0000-03-01', '2 days'],
+    ['0001-01-01', '0002-01-01', '1 year'],
+    ['2015-01-01', '2015-01-01', '0 days'],
+    ['2015-01-02', '2015-01-01', '—'],
+    ['invalid', '2015-01-01', '—'],
+    ['2015-01-01', null, '—'],
+  ])
+    assert.equal(
+      formatExecutionDuration({ simulationStartDate: start, simulationEndDate: end }),
+      expected,
+    );
+  assert.equal(formatRunDateRange(), '—');
+  assert.equal(formatRunDateRange('2026-01-01T12:00:00Z'), '2026-01-01');
+  assert.equal(formatRunDateRange(null, '2026-01-02T12:00:00Z'), '2026-01-02');
+  assert.equal(formatRunDateRange('2026-01-01T12:00:00Z', '2026-01-01T13:00:00Z'), '2026-01-01');
+  assert.equal(
+    formatRunDateRange('2026-01-01T12:00:00Z', '2026-01-02T13:00:00Z'),
+    '2026-01-01 → 2026-01-02',
+  );
+});
+
+test('hash-group differences compare known configuration values and merge missing-hash observations', async () => {
+  const { getCaseHashConfigurationDifferences } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const group = (caseHash, values, key = caseHash) => ({
+    key,
+    caseHash,
+    executionIds: caseHash === 'a' ? ['1', '2', '3'] : ['4'],
+    configuration: Object.fromEntries(
+      Object.entries(values).map(([field, value]) => [
+        field,
+        { source: value == null ? null : { value }, differences: [], missingExecutionIds: [] },
+      ]),
+    ),
+  });
+  const reference = group('a', {
+    compset_alias: 'COMMON',
+    compset_long_name: 'COMMON_LONG',
+    grid_alias: 'grid_A',
+    grid_long_name: 'grid_long_A',
+    git_tag: 'v3',
+  });
+  const identical = group('b', {
+    compset_alias: 'COMMON',
+    compset_long_name: 'COMMON_LONG',
+    grid_alias: 'grid_A',
+    grid_long_name: 'grid_long_A',
+    git_tag: 'v3',
+  });
+  const unknown = group(
+    null,
+    { compset_alias: null, grid_alias: 'Unknown', git_tag: 'Unavailable' },
+    'missing:one',
+  );
+  assert.equal(getCaseHashConfigurationDifferences([reference, identical, unknown], 'a').size, 0);
+  const changed = group('b', {
+    compset_alias: 'COMMON',
+    compset_long_name: 'DIFFERENT_LONG',
+    grid_alias: 'grid_B',
+    grid_long_name: 'grid_long_B',
+    git_tag: 'v4',
+  });
+  const differences = getCaseHashConfigurationDifferences([changed, reference, unknown], 'a');
+  assert.deepEqual(
+    differences.get('b').map((difference) => difference.field),
+    ['compset_long_name', 'grid_alias', 'grid_long_name', 'git_tag'],
+  );
+  assert.equal(differences.has('a'), false);
+  assert.equal(differences.has(null), false);
+  assert.equal(differences.get('b')[1].baselineHash, 'a');
+  assert.equal(differences.get('b')[1].baselineValue, 'grid_A');
+  const fallback = getCaseHashConfigurationDifferences(
+    [
+      reference,
+      group(null, { grid_alias: 'grid_B' }, 'missing:one'),
+      group(null, { grid_alias: 'grid_C' }, 'missing:two'),
+    ],
+    'a',
+  );
+  assert.equal(fallback.get(null).length, 1);
+  assert.equal(fallback.get(null)[0].value, 'grid_B · grid_C');
+  const within = group('a', { grid_alias: 'grid_A' });
+  within.configuration.grid_alias.differences = [{ value: 'grid_B' }];
+  const matchingObservations = group('b', { grid_alias: 'grid_B' });
+  matchingObservations.configuration.grid_alias.differences = [{ value: 'grid_A' }];
+  assert.equal(getCaseHashConfigurationDifferences([within, matchingObservations], 'a').size, 0);
+  assert.equal(getCaseHashConfigurationDifferences([within], 'a').size, 0);
+  assert.equal(getCaseHashConfigurationDifferences([reference, changed], undefined).size, 0);
+  assert.equal(
+    getCaseHashConfigurationDifferences([group('a', {}), reference, changed], 'unknown').size,
+    0,
+  );
+  const missingBaseline = group('a', { compset_alias: 'COMMON' });
+  assert.equal(
+    getCaseHashConfigurationDifferences([missingBaseline, identical, changed], 'a').size,
+    0,
+    'Missing baseline values never choose another group as a field baseline',
+  );
+  const reversed = getCaseHashConfigurationDifferences([reference, changed], 'b');
+  assert.equal(reversed.has('b'), false);
+  assert.equal(reversed.get('a')[1].baselineValue, 'grid_B');
+  assert.equal(reversed.get('a')[1].value, 'grid_A');
+});
+
+test('discovery hash groups use execution count then full hash for deterministic display baselines', async () => {
+  const { sortCaseHashGroups } = await server.ssrLoadModule('/src/features/catalog/caseUtils.ts');
+  const groups = [
+    { caseHash: 'b', executions: ['1', '2'] },
+    { caseHash: null, executions: ['3', '4'] },
+    { caseHash: 'c', executions: ['5', '6', '7'] },
+    { caseHash: 'a', executions: ['8', '9'] },
+  ];
+  assert.deepEqual(
+    sortCaseHashGroups(groups).map((group) => group.caseHash),
+    ['c', 'a', 'b', null],
+  );
+  assert.deepEqual(
+    sortCaseHashGroups([...groups].reverse()).map((group) => group.caseHash),
+    ['c', 'a', 'b', null],
+  );
+  assert.deepEqual(
+    groups.map((group) => group.caseHash),
+    ['b', null, 'c', 'a'],
+  );
+  assert.equal(
+    sortCaseHashGroups([
+      { caseHash: null, executions: ['1', '2', '3'] },
+      { caseHash: 'a', executions: ['4'] },
+    ])[0].caseHash,
+    null,
+    'A larger fallback group sorts first rather than silently selecting another baseline',
+  );
+});
+
+test('execution metadata sorting keeps unknowns last without mutating candidates', async () => {
+  const { sortCaseExecutions } = await server.ssrLoadModule('/src/features/catalog/caseUtils.ts');
+  const candidates = [
+    {
+      summary: { id: 'b', executionId: 'run-2' },
+      details: { machineName: 'Unknown', initializationType: 'startup' },
+    },
+    {
+      summary: { id: 'a', executionId: 'run-1' },
+      details: { machineName: 'Machine A', initializationType: 'hybrid' },
+    },
+  ];
+  for (const direction of ['asc', 'desc'])
+    assert.equal(
+      sortCaseExecutions(candidates, { key: 'machine', direction }).at(-1).summary.id,
+      'b',
+    );
+  assert.equal(
+    sortCaseExecutions(candidates, { key: 'initialization', direction: 'asc' })[0].summary.id,
+    'a',
+  );
+  assert.equal(
+    sortCaseExecutions(candidates, { key: 'executionId', direction: 'desc' })[0].summary.id,
+    'b',
+  );
+  assert.deepEqual(
+    candidates.map(({ summary }) => summary.id),
+    ['b', 'a'],
+  );
+});
+
 test('simulated duration chooses units without converting mixed calendars to years', async () => {
   const { formatSimulatedDuration, describeSimulatedDuration } = await server.ssrLoadModule(
     '/src/features/catalog/caseUtils.ts',

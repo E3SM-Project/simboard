@@ -11,9 +11,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
+import { reconcileExecutionOrder } from '@/lib/catalog/executionDiscovery';
 import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
@@ -26,6 +28,7 @@ interface CompareWorkspaceProps {
   selectedExecutions: ExecutionOut[];
   backLabel?: string;
   contextNotice?: ReactNode;
+  caseComparison?: boolean;
   description?: string;
   embedded?: boolean;
   emptyStateActionHref?: string;
@@ -68,6 +71,7 @@ const arraysEqual = <T,>(left: T[], right: T[]) =>
 export const CompareWorkspace = ({
   backLabel = 'Back to Case',
   contextNotice,
+  caseComparison = false,
   description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove executions, and expand sections for detailed metrics.',
   embedded = false,
   emptyStateActionHref = '/cases',
@@ -91,7 +95,13 @@ export const CompareWorkspace = ({
 
   // -------------------- Global State --------------------
   // -------------------- Local State --------------------
-  const [order, setOrder] = useState(selectedExecutionIds.map((_, i) => i));
+  const [orderedIds, setOrderedIds] = useState(selectedExecutionIds);
+  const displayIds = reconcileExecutionOrder(orderedIds, selectedExecutionIds);
+  const order = displayIds.map((id) => selectedExecutionIds.indexOf(id));
+  const setOrder = (update: number[] | ((current: number[]) => number[])) => {
+    const nextOrder = typeof update === 'function' ? update(order) : update;
+    setOrderedIds(nextOrder.map((index) => selectedExecutionIds[index]));
+  };
 
   const executionHeaders = selectedExecutionIds.map((id) => {
     const execution = selectedExecutions.find((item) => item.id === id);
@@ -112,13 +122,20 @@ export const CompareWorkspace = ({
   const dragCol = useRef<number | null>(null);
   const previousSelectedExecutionIds = useRef(selectedExecutionIds);
   const [diffsEnabled, setDiffsEnabled] = useState(false);
-  const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(false);
+  const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(caseComparison);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const previousExpandedSections = useRef<Record<string, boolean> | null>(null);
 
   // -------------------- Derived Data --------------------
-  const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedExecutionIds[colIdx]));
+  const visibleOrder = order.filter(
+    (colIdx) =>
+      colIdx < selectedExecutionIds.length &&
+      !hidden.includes(selectedExecutionIds[colIdx]) &&
+      (!caseComparison ||
+        selectedExecutions.some((execution) => execution.id === selectedExecutionIds[colIdx])),
+  );
   const canCompareDifferences = visibleOrder.length > 1;
+  const showDifferencesOnly = diffsOnlyEnabled && canCompareDifferences;
 
   const getExecutionProp = <K extends keyof ExecutionOut>(
     id: string,
@@ -339,7 +356,7 @@ export const CompareWorkspace = ({
   const initialExpandedSections: Record<string, boolean> = {};
 
   allSectionKeys.forEach((section) => {
-    initialExpandedSections[section] = defaultExpanded.includes(section);
+    initialExpandedSections[section] = caseComparison || defaultExpanded.includes(section);
   });
   const [expandedSections, setExpandedSections] =
     useState<Record<string, boolean>>(initialExpandedSections);
@@ -419,13 +436,17 @@ export const CompareWorkspace = ({
     setHeaders((prev) => (arraysEqual(prev, nextHeaders) ? prev : nextHeaders));
 
     if (!arraysEqual(previousSelectedExecutionIds.current, selectedExecutionIds)) {
-      setOrder(selectedExecutionIds.map((_, i) => i));
+      setOrderedIds((previous) =>
+        caseComparison
+          ? reconcileExecutionOrder(previous, selectedExecutionIds)
+          : selectedExecutionIds,
+      );
       previousSelectedExecutionIds.current = selectedExecutionIds;
     }
-  }, [selectedExecutionIds, selectedExecutions]);
+  }, [selectedExecutionIds, selectedExecutions, caseComparison]);
 
   useEffect(() => {
-    if (canCompareDifferences || !diffsOnlyEnabled) {
+    if (caseComparison || canCompareDifferences || !diffsOnlyEnabled) {
       return;
     }
 
@@ -435,7 +456,7 @@ export const CompareWorkspace = ({
       setExpandedSections(previousExpandedSections.current);
       previousExpandedSections.current = null;
     }
-  }, [canCompareDifferences, diffsOnlyEnabled]);
+  }, [caseComparison, canCompareDifferences, diffsOnlyEnabled]);
 
   useEffect(() => {
     if (summaryExpanded && summaryCards.length === 0) {
@@ -616,7 +637,7 @@ export const CompareWorkspace = ({
   const tableMinWidth = LABEL_COLUMN_WIDTH + visibleValueWidth;
 
   // -------------------- Render --------------------
-  if (selectedExecutionIds.length === 0) {
+  if (selectedExecutionIds.length === 0 && !caseComparison) {
     return (
       <div className="max-w-screen-2xl mx-auto p-8 text-center text-gray-600">
         <p className="text-lg mb-4">{emptyStateMessage}</p>
@@ -626,6 +647,229 @@ export const CompareWorkspace = ({
         >
           {emptyStateActionLabel}
         </a>
+      </div>
+    );
+  }
+
+  if (caseComparison) {
+    return (
+      <div className="flex min-h-0 flex-col gap-4" data-case-comparison>
+        {contextNotice}
+        {selectedExecutionIds.length < 2 ? (
+          <p
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            role="status"
+          >
+            Select at least two executions using Edit executions to compare.
+          </p>
+        ) : null}
+        {selectedExecutionIds.length >= 2 && selectedExecutions.length < 2 ? (
+          <p className="text-sm text-slate-600" role="status">
+            Comparison needs details for at least two selected executions.
+          </p>
+        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm">
+          <p className="text-slate-600">
+            <span className="font-medium text-slate-900" aria-live="polite">
+              {visibleColumns.length} execution{visibleColumns.length === 1 ? '' : 's'} ·{' '}
+              {totalChangedRows} differing field{totalChangedRows === 1 ? '' : 's'}
+            </span>
+            <span className="ml-3 inline-block">Compared against the reference execution</span>
+          </p>
+          <div
+            className="inline-flex rounded-lg border bg-slate-50 p-1"
+            role="group"
+            aria-label="Comparison fields"
+          >
+            <Button
+              size="sm"
+              variant={showDifferencesOnly ? 'default' : 'ghost'}
+              aria-pressed={showDifferencesOnly}
+              disabled={!canCompareDifferences}
+              onClick={() => setDiffsOnlyEnabled(true)}
+            >
+              Differences ({totalChangedRows})
+            </Button>
+            <Button
+              size="sm"
+              variant={!showDifferencesOnly ? 'default' : 'ghost'}
+              aria-pressed={!showDifferencesOnly}
+              onClick={() => setDiffsOnlyEnabled(false)}
+            >
+              All fields
+            </Button>
+          </div>
+        </div>
+        {hidden.length > 0 ? (
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2 text-sm"
+            aria-label="Show hidden executions"
+          >
+            <span>Hidden executions:</span>
+            {hidden.map((id) => (
+              <Button key={id} size="sm" variant="outline" onClick={() => handleShow(id)}>
+                Show {headers[selectedExecutionIds.indexOf(id)] ?? id}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className="min-h-0 overflow-auto rounded-lg border border-slate-200"
+          tabIndex={0}
+          role="region"
+          aria-label="Execution comparison"
+        >
+          <table
+            className="w-full table-fixed border-separate border-spacing-0 text-left text-sm"
+            style={{ minWidth: 180 + visibleColumns.length * 260 }}
+          >
+            <colgroup>
+              <col style={{ width: 180 }} />
+              {visibleColumns.map((column) => (
+                <col key={column.executionId} />
+              ))}
+            </colgroup>
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th
+                  scope="col"
+                  className="sticky left-0 z-30 border-b border-r bg-slate-100 px-3 py-3 font-medium"
+                >
+                  Field
+                </th>
+                {visibleColumns.map((column, index) => (
+                  <th
+                    key={column.executionId}
+                    scope="col"
+                    className={`border-b border-r bg-slate-100 px-3 py-3 align-top font-medium ${dragOverIdx === column.colIdx ? 'ring-2 ring-inset ring-blue-400' : ''}`}
+                    draggable
+                    onDragStart={() => handleDragStart(column.colIdx)}
+                    onDragOver={(event) => handleDragOver(event, column.colIdx)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={() => handleDrop(column.colIdx)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <a
+                        href={column.executionHref}
+                        onClick={(event) => handleInternalLinkClick(event, column.executionHref)}
+                        className="min-w-0 break-all font-mono text-blue-700 hover:underline"
+                      >
+                        {column.executionHeader}
+                      </a>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Hide ${column.executionHeader}`}
+                          title="Hide execution (keep selected)"
+                          className="rounded p-1 hover:bg-slate-200"
+                          onClick={() => handleHide(column.colIdx)}
+                        >
+                          <EyeOff size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${column.executionHeader}`}
+                          title="Remove execution from selection"
+                          className="rounded p-1 hover:bg-slate-200"
+                          onClick={() => handleRemove(column.colIdx)}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    {index === 0 ? (
+                      <Badge variant="secondary" className="mt-1">
+                        Reference
+                      </Badge>
+                    ) : (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs text-blue-700 hover:underline"
+                        aria-label={`Use ${column.executionHeader} as reference`}
+                        onClick={() =>
+                          setOrder((current) => [
+                            column.colIdx,
+                            ...current.filter((item) => item !== column.colIdx),
+                          ])
+                        }
+                      >
+                        Use as reference
+                      </button>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            {compareSections.map((section) => {
+              const rows = showDifferencesOnly ? section.diffRows : section.rows;
+              if (rows.length === 0 || visibleColumns.length === 0) return null;
+
+              return (
+                <tbody key={section.key}>
+                  <tr>
+                    <th
+                      colSpan={visibleColumns.length + 1}
+                      scope="colgroup"
+                      className="border-b bg-slate-50 text-slate-700"
+                    >
+                      <button
+                        type="button"
+                        className="sticky left-0 inline-flex items-center gap-2 px-3 py-2 text-left"
+                        aria-expanded={expandedSections[section.key]}
+                        onClick={() => toggleSection(section.key)}
+                      >
+                        <ChevronRight
+                          size={14}
+                          className={expandedSections[section.key] ? 'rotate-90' : ''}
+                        />
+                        {section.label}
+                        <span className="text-xs font-normal text-slate-500">
+                          {section.diffCount} difference{section.diffCount === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    </th>
+                  </tr>
+                  {expandedSections[section.key] &&
+                    rows.map((row) => (
+                      <tr key={row.label}>
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 border-b border-r bg-white px-3 py-2 align-top font-medium"
+                        >
+                          {row.label}
+                        </th>
+                        {visibleColumns.map((column) => {
+                          const value = row.values[column.colIdx];
+                          const changed =
+                            row.diffable !== false &&
+                            column.colIdx !== visibleOrder[0] &&
+                            norm(value) !== norm(row.values[visibleOrder[0]]);
+
+                          return (
+                            <td
+                              key={column.executionId}
+                              data-different={changed || undefined}
+                              className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/70' : 'bg-white'}`}
+                            >
+                              {changed ? (
+                                <span className="sr-only">Differs from reference column. </span>
+                              ) : null}
+                              {renderCompareValue(section.key, row, value, column.colIdx)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                </tbody>
+              );
+            })}
+          </table>
+          {visibleColumns.length === 0 ? (
+            <p className="p-4 text-slate-600">Unhide an execution to restore compare columns.</p>
+          ) : canCompareDifferences && diffsOnlyEnabled && totalChangedRows === 0 ? (
+            <p className="p-4 text-slate-600">No differences across visible executions.</p>
+          ) : null}
+        </div>
       </div>
     );
   }
