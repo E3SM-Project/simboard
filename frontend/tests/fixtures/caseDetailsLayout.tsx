@@ -47,6 +47,11 @@ const executions = [1, 2, 3].map((number) => ({
   simulationStartDate: `000${number}-01-01`,
   simulationEndDate: `000${number + 1}-01-01`,
   initializationType: number === 1 ? 'hybrid' : 'startup',
+  machineName: number === 3 ? null : 'chrysalis',
+  compsetAlias: 'COMMON-COMPSET',
+  compsetLongName: 'COMMON_COMPSET_LONG_NAME',
+  gridAlias: 'COMMON-GRID',
+  gridLongName: 'COMMON_GRID_LONG_NAME',
   runStartDate: number === 3 ? null : `2026-10-0${number}T12:00:00Z`,
   runEndDate: number === 3 ? null : `2026-10-0${number}T13:00:00Z`,
 }));
@@ -428,6 +433,16 @@ async function run() {
 
   const table = document.querySelector('table')!;
   const toolbar = document.querySelector<HTMLElement>('[data-execution-toolbar]')!;
+  const instructions = document.querySelector<HTMLElement>('[data-execution-instructions]')!;
+  check(
+    instructions.previousElementSibling?.textContent === 'Executions' &&
+      instructions.closest('section')?.querySelector('h2')?.nextElementSibling === instructions,
+    'Execution instructions sit directly beneath heading above toolbar divider',
+  );
+  check(
+    document.querySelectorAll('[data-execution-instructions]').length === 1,
+    'Execution instructions appear only once',
+  );
   if (innerWidth >= 900)
     check(
       toolbar.getBoundingClientRect().height < 150,
@@ -436,12 +451,14 @@ async function run() {
   check(!toolbar.textContent?.includes('Actions'), 'Toolbar avoids redundant section labels');
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Simulation dates|Initialization|Run dates|Execution ID',
+      'Select|Simulation dates|Duration|Run dates|Execution ID|Initialization|Machine',
     'Flat execution column order',
   );
   const row = table.tBodies[0].rows[0];
   check(row.cells[1].textContent === '0001-01-01 → 0002-01-01', 'Simulation dates match column');
-  check(row.cells[2].textContent === 'hybrid', 'Initialization value stays unchanged');
+  check(row.cells[2].textContent === '1 year', 'Simulation duration uses model dates');
+  check(row.cells[5].textContent === 'hybrid', 'Initialization value stays unchanged');
+  check(row.cells[6].textContent === 'chrysalis', 'Machine shows by default even when uniform');
   check(row.cells[3].textContent === '2026-10-01', 'Same-day run dates remain compact');
   check(row.cells[4].querySelector('a')?.textContent === 'run-1', 'Oldest simulation stays first');
   check(
@@ -450,16 +467,24 @@ async function run() {
     ),
     'Single hash hides grouping controls',
   );
+  check(row.cells[4].textContent === 'run-1', 'Execution ID stays uncluttered');
+  row.querySelector<HTMLButtonElement>('[aria-label="Execution details for run-1"]')!.click();
+  await waitFor(() => document.querySelector('[aria-label="Details for run-1"]'));
+  const metadata = document.querySelector<HTMLElement>('[aria-label="Details for run-1"]')!;
   check(
-    row.cells[4].textContent?.includes('Details · Varies'),
-    'Known initialization variation is discoverable',
+    metadata.textContent?.includes('Initialization: hybrid') &&
+      !metadata.textContent?.includes('(varies)'),
+    'Execution details show values without variation labels',
   );
-  row.cells[4].querySelector('summary')!.click();
   check(
-    row.cells[4].textContent?.includes('Machine: —'),
-    'Unavailable metadata uses shared placeholder',
+    metadata.textContent?.includes('Case Hash: test-hash'),
+    'Hash remains available in execution details',
   );
-  row.cells[4].querySelector('summary')!.click();
+  metadata.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitFor(
+    () => !document.querySelector('[aria-label="Details for run-1"][data-state="open"]'),
+  );
+  await checkExecutionColumns(table);
   check(
     row.cells[4].querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
     'Execution link retained',
@@ -524,6 +549,62 @@ async function run() {
       ...executions,
       { ...executions[2], id: 'missing-hash', executionId: 'fallback-run', caseHash: null },
     ],
+    configurationGroups: [
+      {
+        key: 'test-hash',
+        caseHash: 'test-hash',
+        executionIds: ['run-1', 'run-2', 'run-3'],
+        configuration: {
+          compset_alias: {
+            source: {
+              value: 'COMMON-COMPSET',
+              executionId: 'run-1',
+              executionUuid: 'execution-1',
+              runDate: null,
+            },
+            differences: [],
+            missingExecutionIds: [],
+          },
+          grid_alias: {
+            source: {
+              value: 'COMMON-GRID',
+              executionId: 'run-1',
+              executionUuid: 'execution-1',
+              runDate: null,
+            },
+            differences: [],
+            missingExecutionIds: [],
+          },
+        },
+      },
+      {
+        key: 'missing:missing-hash',
+        caseHash: null,
+        executionIds: ['fallback-run'],
+        configuration: {
+          compset_alias: {
+            source: {
+              value: 'COMMON-COMPSET',
+              executionId: 'fallback-run',
+              executionUuid: 'missing-hash',
+              runDate: null,
+            },
+            differences: [],
+            missingExecutionIds: [],
+          },
+          grid_alias: {
+            source: {
+              value: 'ALTERNATE-GRID',
+              executionId: 'fallback-run',
+              executionUuid: 'missing-hash',
+              runDate: null,
+            },
+            differences: [],
+            missingExecutionIds: [],
+          },
+        },
+      },
+    ],
   };
   client.setQueryData(
     catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case'),
@@ -543,19 +624,112 @@ async function run() {
   const grouped = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Group by Case Hash',
   )!;
-  grouped.click();
-  await waitFor(() => document.querySelector('table table'));
-  const groupTable = document.querySelector('table table')!;
+  await toggleExecutionColumn('Grid Alias');
   check(
-    [...document.querySelector('table')!.tHead!.rows[0].cells]
+    [...table.querySelectorAll('th')].some((cell) => cell.textContent === 'Grid Alias'),
+    'Optional column enabled before grouping',
+  );
+  grouped.click();
+  await waitFor(() => document.querySelector('[data-case-hash-baseline="true"]'));
+  check(
+    !document.querySelector('[aria-label="Case executions"] table table'),
+    'Hash groups start collapsed without automatically opening first row',
+  );
+  document
+    .querySelector<HTMLButtonElement>('[data-case-hash-baseline="true"] button[aria-expanded]')!
+    .click();
+  await waitFor(() => document.querySelector('table table'));
+  let groupTable = document.querySelector<HTMLTableElement>('table table')!;
+  check(
+    [
+      ...document.querySelector<HTMLTableElement>('[aria-label="Case executions"] table')!.tHead!
+        .rows[0].cells,
+    ]
       .map((cell) => cell.textContent?.trim())
-      .join('|') === 'Case Hash|Executions|Simulation window|Actions',
+      .join('|') === 'Case Hash group|Executions|Simulation period range|Actions',
     'Hash groups use concise contextual columns',
   );
   check(
     [...groupTable.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Simulation dates|Initialization|Run dates|Execution ID',
+      'Select|Simulation dates|Duration|Run dates|Execution ID|Initialization|Machine|Grid Alias',
     'Grouped execution column order',
+  );
+  await toggleExecutionColumn('Grid Alias');
+  check(
+    [...groupTable.querySelectorAll('th')].map((cell) => cell.textContent).join('|') ===
+      'Select|Simulation dates|Duration|Run dates|Execution ID|Initialization|Machine',
+    'Both views share column visibility and layout',
+  );
+  check(
+    !document.querySelector('[data-execution-toolbar]')?.textContent?.includes('Expand all'),
+    'Group toolbar omits bulk expansion controls',
+  );
+  const groupDifferences = document.querySelector<HTMLElement>(
+    '[aria-label="Case executions"] [aria-label="Configuration differences"]',
+  )!;
+  check(
+    groupDifferences && groupDifferences.querySelector('dt')?.textContent === 'Grid Alias',
+    'Verified group differences remain visible with optional columns disabled',
+  );
+  check(
+    groupDifferences.querySelector('mark')?.textContent === 'ALTERNATE-GRID',
+    'Only this group’s differing value is highlighted',
+  );
+  const valueComparison = groupDifferences.querySelector<HTMLElement>('dd')!;
+  check(
+    !valueComparison.closest('[title]'),
+    'Configuration differences do not combine native and SimBoard tooltips',
+  );
+  valueComparison.focus();
+  await waitFor(() => valueComparison.getAttribute('aria-describedby'));
+  const differenceTooltip = document.getElementById(
+    valueComparison.getAttribute('aria-describedby')!,
+  )!;
+  check(
+    differenceTooltip.textContent?.includes('Baseline (test-hash): COMMON-GRID') &&
+      differenceTooltip.textContent?.includes("This group's value: ALTERNATE-GRID"),
+    'One tooltip contains both comparison values',
+  );
+  check(
+    document.querySelectorAll('[role="tooltip"]').length === 1,
+    'Only one difference tooltip opens',
+  );
+  valueComparison.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitFor(() => !valueComparison.getAttribute('aria-describedby'));
+  check(
+    groupDifferences
+      .querySelector('dd')
+      ?.textContent?.includes("COMMON-GRID→This group's value: ALTERNATE-GRID"),
+    'Group differences show baseline value then this group’s value',
+  );
+  const executionSection = document.querySelector<HTMLElement>('[aria-label="Case executions"]')!;
+  const baselineRow = executionSection.querySelector<HTMLElement>(
+    '[data-case-hash-baseline="true"]',
+  )!;
+  check(
+    baselineRow.textContent?.includes('test-hash') && baselineRow.textContent?.includes('Baseline'),
+    'First displayed hash group is labeled Baseline',
+  );
+  check(
+    !baselineRow.querySelector('[aria-label="Configuration differences"]'),
+    'Baseline group does not highlight its own configuration',
+  );
+  baselineRow.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click();
+  await waitFor(() => !groupTable.isConnected);
+  check(
+    executionSection.querySelector('[data-case-hash-baseline="true"]') === baselineRow,
+    'Collapsing groups preserves baseline',
+  );
+  baselineRow.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click();
+  await waitFor(() => executionSection.querySelector('table table'));
+  groupTable = executionSection.querySelector<HTMLTableElement>('table table')!;
+  check(
+    executionSection.querySelector('[data-case-hash-baseline="true"]') === baselineRow,
+    'Expanding groups preserves baseline',
+  );
+  check(
+    !groupDifferences.textContent?.includes('Compset'),
+    'Group differences omit unchanged configuration',
   );
   check(
     groupTable.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
@@ -620,12 +794,37 @@ async function run() {
   flat.click();
   await waitFor(() => !document.querySelector('table table'));
   check(
-    document.querySelectorAll('th')[1].getAttribute('aria-sort') === 'ascending',
+    document.querySelectorAll('[aria-label="Case executions"] th')[1].getAttribute('aria-sort') ===
+      'ascending',
     'Flat view retains grouped simulation sort',
   );
   check(
-    document.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
+    document
+      .querySelector('[aria-label="Case executions"] [role="checkbox"]')
+      ?.getAttribute('aria-checked') === 'true',
     'Sorting retains selection',
+  );
+  await checkExecutionGroupSearch();
+  const multipleHashRecord = {
+    ...groupedRecord,
+    executions: [
+      ...groupedRecord.executions,
+      { ...executions[2], id: 'other-hash', executionId: 'other-run', caseHash: 'other-hash' },
+    ],
+  };
+  client.setQueryData(
+    catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case'),
+    multipleHashRecord,
+  );
+  await waitFor(() =>
+    document
+      .querySelector('[data-execution-instructions]')
+      ?.textContent?.includes('Multiple case hashes detected.'),
+  );
+  check(
+    document.querySelector('[data-execution-instructions]')?.textContent ===
+      'Select 2–5 executions to compare simulation configurations and results. Multiple case hashes detected. Group by Case Hash to inspect configuration differences.',
+    'Multiple known hashes append instructions without asserting configuration changes',
   );
   client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
   client.setQueryData(catalogQueryKeys.cases.detail(record.id), record);
@@ -634,6 +833,11 @@ async function run() {
       ![...document.querySelectorAll('button')].some(
         (element) => element.textContent === 'Group by Case Hash',
       ),
+  );
+  check(
+    document.querySelector('[data-execution-instructions]')?.textContent ===
+      'Select 2–5 executions to compare simulation configurations and results.',
+    'Single-hash cases show only default execution instructions',
   );
 
   const runAscKey = [
@@ -736,6 +940,177 @@ async function run() {
   await checkArtifactsScrolling();
   await checkExecutionPlaceholders();
   await checkConfigurationComparison();
+}
+
+async function checkExecutionGroupSearch() {
+  const section = document.querySelector<HTMLElement>('[aria-label="Case executions"]')!;
+  const setInput = (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  check(
+    ![...section.querySelectorAll('button')].some((button) =>
+      button.textContent?.startsWith('Filters'),
+    ),
+    'Toolbar omits Filters control',
+  );
+  check(
+    document.querySelector('[data-execution-instructions]')?.textContent ===
+      'Select 2–5 executions to compare simulation configurations and results.',
+    'Missing-hash fallback alone retains default execution instructions',
+  );
+  const search = section.querySelector<HTMLInputElement>('[aria-label="Search executions"]')!;
+  check(
+    search.placeholder === 'Search execution ID',
+    'Search uses concise execution ID placeholder',
+  );
+  setInput(search, 'Missing Case Hash');
+  await waitFor(() => section.querySelectorAll('table tbody [role="checkbox"]').length === 1);
+  check(
+    section.querySelector('[aria-label="Select fallback-run for compare"]'),
+    'Search retains missing-hash fallback matching',
+  );
+  setInput(search, 'not-a-hash');
+  await waitFor(() => section.textContent?.includes('No executions match these filters.'));
+  [...section.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent === 'Reset filters')!
+    .click();
+  await waitFor(() => section.querySelectorAll('table tbody [role="checkbox"]').length === 4);
+  check(
+    section
+      .querySelector('[aria-label="Select run-1 for compare"]')
+      ?.getAttribute('aria-checked') === 'true',
+    'Search preserves selections',
+  );
+  [...section.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent === 'Group by Case Hash')!
+    .click();
+  setInput(search, 'Missing Case Hash');
+  await waitFor(() =>
+    section
+      .querySelector('[data-case-hash-baseline="true"]')
+      ?.textContent?.includes('Missing Case Hash'),
+  );
+  check(
+    !section.querySelector('[aria-label="Configuration differences"]'),
+    'First displayed fallback becomes baseline without highlighting its own values',
+  );
+  setInput(search, 'run-1');
+  await waitFor(
+    () =>
+      [...section.querySelector<HTMLTableElement>('table')!.tBodies[0].rows].filter(
+        (row) => row.cells.length === 4,
+      ).length === 1 &&
+      section.querySelector('[data-case-hash-baseline="true"]')?.textContent?.includes('test-hash'),
+  );
+  const groupRow = section.querySelector<HTMLTableElement>('table')!.tBodies[0].rows[0];
+  check(groupRow.cells[1].textContent === '3', 'Filtered groups retain actual execution counts');
+  check(
+    groupRow.cells[2].textContent === '0001-01-01 → 0004-01-01',
+    'Filtered groups retain full simulation period range',
+  );
+  setInput(search, '');
+  [...section.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent === 'All executions')!
+    .click();
+  await waitFor(() => !section.querySelector('table table'));
+}
+
+async function toggleExecutionColumn(label: string) {
+  const trigger = [
+    ...document.querySelectorAll<HTMLButtonElement>('[data-execution-toolbar] button'),
+  ].find((button) => button.textContent === 'Columns')!;
+  trigger.focus();
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  await waitFor(() => document.querySelector('[aria-label="Execution columns"]'));
+  const menu = document.querySelector<HTMLElement>('[aria-label="Execution columns"]')!;
+  const option = [...menu.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
+    (item) => item.textContent === label,
+  )!;
+  const previous = option.getAttribute('aria-checked');
+  option.click();
+  await waitFor(() => option.getAttribute('aria-checked') !== previous);
+  menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitFor(
+    () => !document.querySelector('[aria-label="Execution columns"][data-state="open"]'),
+  );
+}
+
+async function checkExecutionColumns(table: HTMLTableElement) {
+  const headers = () => [...table.querySelectorAll('th')].map((cell) => cell.textContent);
+  const defaults = headers().join('|');
+  const columns = [
+    'Initialization',
+    'Machine',
+    'Compset Alias',
+    'Compset Long Name',
+    'Grid Alias',
+    'Grid Long Name',
+  ];
+  for (const column of columns) {
+    const visible = headers().includes(column);
+    await toggleExecutionColumn(column);
+    check(headers().includes(column) !== visible, `${column} toggles independently`);
+    check(
+      headers().slice(0, 5).join('|') === 'Select|Simulation dates|Duration|Run dates|Execution ID',
+      'Core columns remain visible',
+    );
+    await toggleExecutionColumn(column);
+  }
+  check(headers().join('|') === defaults, 'Column toggling restores default order');
+  const metadataSearch = document.querySelector<HTMLInputElement>(
+    '[aria-label="Search executions"]',
+  )!;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    metadataSearch,
+    'COMMON_COMPSET_LONG_NAME',
+  );
+  metadataSearch.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitFor(() => table.tBodies[0].rows.length === 3);
+  await toggleExecutionColumn('Compset Long Name');
+  await toggleExecutionColumn('Compset Long Name');
+  check(
+    table.isConnected && table.tBodies[0].rows.length === 3,
+    'Hiding a metadata column does not change search matches',
+  );
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    metadataSearch,
+    '',
+  );
+  metadataSearch.dispatchEvent(new Event('input', { bubbles: true }));
+  check(
+    getComputedStyle(table).fontSize === '14px',
+    'Execution table uses native SimBoard typography',
+  );
+  const initialization = table.querySelectorAll('th')[5];
+  initialization.querySelector('button')!.click();
+  await waitFor(() => initialization.getAttribute('aria-sort') === 'ascending');
+  check(
+    table.tBodies[0].rows[0].cells[5].textContent === 'hybrid',
+    'Initialization sort uses known metadata',
+  );
+  const machine = table.querySelectorAll('th')[6];
+  machine.querySelector('button')!.click();
+  await waitFor(() => machine.getAttribute('aria-sort') === 'ascending');
+  check(
+    table.tBodies[0].rows[2].cells[6].textContent === '—',
+    'Machine sort keeps missing values last',
+  );
+  table.querySelectorAll('th')[1].querySelector('button')!.click();
+  await waitFor(() => table.querySelectorAll('th')[1].getAttribute('aria-sort') === 'ascending');
+  const toolbar = document.querySelector<HTMLElement>('[data-execution-toolbar]')!;
+  const trigger = [...toolbar.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Columns',
+  )!;
+  const search = toolbar.querySelector('[aria-label="Search executions"]')!;
+  check(
+    trigger.parentElement === search.parentElement?.parentElement,
+    'Columns sits immediately before search',
+  );
+  check(
+    trigger.getBoundingClientRect().right <= search.getBoundingClientRect().left,
+    'Columns aligns left of search',
+  );
 }
 
 async function checkExecutionComparison(compareButton: HTMLButtonElement) {

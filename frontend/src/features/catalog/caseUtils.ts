@@ -1,6 +1,10 @@
 import { format } from 'date-fns';
 
-import { formatCaseHashLabel, MISSING_CASE_HASH_LABEL } from '@/lib/catalog/executionDiscovery';
+import {
+  formatCaseHashLabel,
+  knownExecutionValue,
+  MISSING_CASE_HASH_LABEL,
+} from '@/lib/catalog/executionDiscovery';
 import type {
   CaseHashConfigurationOut,
   ExecutionListItemOut,
@@ -8,13 +12,110 @@ import type {
   SimulationCoverageOut,
   SimulationDurationOut,
 } from '@/types';
-import { compareModelDates } from '@/utils/utils';
+import { compareModelDates, getModelDateDuration } from '@/utils/utils';
 
 export {
   formatCaseHashLabel,
   formatExecutionDateRange,
   MISSING_CASE_HASH_LABEL,
 } from '@/lib/catalog/executionDiscovery';
+
+export const CASE_CONFIGURATION_FIELDS = [
+  ['compset_alias', 'Compset Alias'],
+  ['compset_long_name', 'Compset Long Name'],
+  ['grid_alias', 'Grid Alias'],
+  ['grid_long_name', 'Grid Long Name'],
+  ['source_code_path', 'Source code path'],
+  ['git_commit_hash', 'Model hash'],
+  ['git_tag', 'Model tag'],
+] as const;
+
+export interface CaseHashConfigurationDifference {
+  field: string;
+  label: string;
+  value: string;
+  baselineValue: string;
+  baselineHash: string | null;
+}
+
+export const getCaseHashConfigurationDifferences = (
+  groups: CaseHashConfigurationOut[],
+  baselineHash: string | null | undefined,
+) => {
+  const differences = new Map<string | null, CaseHashConfigurationDifference[]>();
+  if (baselineHash === undefined) return differences;
+  const byHash = new Map<string | null, CaseHashConfigurationOut[]>();
+  for (const group of groups) {
+    const hashGroups = byHash.get(group.caseHash) ?? [];
+    hashGroups.push(group);
+    byHash.set(group.caseHash, hashGroups);
+  }
+  for (const [field, label] of CASE_CONFIGURATION_FIELDS) {
+    const valuesByHash = new Map(
+      [...byHash].map(([caseHash, hashGroups]) => [
+        caseHash,
+        [
+          ...new Set(
+            hashGroups.flatMap((group) => {
+              const metadata = group.configuration[field];
+              return [metadata?.source, ...(metadata?.differences ?? [])]
+                .map((observation) => knownExecutionValue(observation?.value))
+                .filter((value): value is string => value != null);
+            }),
+          ),
+        ],
+      ]),
+    );
+    const baselineValues = valuesByHash.get(baselineHash) ?? [];
+    if (baselineValues.length === 0) continue;
+    for (const [caseHash, values] of valuesByHash) {
+      if (
+        caseHash === baselineHash ||
+        values.length === 0 ||
+        (values.length === baselineValues.length &&
+          values.every((value) => baselineValues.includes(value)))
+      )
+        continue;
+      const entries = differences.get(caseHash) ?? [];
+      entries.push({
+        field,
+        label,
+        value: values.join(' · '),
+        baselineValue: baselineValues.join(' · '),
+        baselineHash,
+      });
+      differences.set(caseHash, entries);
+    }
+  }
+
+  return differences;
+};
+
+export const sortCaseHashGroups = <T extends { caseHash: string | null; executions: unknown[] }>(
+  groups: T[],
+): T[] =>
+  [...groups].sort((left, right) => {
+    const countDifference = right.executions.length - left.executions.length;
+    if (countDifference !== 0) return countDifference;
+    if (left.caseHash == null && right.caseHash != null) return 1;
+    if (left.caseHash != null && right.caseHash == null) return -1;
+
+    return (left.caseHash ?? '').localeCompare(right.caseHash ?? '');
+  });
+
+export const formatExecutionDuration = (execution: ExecutionSummaryOut) => {
+  if (
+    !execution.simulationStartDate ||
+    !execution.simulationEndDate ||
+    compareModelDates(execution.simulationStartDate, execution.simulationEndDate) > 0
+  )
+    return '—';
+  try {
+    return getModelDateDuration(execution.simulationStartDate, execution.simulationEndDate);
+  } catch {
+    return '—';
+  }
+};
 
 export const formatSimulationCoverage = (coverage?: SimulationCoverageOut) => {
   const years = coverage?.years;
@@ -149,13 +250,15 @@ export interface ExecutionSummaryGroup {
 export type ExecutionSummaryGroupFilter = 'all' | 'multiRun' | 'missing';
 
 export interface ExecutionDateSort {
-  key: 'simulation' | 'run';
+  key: 'simulation' | 'run' | 'executionId' | 'initialization' | 'machine';
   direction: 'asc' | 'desc';
 }
 
 interface ExecutionWithDates {
   summary: ExecutionSummaryOut;
-  details?: Pick<ExecutionListItemOut, 'runStartDate' | 'runEndDate'>;
+  details?: Partial<
+    Pick<ExecutionListItemOut, 'runStartDate' | 'runEndDate' | 'initializationType' | 'machineName'>
+  >;
 }
 
 export interface ExecutionDateWindow {
@@ -222,7 +325,7 @@ export const sortCaseExecutions = <T extends ExecutionWithDates>(
         left.summary.simulationStartDate,
         right.summary.simulationStartDate,
       );
-    } else {
+    } else if (sort.key === 'run') {
       const leftTime = getExecutionRunTime(left);
       const rightTime = getExecutionRunTime(right);
       if (leftTime == null || rightTime == null) {
@@ -232,6 +335,19 @@ export const sortCaseExecutions = <T extends ExecutionWithDates>(
       } else {
         comparison = leftTime - rightTime;
       }
+    } else {
+      const field = sort.key === 'initialization' ? 'initializationType' : 'machineName';
+      const leftValue =
+        sort.key === 'executionId'
+          ? left.summary.executionId
+          : knownExecutionValue(left.details?.[field]);
+      const rightValue =
+        sort.key === 'executionId'
+          ? right.summary.executionId
+          : knownExecutionValue(right.details?.[field]);
+      if (leftValue == null && rightValue != null) return 1;
+      if (leftValue != null && rightValue == null) return -1;
+      comparison = (leftValue ?? '').localeCompare(rightValue ?? '');
     }
 
     return (
@@ -304,10 +420,6 @@ export const groupExecutionSummaries = (
       isFallback: group.isFallback,
       executions: group.executions,
     }));
-};
-
-export const getDefaultExpandedGroupKeys = <T extends { key: string }>(groups: T[]) => {
-  return groups.slice(0, 1).map((group) => group.key);
 };
 
 export const matchesExecutionGroupFilter = <

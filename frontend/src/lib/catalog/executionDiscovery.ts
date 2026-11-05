@@ -44,6 +44,8 @@ export const formatRunDateRange = (startDate?: string | null, endDate?: string |
   const start = startDate?.slice(0, 10) ?? '—';
   const end = endDate?.slice(0, 10) ?? '—';
 
+  if (!startDate) return end;
+  if (!endDate) return start;
   return start === end ? start : `${start} → ${end}`;
 };
 
@@ -107,11 +109,20 @@ export const matchesExecutionSearch = (
   query: string,
 ) => {
   const summary = getExecutionSummary(candidate, discovery);
-  const hash = discovery.showCaseHash
-    ? (candidate.summary.caseHash ?? MISSING_CASE_HASH_LABEL)
-    : '';
+  const metadata = [
+    ...EXECUTION_METADATA_FIELDS.map(([key]) => knownExecutionValue(candidate.details?.[key])),
+    knownExecutionValue(candidate.details?.compsetLongName),
+    knownExecutionValue(candidate.details?.gridLongName),
+  ];
 
-  return [summary.executionId, summary.simulationPeriod, summary.context, hash]
+  return [
+    summary.executionId,
+    summary.simulationPeriod,
+    summary.context,
+    candidate.summary.caseHash ?? MISSING_CASE_HASH_LABEL,
+    formatRunDateRange(candidate.details?.runStartDate, candidate.details?.runEndDate),
+    ...metadata,
+  ]
     .join(' ')
     .toLowerCase()
     .includes(query.trim().toLowerCase());
