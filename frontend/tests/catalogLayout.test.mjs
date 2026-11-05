@@ -104,6 +104,180 @@ test('configuration baseline uses most frequent known hash with deterministic ha
   assert.equal(getConfigurationBaseline([]), undefined);
 });
 
+test('case metadata keeps compset alias and long name aligned with execution fields', async () => {
+  const { CaseConfigurationSummary } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const execution = { compsetAlias: 'F2010', compsetLongName: '2000_EAM_ELM_MPASSI_MPASO' };
+  const values = {
+    compset_alias: execution.compsetAlias,
+    compset_long_name: execution.compsetLongName,
+  };
+  const record = {
+    machineNames: ['machine'],
+    hpcUsernames: ['user'],
+    latestExecution: null,
+    configurationGroups: [
+      {
+        key: 'one',
+        caseHash: 'aaa',
+        executionIds: ['run-1'],
+        configuration: Object.fromEntries(
+          Object.entries(values).map(([key, value]) => [
+            key,
+            {
+              source: { value, executionUuid: 'run-1', executionId: 'run-1' },
+              differences: [],
+              missingExecutionIds: [],
+            },
+          ]),
+        ),
+      },
+    ],
+  };
+  for (const sharedConfiguration of [
+    undefined,
+    Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        { value, varies: false, incomplete: false },
+      ]),
+    ),
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(CaseConfigurationSummary, { record: { ...record, sharedConfiguration } }),
+    );
+    const fields = Object.fromEntries(
+      [...html.matchAll(/<dt\b[^>]*>([^<]+)<\/dt><dd\b[^>]*>([\s\S]*?)<\/dd>/g)].map((match) => [
+        match[1],
+        match[2],
+      ]),
+    );
+    assert.equal(fields['Compset Alias'], execution.compsetAlias);
+    assert.equal(fields['Compset Long Name'], execution.compsetLongName);
+  }
+});
+
+test('case summary links only differing configuration fields to compact comparison rows', async () => {
+  const { CaseConfigurationSummary, CaseConfigurationDetails } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const field = (value) => ({
+    source:
+      value == null ? null : { value, executionUuid: 'run-1', executionId: 'run-1', runDate: null },
+    differences: [],
+    missingExecutionIds: value == null ? ['run-1'] : [],
+  });
+  const configuration = {
+    compset_alias: field('shared-alias'),
+    compset_long_name: field('shared-long-name'),
+    grid_alias: field('shared-grid'),
+    grid_long_name: field('shared-grid-long'),
+  };
+  const first = { key: 'one', caseHash: 'aaa', executionIds: ['run-1'], configuration };
+  const record = {
+    machineNames: ['machine'],
+    hpcUsernames: ['user'],
+    latestExecution: null,
+    sharedConfiguration: Object.fromEntries(
+      Object.entries(configuration).map(([name, entry]) => [
+        name,
+        { value: entry.source.value, varies: false, incomplete: false },
+      ]),
+    ),
+  };
+  const identity = { machineName: 'machine', hpcUsername: 'user', caseName: 'case' };
+  for (const changedField of [
+    'compset_alias',
+    'compset_long_name',
+    'grid_alias',
+    'grid_long_name',
+    null,
+  ]) {
+    const second = {
+      ...first,
+      key: 'two',
+      caseHash: 'bbb',
+      configuration: changedField
+        ? { ...configuration, [changedField]: field(null) }
+        : configuration,
+    };
+    const current = { ...record, configurationGroups: [first, second] };
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(
+          'div',
+          null,
+          createElement(CaseConfigurationSummary, { record: current, identity }),
+          createElement(CaseConfigurationDetails, { record: current, identity }),
+        ),
+      ),
+    );
+    assert.doesNotMatch(html, /Expand metadata|Baseline:|data-configuration-group/);
+    if (changedField) {
+      assert.match(html, /Only configuration fields that differ between case hashes are shown\./);
+      assert.match(html, /Case hashes identify CIME case instances\./);
+      assert.match(html, /1 execution/);
+      const body = html.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/)[1];
+      assert.match(html, /href="#case-configuration-differences"/);
+      assert.match(html, new RegExp(`aria-controls="case-configuration-${changedField}"`));
+      assert.match(html, /id="case-configuration-differences" tabindex="-1"/);
+      assert.match(body, new RegExp(`id="case-configuration-${changedField}"`));
+      assert.equal((body.match(/scope="row"/g) ?? []).length, 1);
+      assert.match(body, /Unavailable/);
+    } else {
+      assert.doesNotMatch(html, /Differs by case hash/);
+      assert.doesNotMatch(html, /data-case-configuration|<table/);
+    }
+  }
+  for (const configurationGroups of [undefined, [], [first]]) {
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(CaseConfigurationDetails, {
+          record: { ...record, configurationGroups },
+          identity,
+        }),
+      ),
+    );
+    assert.equal(html, '');
+  }
+  const varyingConfiguration = {
+    ...configuration,
+    grid_alias: {
+      ...configuration.grid_alias,
+      differences: [
+        { value: 'later-grid', executionUuid: 'run-2', executionId: 'run-2', runDate: null },
+      ],
+    },
+  };
+  const html = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CaseConfigurationSummary, {
+        record: {
+          ...record,
+          configurationGroups: [
+            { ...first, configuration: varyingConfiguration },
+            { ...first, key: 'two', caseHash: 'bbb' },
+          ],
+        },
+        identity,
+      }),
+    ),
+  );
+  assert.doesNotMatch(html, /Differs by case hash/);
+  assert.match(html, /title="Source execution: run-1"/);
+  assert.match(html, /Changes within Case Hash/);
+  assert.match(html, /later-grid/);
+  assert.match(html, /href="\/cases\/machine\/user\/case\/run-2"/);
+});
+
 test('Case Group stays visible without opening or counting as an advanced filter', async () => {
   const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
   const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');

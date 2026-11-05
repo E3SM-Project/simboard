@@ -188,12 +188,14 @@ async function run() {
       'One Case Metadata heading',
     );
     const summaryLabels = [
-      'Total Simulated Duration',
       'Latest Execution',
-      'Compset Alias',
-      'Grid Alias',
+      'Total Simulated Duration',
       'Machine',
-      'HPC User',
+      'HPC Username',
+      'Compset Alias',
+      'Compset Long Name',
+      'Grid Alias',
+      'Grid Long Name',
     ];
     for (const text of summaryLabels) {
       const label = [...document.querySelectorAll('dt')].find(
@@ -201,6 +203,19 @@ async function run() {
       );
       check(label, `Metadata label exists: ${text}`);
       const style = getComputedStyle(label!);
+      check(
+        style.fontSize === '13px' && style.fontWeight === '600',
+        `Metadata label uses muted semibold typography: ${text}`,
+      );
+      const valueStyle = getComputedStyle(label!.parentElement!.querySelector('dd')!);
+      check(
+        valueStyle.fontSize === '14px' && valueStyle.fontWeight === '400',
+        `Metadata value uses normal primary typography: ${text}`,
+      );
+      check(
+        style.color !== valueStyle.color,
+        `Metadata label and value have distinct color hierarchy: ${text}`,
+      );
       check(style.textTransform === 'none', `Metadata label uses sentence case: ${text}`);
       check(
         style.letterSpacing === 'normal' || style.letterSpacing === '0px',
@@ -252,9 +267,12 @@ async function run() {
       'Summary preserves exact reading order',
     );
     const fields = [...metadata.children].map((element) => element.getBoundingClientRect());
-    const columns = window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1;
+    const columns = window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 2 : 1;
     fields.forEach((field, index) => {
-      check(Math.abs(field.height - fields[0].height) < 1, 'Summary fields have equal heights');
+      check(
+        Math.abs(field.height - fields[index - (index % columns)].height) < 1,
+        'Summary fields align within each row',
+      );
       if (index % columns !== 0) {
         check(Math.abs(field.top - fields[index - 1].top) < 1, 'Summary row labels align');
         check(field.left > fields[index - 1].left, 'Summary reads left to right');
@@ -264,8 +282,8 @@ async function run() {
     });
     const stats = metadata;
     check(
-      stats.textContent?.startsWith('Total Simulated Duration'),
-      'Duration is first summary statistic',
+      stats.textContent?.startsWith('Latest Execution'),
+      'Latest execution is first summary statistic',
     );
     check(
       stats.textContent?.includes('2 years (partial)'),
@@ -540,13 +558,18 @@ async function checkConfigurationComparison() {
         executionIds: ['run-1', 'run-2'],
         configuration: firstConfiguration,
         coverage: { years: 20, partial: false, excludedExecutionCount: 0 },
-        simulatedDuration: duration({ days: 10950, months: 360, years: 30 }),
+        simulatedDuration: duration({ days: 10950, months: 360, years: 30, calendarAssumed: true }),
       },
       {
         key: 'missing:run-3',
         caseHash: null,
         executionIds: ['run-3'],
-        configuration: { ...firstConfiguration, grid_alias: field(null, 'run-3') },
+        configuration: {
+          ...firstConfiguration,
+          grid_alias: field(null, 'run-3'),
+          compset_long_name: field('OTHER_'.repeat(100), 'run-3'),
+          grid_long_name: field('other-grid-long', 'run-3'),
+        },
         coverage: { years: null, partial: true, excludedExecutionCount: 1 },
         simulatedDuration: duration({
           days: null,
@@ -562,15 +585,17 @@ async function checkConfigurationComparison() {
   root.render(
     <MemoryRouter>
       <div className="min-w-0 p-6">
-        <CaseConfigurationSummary record={configured} />
+        <div className="h-screen" aria-hidden="true" />
+        <CaseConfigurationSummary record={configured} identity={identity} />
         <CaseConfigurationDetails record={configured} identity={identity} />
+        <div className="h-screen" aria-hidden="true" />
       </div>
     </MemoryRouter>,
   );
   await waitFor(() => document.querySelector('[data-case-configuration]'));
   const summary = document.querySelector('[aria-label="Case summary"]')!;
   check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
-  check(summary.textContent?.includes('Varies by Case Hash'), 'Summary flags differing values');
+  check(summary.textContent?.includes('Differs by case hash'), 'Summary flags differing values');
   check(!summary.textContent?.includes('Model tag'), 'Technical metadata stays out of summary');
   check(
     summary.textContent?.includes('Some executions unavailable'),
@@ -580,67 +605,129 @@ async function checkConfigurationComparison() {
     summary.textContent?.includes('Changes within Case Hash'),
     'Summary flags within-hash differences',
   );
-  const details = document.querySelector('[data-case-configuration]')!;
-  const groups = [...details.querySelectorAll<HTMLDetailsElement>('[data-configuration-group]')];
-  check(groups.length === 2, 'One compact row per hash or missing-hash identity');
-  check(!details.querySelector('table'), 'Dense comparison table removed');
+  const details = document.querySelector<HTMLElement>('[data-case-configuration]')!;
+  const table = details.querySelector('table')!;
+  const hashes = [...table.querySelectorAll('thead th')].slice(1);
+  check(hashes.length === 2, 'One comparison column per hash or missing-hash identity');
+  check(!details.querySelector('[data-configuration-group]'), 'Per-hash metadata sections removed');
+  check(!details.textContent?.includes('Expand metadata'), 'No expand metadata prompt');
   check(
-    groups.every((group) => !group.open),
-    'Full metadata starts collapsed',
+    details
+      .querySelector('p')
+      ?.textContent?.includes(
+        'Only configuration fields that differ between case hashes are shown.',
+      ),
+    'Concise comparison explanation',
   );
   check(
-    groups.every((group) => !group.querySelector('summary [tabindex="0"]')),
-    'Hash disclosure has no nested focus stops',
+    details.querySelector('p')?.textContent?.includes('Case hashes identify CIME case instances.'),
+    'Comparison briefly explains case hashes',
   );
-  const baselineRow = groups[0].querySelector('summary')!;
-  check(baselineRow.textContent?.includes('Baseline'), 'Most common hash is baseline');
-  check(baselineRow.textContent?.includes('30 years'), 'Hash duration is cumulative, not coverage');
-  check(!baselineRow.textContent?.includes('hash-'.repeat(40)), 'Hash is abbreviated');
-  const comparison = baselineRow.querySelector('[data-configuration-differences]')!;
+  check(hashes[0].textContent?.includes('30 years'), 'Hash duration is cumulative, not coverage');
   check(
-    comparison.textContent?.includes('Grid Alias: grid-one'),
-    'Differing field includes baseline value',
+    !table.querySelector('thead')?.textContent?.includes('Gregorian calendar assumed'),
+    'Hash columns omit calendar assumption labels',
   );
   check(
-    !comparison.textContent?.includes('Compset Alias'),
-    'Shared fields excluded from comparison',
+    !table.querySelector('thead')?.textContent?.includes('Simulated duration:'),
+    'Hash columns show duration without repeating a label',
+  );
+  check(hashes[0].textContent?.includes('2 executions'), 'Execution count remains visible');
+  check(!hashes[0].textContent?.includes('hash-'.repeat(40)), 'Hash is abbreviated');
+  check(
+    hashes[0].querySelector('[title]')?.getAttribute('title') === 'hash-'.repeat(40),
+    'Full hash remains available',
   );
   check(
-    !comparison.textContent?.includes('Duration'),
-    'Duration is separate from configuration differences',
-  );
-  check(
-    groups[1].querySelector('summary')?.textContent?.includes('Missing Case Hash: run-3'),
+    hashes[1].textContent?.includes('Missing Case Hash: run-3'),
     'Hashless execution keeps identity',
   );
   check(
-    groups[1]
-      .querySelector('[data-configuration-differences]')
-      ?.textContent?.includes('Unavailable'),
-    'Missing value stays explicit',
+    hashes[1].textContent?.includes('Unavailable (partial)'),
+    'Partial hash duration stays explicit',
   );
-  const group = groups[0];
-  group.querySelector('summary')!.click();
-  check(group.open, 'Metadata row expands');
-  check(group.textContent?.includes('/model/source'), 'Stored source code path remains available');
-  check(group.textContent?.includes('model-hash'), 'Model hash remains available');
-  check(group.textContent?.includes('Model tag'), 'Model tag is available on demand');
-  const configuration = group.querySelector('dl')!;
+  const rowLabels = [...table.querySelectorAll('tbody th')].map((element) => element.textContent);
   check(
-    configuration.querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
-    'Configuration links to its execution source',
+    rowLabels.join('|') === 'Compset Long Name|Grid Alias|Grid Long Name',
+    'Only differing fields become rows, including both long names',
   );
-  const changes = configuration.querySelector<HTMLDetailsElement>('details')!;
+  check(
+    !table.querySelector('tbody')?.textContent?.includes('Duration'),
+    'Duration stays outside configuration rows',
+  );
+  check(
+    table.querySelector('tbody')?.textContent?.includes('Unavailable'),
+    'Missing configuration value stays explicit',
+  );
+  const links = [...summary.querySelectorAll<HTMLAnchorElement>('a[href^="#case-configuration-"]')];
+  check(links.length === 3, 'Every differing summary field has a comparison link');
+  for (const link of links) {
+    link.focus();
+    check(document.activeElement === link, 'Difference link accepts keyboard focus');
+    const previousHash = location.hash;
+    link.click();
+    const target = document.getElementById(link.hash.slice(1))!;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const rowLabel = document.getElementById(link.getAttribute('aria-controls')!)!;
+    check(
+      target === details && document.activeElement === rowLabel,
+      'Difference link focuses matching row without scrolling to it',
+    );
+    const rowColor = getComputedStyle(rowLabel).backgroundColor;
+    check(
+      rowColor !== 'rgb(255, 255, 255)' && rowColor !== 'rgba(0, 0, 0, 0)',
+      'Selected comparison row has visible highlight',
+    );
+    for (const cell of rowLabel.parentElement!.children) {
+      check(
+        getComputedStyle(cell).backgroundColor === rowColor,
+        'Highlight spans field label and every hash value',
+      );
+    }
+    check(
+      [...table.querySelectorAll('tbody th')]
+        .filter((label) => label !== rowLabel)
+        .every((label) => getComputedStyle(label).backgroundColor !== rowColor),
+      'Only selected row stays highlighted',
+    );
+    check(location.hash === previousHash, 'Difference link prevents native fragment jump');
+    const bounds = target.getBoundingClientRect();
+    if (bounds.height < window.innerHeight) {
+      check(
+        Math.abs((bounds.top + bounds.bottom) / 2 - window.innerHeight / 2) < 2,
+        'Difference link centers comparison component',
+      );
+    }
+    check(
+      target.querySelector('h3')!.getBoundingClientRect().top >= 0 &&
+        target.querySelector('h3')!.getBoundingClientRect().top < window.innerHeight,
+      'Difference link keeps comparison heading in view',
+    );
+  }
+  details.style.minHeight = '200vh';
+  links[0].click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const headingBounds = details.querySelector('h3')!.getBoundingClientRect();
+  check(
+    Math.abs((headingBounds.top + headingBounds.bottom) / 2 - window.innerHeight / 2) < 2,
+    'Tall comparisons center their heading instead of jumping into table',
+  );
+  details.style.minHeight = '';
+  check(
+    table.querySelector('tbody a')?.getAttribute('href')?.endsWith('/run-1'),
+    'Configuration links to execution source',
+  );
+  const changes = table.querySelector<HTMLDetailsElement>('tbody details')!;
   changes.querySelector('summary')!.click();
   check(changes.textContent?.includes('later-grid'), 'Later differences remain available');
   check(changes.textContent?.includes('Run date unavailable'), 'Undated provenance stays explicit');
   check(
-    group.textContent?.includes('LONG_'.repeat(100)),
-    'Full shared configuration remains available',
+    table.textContent?.includes('LONG_'.repeat(100)),
+    'Long configuration values remain available',
   );
   check(
     document.documentElement.scrollWidth <= window.innerWidth,
-    'Expanded config has no page-wide overflow',
+    'Comparison has no page-wide overflow',
   );
   const first = configured.configurationGroups![0];
   const agreeing = {
@@ -653,24 +740,14 @@ async function checkConfigurationComparison() {
   };
   root.render(
     <MemoryRouter>
-      <CaseConfigurationSummary record={agreeing} />
+      <CaseConfigurationSummary record={agreeing} identity={identity} />
       <CaseConfigurationDetails record={agreeing} identity={identity} />
     </MemoryRouter>,
   );
-  await waitFor(() => document.querySelectorAll('[data-configuration-group]').length === 1);
+  await waitFor(() => !document.querySelector('[data-case-configuration]'));
   check(
-    document.body.textContent?.includes('Case Configuration'),
-    'Single hash uses simplified presentation',
-  );
-  check(
-    !document
-      .querySelector('[data-configuration-group] > summary')
-      ?.textContent?.includes('Baseline'),
-    'Single hash has no baseline controls',
-  );
-  check(
-    document.querySelector('[data-configuration-group]'),
-    'Agreement retains full per-hash details',
+    !document.body.textContent?.includes('Configuration Differences'),
+    'Single hash hides entire comparison section',
   );
   const agreeingSummary = document.querySelector('[aria-label="Case summary"]')!;
   check(
@@ -678,8 +755,26 @@ async function checkConfigurationComparison() {
     'Agreeing baselines still flag within-hash changes',
   );
   check(
-    !agreeingSummary.textContent?.includes('Varies by Case Hash'),
+    !agreeingSummary.textContent?.includes('Differs by case hash'),
     'Within-hash changes do not imply differing baselines',
+  );
+  check(
+    agreeingSummary
+      .querySelector('a[title="Source execution: run-1"]')
+      ?.getAttribute('href')
+      ?.endsWith('/run-1'),
+    'Shared summary value retains execution source',
+  );
+  const withinHashChanges = agreeingSummary.querySelector<HTMLDetailsElement>('details')!;
+  check(!withinHashChanges.open, 'Within-hash observations stay compact');
+  withinHashChanges.querySelector('summary')!.click();
+  check(
+    withinHashChanges.open && withinHashChanges.textContent?.includes('later-grid'),
+    'Within-hash observations remain accessible without a comparison row',
+  );
+  check(
+    withinHashChanges.querySelector('a')?.getAttribute('href')?.endsWith('/run-2'),
+    'Alternate observation retains execution source',
   );
   const identical: CaseDetailOut = {
     ...agreeing,
@@ -693,16 +788,46 @@ async function checkConfigurationComparison() {
       <CaseConfigurationDetails record={identical} identity={identity} />
     </MemoryRouter>,
   );
-  await waitFor(() => document.querySelectorAll('[data-configuration-group]').length === 2);
+  await waitFor(() => !document.querySelector('[aria-label="Case summary"]'));
   check(
-    [...document.querySelectorAll('[data-configuration-differences]')].every(
-      (element) => !element.textContent?.includes('Grid Alias:'),
-    ),
-    'Identical metadata is not repeated',
+    !document.querySelector('[data-case-configuration]'),
+    'Identical hashes hide entire comparison section',
+  );
+  const many: CaseDetailOut = {
+    ...configured,
+    configurationGroups: Array.from({ length: 8 }, (_, index) => ({
+      ...first,
+      key: `hash-${index}`,
+      caseHash: `hash-${index}`,
+      configuration: {
+        ...firstConfiguration,
+        grid_long_name: field(`grid-${index}-${'LONG_'.repeat(100)}`, 'run-1'),
+      },
+    })),
+  };
+  root.render(
+    <MemoryRouter>
+      <div className="min-w-0 p-6">
+        <CaseConfigurationDetails record={many} identity={identity} />
+      </div>
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelectorAll('[data-case-configuration] thead th').length === 9);
+  const manyTable = document.querySelector('[data-case-configuration] table')!;
+  const scrollContainer = manyTable.parentElement!;
+  check(
+    scrollContainer.scrollWidth > scrollContainer.clientWidth,
+    'Many hashes scroll within comparison',
+  );
+  scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+  check(scrollContainer.scrollLeft > 0, 'Comparison allows horizontal scrolling');
+  check(
+    manyTable.querySelector('tbody th')!.getBoundingClientRect().left >= 0,
+    'Field labels stay visible while scrolling',
   );
   check(
-    document.body.textContent?.includes('Same as baseline'),
-    'Identical hash reports agreement',
+    document.documentElement.scrollWidth <= window.innerWidth,
+    'Many hashes do not cause page overflow',
   );
 }
 

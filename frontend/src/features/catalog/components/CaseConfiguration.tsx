@@ -1,5 +1,13 @@
 import { Link } from 'react-router-dom';
 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   describeSimulatedDuration,
@@ -17,12 +25,12 @@ import type {
   SimulationDurationOut,
 } from '@/types';
 
-// Keep technical metadata in expandable details; extraction belongs to #443.
+// Compare stored technical metadata only; extraction belongs to #443.
 const CONFIGURATION_FIELDS = [
   ['compset_alias', 'Compset Alias'],
+  ['compset_long_name', 'Compset Long Name'],
   ['grid_alias', 'Grid Alias'],
-  ['compset_long_name', 'Compset long name'],
-  ['grid_long_name', 'Resolution'],
+  ['grid_long_name', 'Grid Long Name'],
   ['source_code_path', 'Source code path'],
   ['git_commit_hash', 'Model hash'],
   ['git_tag', 'Model tag'],
@@ -36,12 +44,9 @@ export const CaseConfigurationSummary = ({
   identity?: ReadableCaseIdentity;
 }) => (
   <dl
-    className="grid auto-rows-fr grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3"
+    className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-4"
     aria-label="Case summary"
   >
-    <SummaryField label="Total Simulated Duration">
-      <SimulatedDurationValue duration={record.simulatedDuration} />
-    </SummaryField>
     <SummaryField label="Latest Execution">
       {record.latestExecution ? (
         <>
@@ -54,7 +59,7 @@ export const CaseConfigurationSummary = ({
           </div>
           {identity ? (
             <Link
-              className="text-xs font-normal underline"
+              className="text-[13px] underline"
               to={executionDetailsPath({
                 ...identity,
                 executionId: record.latestExecution.executionId,
@@ -63,20 +68,25 @@ export const CaseConfigurationSummary = ({
               {record.latestExecution.executionId}
             </Link>
           ) : (
-            <span className="text-xs font-normal">{record.latestExecution.executionId}</span>
+            <span className="text-[13px]">{record.latestExecution.executionId}</span>
           )}
         </>
       ) : (
         'Unavailable'
       )}
     </SummaryField>
-    {CONFIGURATION_FIELDS.slice(0, 2).map(([field, label]) => (
+    <SummaryField label="Total Simulated Duration">
+      <SimulatedDurationValue duration={record.simulatedDuration} />
+    </SummaryField>
+    <SummaryField label="Machine">{record.machineNames.join(', ') || 'Unavailable'}</SummaryField>
+    <SummaryField label="HPC Username">
+      {record.hpcUsernames.join(', ') || 'Unavailable'}
+    </SummaryField>
+    {CONFIGURATION_FIELDS.slice(0, 4).map(([field, label]) => (
       <SummaryField key={field} label={label}>
-        <SharedConfigurationValue record={record} field={field} />
+        <SharedConfigurationValue record={record} field={field} identity={identity} />
       </SummaryField>
     ))}
-    <SummaryField label="Machine">{record.machineNames.join(', ') || 'Unavailable'}</SummaryField>
-    <SummaryField label="HPC User">{record.hpcUsernames.join(', ') || 'Unavailable'}</SummaryField>
   </dl>
 );
 
@@ -88,121 +98,89 @@ export const CaseConfigurationDetails = ({
   identity: ReadableCaseIdentity;
 }) => {
   const groups = record.configurationGroups ?? [];
-  if (groups.length === 0) return null;
   const baseline = getConfigurationBaseline(groups);
   const orderedGroups = baseline
     ? [baseline, ...groups.filter((group) => group !== baseline)]
     : groups;
-  const differingFields = CONFIGURATION_FIELDS.filter(
-    ([field]) =>
-      new Set(groups.map((group) => group.configuration[field]?.source?.value ?? null)).size > 1,
+  const differingFields = CONFIGURATION_FIELDS.filter(([field]) =>
+    configurationFieldDiffers(record, field),
   );
+  if (groups.length < 2 || differingFields.length === 0) return null;
 
   return (
-    <section className="min-w-0 border-t border-slate-200 pt-3" data-case-configuration>
-      <h3 className="text-sm font-semibold">
-        {groups.length === 1 ? 'Case Configuration' : 'Configuration Differences'}
+    <section
+      id="case-configuration-differences"
+      tabIndex={-1}
+      aria-labelledby="case-configuration-differences-title"
+      className="min-w-0 border-t border-slate-200 pt-3"
+      data-case-configuration
+    >
+      <h3 id="case-configuration-differences-title" className="text-sm font-semibold">
+        Configuration Differences
       </h3>
-      {groups.length > 1 ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {baseline
-            ? 'Baseline: most executions; hash breaks ties. '
-            : 'No known case hash to use as baseline. '}
-          Only changed configuration values appear below. Expand a row for full metadata and
-          execution sources.
-        </p>
-      ) : null}
-      <div className="mt-2 divide-y divide-slate-200">
-        {orderedGroups.map((group) => {
-          const isBaseline = groups.length > 1 && group === baseline;
-          const changes = differingFields.filter(
-            ([field]) =>
-              isBaseline ||
-              !baseline ||
-              (group.configuration[field]?.source?.value ?? null) !==
-                (baseline.configuration[field]?.source?.value ?? null),
-          );
-          const hasInternalChanges = CONFIGURATION_FIELDS.some(
-            ([field]) => group.configuration[field]?.differences.length,
-          );
-
-          return (
-            <details key={group.key} className="min-w-0 py-3" data-configuration-group>
-              <summary className="grid cursor-pointer grid-cols-2 items-start gap-x-4 gap-y-2 text-sm lg:grid-cols-[minmax(0,1fr)_6rem_12rem_minmax(0,2fr)]">
-                <span className="col-span-2 min-w-0 break-words lg:col-span-1">
-                  <span className="block text-xs text-muted-foreground">Case Hash</span>
-                  <span className="font-mono font-semibold" title={groupLabel(group)}>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Case hashes identify CIME case instances. Different hashes usually mean the case was
+        recreated or cloned. Only configuration fields that differ between case hashes are shown.
+      </p>
+      <div className="mt-2" data-configuration-differences>
+        <Table
+          className="table-fixed"
+          style={{ minWidth: `${160 + orderedGroups.length * 224}px` }}
+        >
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col" className="sticky left-0 z-10 w-40 bg-white align-top">
+                Field
+              </TableHead>
+              {orderedGroups.map((group) => (
+                <TableHead
+                  key={group.key}
+                  scope="col"
+                  className="w-56 py-2 align-top [overflow-wrap:anywhere]"
+                >
+                  <span
+                    className="font-mono text-xs font-semibold text-slate-950"
+                    title={groupLabel(group)}
+                  >
                     {group.caseHash ? formatCaseHashLabel(group.caseHash) : groupLabel(group)}
                   </span>
-                  {isBaseline ? <span className="ml-2 text-xs font-medium">Baseline</span> : null}
-                  <span className="block text-xs text-muted-foreground">Expand metadata</span>
-                </span>
-                <span>
-                  <span className="block text-xs text-muted-foreground">Executions</span>
-                  <span className="font-semibold">{group.executionIds.length}</span>
-                </span>
-                <span>
-                  <span className="block text-xs text-muted-foreground">Simulated Duration</span>
-                  <span className="font-semibold">
+                  <span className="mt-1 block text-xs font-normal">
+                    {group.executionIds.length}{' '}
+                    {group.executionIds.length === 1 ? 'execution' : 'executions'}
+                  </span>
+                  <span className="block text-xs font-normal">
                     <SimulatedDurationValue
                       duration={group.simulatedDuration}
-                      withTooltip={false}
+                      showCalendarNotes={false}
                     />
                   </span>
-                </span>
-                <span
-                  className="col-span-2 min-w-0 space-y-1 [overflow-wrap:anywhere] lg:col-span-1"
-                  data-configuration-differences
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {differingFields.map(([field, label]) => (
+              <TableRow
+                key={field}
+                className="[&:focus-within>td]:bg-sky-50 [&:focus-within>th]:bg-sky-50 [&:focus-within>th]:text-sky-900"
+              >
+                <TableHead
+                  scope="row"
+                  id={configurationFieldId(field)}
+                  tabIndex={-1}
+                  className="sticky left-0 z-10 scroll-mt-24 bg-white py-2 align-top text-xs font-medium text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  {changes.map(([field, label]) => (
-                    <span key={field} className="block">
-                      <span className="text-xs text-muted-foreground">{label}: </span>
-                      {group.configuration[field]?.source?.value ?? 'Unavailable'}
-                    </span>
-                  ))}
-                  {groups.length > 1 && changes.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      {isBaseline
-                        ? 'No configuration differences'
-                        : baseline
-                          ? 'Same as baseline'
-                          : 'No configuration differences'}
-                    </span>
-                  ) : null}
-                  {hasInternalChanges ? (
-                    <span className="block text-xs text-muted-foreground">
-                      Changes within Case Hash
-                    </span>
-                  ) : null}
-                </span>
-              </summary>
-              <div className="mt-3 space-y-3">
-                <p className="break-all text-xs">Full Case Hash: {groupLabel(group)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {describeSimulatedDuration(group.simulatedDuration)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Configuration uses the earliest available value per field, ordered by run start
-                  with run end fallback. Undated executions sort last; execution IDs break ties.
-                  Values may come from different executions.
-                </p>
-                <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-                  {CONFIGURATION_FIELDS.map(([field, label]) => (
-                    <div key={field} className="min-w-0">
-                      <dt className="mb-1 text-xs font-medium text-slate-500">{label}</dt>
-                      <dd>
-                        <ConfigurationValue
-                          field={group.configuration[field]}
-                          identity={identity}
-                        />
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </details>
-          );
-        })}
+                  {label}
+                </TableHead>
+                {orderedGroups.map((group) => (
+                  <TableCell key={group.key} className="align-top">
+                    <ConfigurationValue field={group.configuration[field]} identity={identity} />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </section>
   );
@@ -210,23 +188,90 @@ export const CaseConfigurationDetails = ({
 
 const SummaryField = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="min-w-0 space-y-1">
-    <dt className="text-xs font-medium text-slate-500">{label}</dt>
-    <dd className="text-sm font-semibold text-slate-950 [overflow-wrap:anywhere]">{children}</dd>
+    <dt className="text-[13px] font-semibold leading-4 text-muted-foreground">{label}</dt>
+    <dd className="text-sm font-normal leading-5 text-foreground [overflow-wrap:anywhere]">
+      {children}
+    </dd>
   </div>
 );
 
-const SharedConfigurationValue = ({ record, field }: { record: CaseDetailOut; field: string }) => {
+const SharedConfigurationValue = ({
+  record,
+  field,
+  identity,
+}: {
+  record: CaseDetailOut;
+  field: string;
+  identity?: ReadableCaseIdentity;
+}) => {
   const summary = record.sharedConfiguration?.[field];
+  const differs = configurationFieldDiffers(record, field);
+  const groups = record.configurationGroups ?? [];
+  const source = groups.find((group) => group.configuration[field]?.source)?.configuration[field]
+    ?.source;
+  const value = summary?.value ?? source?.value ?? 'Unavailable';
+  const changingGroups = groups.filter((group) => group.configuration[field]?.differences.length);
 
   return (
     <>
-      {summary?.varies ? 'Varies by Case Hash' : (summary?.value ?? 'Unavailable')}
-      {summary?.incomplete && (summary.value != null || summary.varies) ? (
+      {differs ? (
+        record.configurationGroups?.length ? (
+          <a
+            href="#case-configuration-differences"
+            aria-controls={configurationFieldId(field)}
+            className="underline underline-offset-2"
+            onClick={(event) => {
+              if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+              const section = document.getElementById('case-configuration-differences');
+              if (!section) return;
+              event.preventDefault();
+              const rowLabel = document.getElementById(configurationFieldId(field));
+              (rowLabel ?? section).focus({ preventScroll: true });
+              const target =
+                section.getBoundingClientRect().height < window.innerHeight
+                  ? section
+                  : (section.querySelector('h3') ?? section);
+              target.scrollIntoView({ block: 'center', inline: 'nearest' });
+            }}
+          >
+            Differs by case hash
+          </a>
+        ) : (
+          'Differs by case hash'
+        )
+      ) : source && identity ? (
+        <Link
+          className="hover:underline"
+          title={`Source execution: ${source.executionId}`}
+          to={executionDetailsPath({ ...identity, executionId: source.executionId })}
+        >
+          {value}
+        </Link>
+      ) : (
+        value
+      )}
+      {summary?.incomplete && (summary.value != null || differs) ? (
         <span className="block text-xs font-normal text-muted-foreground">
           Some executions unavailable
         </span>
       ) : null}
-      {summary?.hasDifferences ? (
+      {!differs && identity && changingGroups.length > 0 ? (
+        <details className="text-xs font-normal text-muted-foreground">
+          <summary className="cursor-pointer">Changes within Case Hash</summary>
+          <ul className="mt-1 space-y-2">
+            {changingGroups.flatMap((group) =>
+              group.configuration[field].differences.map((observation) => (
+                <li key={`${group.key}:${observation.executionUuid}`}>
+                  <span className="font-mono">
+                    {group.caseHash ? formatCaseHashLabel(group.caseHash) : groupLabel(group)}
+                  </span>
+                  <Observation observation={observation} identity={identity} />
+                </li>
+              )),
+            )}
+          </ul>
+        </details>
+      ) : summary?.hasDifferences ? (
         <span className="block text-xs font-normal text-muted-foreground">
           Changes within Case Hash
         </span>
@@ -235,27 +280,41 @@ const SharedConfigurationValue = ({ record, field }: { record: CaseDetailOut; fi
   );
 };
 
+const configurationFieldDiffers = (record: CaseDetailOut, field: string) =>
+  record.configurationGroups?.length
+    ? new Set(
+        record.configurationGroups.map(
+          (group) => group.configuration[field]?.source?.value ?? null,
+        ),
+      ).size > 1
+    : Boolean(record.sharedConfiguration?.[field]?.varies);
+
+const configurationFieldId = (field: string) => `case-configuration-${field}`;
+
 const SimulatedDurationValue = ({
   duration,
-  withTooltip = true,
+  showCalendarNotes = true,
 }: {
   duration?: SimulationDurationOut;
-  withTooltip?: boolean;
+  showCalendarNotes?: boolean;
 }) => {
   const value = (
-    <span tabIndex={withTooltip ? 0 : undefined} className="inline-block">
+    <span
+      tabIndex={0}
+      className="inline-block"
+      aria-label={`Simulated duration: ${formatSimulatedDuration(duration)}`}
+    >
       {formatSimulatedDuration(duration)}
-      {duration?.calendarAssumed ? (
+      {showCalendarNotes && duration?.calendarAssumed ? (
         <span className="block text-xs font-normal text-muted-foreground">
           Gregorian calendar assumed
         </span>
       ) : null}
-      {(duration?.calendars.length ?? 0) > 1 ? (
+      {showCalendarNotes && (duration?.calendars.length ?? 0) > 1 ? (
         <span className="block text-xs font-normal text-muted-foreground">Mixed calendars</span>
       ) : null}
     </span>
   );
-  if (!withTooltip) return value;
 
   return (
     <TooltipProvider delayDuration={150}>
