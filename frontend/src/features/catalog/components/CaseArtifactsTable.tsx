@@ -187,21 +187,19 @@ export const CaseArtifactsTable = ({
     sortKey === headerSortKey ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined;
 
   return (
-    <section className="space-y-4" aria-labelledby="artifacts-heading">
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h3 id="artifacts-heading" className="text-lg font-semibold text-slate-950">
-            Artifacts
-          </h3>
-          <p className="text-sm text-slate-500">
-            {totalArtifactCount} records · {artifacts.length} unique values
-          </p>
-        </div>
-        <p className="text-sm text-slate-500">
-          Files, directories, and scripts recorded for executions in this case. Each row shows a
-          unique value and its linked executions.
-        </p>
-      </div>
+    <details className="space-y-4" aria-labelledby="artifacts-heading">
+      <summary className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        <h3 id="artifacts-heading" className="inline text-lg font-semibold text-slate-950">
+          Artifacts
+        </h3>
+        <span className="ml-2 text-sm text-slate-500">
+          {totalArtifactCount} records · {artifacts.length} unique values
+        </span>
+      </summary>
+      <p className="text-sm text-slate-500">
+        Files, directories, and scripts recorded for executions in this case. Each row shows a
+        unique value and its linked executions.
+      </p>
 
       {artifacts.length > 0 ? (
         <>
@@ -404,6 +402,6 @@ export const CaseArtifactsTable = ({
       ) : (
         <p className="text-sm text-slate-500">No execution artifacts available.</p>
       )}
-    </section>
+    </details>
   );
 };

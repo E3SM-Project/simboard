@@ -1532,6 +1532,15 @@ async function checkArtifactsScrolling() {
   await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 30);
 
   const table = document.querySelector('table')!;
+  const disclosure = table.closest('details')!;
+  check(disclosure && !disclosure.open, 'Populated artifacts start collapsed');
+  check(
+    disclosure.querySelector('summary')?.textContent?.includes('30 records · 30 unique values'),
+    'Collapsed artifacts retain counts',
+  );
+  check(!table.checkVisibility(), 'Collapsed artifacts hide table and controls');
+  disclosure.querySelector('summary')!.click();
+  check(disclosure.open && table.checkVisibility(), 'Artifacts expand on demand');
   const scroller = table.parentElement!;
   const description =
     document.getElementById('artifacts-heading')!.parentElement!.nextElementSibling!;
@@ -1595,11 +1604,34 @@ async function checkArtifactsScrolling() {
     scroller.clientHeight < limit && scroller.scrollHeight <= scroller.clientHeight,
     'Filtered short tables size naturally',
   );
+  disclosure.querySelector('summary')!.click();
+  check(
+    !disclosure.open && !search.checkVisibility(),
+    'Collapsing artifacts hides search controls',
+  );
+  disclosure.querySelector('summary')!.click();
+  check(
+    search.value === 'Artifact 00' && table.tBodies[0].rows.length === 1,
+    'Reopening artifacts preserves filters',
+  );
 
   root.render(
-    <CaseArtifactsTable artifacts={[]} totalArtifactCount={0} onFilterExecutionIds={() => {}} />,
+    <CaseArtifactsTable
+      key="empty-artifacts"
+      artifacts={[]}
+      totalArtifactCount={0}
+      onFilterExecutionIds={() => {}}
+    />,
   );
   await waitFor(() => document.body.textContent?.includes('No execution artifacts available.'));
+  const emptyDisclosure = document.getElementById('artifacts-heading')!.closest('details')!;
+  check(!emptyDisclosure.open, 'Empty artifacts start collapsed');
+  check(
+    emptyDisclosure.querySelector('summary')?.textContent?.includes('0 records · 0 unique values'),
+    'Empty artifacts retain counts',
+  );
+  emptyDisclosure.querySelector('summary')!.click();
+  check(emptyDisclosure.open, 'Empty artifacts can expand to show explanation');
   check(!document.querySelector('table'), 'Empty artifacts do not reserve table space');
 }
 
