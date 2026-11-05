@@ -15,6 +15,7 @@ import {
   formatCaseHashLabel,
   formatSimulatedDuration,
   getConfigurationBaseline,
+  getConfigurationDiffParts,
 } from '@/features/catalog/caseUtils';
 import { executionDetailsPath, type ReadableCaseIdentity } from '@/lib/catalog/urls';
 import type {
@@ -106,18 +107,21 @@ export const CaseConfigurationDetails = ({
     configurationFieldDiffers(record, field),
   );
   if (groups.length < 2 || differingFields.length === 0) return null;
+  const reference = orderedGroups[0];
 
   return (
-    <section
+    <details
       id="case-configuration-differences"
       tabIndex={-1}
       aria-labelledby="case-configuration-differences-title"
       className="min-w-0 border-t border-slate-200 pt-3"
       data-case-configuration
     >
-      <h3 id="case-configuration-differences-title" className="text-sm font-semibold">
-        Configuration Differences
-      </h3>
+      <summary className="cursor-pointer">
+        <h3 id="case-configuration-differences-title" className="inline text-sm font-semibold">
+          Configuration Differences
+        </h3>
+      </summary>
       <p className="mt-1 text-xs text-muted-foreground">
         Case hashes identify CIME case instances. Different hashes usually mean the case was
         recreated or cloned. Only configuration fields that differ between case hashes are shown.
@@ -144,6 +148,9 @@ export const CaseConfigurationDetails = ({
                   >
                     {group.caseHash ? formatCaseHashLabel(group.caseHash) : groupLabel(group)}
                   </span>
+                  {group === reference ? (
+                    <span className="ml-2 text-xs font-medium">Reference</span>
+                  ) : null}
                   <span className="mt-1 block text-xs font-normal">
                     {group.executionIds.length}{' '}
                     {group.executionIds.length === 1 ? 'execution' : 'executions'}
@@ -174,7 +181,15 @@ export const CaseConfigurationDetails = ({
                 </TableHead>
                 {orderedGroups.map((group) => (
                   <TableCell key={group.key} className="align-top">
-                    <ConfigurationValue field={group.configuration[field]} identity={identity} />
+                    <ConfigurationValue
+                      field={group.configuration[field]}
+                      identity={identity}
+                      referenceValue={
+                        group === reference
+                          ? undefined
+                          : (reference.configuration[field]?.source?.value ?? null)
+                      }
+                    />
                   </TableCell>
                 ))}
               </TableRow>
@@ -182,7 +197,7 @@ export const CaseConfigurationDetails = ({
           </TableBody>
         </Table>
       </div>
-    </section>
+    </details>
   );
 };
 
@@ -225,6 +240,7 @@ const SharedConfigurationValue = ({
               const section = document.getElementById('case-configuration-differences');
               if (!section) return;
               event.preventDefault();
+              if (section instanceof HTMLDetailsElement) section.open = true;
               const rowLabel = document.getElementById(configurationFieldId(field));
               (rowLabel ?? section).focus({ preventScroll: true });
               const target =
@@ -332,13 +348,20 @@ const groupLabel = (group: CaseHashConfigurationOut) =>
 const ConfigurationValue = ({
   field,
   identity,
+  referenceValue,
 }: {
   field?: ConfigurationFieldOut;
   identity: ReadableCaseIdentity;
+  referenceValue?: string | null;
 }) => (
   <div className="space-y-1 text-sm [overflow-wrap:anywhere]">
     {field?.source ? (
-      <Observation observation={field.source} identity={identity} />
+      <Observation observation={field.source} identity={identity} referenceValue={referenceValue} />
+    ) : referenceValue != null ? (
+      <span>
+        <span className="sr-only select-none">Reference value available; this value is </span>
+        <mark className="rounded-sm bg-amber-100 font-medium text-amber-950">Unavailable</mark>
+      </span>
     ) : (
       <span>Unavailable</span>
     )}
@@ -350,7 +373,11 @@ const ConfigurationValue = ({
         <ul className="mt-1 space-y-2">
           {field.differences.map((observation) => (
             <li key={observation.executionUuid}>
-              <Observation observation={observation} identity={identity} />
+              <Observation
+                observation={observation}
+                identity={identity}
+                referenceValue={referenceValue}
+              />
             </li>
           ))}
         </ul>
@@ -378,21 +405,49 @@ const ConfigurationValue = ({
 const Observation = ({
   observation,
   identity,
+  referenceValue,
 }: {
   observation: ConfigurationObservationOut;
   identity: ReadableCaseIdentity;
-}) => (
-  <div>
-    <div>{observation.value}</div>
-    <div className="text-xs text-muted-foreground">
-      <Link
-        className="underline"
-        to={executionDetailsPath({ ...identity, executionId: observation.executionId })}
+  referenceValue?: string | null;
+}) => {
+  const parts =
+    referenceValue === undefined
+      ? [{ text: observation.value, changed: false }]
+      : getConfigurationDiffParts(observation.value, referenceValue);
+
+  return (
+    <div>
+      {parts.some((part) => part.changed) ? (
+        <span className="sr-only select-none">Differs from reference column. </span>
+      ) : null}
+      <div
+        title={
+          referenceValue === undefined
+            ? undefined
+            : `Reference value: ${referenceValue ?? 'Unavailable'}`
+        }
       >
-        {observation.executionId}
-      </Link>
-      {' · '}
-      {observation.runDate ? formatCaseDate(observation.runDate) : 'Run date unavailable'}
+        {parts.map((part, index) =>
+          part.changed ? (
+            <mark key={index} className="rounded-sm bg-amber-100 font-medium text-amber-950">
+              {part.text}
+            </mark>
+          ) : (
+            <span key={index}>{part.text}</span>
+          ),
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        <Link
+          className="underline"
+          to={executionDetailsPath({ ...identity, executionId: observation.executionId })}
+        >
+          {observation.executionId}
+        </Link>
+        {' · '}
+        {observation.runDate ? formatCaseDate(observation.runDate) : 'Run date unavailable'}
+      </div>
     </div>
-  </div>
-);
+  );
+};

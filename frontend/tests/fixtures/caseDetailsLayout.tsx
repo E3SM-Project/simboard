@@ -227,14 +227,64 @@ async function run() {
       'Page update timestamp near header',
     );
     const metadata = document.querySelector('[aria-label="Case summary"]')!;
+    const metadataCard = document.querySelector('[data-case-metadata]')!;
+    const identityLabels = [...metadataCard.querySelectorAll('label')].filter((label) =>
+      ['Case Group', 'Case Classification'].includes(label.textContent ?? ''),
+    );
+    check(identityLabels.length === 2, 'Group and classification appear once in Case Metadata');
+    const identityBounds = identityLabels.map((label) => label.getBoundingClientRect());
+    const summaryColumns = [...metadata.children].map((field) => field.getBoundingClientRect());
+    check(
+      Math.abs(identityBounds[0].left - summaryColumns[0].left) < 1,
+      'Case Group aligns with first metadata column',
+    );
+    if (window.innerWidth >= 640) {
+      check(
+        Math.abs(identityBounds[1].left - summaryColumns[1].left) < 1,
+        'Case Classification aligns with adjacent second metadata column',
+      );
+      check(
+        Math.abs(identityBounds[0].top - identityBounds[1].top) < 1,
+        'Case context fields share first row',
+      );
+    } else {
+      check(
+        identityBounds[1].top > identityBounds[0].top,
+        'Case context fields stack in order on mobile',
+      );
+    }
+    check(
+      ![...metadataCard.querySelectorAll('h2, h3')].some((heading) =>
+        ['Case Context', 'Execution Summary', 'Model Configuration'].includes(
+          heading.textContent ?? '',
+        ),
+      ),
+      'Metadata rows remain compact without redundant subtitles',
+    );
+    check(
+      identityLabels[0].getBoundingClientRect().top < metadata.getBoundingClientRect().top,
+      'Case identity row precedes execution and configuration rows',
+    );
+    for (const label of identityLabels) {
+      const labelStyle = getComputedStyle(label);
+      const valueStyle = getComputedStyle(label.nextElementSibling!);
+      check(
+        labelStyle.fontSize === '13px' && labelStyle.fontWeight === '600',
+        'Case identity labels match metadata typography',
+      );
+      check(
+        valueStyle.fontSize === '14px' && valueStyle.fontWeight === '400',
+        'Case identity values match metadata typography',
+      );
+    }
     const descriptiveDetails = [...document.querySelectorAll('h2')]
-      .find((heading) => heading.textContent === 'Case Metadata Details')!
+      .find((heading) => heading.textContent === 'Case Notes')!
       .closest('section')!;
     check(
       [...descriptiveDetails.querySelectorAll('label')]
         .map((label) => label.textContent)
-        .join('|') === 'Case Group|Case Classification|Description|Key Features|Known Issues|Notes',
-      'Descriptive metadata preserves requested order',
+        .join('|') === 'Description|Key Features|Known Issues|Notes',
+      'Case Notes contains only descriptive fields in requested order',
     );
     const featureLabel = [...descriptiveDetails.querySelectorAll('label')].find(
       (label) => label.textContent === 'Key Features',
@@ -490,14 +540,41 @@ async function run() {
   edit.click();
   await waitFor(() => document.getElementById('case-group'));
   check(
+    document.getElementById('case-group')!.closest('[data-case-metadata]'),
+    'Case Group editor lives in Case Metadata',
+  );
+  check(
+    document.querySelector('[aria-label="Case classification"]')!.closest('[data-case-metadata]'),
+    'Classification editor lives in Case Metadata',
+  );
+  check(
     (document.getElementById('case-group') as HTMLInputElement).value === record.caseGroup,
     'Editing retains Case Group',
+  );
+  const groupInput = document.getElementById('case-group') as HTMLInputElement;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    groupInput,
+    'temporary-group',
+  );
+  groupInput.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitFor(() =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')].some(
+      (button) => button.textContent === 'Save Changes' && !button.disabled,
+    ),
   );
   const cancel = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Cancel',
   )!;
   cancel.click();
   await waitFor(() => !document.getElementById('case-group'));
+  check(
+    document.querySelector('[data-case-metadata]')?.textContent?.includes(record.caseGroup),
+    'Cancel restores original Case Group in metadata',
+  );
+  check(
+    !document.querySelector('[data-case-metadata]')?.textContent?.includes('temporary-group'),
+    'Cancel discards edits from relocated metadata field',
+  );
 
   const history = [...document.querySelectorAll('button')].find((element) =>
     element.textContent?.includes('Change History'),
@@ -605,10 +682,30 @@ async function checkConfigurationComparison() {
     summary.textContent?.includes('Changes within Case Hash'),
     'Summary flags within-hash differences',
   );
-  const details = document.querySelector<HTMLElement>('[data-case-configuration]')!;
+  const details = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
   const table = details.querySelector('table')!;
+  check(
+    !details.open && !table.checkVisibility(),
+    'Comparison starts collapsed with no visible table',
+  );
+  details.querySelector('summary')!.click();
+  check(details.open && table.checkVisibility(), 'Comparison disclosure opens table manually');
+  details.querySelector('summary')!.click();
+  check(!details.open, 'Comparison disclosure closes table manually');
   const hashes = [...table.querySelectorAll('thead th')].slice(1);
   check(hashes.length === 2, 'One comparison column per hash or missing-hash identity');
+  check(
+    hashes[0].textContent?.includes('Reference') && !hashes[1].textContent?.includes('Reference'),
+    'First hash is clearly labeled as comparison reference',
+  );
+  check(!table.querySelector('tbody td:first-of-type mark'), 'Reference values stay unmarked');
+  const changedToken = table.querySelector('tbody td:nth-of-type(2) mark')!;
+  check(changedToken, 'Changed tokens receive inline highlighting');
+  check(
+    getComputedStyle(changedToken).backgroundColor !==
+      getComputedStyle(changedToken.parentElement!).backgroundColor,
+    'Token highlighting is visible without changing table layout',
+  );
   check(!details.querySelector('[data-configuration-group]'), 'Per-hash metadata sections removed');
   check(!details.textContent?.includes('Expand metadata'), 'No expand metadata prompt');
   check(
@@ -662,10 +759,12 @@ async function checkConfigurationComparison() {
   const links = [...summary.querySelectorAll<HTMLAnchorElement>('a[href^="#case-configuration-"]')];
   check(links.length === 3, 'Every differing summary field has a comparison link');
   for (const link of links) {
+    details.open = false;
     link.focus();
     check(document.activeElement === link, 'Difference link accepts keyboard focus');
     const previousHash = location.hash;
     link.click();
+    check(details.open, 'Every Differs by link expands comparison before navigating');
     const target = document.getElementById(link.hash.slice(1))!;
     await new Promise((resolve) => setTimeout(resolve, 20));
     const rowLabel = document.getElementById(link.getAttribute('aria-controls')!)!;
@@ -813,6 +912,9 @@ async function checkConfigurationComparison() {
     </MemoryRouter>,
   );
   await waitFor(() => document.querySelectorAll('[data-case-configuration] thead th').length === 9);
+  const manyDetails = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
+  check(!manyDetails.open, 'Many-hash comparison also starts collapsed');
+  manyDetails.querySelector('summary')!.click();
   const manyTable = document.querySelector('[data-case-configuration] table')!;
   const scrollContainer = manyTable.parentElement!;
   check(

@@ -1017,9 +1017,88 @@ export const CaseDetailsPage = ({
       </div>
 
       <div>
-        <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
+        <Card className="border-slate-200 bg-slate-50/40 shadow-sm" data-case-metadata>
           <CardContent className="space-y-4 p-4">
             <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
+
+            {formState ? (
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="min-w-0 space-y-1">
+                  <Label
+                    htmlFor={isEditing ? 'case-group' : undefined}
+                    className="block text-[13px] font-semibold leading-4 text-muted-foreground"
+                  >
+                    Case Group
+                  </Label>
+                  {isEditing ? (
+                    <>
+                      <Input
+                        id="case-group"
+                        className="max-w-sm"
+                        value={formState.caseGroup}
+                        onChange={(event) => updateField('caseGroup', event.target.value)}
+                        aria-describedby="case-group-help"
+                        placeholder="No case group"
+                      />
+                      <p id="case-group-help" className="text-xs text-muted-foreground">
+                        Changing Case Group applies to all executions in this case. Clearing it
+                        allows future ingestion to populate it again.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-normal leading-5 text-foreground [overflow-wrap:anywhere]">
+                      {caseRecord.caseGroup ?? 'Unset'}
+                    </p>
+                  )}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <Label className="block text-[13px] font-semibold leading-4 text-muted-foreground">
+                    Case Classification
+                  </Label>
+                  {isEditing ? (
+                    <Select
+                      value={formState.simulationType ?? 'unset'}
+                      onValueChange={(value) => {
+                        setSaveError(null);
+                        setFormState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                simulationType:
+                                  value === 'unset' ? null : (value as CaseSimulationTypeValue),
+                              }
+                            : current,
+                        );
+                      }}
+                    >
+                      <SelectTrigger aria-label="Case classification" className="max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unset">Unset</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                        <SelectItem value="production">Production</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm font-normal capitalize leading-5 text-foreground">
+                      {caseRecord.simulationType ?? 'Unset'}
+                    </p>
+                  )}
+                  {hasAmbiguousDiagnosticsTiers ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
+                      SimBoard cannot determine one observed tier.
+                    </div>
+                  ) : hasDiagnosticsMismatch ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Case classification is {caseRecord.simulationType}, but diagnostics provenance
+                      is {diagnosticsTierLabel}.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             <CaseConfigurationSummary record={caseRecord} identity={readableIdentity} />
 
@@ -1068,7 +1147,7 @@ export const CaseDetailsPage = ({
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Case Metadata Details</h2>
+                <h2 className="text-lg font-semibold text-slate-950">Case Notes</h2>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
                 {!canEdit ? (
@@ -1079,82 +1158,6 @@ export const CaseDetailsPage = ({
 
             {formState ? (
               <div className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor={isEditing ? 'case-group' : undefined}
-                      className="block text-xs text-muted-foreground"
-                    >
-                      Case Group
-                    </Label>
-                    {isEditing ? (
-                      <>
-                        <Input
-                          id="case-group"
-                          className="max-w-sm"
-                          value={formState.caseGroup}
-                          onChange={(event) => updateField('caseGroup', event.target.value)}
-                          aria-describedby="case-group-help"
-                          placeholder="No case group"
-                        />
-                        <p id="case-group-help" className="text-xs text-muted-foreground">
-                          Changing Case Group applies to all executions in this case. Clearing it
-                          allows future ingestion to populate it again.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm font-medium text-slate-950">
-                        {caseRecord.caseGroup ?? 'Unset'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="block text-xs text-muted-foreground">
-                      Case Classification
-                    </Label>
-                    {isEditing ? (
-                      <Select
-                        value={formState.simulationType ?? 'unset'}
-                        onValueChange={(value) => {
-                          setSaveError(null);
-                          setFormState((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  simulationType:
-                                    value === 'unset' ? null : (value as CaseSimulationTypeValue),
-                                }
-                              : current,
-                          );
-                        }}
-                      >
-                        <SelectTrigger aria-label="Case classification" className="max-w-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unset">Unset</SelectItem>
-                          <SelectItem value="development">Development</SelectItem>
-                          <SelectItem value="production">Production</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="text-sm font-medium capitalize text-slate-950">
-                        {caseRecord.simulationType ?? 'Unset'}
-                      </p>
-                    )}
-                    {hasAmbiguousDiagnosticsTiers ? (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
-                        SimBoard cannot determine one observed tier.
-                      </div>
-                    ) : hasDiagnosticsMismatch ? (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        Case classification is {caseRecord.simulationType}, but diagnostics
-                        provenance is {diagnosticsTierLabel}.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
                 <div>
                   {isEditing ? (
                     <MarkdownEditorField

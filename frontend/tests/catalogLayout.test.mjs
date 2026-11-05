@@ -104,6 +104,104 @@ test('configuration baseline uses most frequent known hash with deterministic ha
   assert.equal(getConfigurationBaseline([]), undefined);
 });
 
+test('configuration token differences preserve values and leave shared tokens unmarked', async () => {
+  const { getConfigurationDiffParts } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  for (const [reference, value, changedText] of [
+    ['20TRSOI_EAM%CMIP6_ELM', 'SSP245SOI_EAM%CMIP6_ELM', 'SSP245SOI'],
+    ['A_B_C', 'X_B_Y', 'XY'],
+    ['A_B_C', 'A_X_B_C', 'X_'],
+    ['A_B_C', 'A_C', 'A_C'],
+    ['A_B', 'A%B', '%'],
+    ['v3.1', 'v3.2', '2'],
+    ['/root/old/model', '/root/new/model', 'new'],
+    ['WCYCL20TR', 'WCYCLSSP245', 'WCYCLSSP245'],
+    ['A  B', 'A B', ' '],
+    ['A_B', 'A_B', ''],
+    [null, 'A_B', 'A_B'],
+    ['A_B', '', ''],
+  ]) {
+    const parts = getConfigurationDiffParts(value, reference);
+    assert.equal(parts.map((part) => part.text).join(''), value);
+    assert.equal(
+      parts
+        .filter((part) => part.changed)
+        .map((part) => part.text)
+        .join(''),
+      changedText,
+    );
+  }
+  const longReference = 'A_'.repeat(1000);
+  const longValue = 'B_'.repeat(1000);
+  assert.deepEqual(getConfigurationDiffParts(longValue, longReference), [
+    { text: longValue, changed: true },
+  ]);
+  assert.deepEqual(getConfigurationDiffParts('', 'A_B'), []);
+});
+
+test('configuration table labels its reference and marks only changed values', async () => {
+  const { CaseConfigurationDetails } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const field = (value) => ({
+    source:
+      value == null ? null : { value, executionUuid: 'run-1', executionId: 'run-1', runDate: null },
+    differences: [],
+    missingExecutionIds: [],
+  });
+  const reference = '20TRSOI_EAM%CMIP6_ELM';
+  const groups = [reference, reference, 'SSP245SOI_EAM%CMIP6_ELM', null].map((value, index) => ({
+    key: `hash-${index}`,
+    caseHash: `hash-${index}`,
+    executionIds: index === 0 ? ['run-1', 'run-2'] : ['run-3'],
+    configuration: { compset_long_name: field(value) },
+  }));
+  groups[0].configuration.compset_long_name.differences.push({
+    value: '20TRSOI_EAM%CMIP5_ELM',
+    executionUuid: 'reference-alternate',
+    executionId: 'reference-alternate',
+    runDate: null,
+  });
+  groups[2].configuration.compset_long_name.differences.push({
+    value: 'SSP370SOI_EAM%CMIP6_ELM',
+    executionUuid: 'other-alternate',
+    executionId: 'other-alternate',
+    runDate: null,
+  });
+  const html = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CaseConfigurationDetails, {
+        record: { configurationGroups: groups },
+        identity: { machineName: 'machine', hpcUsername: 'user', caseName: 'case' },
+      }),
+    ),
+  );
+  const headers = [...html.matchAll(/<th\b[^>]*scope="col"[^>]*>([\s\S]*?)<\/th>/g)].map(
+    (match) => match[1],
+  );
+  const disclosure = html.match(/<details\b[^>]*id="case-configuration-differences"[^>]*>/)?.[0];
+  assert.ok(disclosure);
+  assert.doesNotMatch(disclosure, /\bopen(?:=|\s|>)/);
+  assert.match(html, /<summary\b[^>]*><h3\b[^>]*id="case-configuration-differences-title"/);
+  assert.match(headers[1], /Reference/);
+  assert.equal(headers.filter((header) => header.includes('Reference')).length, 1);
+  const cells = [...html.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+  assert.doesNotMatch(cells[0], /<mark/);
+  assert.match(cells[0], /20TRSOI_EAM%CMIP5_ELM/);
+  assert.doesNotMatch(cells[1], /<mark/);
+  assert.match(cells[2], /<mark\b[^>]*>SSP245SOI<\/mark>/);
+  assert.match(cells[2], /<mark\b[^>]*>SSP370SOI<\/mark>/);
+  assert.match(cells[2], /class="sr-only select-none">Differs from reference column\./);
+  assert.doesNotMatch(html, /<mark\b[^>]*aria-label=/);
+  assert.doesNotMatch(cells[2], /<mark\b[^>]*>[^<]*(?:EAM|CMIP6|ELM)/);
+  assert.match(cells[2], /title="Reference value: 20TRSOI_EAM%CMIP6_ELM"/);
+  assert.match(cells[3], /<mark\b[^>]*>Unavailable<\/mark>/);
+});
+
 test('case metadata keeps compset alias and long name aligned with execution fields', async () => {
   const { CaseConfigurationSummary } = await server.ssrLoadModule(
     '/src/features/catalog/components/CaseConfiguration.tsx',
