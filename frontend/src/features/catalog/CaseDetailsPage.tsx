@@ -1283,7 +1283,12 @@ export const CaseDetailsPage = ({
         </Card>
       </section>
 
-      <section ref={executionsSectionRef} className="space-y-4">
+      <section
+        ref={executionsSectionRef}
+        tabIndex={-1}
+        aria-label="Case executions"
+        className="space-y-4"
+      >
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
@@ -1894,7 +1899,10 @@ export const CaseDetailsPage = ({
             className="left-0 top-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 data-[state=closed]:!animate-none data-[state=open]:!animate-none sm:rounded-none"
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              compareButtonRef.current?.focus();
+              const target = compareButtonRef.current?.disabled
+                ? executionsSectionRef.current
+                : compareButtonRef.current;
+              target?.focus({ preventScroll: true });
             }}
           >
             <div className="shrink-0 border-b px-4 py-3 pr-12">

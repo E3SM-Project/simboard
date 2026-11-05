@@ -430,7 +430,7 @@ export const CompareWorkspace = ({
   }, [selectedExecutionIds, selectedExecutions]);
 
   useEffect(() => {
-    if (canCompareDifferences || !diffsOnlyEnabled) {
+    if (caseComparison || canCompareDifferences || !diffsOnlyEnabled) {
       return;
     }
 
@@ -440,7 +440,7 @@ export const CompareWorkspace = ({
       setExpandedSections(previousExpandedSections.current);
       previousExpandedSections.current = null;
     }
-  }, [canCompareDifferences, diffsOnlyEnabled]);
+  }, [caseComparison, canCompareDifferences, diffsOnlyEnabled]);
 
   useEffect(() => {
     if (summaryExpanded && summaryCards.length === 0) {
@@ -809,7 +809,8 @@ export const CompareWorkspace = ({
               </tr>
             </thead>
             {compareSections.map((section) => {
-              const rows = diffsOnlyEnabled ? section.diffRows : section.rows;
+              const rows =
+                diffsOnlyEnabled && canCompareDifferences ? section.diffRows : section.rows;
               if (rows.length === 0) return null;
 
               return (
@@ -859,7 +860,7 @@ export const CompareWorkspace = ({
             <p className="p-3 text-sm text-slate-600">
               Unhide an execution to restore compare columns.
             </p>
-          ) : diffsOnlyEnabled && totalChangedRows === 0 ? (
+          ) : canCompareDifferences && diffsOnlyEnabled && totalChangedRows === 0 ? (
             <p className="p-3 text-sm text-slate-600">No differences across visible executions.</p>
           ) : null}
         </div>

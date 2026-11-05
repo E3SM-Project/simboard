@@ -171,7 +171,7 @@ export const CaseCompareRoute = ({
 
   const contextNotice =
     excludedExecutionCount > 0 || missingExecutionCount > 0 ? (
-      <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700 shadow-sm">
+      <section className="shrink-0 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             {excludedExecutionCount > 0 ? (

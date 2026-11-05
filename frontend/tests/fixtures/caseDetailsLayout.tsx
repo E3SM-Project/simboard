@@ -14,11 +14,17 @@ import {
   CaseConfigurationSummary,
 } from '../../src/features/catalog/components/CaseConfiguration';
 import { HomePage } from '../../src/features/home/HomePage';
+import { CompareWorkspace } from '../../src/features/compare/ComparePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
 import { CaseCompareRoute } from '../../src/routes/CaseCompareRoute';
-import type { CaseDetailOut, ConfigurationFieldOut, SimulationDurationOut } from '../../src/types';
+import type {
+  CaseDetailOut,
+  ConfigurationFieldOut,
+  ExecutionOut,
+  SimulationDurationOut,
+} from '../../src/types';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -469,11 +475,30 @@ async function run() {
     (element) => element.textContent === 'Compare Case Executions',
   )!;
   check(!compare.disabled, 'Selection still enables comparison');
+  localStorage.setItem(
+    `case_compare_hidden_cols:${record.id}`,
+    JSON.stringify(['execution-1', 'execution-2']),
+  );
   compare.focus();
   const pageScroll = window.scrollY;
   compare.click();
   await waitFor(() => document.querySelector('[data-case-comparison]'));
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  check(dialog.querySelectorAll('thead th').length === 2, 'Stored hidden columns apply on opening');
+  check(
+    dialog.querySelector<HTMLInputElement>('input')!.checked,
+    'Stored hidden columns preserve differences-only preference',
+  );
+  for (const button of dialog.querySelectorAll<HTMLButtonElement>(
+    '[aria-label="Show hidden executions"] button',
+  )) {
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  check(
+    dialog.querySelector<HTMLInputElement>('input')!.checked,
+    'Showing stored columns resumes differences only',
+  );
   await new Promise((resolve) => setTimeout(resolve, 250));
   const dialogBounds = dialog.getBoundingClientRect();
   check(
@@ -501,6 +526,19 @@ async function run() {
     .click();
   await waitFor(() => !document.querySelector('[role="dialog"]'));
   check(!compare.disabled, 'Closing preserves selected executions for reopening');
+  compare.click();
+  await waitFor(() => document.querySelector('[data-case-comparison]'));
+  document
+    .querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Remove run-2"]')!
+    .click();
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
+  check(
+    document.activeElement === document.querySelector('[aria-label="Case executions"]'),
+    'Dropping below two selections returns focus to executions',
+  );
+  const runTwoRow = [...table.tBodies[0].rows].find((row) => row.cells[4].textContent === 'run-2')!;
+  runTwoRow.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click();
+  await waitFor(() => !compare.disabled);
 
   const grouped = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Grouped by Case Hash',
@@ -635,8 +673,45 @@ async function run() {
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
   await checkArtifactsScrolling();
+  await checkStandaloneComparison();
   await checkExecutionPlaceholders();
   await checkConfigurationComparison();
+}
+
+async function checkStandaloneComparison() {
+  root.render(
+    <MemoryRouter>
+      <CompareWorkspace
+        selectedExecutionIds={['execution-1', 'execution-2']}
+        selectedExecutions={['execution-1', 'execution-2'].map(
+          (id) => client.getQueryData<ExecutionOut>(catalogQueryKeys.executions.detail(id))!,
+        )}
+        setSelectedExecutionIds={() => {}}
+      />
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelector('h1')?.textContent === 'Cross-Case Compare');
+  check(
+    !document.querySelector('[data-case-comparison]'),
+    'Standalone comparison keeps existing layout',
+  );
+  check(
+    document.body.textContent?.includes('Highlight differences'),
+    'Standalone comparison retains highlight toggle',
+  );
+  const summaryButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+    button.textContent?.includes('Highlights'),
+  )!;
+  summaryButton.click();
+  await waitFor(() => document.getElementById('compare-change-summary'));
+  check(
+    document.getElementById('compare-change-summary')!.textContent?.includes('Change Summary'),
+    'Standalone comparison retains summary',
+  );
+  check(
+    document.querySelector('button[aria-controls="section-configuration"]'),
+    'Standalone comparison retains section toggles',
+  );
 }
 
 async function checkCaseHashFilterVisibility() {
@@ -780,6 +855,8 @@ async function checkExecutionComparison(comparison: HTMLElement) {
     document.documentElement.scrollWidth <= window.innerWidth,
     'Comparison causes no page-wide overflow',
   );
+  comparison.querySelector<HTMLInputElement>('input')!.click();
+  await waitFor(() => comparison.querySelector<HTMLInputElement>('input')!.checked);
   for (const button of comparison.querySelectorAll<HTMLButtonElement>(
     'button[aria-label^="Hide "]',
   )) {
@@ -800,6 +877,10 @@ async function checkExecutionComparison(comparison: HTMLElement) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   await waitFor(() => !comparison.querySelector('[aria-label="Show hidden executions"]'));
+  check(
+    comparison.querySelector<HTMLInputElement>('input')!.checked,
+    'Hiding and restoring columns preserves differences-only preference',
+  );
   const lastHeader = [...table.querySelectorAll<HTMLTableCellElement>('thead th')].find(
     (header) => header.querySelector('a')?.textContent === 'run-3',
   )!;
