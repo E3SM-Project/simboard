@@ -72,6 +72,9 @@ def simulation_coverage(executions: list[Execution]) -> SimulationCoverageOut:
     intervals: list[tuple[str, str]] = []
     excluded = 0
     for execution in executions:
+        if execution.status != ExecutionStatus.COMPLETED:
+            excluded += 1
+            continue
         try:
             start = normalize_model_date(execution.simulation_start_date)
             end = normalize_model_date(execution.simulation_end_date)
