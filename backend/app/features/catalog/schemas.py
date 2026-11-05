@@ -799,11 +799,86 @@ class CaseSummaryOut(CamelOutBaseModel):
     ]
 
 
+class SimulationCoverageOut(CamelOutBaseModel):
+    """Union of half-open simulation intervals, measured in Gregorian years."""
+
+    years: float | None = None
+    partial: bool = False
+    excluded_execution_count: int = 0
+
+
+class SimulationDurationOut(CamelOutBaseModel):
+    """Cumulative execution time, not the union of simulated date ranges.
+
+    Months use each date's zero-based day divided by its model month length.
+    Mixed calendars expose days only. Absent calendars use the stored Gregorian
+    date convention and explicitly flag that assumption.
+    """
+
+    days: int | None = None
+    months: float | None = None
+    years: float | None = None
+    calendars: list[str] = Field(default_factory=list)
+    calendar_assumed: bool = False
+    partial: bool = False
+    excluded_execution_count: int = 0
+
+
+class ConfigurationObservationOut(CamelOutBaseModel):
+    """An execution's configuration value and ordering timestamp."""
+
+    value: str
+    execution_uuid: UUID
+    execution_id: str
+    run_date: datetime | None = None
+
+
+class ConfigurationFieldOut(CamelOutBaseModel):
+    """Earliest available value, conflicting observations, and missing sources."""
+
+    source: ConfigurationObservationOut | None = None
+    differences: list[ConfigurationObservationOut] = Field(default_factory=list)
+    missing_execution_ids: list[str] = Field(default_factory=list)
+
+
+class SharedConfigurationFieldOut(CamelOutBaseModel):
+    """Agreement across group baselines; missing groups never imply agreement."""
+
+    value: str | None = None
+    varies: bool = False
+    incomplete: bool = False
+    has_differences: bool = False
+
+
+class CaseHashConfigurationOut(CamelOutBaseModel):
+    """One hash's baseline; hashless executions each retain their own identity."""
+
+    key: str
+    case_hash: str | None = None
+    execution_ids: list[str]
+    configuration: dict[str, ConfigurationFieldOut]
+    coverage: SimulationCoverageOut
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
+    )
+
+
 class CaseDetailOut(CaseSummaryOut):
     """Schema for representing full case details used by Case Details."""
 
     source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
     performance_source_directory: SourceDirectoryOut | None = None
+    configuration_groups: list[CaseHashConfigurationOut] = Field(default_factory=list)
+    shared_configuration: dict[str, SharedConfigurationFieldOut] = Field(
+        default_factory=dict
+    )
+    simulation_coverage: SimulationCoverageOut = Field(
+        default_factory=SimulationCoverageOut
+    )
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
+    )
+    latest_execution: LatestExecutionSummaryOut | None = None
 
     artifacts: Annotated[
         list[CaseExecutionArtifactOut],

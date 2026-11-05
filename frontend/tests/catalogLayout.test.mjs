@@ -32,6 +32,350 @@ after(async () => {
   if (cacheDir) await rm(cacheDir, { recursive: true, force: true });
 });
 
+test('simulated duration chooses units without converting mixed calendars to years', async () => {
+  const { formatSimulatedDuration, describeSimulatedDuration } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const duration = {
+    days: 365,
+    months: 12,
+    years: 1,
+    calendars: ['gregorian'],
+    calendarAssumed: false,
+    partial: false,
+    excludedExecutionCount: 0,
+  };
+  for (const [days, months, years, expected] of [
+    [0, 0, 0, '0 days'],
+    [6, 6 / 31, 6 / 372, '6 days'],
+    [1, 1 / 31, 1 / 372, '1 day'],
+    [7, 7 / 31, 7 / 372, '1 week'],
+    [28, 1, 1 / 12, '1 month'],
+    [365, 12, 1, '1 year'],
+    [730, 24, 2, '2 years'],
+    [14, null, null, '2 weeks'],
+    [10000, null, null, '1,428.57 weeks'],
+  ]) {
+    assert.equal(formatSimulatedDuration({ ...duration, days, months, years }), expected);
+  }
+  assert.equal(formatSimulatedDuration(), 'Unavailable');
+  assert.equal(
+    formatSimulatedDuration({
+      ...duration,
+      days: 10000,
+      months: null,
+      years: null,
+      calendars: ['gregorian', 'noleap'],
+    }),
+    '10,000 days',
+  );
+  assert.equal(
+    formatSimulatedDuration({ ...duration, days: null, partial: true }),
+    'Unavailable (partial)',
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, calendarAssumed: true }),
+    /stored Gregorian date convention/,
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, partial: true, excludedExecutionCount: 2 }),
+    /2 execution\(s\) excluded/,
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, calendars: ['gregorian', 'noleap'] }),
+    /Mixed model calendars/,
+  );
+  assert.match(describeSimulatedDuration(duration), /Overlaps and retries count separately/);
+});
+
+test('configuration baseline uses most frequent known hash with deterministic hash ties', async () => {
+  const { getConfigurationBaseline } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const first = { key: 'z-key', caseHash: 'aaa', executionIds: ['1', '2'] };
+  const tied = { key: 'a-key', caseHash: 'zzz', executionIds: ['3', '4'] };
+  const larger = { key: 'b-key', caseHash: 'bbb', executionIds: ['5', '6', '7'] };
+  const missing = { key: 'missing', caseHash: null, executionIds: ['8', '9', '10', '11'] };
+  assert.equal(getConfigurationBaseline([first, tied]), first);
+  assert.equal(getConfigurationBaseline([tied, first]), first);
+  assert.equal(getConfigurationBaseline([first, larger]), larger);
+  assert.equal(getConfigurationBaseline([first, missing]), first);
+  assert.equal(getConfigurationBaseline([missing]), undefined);
+  assert.equal(getConfigurationBaseline([]), undefined);
+});
+
+test('configuration token differences preserve values and leave shared tokens unmarked', async () => {
+  const { getConfigurationDiffParts } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  for (const [reference, value, changedText] of [
+    ['20TRSOI_EAM%CMIP6_ELM', 'SSP245SOI_EAM%CMIP6_ELM', 'SSP245SOI'],
+    ['A_B_C', 'X_B_Y', 'XY'],
+    ['A_B_C', 'A_X_B_C', 'X_'],
+    ['A_B_C', 'A_C', 'A_C'],
+    ['A_B', 'A%B', '%'],
+    ['v3.1', 'v3.2', '2'],
+    ['/root/old/model', '/root/new/model', 'new'],
+    ['WCYCL20TR', 'WCYCLSSP245', 'WCYCLSSP245'],
+    ['A  B', 'A B', ' '],
+    ['A_B', 'A_B', ''],
+    [null, 'A_B', 'A_B'],
+    ['A_B', '', ''],
+  ]) {
+    const parts = getConfigurationDiffParts(value, reference);
+    assert.equal(parts.map((part) => part.text).join(''), value);
+    assert.equal(
+      parts
+        .filter((part) => part.changed)
+        .map((part) => part.text)
+        .join(''),
+      changedText,
+    );
+  }
+  const longReference = 'A_'.repeat(1000);
+  const longValue = 'B_'.repeat(1000);
+  assert.deepEqual(getConfigurationDiffParts(longValue, longReference), [
+    { text: longValue, changed: true },
+  ]);
+  assert.deepEqual(getConfigurationDiffParts('', 'A_B'), []);
+});
+
+test('configuration table labels its reference and marks only changed values', async () => {
+  const { CaseConfigurationDetails } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const field = (value) => ({
+    source:
+      value == null ? null : { value, executionUuid: 'run-1', executionId: 'run-1', runDate: null },
+    differences: [],
+    missingExecutionIds: [],
+  });
+  const reference = '20TRSOI_EAM%CMIP6_ELM';
+  const groups = [reference, reference, 'SSP245SOI_EAM%CMIP6_ELM', null].map((value, index) => ({
+    key: `hash-${index}`,
+    caseHash: `hash-${index}`,
+    executionIds: index === 0 ? ['run-1', 'run-2'] : ['run-3'],
+    configuration: { compset_long_name: field(value) },
+  }));
+  groups[0].configuration.compset_long_name.differences.push({
+    value: '20TRSOI_EAM%CMIP5_ELM',
+    executionUuid: 'reference-alternate',
+    executionId: 'reference-alternate',
+    runDate: null,
+  });
+  groups[2].configuration.compset_long_name.differences.push({
+    value: 'SSP370SOI_EAM%CMIP6_ELM',
+    executionUuid: 'other-alternate',
+    executionId: 'other-alternate',
+    runDate: null,
+  });
+  const html = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CaseConfigurationDetails, {
+        record: { configurationGroups: groups },
+        identity: { machineName: 'machine', hpcUsername: 'user', caseName: 'case' },
+      }),
+    ),
+  );
+  const headers = [...html.matchAll(/<th\b[^>]*scope="col"[^>]*>([\s\S]*?)<\/th>/g)].map(
+    (match) => match[1],
+  );
+  const disclosure = html.match(/<details\b[^>]*id="case-configuration-differences"[^>]*>/)?.[0];
+  assert.ok(disclosure);
+  assert.doesNotMatch(disclosure, /\bopen(?:=|\s|>)/);
+  assert.match(html, /<summary\b[^>]*><h3\b[^>]*id="case-configuration-differences-title"/);
+  assert.match(headers[1], /Reference/);
+  assert.equal(headers.filter((header) => header.includes('Reference')).length, 1);
+  const cells = [...html.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+  assert.doesNotMatch(cells[0], /<mark/);
+  assert.match(cells[0], /20TRSOI_EAM%CMIP5_ELM/);
+  assert.doesNotMatch(cells[1], /<mark/);
+  assert.match(cells[2], /<mark\b[^>]*>SSP245SOI<\/mark>/);
+  assert.match(cells[2], /<mark\b[^>]*>SSP370SOI<\/mark>/);
+  assert.match(cells[2], /class="sr-only select-none">Differs from reference column\./);
+  assert.doesNotMatch(html, /<mark\b[^>]*aria-label=/);
+  assert.doesNotMatch(cells[2], /<mark\b[^>]*>[^<]*(?:EAM|CMIP6|ELM)/);
+  assert.match(cells[2], /title="Reference value: 20TRSOI_EAM%CMIP6_ELM"/);
+  assert.match(cells[3], /<mark\b[^>]*>Unavailable<\/mark>/);
+});
+
+test('case metadata keeps compset alias and long name aligned with execution fields', async () => {
+  const { CaseConfigurationSummary } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const execution = { compsetAlias: 'F2010', compsetLongName: '2000_EAM_ELM_MPASSI_MPASO' };
+  const values = {
+    compset_alias: execution.compsetAlias,
+    compset_long_name: execution.compsetLongName,
+  };
+  const record = {
+    machineNames: ['machine'],
+    hpcUsernames: ['user'],
+    latestExecution: null,
+    configurationGroups: [
+      {
+        key: 'one',
+        caseHash: 'aaa',
+        executionIds: ['run-1'],
+        configuration: Object.fromEntries(
+          Object.entries(values).map(([key, value]) => [
+            key,
+            {
+              source: { value, executionUuid: 'run-1', executionId: 'run-1' },
+              differences: [],
+              missingExecutionIds: [],
+            },
+          ]),
+        ),
+      },
+    ],
+  };
+  for (const sharedConfiguration of [
+    undefined,
+    Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        { value, varies: false, incomplete: false },
+      ]),
+    ),
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(CaseConfigurationSummary, { record: { ...record, sharedConfiguration } }),
+    );
+    const fields = Object.fromEntries(
+      [...html.matchAll(/<dt\b[^>]*>([^<]+)<\/dt><dd\b[^>]*>([\s\S]*?)<\/dd>/g)].map((match) => [
+        match[1],
+        match[2],
+      ]),
+    );
+    assert.equal(fields['Compset Alias'], execution.compsetAlias);
+    assert.equal(fields['Compset Long Name'], execution.compsetLongName);
+  }
+});
+
+test('case summary links only differing configuration fields to compact comparison rows', async () => {
+  const { CaseConfigurationSummary, CaseConfigurationDetails } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const field = (value) => ({
+    source:
+      value == null ? null : { value, executionUuid: 'run-1', executionId: 'run-1', runDate: null },
+    differences: [],
+    missingExecutionIds: value == null ? ['run-1'] : [],
+  });
+  const configuration = {
+    compset_alias: field('shared-alias'),
+    compset_long_name: field('shared-long-name'),
+    grid_alias: field('shared-grid'),
+    grid_long_name: field('shared-grid-long'),
+  };
+  const first = { key: 'one', caseHash: 'aaa', executionIds: ['run-1'], configuration };
+  const record = {
+    machineNames: ['machine'],
+    hpcUsernames: ['user'],
+    latestExecution: null,
+    sharedConfiguration: Object.fromEntries(
+      Object.entries(configuration).map(([name, entry]) => [
+        name,
+        { value: entry.source.value, varies: false, incomplete: false },
+      ]),
+    ),
+  };
+  const identity = { machineName: 'machine', hpcUsername: 'user', caseName: 'case' };
+  for (const changedField of [
+    'compset_alias',
+    'compset_long_name',
+    'grid_alias',
+    'grid_long_name',
+    null,
+  ]) {
+    const second = {
+      ...first,
+      key: 'two',
+      caseHash: 'bbb',
+      configuration: changedField
+        ? { ...configuration, [changedField]: field(null) }
+        : configuration,
+    };
+    const current = { ...record, configurationGroups: [first, second] };
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(
+          'div',
+          null,
+          createElement(CaseConfigurationSummary, { record: current, identity }),
+          createElement(CaseConfigurationDetails, { record: current, identity }),
+        ),
+      ),
+    );
+    assert.doesNotMatch(html, /Expand metadata|Baseline:|data-configuration-group/);
+    if (changedField) {
+      assert.match(html, /Only configuration fields that differ between case hashes are shown\./);
+      assert.match(html, /Case hashes identify CIME case instances\./);
+      assert.match(html, /1 execution/);
+      const body = html.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/)[1];
+      assert.match(html, /href="#case-configuration-differences"/);
+      assert.match(html, new RegExp(`aria-controls="case-configuration-${changedField}"`));
+      assert.match(html, /id="case-configuration-differences" tabindex="-1"/);
+      assert.match(body, new RegExp(`id="case-configuration-${changedField}"`));
+      assert.equal((body.match(/scope="row"/g) ?? []).length, 1);
+      assert.match(body, /Unavailable/);
+    } else {
+      assert.doesNotMatch(html, /Differs by case hash/);
+      assert.doesNotMatch(html, /data-case-configuration|<table/);
+    }
+  }
+  for (const configurationGroups of [undefined, [], [first]]) {
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(CaseConfigurationDetails, {
+          record: { ...record, configurationGroups },
+          identity,
+        }),
+      ),
+    );
+    assert.equal(html, '');
+  }
+  const varyingConfiguration = {
+    ...configuration,
+    grid_alias: {
+      ...configuration.grid_alias,
+      differences: [
+        { value: 'later-grid', executionUuid: 'run-2', executionId: 'run-2', runDate: null },
+      ],
+    },
+  };
+  const html = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CaseConfigurationSummary, {
+        record: {
+          ...record,
+          configurationGroups: [
+            { ...first, configuration: varyingConfiguration },
+            { ...first, key: 'two', caseHash: 'bbb' },
+          ],
+        },
+        identity,
+      }),
+    ),
+  );
+  assert.doesNotMatch(html, /Differs by case hash/);
+  assert.match(html, /title="Source execution: run-1"/);
+  assert.match(html, /Changes within Case Hash/);
+  assert.match(html, /later-grid/);
+  assert.match(html, /href="\/cases\/machine\/user\/case\/run-2"/);
+});
+
 test('Case Group stays visible without opening or counting as an advanced filter', async () => {
   const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
   const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');

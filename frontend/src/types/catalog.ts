@@ -87,7 +87,57 @@ export interface SourceDirectoryOut {
   path: string;
 }
 
+export interface SimulationCoverageOut {
+  years: number | null;
+  partial: boolean;
+  excludedExecutionCount: number;
+}
+
+export interface SimulationDurationOut {
+  days: number | null;
+  months: number | null;
+  years: number | null;
+  calendars: string[];
+  calendarAssumed: boolean;
+  partial: boolean;
+  excludedExecutionCount: number;
+}
+
+export interface ConfigurationObservationOut {
+  value: string;
+  executionUuid: string;
+  executionId: string;
+  runDate: string | null;
+}
+
+export interface ConfigurationFieldOut {
+  source: ConfigurationObservationOut | null;
+  differences: ConfigurationObservationOut[];
+  missingExecutionIds: string[];
+}
+
+export interface SharedConfigurationFieldOut {
+  value: string | null;
+  varies: boolean;
+  incomplete: boolean;
+  hasDifferences?: boolean;
+}
+
+export interface CaseHashConfigurationOut {
+  key: string;
+  caseHash: string | null;
+  executionIds: string[];
+  configuration: Record<string, ConfigurationFieldOut>;
+  coverage: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
+}
+
 export interface CaseDetailOut extends CaseSummaryOut {
+  configurationGroups?: CaseHashConfigurationOut[];
+  sharedConfiguration?: Record<string, SharedConfigurationFieldOut>;
+  simulationCoverage?: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
+  latestExecution?: CaseListItemOut['latestExecution'];
   sourceDirectories?: SourceDirectoryOut[];
   performanceSourceDirectory?: SourceDirectoryOut | null;
   artifacts: CaseExecutionArtifactOut[];

@@ -1,9 +1,137 @@
 import { format } from 'date-fns';
 
-import type { ExecutionListItemOut, ExecutionSummaryOut } from '@/types';
+import type {
+  CaseHashConfigurationOut,
+  ExecutionListItemOut,
+  ExecutionSummaryOut,
+  SimulationCoverageOut,
+  SimulationDurationOut,
+} from '@/types';
 import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
+
+export const formatSimulationCoverage = (coverage?: SimulationCoverageOut) => {
+  const years = coverage?.years;
+  const value =
+    years == null
+      ? 'Unavailable'
+      : new Intl.NumberFormat('en', { maximumFractionDigits: 3 }).format(years);
+
+  return `${value}${coverage?.partial ? ' (partial)' : ''}`;
+};
+
+export const formatSimulatedDuration = (duration?: SimulationDurationOut) => {
+  let value = duration?.days;
+  let unit = 'day';
+  if (value != null && value >= 7 && (duration?.calendars.length ?? 0) <= 1) {
+    if (duration?.years != null && duration.years >= 1) {
+      value = duration.years;
+      unit = 'year';
+    } else if (duration?.months != null && duration.months >= 1) {
+      value = duration.months;
+      unit = 'month';
+    } else {
+      value /= 7;
+      unit = 'week';
+    }
+  }
+  const formatted =
+    value == null
+      ? 'Unavailable'
+      : new Intl.NumberFormat('en', {
+          style: 'unit',
+          unit,
+          unitDisplay: 'long',
+          maximumFractionDigits: 2,
+        }).format(value);
+
+  return `${formatted}${duration?.partial ? ' (partial)' : ''}`;
+};
+
+export const describeSimulatedDuration = (duration?: SimulationDurationOut) => {
+  const details = [
+    'Cumulative simulated duration of completed executions. Overlaps and retries count separately; gaps do not count.',
+  ];
+  if (duration?.partial) {
+    details.push(
+      `${duration.excludedExecutionCount} execution(s) excluded: unfinished runs, missing or invalid dates, or unsupported calendars.`,
+    );
+  }
+  if (duration?.calendarAssumed) {
+    details.push(
+      'Calendar unavailable for some executions; uses the stored Gregorian date convention.',
+    );
+  }
+  if ((duration?.calendars.length ?? 0) > 1) {
+    details.push(
+      'Mixed model calendars; total shown in model days, not equivalent months or years.',
+    );
+  }
+
+  return details.join(' ');
+};
+
+export const getConfigurationBaseline = (groups: CaseHashConfigurationOut[]) =>
+  [...groups]
+    .filter((group) => group.caseHash != null)
+    .sort(
+      (left, right) =>
+        right.executionIds.length - left.executionIds.length ||
+        (left.caseHash ?? '').localeCompare(right.caseHash ?? '') ||
+        left.key.localeCompare(right.key),
+    )[0];
+
+export const getConfigurationDiffParts = (
+  value: string,
+  reference: string | null,
+): Array<{ text: string; changed: boolean }> => {
+  if (value === '') return [];
+  if (value === reference) return [{ text: value, changed: false }];
+  const tokens = value.split(/([_%./\s-]+)/).filter(Boolean);
+  const referenceTokens = (reference ?? '').split(/([_%./\s-]+)/).filter(Boolean);
+  // Bound work for unusually large metadata values; keep their text intact.
+  if (tokens.length * referenceTokens.length > 100_000) {
+    return [{ text: value, changed: true }];
+  }
+  const lengths = Array.from(
+    { length: referenceTokens.length + 1 },
+    () => new Uint32Array(tokens.length + 1),
+  );
+  for (let i = referenceTokens.length - 1; i >= 0; i--) {
+    for (let j = tokens.length - 1; j >= 0; j--) {
+      lengths[i][j] =
+        referenceTokens[i] === tokens[j]
+          ? 1 + lengths[i + 1][j + 1]
+          : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+    }
+  }
+  const unchanged = new Set<number>();
+  let i = 0;
+  let j = 0;
+  while (i < referenceTokens.length && j < tokens.length) {
+    if (referenceTokens[i] === tokens[j]) {
+      unchanged.add(j);
+      i++;
+      j++;
+    } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  const parts: Array<{ text: string; changed: boolean }> = [];
+  tokens.forEach((text, index) => {
+    const changed = !unchanged.has(index);
+    const previous = parts.at(-1);
+    if (previous?.changed === changed) previous.text += text;
+    else parts.push({ text, changed });
+  });
+  // A deletion has no new token to mark. Highlight the remaining value instead.
+  if (parts.every((part) => !part.changed)) return [{ text: value, changed: true }];
+
+  return parts;
+};
 
 export interface ExecutionSummaryGroup {
   key: string;

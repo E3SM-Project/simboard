@@ -1342,6 +1342,75 @@ class TestGetCase:
         assert data["links"] == []
         assert data["artifacts"] == []
 
+    def test_detail_and_list_agree_on_latest_execution_with_tied_dates(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "tied-latest-run")
+        ingestion = _create_ingestion(db, case.machine_id, normal_user_sync["id"])
+        for execution_id in ["run-a", "run-B", "run_a"]:
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                execution_id=execution_id,
+                execution_status=ExecutionStatus.COMPLETED,
+            )
+            execution.run_end_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        db.commit()
+        detail = client.get(f"{API_BASE}/cases/{case.id}").json()
+        listing = client.get(f"{API_BASE}/cases", params={"name": case.name}).json()
+        assert detail["latestExecution"]["executionId"] == "run_a"
+        assert detail["latestExecution"] == listing["items"][0]["latestExecution"]
+
+    def test_detail_aggregates_include_executions_beyond_one_page(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "all-executions-summary")
+        ingestion = _create_ingestion(db, case.machine_id, normal_user_sync["id"])
+        for index in range(105):
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                execution_id=f"run-{index:03d}",
+                execution_status=ExecutionStatus.COMPLETED,
+            )
+            execution.case_hash = "hash-one" if index < 104 else "hash-two"
+            execution.grid_alias = "grid-one" if index < 104 else "grid-two"
+            execution.simulation_start_date = f"{1850 + index:04d}-01-01"
+            execution.simulation_end_date = f"{1851 + index:04d}-01-01"
+            execution.run_end_date = datetime(
+                2026, 1, 1, tzinfo=timezone.utc
+            ) + timedelta(days=index)
+        db.commit()
+
+        page = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id), "page_size": 25}
+        )
+        assert page.status_code == 200
+        assert len(page.json()["items"]) == 25
+        response = client.get(f"{API_BASE}/cases/{case.id}")
+        assert response.status_code == 200
+        detail = response.json()
+        assert detail["simulationCoverage"]["years"] == 105
+        assert detail["latestExecution"]["executionId"] == "run-104"
+        assert detail["sharedConfiguration"]["grid_alias"]["varies"]
+        assert len(detail["configurationGroups"]) == 2
+        resolved = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": case.machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["configurationGroups"] == detail["configurationGroups"]
+
     def test_endpoint_includes_artifacts_from_multiple_executions(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):

@@ -60,6 +60,10 @@ import {
   CaseArtifactsTable,
   type CaseArtifactValue,
 } from '@/features/catalog/components/CaseArtifactsTable';
+import {
+  CaseConfigurationDetails,
+  CaseConfigurationSummary,
+} from '@/features/catalog/components/CaseConfiguration';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
@@ -92,34 +96,6 @@ import type {
   ExternalLinkOut,
 } from '@/types';
 import { formatModelDate } from '@/utils/utils';
-
-const DetailField = ({
-  label,
-  value,
-  mono = false,
-  title,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  title?: string;
-}) => (
-  <div className="min-w-0 space-y-0.5" title={title}>
-    <div className="text-xs font-medium text-slate-500">{label}</div>
-    <div
-      className={`truncate font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}
-    >
-      {value}
-    </div>
-  </div>
-);
-
-const summarizeValues = (values: string[]) => {
-  if (values.length === 0) return '—';
-  if (values.length === 1) return values[0];
-
-  return `${values[0]} +${values.length - 1}`;
-};
 
 const summarizeDistinctValues = (values: Array<string | null | undefined>) => {
   const uniqueValues = [...new Set(values.filter((value): value is string => Boolean(value)))];
@@ -862,8 +838,6 @@ export const CaseDetailsPage = ({
   const hasUnsavedChanges =
     formState != null &&
     Object.keys(buildUpdatePayload(caseRecord, formState, linkRows)).length > 0;
-  const machineSummary = summarizeValues(caseRecord.machineNames);
-  const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
   const diagnosticsTierLabel = caseRecord.diagnosticsTiers.join(' and ');
@@ -1043,41 +1017,94 @@ export const CaseDetailsPage = ({
       </div>
 
       <div>
-        <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
+        <Card className="border-slate-200 bg-slate-50/40 shadow-sm" data-case-metadata>
           <CardContent className="space-y-4 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
-              <div className="flex flex-wrap gap-2">
-                {caseRecord.caseGroup ? (
-                  <Badge variant="outline">{caseRecord.caseGroup}</Badge>
-                ) : null}
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <DetailField label="Executions" value={caseRecord.executions.length} />
-              <DetailField label="Case hash groups" value={caseHashGroupCount} />
-              <div
-                className="min-w-0"
-                title={
-                  caseRecord.machineNames.length > 1
-                    ? caseRecord.machineNames.join(', ')
-                    : undefined
-                }
-              >
-                <DetailField label="Machines" value={machineSummary} />
+            {formState ? (
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="min-w-0 space-y-1">
+                  <Label
+                    htmlFor={isEditing ? 'case-group' : undefined}
+                    className="block text-[13px] font-semibold leading-4 text-muted-foreground"
+                  >
+                    Case Group
+                  </Label>
+                  {isEditing ? (
+                    <>
+                      <Input
+                        id="case-group"
+                        className="max-w-sm"
+                        value={formState.caseGroup}
+                        onChange={(event) => updateField('caseGroup', event.target.value)}
+                        aria-describedby="case-group-help"
+                        placeholder="No case group"
+                      />
+                      <p id="case-group-help" className="text-xs text-muted-foreground">
+                        Changing Case Group applies to all executions in this case. Clearing it
+                        allows future ingestion to populate it again.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-normal leading-5 text-foreground [overflow-wrap:anywhere]">
+                      {caseRecord.caseGroup ?? 'Unset'}
+                    </p>
+                  )}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <Label className="block text-[13px] font-semibold leading-4 text-muted-foreground">
+                    Case Classification
+                  </Label>
+                  {isEditing ? (
+                    <Select
+                      value={formState.simulationType ?? 'unset'}
+                      onValueChange={(value) => {
+                        setSaveError(null);
+                        setFormState((current) =>
+                          current
+                            ? {
+                                ...current,
+                                simulationType:
+                                  value === 'unset' ? null : (value as CaseSimulationTypeValue),
+                              }
+                            : current,
+                        );
+                      }}
+                    >
+                      <SelectTrigger aria-label="Case classification" className="max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unset">Unset</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                        <SelectItem value="production">Production</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm font-normal capitalize leading-5 text-foreground">
+                      {caseRecord.simulationType ?? 'Unset'}
+                    </p>
+                  )}
+                  {hasAmbiguousDiagnosticsTiers ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
+                      SimBoard cannot determine one observed tier.
+                    </div>
+                  ) : hasDiagnosticsMismatch ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Case classification is {caseRecord.simulationType}, but diagnostics provenance
+                      is {diagnosticsTierLabel}.
+                    </div>
+                  ) : null}
+                </div>
               </div>
-              <div
-                className="min-w-0"
-                title={
-                  caseRecord.hpcUsernames.length > 1
-                    ? caseRecord.hpcUsernames.join(', ')
-                    : undefined
-                }
-              >
-                <DetailField label="HPC users" value={hpcUsernameSummary} />
-              </div>
-            </div>
+            ) : null}
+
+            <CaseConfigurationSummary record={caseRecord} identity={readableIdentity} />
+
+            {readableIdentity ? (
+              <CaseConfigurationDetails record={caseRecord} identity={readableIdentity} />
+            ) : null}
 
             <div className="border-t border-slate-200 pt-3">
               <div className="space-y-3">
@@ -1121,9 +1148,6 @@ export const CaseDetailsPage = ({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Case Notes</h2>
-                <p className="text-sm text-muted-foreground">
-                  Shared notes for this case identity. Applies across executions in this case.
-                </p>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
                 {!canEdit ? (
@@ -1134,82 +1158,6 @@ export const CaseDetailsPage = ({
 
             {formState ? (
               <div className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor={isEditing ? 'case-group' : undefined}
-                      className="block text-xs text-muted-foreground"
-                    >
-                      Case Group
-                    </Label>
-                    {isEditing ? (
-                      <>
-                        <Input
-                          id="case-group"
-                          className="max-w-sm"
-                          value={formState.caseGroup}
-                          onChange={(event) => updateField('caseGroup', event.target.value)}
-                          aria-describedby="case-group-help"
-                          placeholder="No case group"
-                        />
-                        <p id="case-group-help" className="text-xs text-muted-foreground">
-                          Changing Case Group applies to all executions in this case. Clearing it
-                          allows future ingestion to populate it again.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm font-medium text-slate-950">
-                        {caseRecord.caseGroup ?? 'Unset'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="block text-xs text-muted-foreground">
-                      Case classification
-                    </Label>
-                    {isEditing ? (
-                      <Select
-                        value={formState.simulationType ?? 'unset'}
-                        onValueChange={(value) => {
-                          setSaveError(null);
-                          setFormState((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  simulationType:
-                                    value === 'unset' ? null : (value as CaseSimulationTypeValue),
-                                }
-                              : current,
-                          );
-                        }}
-                      >
-                        <SelectTrigger aria-label="Case classification" className="max-w-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unset">Unset</SelectItem>
-                          <SelectItem value="development">Development</SelectItem>
-                          <SelectItem value="production">Production</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="text-sm font-medium capitalize text-slate-950">
-                        {caseRecord.simulationType ?? 'Unset'}
-                      </p>
-                    )}
-                    {hasAmbiguousDiagnosticsTiers ? (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
-                        SimBoard cannot determine one observed tier.
-                      </div>
-                    ) : hasDiagnosticsMismatch ? (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        Case classification is {caseRecord.simulationType}, but diagnostics
-                        provenance is {diagnosticsTierLabel}.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
                 <div>
                   {isEditing ? (
                     <MarkdownEditorField
@@ -1235,7 +1183,7 @@ export const CaseDetailsPage = ({
                   )}
                 </div>
 
-                <div className="grid gap-5 xl:grid-cols-2">
+                <div className="grid items-start gap-5 md:grid-cols-2">
                   <div>
                     {isEditing ? (
                       <MarkdownEditorField

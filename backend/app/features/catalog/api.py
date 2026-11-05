@@ -11,6 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
+from app.features.catalog.case_summary import summarize_case_executions
 from app.features.catalog.enums import (
     ArtifactKind,
     CaseSimulationType,
@@ -227,7 +228,7 @@ def _completed_execution_summary_subquery(db: Session):
                     latest_run_activity.desc().nullslast(),
                     Execution.run_end_date.desc().nullslast(),
                     Execution.run_start_date.desc().nullslast(),
-                    Execution.execution_id.desc(),
+                    Execution.execution_id.collate("C").desc(),
                 ),
             )
             .label("latest_execution_rank"),
@@ -1779,6 +1780,7 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
     """Convert a Case ORM instance to CaseDetailOut."""
     result = CaseDetailOut(
         **_build_case_summary(case),
+        **summarize_case_executions(case.executions),
         artifacts=_case_execution_artifacts(case),
         description=case.description,
         key_features=case.key_features,

@@ -7,11 +7,17 @@ import { api } from '../../src/api/api';
 import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
+import { describeSimulatedDuration } from '../../src/features/catalog/caseUtils';
 import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
+import {
+  CaseConfigurationDetails,
+  CaseConfigurationSummary,
+} from '../../src/features/catalog/components/CaseConfiguration';
 import { HomePage } from '../../src/features/home/HomePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
+import type { CaseDetailOut, ConfigurationFieldOut, SimulationDurationOut } from '../../src/types';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -38,6 +44,16 @@ const executions = [1, 2, 3].map((number) => ({
   runStartDate: number === 3 ? null : `2026-10-0${number}T12:00:00Z`,
   runEndDate: number === 3 ? null : `2026-10-0${number}T13:00:00Z`,
 }));
+const duration = (overrides: Partial<SimulationDurationOut> = {}): SimulationDurationOut => ({
+  days: 365,
+  months: 12,
+  years: 1,
+  calendars: ['gregorian'],
+  calendarAssumed: false,
+  partial: false,
+  excludedExecutionCount: 0,
+  ...overrides,
+});
 const record = {
   id: 'case-1',
   name: 'test.case',
@@ -55,6 +71,21 @@ const record = {
   links: [{ id: 'link-1', kind: 'docs', label: 'Case docs', url: 'https://example.test/docs' }],
   sourceDirectories: [{ id: 'source-1', kind: 'archive', path: '/archive/test.case' }],
   executions,
+  sharedConfiguration: {
+    compset_alias: { value: 'SHARED-COMPSET', varies: false, incomplete: false },
+    grid_alias: { value: 'SHARED-GRID', varies: false, incomplete: false },
+    git_tag: { value: 'v3', varies: false, incomplete: false },
+  },
+  simulationCoverage: { years: 1234.5, partial: true, excludedExecutionCount: 1 },
+  simulatedDuration: duration({
+    days: 730,
+    months: 24,
+    years: 2,
+    partial: true,
+    excludedExecutionCount: 1,
+    calendarAssumed: true,
+  }),
+  latestExecution: { executionId: 'run-105', runEndDate: '2026-11-02T12:00:00Z' },
 };
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
 client.setQueryDefaults(['executions', 'case'], {
@@ -138,7 +169,9 @@ async function run() {
     await waitFor(() => document.querySelector('h1')?.textContent === record.name);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const developer = document.querySelector('details');
+    const developer = [...document.querySelectorAll('details')].find(
+      (element) => element.querySelector('summary')?.textContent === 'Developer Details',
+    );
     check(Boolean(developer) === (role === 'admin'), `Developer Details visibility: ${role}`);
     if (developer) {
       check(!developer.open, 'Developer Details must start collapsed');
@@ -154,12 +187,35 @@ async function run() {
       headings.filter((text) => text === 'Case Metadata').length === 1,
       'One Case Metadata heading',
     );
-    for (const text of ['Executions', 'Case hash groups', 'Machines', 'HPC users']) {
-      const label = [...document.querySelectorAll('div')].find(
-        (element) => element.childElementCount === 0 && element.textContent === text,
+    const summaryLabels = [
+      'Latest Execution',
+      'Total Simulated Duration',
+      'Machine',
+      'HPC Username',
+      'Compset Alias',
+      'Compset Long Name',
+      'Grid Alias',
+      'Grid Long Name',
+    ];
+    for (const text of summaryLabels) {
+      const label = [...document.querySelectorAll('dt')].find(
+        (element) => element.textContent === text,
       );
       check(label, `Metadata label exists: ${text}`);
       const style = getComputedStyle(label!);
+      check(
+        style.fontSize === '13px' && style.fontWeight === '600',
+        `Metadata label uses muted semibold typography: ${text}`,
+      );
+      const valueStyle = getComputedStyle(label!.parentElement!.querySelector('dd')!);
+      check(
+        valueStyle.fontSize === '14px' && valueStyle.fontWeight === '400',
+        `Metadata value uses normal primary typography: ${text}`,
+      );
+      check(
+        style.color !== valueStyle.color,
+        `Metadata label and value have distinct color hierarchy: ${text}`,
+      );
       check(style.textTransform === 'none', `Metadata label uses sentence case: ${text}`);
       check(
         style.letterSpacing === 'normal' || style.letterSpacing === '0px',
@@ -170,6 +226,141 @@ async function run() {
       document.body.textContent?.includes('Page updated:'),
       'Page update timestamp near header',
     );
+    const metadata = document.querySelector('[aria-label="Case summary"]')!;
+    const metadataCard = document.querySelector('[data-case-metadata]')!;
+    const identityLabels = [...metadataCard.querySelectorAll('label')].filter((label) =>
+      ['Case Group', 'Case Classification'].includes(label.textContent ?? ''),
+    );
+    check(identityLabels.length === 2, 'Group and classification appear once in Case Metadata');
+    const identityBounds = identityLabels.map((label) => label.getBoundingClientRect());
+    const summaryColumns = [...metadata.children].map((field) => field.getBoundingClientRect());
+    check(
+      Math.abs(identityBounds[0].left - summaryColumns[0].left) < 1,
+      'Case Group aligns with first metadata column',
+    );
+    if (window.innerWidth >= 640) {
+      check(
+        Math.abs(identityBounds[1].left - summaryColumns[1].left) < 1,
+        'Case Classification aligns with adjacent second metadata column',
+      );
+      check(
+        Math.abs(identityBounds[0].top - identityBounds[1].top) < 1,
+        'Case context fields share first row',
+      );
+    } else {
+      check(
+        identityBounds[1].top > identityBounds[0].top,
+        'Case context fields stack in order on mobile',
+      );
+    }
+    check(
+      ![...metadataCard.querySelectorAll('h2, h3')].some((heading) =>
+        ['Case Context', 'Execution Summary', 'Model Configuration'].includes(
+          heading.textContent ?? '',
+        ),
+      ),
+      'Metadata rows remain compact without redundant subtitles',
+    );
+    check(
+      identityLabels[0].getBoundingClientRect().top < metadata.getBoundingClientRect().top,
+      'Case identity row precedes execution and configuration rows',
+    );
+    for (const label of identityLabels) {
+      const labelStyle = getComputedStyle(label);
+      const valueStyle = getComputedStyle(label.nextElementSibling!);
+      check(
+        labelStyle.fontSize === '13px' && labelStyle.fontWeight === '600',
+        'Case identity labels match metadata typography',
+      );
+      check(
+        valueStyle.fontSize === '14px' && valueStyle.fontWeight === '400',
+        'Case identity values match metadata typography',
+      );
+    }
+    const descriptiveDetails = [...document.querySelectorAll('h2')]
+      .find((heading) => heading.textContent === 'Case Notes')!
+      .closest('section')!;
+    check(
+      [...descriptiveDetails.querySelectorAll('label')]
+        .map((label) => label.textContent)
+        .join('|') === 'Description|Key Features|Known Issues|Notes',
+      'Case Notes contains only descriptive fields in requested order',
+    );
+    const featureLabel = [...descriptiveDetails.querySelectorAll('label')].find(
+      (label) => label.textContent === 'Key Features',
+    )!;
+    const issuesLabel = [...descriptiveDetails.querySelectorAll('label')].find(
+      (label) => label.textContent === 'Known Issues',
+    )!;
+    if (window.innerWidth >= 768) {
+      check(
+        Math.abs(
+          featureLabel.getBoundingClientRect().top - issuesLabel.getBoundingClientRect().top,
+        ) < 1,
+        'Features and issues align side by side',
+      );
+    } else {
+      check(
+        featureLabel.getBoundingClientRect().top < issuesLabel.getBoundingClientRect().top,
+        'Features precede issues on mobile',
+      );
+    }
+    check(
+      metadata.textContent?.includes('SHARED-COMPSET'),
+      'Shared alias appears beneath metadata',
+    );
+    check(metadata.textContent?.includes('SHARED-GRID'), 'Shared grid appears beneath metadata');
+    check(!metadata.textContent?.includes('v3'), 'Model tag stays out of primary summary');
+    check(
+      [...metadata.querySelectorAll('dt')].map((label) => label.textContent).join('|') ===
+        summaryLabels.join('|'),
+      'Summary preserves exact reading order',
+    );
+    const fields = [...metadata.children].map((element) => element.getBoundingClientRect());
+    const columns = window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 2 : 1;
+    fields.forEach((field, index) => {
+      check(
+        Math.abs(field.height - fields[index - (index % columns)].height) < 1,
+        'Summary fields align within each row',
+      );
+      if (index % columns !== 0) {
+        check(Math.abs(field.top - fields[index - 1].top) < 1, 'Summary row labels align');
+        check(field.left > fields[index - 1].left, 'Summary reads left to right');
+      } else if (index > 0) {
+        check(field.top > fields[index - 1].top, 'Summary reads top to bottom');
+      }
+    });
+    const stats = metadata;
+    check(
+      stats.textContent?.startsWith('Latest Execution'),
+      'Latest execution is first summary statistic',
+    );
+    check(
+      stats.textContent?.includes('2 years (partial)'),
+      'Use server duration, not coverage or loaded execution intervals',
+    );
+    check(stats.textContent?.includes('2026-11-02'), 'Latest run date differs from page update');
+    check(
+      stats.querySelector('a')?.getAttribute('href')?.endsWith('/run-105'),
+      'Latest run can be outside loaded page',
+    );
+    check(!stats.textContent?.includes('Case hash groups'), 'Hash count removed from summary');
+    check(!stats.textContent?.includes('Executions'), 'Execution count removed from summary');
+    check(
+      stats.textContent?.includes('Gregorian calendar assumed'),
+      'Calendar assumption is visible',
+    );
+    if (role === 'anonymous') {
+      const durationTrigger = stats.querySelector<HTMLElement>('[tabindex="0"]')!;
+      durationTrigger.focus();
+      await waitFor(() => document.querySelector('[role="tooltip"]'));
+      check(
+        document.querySelector('[role="tooltip"]')?.textContent ===
+          describeSimulatedDuration(record.simulatedDuration),
+        'Duration tooltip explains cumulative semantics and exclusions',
+      );
+      durationTrigger.blur();
+    }
     const notes = [...document.querySelectorAll('label')].find(
       (element) => element.textContent === 'Notes',
     );
@@ -349,14 +540,41 @@ async function run() {
   edit.click();
   await waitFor(() => document.getElementById('case-group'));
   check(
+    document.getElementById('case-group')!.closest('[data-case-metadata]'),
+    'Case Group editor lives in Case Metadata',
+  );
+  check(
+    document.querySelector('[aria-label="Case classification"]')!.closest('[data-case-metadata]'),
+    'Classification editor lives in Case Metadata',
+  );
+  check(
     (document.getElementById('case-group') as HTMLInputElement).value === record.caseGroup,
     'Editing retains Case Group',
+  );
+  const groupInput = document.getElementById('case-group') as HTMLInputElement;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    groupInput,
+    'temporary-group',
+  );
+  groupInput.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitFor(() =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')].some(
+      (button) => button.textContent === 'Save Changes' && !button.disabled,
+    ),
   );
   const cancel = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Cancel',
   )!;
   cancel.click();
   await waitFor(() => !document.getElementById('case-group'));
+  check(
+    document.querySelector('[data-case-metadata]')?.textContent?.includes(record.caseGroup),
+    'Cancel restores original Case Group in metadata',
+  );
+  check(
+    !document.querySelector('[data-case-metadata]')?.textContent?.includes('temporary-group'),
+    'Cancel discards edits from relocated metadata field',
+  );
 
   const history = [...document.querySelectorAll('button')].find((element) =>
     element.textContent?.includes('Change History'),
@@ -366,6 +584,353 @@ async function run() {
   check(requests[0].includes('/history'), 'Opening history fetches history only');
   await checkArtifactsScrolling();
   await checkExecutionPlaceholders();
+  await checkConfigurationComparison();
+}
+
+async function checkConfigurationComparison() {
+  const observation = (value: string, executionId: string, runDate: string | null) => ({
+    value,
+    executionId,
+    executionUuid: executionId,
+    runDate,
+  });
+  const field = (value: string | null, executionId: string): ConfigurationFieldOut => ({
+    source: value == null ? null : observation(value, executionId, '2026-01-01T00:00:00Z'),
+    differences: [],
+    missingExecutionIds: value == null ? [executionId] : [],
+  });
+  const firstConfiguration = {
+    compset_alias: field('shared-alias', 'run-1'),
+    grid_alias: field('grid-one', 'run-1'),
+    git_tag: field(null, 'run-1'),
+    compset_long_name: field('LONG_'.repeat(100), 'run-1'),
+    grid_long_name: field('grid-long', 'run-1'),
+    git_commit_hash: field('model-hash', 'run-1'),
+    source_code_path: field('/model/source', 'run-1'),
+  };
+  firstConfiguration.grid_alias.differences.push(observation('later-grid', 'run-2', null));
+  const configured: CaseDetailOut = {
+    ...record,
+    createdAt: record.updatedAt,
+    simulationType: 'production',
+    executions: [],
+    links: [],
+    sourceDirectories: [],
+    latestExecution: null,
+    sharedConfiguration: {
+      compset_alias: { value: 'shared-alias', varies: false, incomplete: false },
+      grid_alias: { value: null, varies: true, incomplete: true, hasDifferences: true },
+      git_tag: { value: null, varies: false, incomplete: true },
+      compset_long_name: {
+        value: firstConfiguration.compset_long_name.source!.value,
+        varies: false,
+        incomplete: false,
+      },
+      grid_long_name: { value: 'grid-long', varies: false, incomplete: false },
+    },
+    configurationGroups: [
+      {
+        key: 'one',
+        caseHash: 'hash-'.repeat(40),
+        executionIds: ['run-1', 'run-2'],
+        configuration: firstConfiguration,
+        coverage: { years: 20, partial: false, excludedExecutionCount: 0 },
+        simulatedDuration: duration({ days: 10950, months: 360, years: 30, calendarAssumed: true }),
+      },
+      {
+        key: 'missing:run-3',
+        caseHash: null,
+        executionIds: ['run-3'],
+        configuration: {
+          ...firstConfiguration,
+          grid_alias: field(null, 'run-3'),
+          compset_long_name: field('OTHER_'.repeat(100), 'run-3'),
+          grid_long_name: field('other-grid-long', 'run-3'),
+        },
+        coverage: { years: null, partial: true, excludedExecutionCount: 1 },
+        simulatedDuration: duration({
+          days: null,
+          months: null,
+          years: null,
+          partial: true,
+          excludedExecutionCount: 1,
+        }),
+      },
+    ],
+  };
+  const identity = { machineName: 'chrysalis', hpcUsername: 'test.user', caseName: record.name };
+  root.render(
+    <MemoryRouter>
+      <div className="min-w-0 p-6">
+        <div className="h-screen" aria-hidden="true" />
+        <CaseConfigurationSummary record={configured} identity={identity} />
+        <CaseConfigurationDetails record={configured} identity={identity} />
+        <div className="h-screen" aria-hidden="true" />
+      </div>
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelector('[data-case-configuration]'));
+  const summary = document.querySelector('[aria-label="Case summary"]')!;
+  check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
+  check(summary.textContent?.includes('Differs by case hash'), 'Summary flags differing values');
+  check(!summary.textContent?.includes('Model tag'), 'Technical metadata stays out of summary');
+  check(
+    summary.textContent?.includes('Some executions unavailable'),
+    'Summary distinguishes missing observations from disagreement',
+  );
+  check(
+    summary.textContent?.includes('Changes within Case Hash'),
+    'Summary flags within-hash differences',
+  );
+  const details = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
+  const table = details.querySelector('table')!;
+  check(
+    !details.open && !table.checkVisibility(),
+    'Comparison starts collapsed with no visible table',
+  );
+  details.querySelector('summary')!.click();
+  check(details.open && table.checkVisibility(), 'Comparison disclosure opens table manually');
+  details.querySelector('summary')!.click();
+  check(!details.open, 'Comparison disclosure closes table manually');
+  const hashes = [...table.querySelectorAll('thead th')].slice(1);
+  check(hashes.length === 2, 'One comparison column per hash or missing-hash identity');
+  check(
+    hashes[0].textContent?.includes('Reference') && !hashes[1].textContent?.includes('Reference'),
+    'First hash is clearly labeled as comparison reference',
+  );
+  check(!table.querySelector('tbody td:first-of-type mark'), 'Reference values stay unmarked');
+  const changedToken = table.querySelector('tbody td:nth-of-type(2) mark')!;
+  check(changedToken, 'Changed tokens receive inline highlighting');
+  check(
+    getComputedStyle(changedToken).backgroundColor !==
+      getComputedStyle(changedToken.parentElement!).backgroundColor,
+    'Token highlighting is visible without changing table layout',
+  );
+  check(!details.querySelector('[data-configuration-group]'), 'Per-hash metadata sections removed');
+  check(!details.textContent?.includes('Expand metadata'), 'No expand metadata prompt');
+  check(
+    details
+      .querySelector('p')
+      ?.textContent?.includes(
+        'Only configuration fields that differ between case hashes are shown.',
+      ),
+    'Concise comparison explanation',
+  );
+  check(
+    details.querySelector('p')?.textContent?.includes('Case hashes identify CIME case instances.'),
+    'Comparison briefly explains case hashes',
+  );
+  check(hashes[0].textContent?.includes('30 years'), 'Hash duration is cumulative, not coverage');
+  check(
+    !table.querySelector('thead')?.textContent?.includes('Gregorian calendar assumed'),
+    'Hash columns omit calendar assumption labels',
+  );
+  check(
+    !table.querySelector('thead')?.textContent?.includes('Simulated duration:'),
+    'Hash columns show duration without repeating a label',
+  );
+  check(hashes[0].textContent?.includes('2 executions'), 'Execution count remains visible');
+  check(!hashes[0].textContent?.includes('hash-'.repeat(40)), 'Hash is abbreviated');
+  check(
+    hashes[0].querySelector('[title]')?.getAttribute('title') === 'hash-'.repeat(40),
+    'Full hash remains available',
+  );
+  check(
+    hashes[1].textContent?.includes('Missing Case Hash: run-3'),
+    'Hashless execution keeps identity',
+  );
+  check(
+    hashes[1].textContent?.includes('Unavailable (partial)'),
+    'Partial hash duration stays explicit',
+  );
+  const rowLabels = [...table.querySelectorAll('tbody th')].map((element) => element.textContent);
+  check(
+    rowLabels.join('|') === 'Compset Long Name|Grid Alias|Grid Long Name',
+    'Only differing fields become rows, including both long names',
+  );
+  check(
+    !table.querySelector('tbody')?.textContent?.includes('Duration'),
+    'Duration stays outside configuration rows',
+  );
+  check(
+    table.querySelector('tbody')?.textContent?.includes('Unavailable'),
+    'Missing configuration value stays explicit',
+  );
+  const links = [...summary.querySelectorAll<HTMLAnchorElement>('a[href^="#case-configuration-"]')];
+  check(links.length === 3, 'Every differing summary field has a comparison link');
+  for (const link of links) {
+    details.open = false;
+    link.focus();
+    check(document.activeElement === link, 'Difference link accepts keyboard focus');
+    const previousHash = location.hash;
+    link.click();
+    check(details.open, 'Every Differs by link expands comparison before navigating');
+    const target = document.getElementById(link.hash.slice(1))!;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const rowLabel = document.getElementById(link.getAttribute('aria-controls')!)!;
+    check(
+      target === details && document.activeElement === rowLabel,
+      'Difference link focuses matching row without scrolling to it',
+    );
+    const rowColor = getComputedStyle(rowLabel).backgroundColor;
+    check(
+      rowColor !== 'rgb(255, 255, 255)' && rowColor !== 'rgba(0, 0, 0, 0)',
+      'Selected comparison row has visible highlight',
+    );
+    for (const cell of rowLabel.parentElement!.children) {
+      check(
+        getComputedStyle(cell).backgroundColor === rowColor,
+        'Highlight spans field label and every hash value',
+      );
+    }
+    check(
+      [...table.querySelectorAll('tbody th')]
+        .filter((label) => label !== rowLabel)
+        .every((label) => getComputedStyle(label).backgroundColor !== rowColor),
+      'Only selected row stays highlighted',
+    );
+    check(location.hash === previousHash, 'Difference link prevents native fragment jump');
+    const bounds = target.getBoundingClientRect();
+    if (bounds.height < window.innerHeight) {
+      check(
+        Math.abs((bounds.top + bounds.bottom) / 2 - window.innerHeight / 2) < 2,
+        'Difference link centers comparison component',
+      );
+    }
+    check(
+      target.querySelector('h3')!.getBoundingClientRect().top >= 0 &&
+        target.querySelector('h3')!.getBoundingClientRect().top < window.innerHeight,
+      'Difference link keeps comparison heading in view',
+    );
+  }
+  details.style.minHeight = '200vh';
+  links[0].click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const headingBounds = details.querySelector('h3')!.getBoundingClientRect();
+  check(
+    Math.abs((headingBounds.top + headingBounds.bottom) / 2 - window.innerHeight / 2) < 2,
+    'Tall comparisons center their heading instead of jumping into table',
+  );
+  details.style.minHeight = '';
+  check(
+    table.querySelector('tbody a')?.getAttribute('href')?.endsWith('/run-1'),
+    'Configuration links to execution source',
+  );
+  const changes = table.querySelector<HTMLDetailsElement>('tbody details')!;
+  changes.querySelector('summary')!.click();
+  check(changes.textContent?.includes('later-grid'), 'Later differences remain available');
+  check(changes.textContent?.includes('Run date unavailable'), 'Undated provenance stays explicit');
+  check(
+    table.textContent?.includes('LONG_'.repeat(100)),
+    'Long configuration values remain available',
+  );
+  check(
+    document.documentElement.scrollWidth <= window.innerWidth,
+    'Comparison has no page-wide overflow',
+  );
+  const first = configured.configurationGroups![0];
+  const agreeing = {
+    ...configured,
+    configurationGroups: configured.configurationGroups!.slice(0, 1),
+    sharedConfiguration: {
+      ...configured.sharedConfiguration,
+      grid_alias: { value: 'grid-one', varies: false, incomplete: false, hasDifferences: true },
+    },
+  };
+  root.render(
+    <MemoryRouter>
+      <CaseConfigurationSummary record={agreeing} identity={identity} />
+      <CaseConfigurationDetails record={agreeing} identity={identity} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => !document.querySelector('[data-case-configuration]'));
+  check(
+    !document.body.textContent?.includes('Configuration Differences'),
+    'Single hash hides entire comparison section',
+  );
+  const agreeingSummary = document.querySelector('[aria-label="Case summary"]')!;
+  check(
+    agreeingSummary.textContent?.includes('Changes within Case Hash'),
+    'Agreeing baselines still flag within-hash changes',
+  );
+  check(
+    !agreeingSummary.textContent?.includes('Differs by case hash'),
+    'Within-hash changes do not imply differing baselines',
+  );
+  check(
+    agreeingSummary
+      .querySelector('a[title="Source execution: run-1"]')
+      ?.getAttribute('href')
+      ?.endsWith('/run-1'),
+    'Shared summary value retains execution source',
+  );
+  const withinHashChanges = agreeingSummary.querySelector<HTMLDetailsElement>('details')!;
+  check(!withinHashChanges.open, 'Within-hash observations stay compact');
+  withinHashChanges.querySelector('summary')!.click();
+  check(
+    withinHashChanges.open && withinHashChanges.textContent?.includes('later-grid'),
+    'Within-hash observations remain accessible without a comparison row',
+  );
+  check(
+    withinHashChanges.querySelector('a')?.getAttribute('href')?.endsWith('/run-2'),
+    'Alternate observation retains execution source',
+  );
+  const identical: CaseDetailOut = {
+    ...agreeing,
+    configurationGroups: [
+      first,
+      { ...first, key: 'two', caseHash: 'second-hash', executionIds: ['run-3'] },
+    ],
+  };
+  root.render(
+    <MemoryRouter>
+      <CaseConfigurationDetails record={identical} identity={identity} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => !document.querySelector('[aria-label="Case summary"]'));
+  check(
+    !document.querySelector('[data-case-configuration]'),
+    'Identical hashes hide entire comparison section',
+  );
+  const many: CaseDetailOut = {
+    ...configured,
+    configurationGroups: Array.from({ length: 8 }, (_, index) => ({
+      ...first,
+      key: `hash-${index}`,
+      caseHash: `hash-${index}`,
+      configuration: {
+        ...firstConfiguration,
+        grid_long_name: field(`grid-${index}-${'LONG_'.repeat(100)}`, 'run-1'),
+      },
+    })),
+  };
+  root.render(
+    <MemoryRouter>
+      <div className="min-w-0 p-6">
+        <CaseConfigurationDetails record={many} identity={identity} />
+      </div>
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelectorAll('[data-case-configuration] thead th').length === 9);
+  const manyDetails = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
+  check(!manyDetails.open, 'Many-hash comparison also starts collapsed');
+  manyDetails.querySelector('summary')!.click();
+  const manyTable = document.querySelector('[data-case-configuration] table')!;
+  const scrollContainer = manyTable.parentElement!;
+  check(
+    scrollContainer.scrollWidth > scrollContainer.clientWidth,
+    'Many hashes scroll within comparison',
+  );
+  scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+  check(scrollContainer.scrollLeft > 0, 'Comparison allows horizontal scrolling');
+  check(
+    manyTable.querySelector('tbody th')!.getBoundingClientRect().left >= 0,
+    'Field labels stay visible while scrolling',
+  );
+  check(
+    document.documentElement.scrollWidth <= window.innerWidth,
+    'Many hashes do not cause page overflow',
+  );
 }
 
 async function checkExecutionPlaceholders() {
