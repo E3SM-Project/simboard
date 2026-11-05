@@ -18,7 +18,6 @@ import { CompareWorkspace } from '../../src/features/compare/ComparePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
-import { CaseCompareRoute } from '../../src/routes/CaseCompareRoute';
 import type {
   CaseDetailOut,
   ConfigurationFieldOut,
@@ -95,20 +94,6 @@ const record = {
   latestExecution: { executionId: 'run-105', runEndDate: '2026-11-02T12:00:00Z' },
 };
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
-client.setQueryData(catalogQueryKeys.cases.detail(record.id), record);
-for (const [index, execution] of executions.entries()) {
-  client.setQueryData(catalogQueryKeys.executions.detail(execution.id), {
-    ...execution,
-    caseName: record.name,
-    machine: { name: 'chrysalis' },
-    hpcUsername: 'test.user',
-    gitTag: index === 0 ? 'v3.1' : 'v3.2',
-    gitRepositorySource: 'https://github.com/E3SM-Project/E3SM',
-    gridAlias: index === 2 ? null : 'shared-grid',
-    groupedArtifacts: {},
-    artifacts: [{ id: execution.id, kind: 'output', uri: `/output/run-${index + 1}` }],
-  });
-}
 client.setQueryDefaults(['executions', 'case'], {
   initialData: {
     pages: [{ items: executions, total: 3, page: 1, pageSize: 100 }],
@@ -124,12 +109,33 @@ function FixtureCasePage() {
     <CaseDetailsPage
       selectedCaseExecutionIdsByCase={selectedIds}
       setSelectedCaseExecutionIdsForCase={(caseId, ids) => setSelectedIds({ [caseId]: ids })}
-      renderCompareSection={({ caseId, onClose }) => (
-        <CaseCompareRoute
-          caseId={caseId}
-          onClose={onClose}
-          selectedCaseExecutionIdsByCase={selectedIds}
-          setSelectedCaseExecutionIdsForCase={(id, ids) => setSelectedIds({ [id]: ids })}
+      renderCompareSection={() => (
+        <CompareWorkspace
+          caseComparison
+          selectedExecutionIds={selectedIds[record.id] ?? []}
+          setSelectedExecutionIds={(ids) => setSelectedIds({ [record.id]: ids })}
+          selectedExecutions={
+            executions.map((execution, index) => ({
+              ...execution,
+              caseName: record.name,
+              machine: { name: 'chrysalis' },
+              hpcUsername: 'test.user',
+              simulationStartDate: '0001-01-01',
+              simulationEndDate: '0002-01-01',
+              initializationType: 'hybrid',
+              runStartDate: null,
+              runEndDate: null,
+              compiler: index === 1 ? 'gnu' : null,
+              groupedArtifacts: {},
+              artifacts: [
+                {
+                  id: 'output',
+                  kind: 'output',
+                  uri: `/archive/${'long-path-segment/'.repeat(15)}${index === 2 ? 'alternate' : 'reference'}/run`,
+                },
+              ],
+            })) as unknown as ExecutionOut[]
+          }
         />
       )}
     />
@@ -146,12 +152,12 @@ function LocationProbe() {
   return <output id="filter-url">{location.search}</output>;
 }
 
-async function waitFor(checkReady: () => unknown) {
+async function waitFor(checkReady: () => unknown, message = 'rendered case details') {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (checkReady()) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  throw new Error('Timed out waiting for rendered case details');
+  throw new Error(`Timed out waiting for ${message}`);
 }
 
 async function run() {
@@ -160,8 +166,10 @@ async function run() {
     window.innerWidth === expectedWidth,
     `Expected viewport ${expectedWidth}, got ${window.innerWidth}`,
   );
-  await checkHomepage();
-  await checkCasesFilters();
+  if (!new URLSearchParams(location.search).has('capture')) {
+    await checkHomepage();
+    await checkCasesFilters();
+  }
   for (const role of ['anonymous', 'editor', 'loading-admin', 'admin']) {
     const user =
       role === 'anonymous'
@@ -201,8 +209,6 @@ async function run() {
       (element) => element.querySelector('summary')?.textContent === 'Developer Details',
     );
     check(Boolean(developer) === (role === 'admin'), `Developer Details visibility: ${role}`);
-    const artifacts = document.getElementById('artifacts-heading')!.closest('details')!;
-    check(!artifacts.open, 'Case artifacts start collapsed');
     if (developer) {
       check(!developer.open, 'Developer Details must start collapsed');
       developer.querySelector('summary')!.click();
@@ -418,7 +424,6 @@ async function run() {
     );
   }
 
-  await checkCaseHashFilterVisibility();
   const table = document.querySelector('table')!;
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
@@ -475,70 +480,9 @@ async function run() {
     (element) => element.textContent === 'Compare Case Executions',
   )!;
   check(!compare.disabled, 'Selection still enables comparison');
-  localStorage.setItem(
-    `case_compare_hidden_cols:${record.id}`,
-    JSON.stringify(['execution-1', 'execution-2']),
-  );
-  compare.focus();
-  const pageScroll = window.scrollY;
   compare.click();
   await waitFor(() => document.querySelector('[data-case-comparison]'));
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-  check(dialog.querySelectorAll('thead th').length === 2, 'Stored hidden columns apply on opening');
-  check(
-    dialog.querySelector<HTMLInputElement>('input')!.checked,
-    'Stored hidden columns preserve differences-only preference',
-  );
-  for (const button of dialog.querySelectorAll<HTMLButtonElement>(
-    '[aria-label="Show hidden executions"] button',
-  )) {
-    button.click();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  check(
-    dialog.querySelector<HTMLInputElement>('input')!.checked,
-    'Showing stored columns resumes differences only',
-  );
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  const dialogBounds = dialog.getBoundingClientRect();
-  check(
-    Math.abs(dialogBounds.width - window.innerWidth) < 1,
-    `Comparison uses full screen width: ${dialogBounds.width} / ${window.innerWidth}`,
-  );
-  check(
-    Math.abs(dialogBounds.height - window.innerHeight) < 1,
-    'Comparison uses full screen height',
-  );
-  check(dialogBounds.left === 0 && dialogBounds.top === 0, 'Comparison starts at viewport origin');
-  check(dialog.contains(document.activeElement), 'Comparison traps initial focus');
-  document.activeElement!.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
-  );
-  await waitFor(() => !document.querySelector('[role="dialog"]'));
-  check(document.activeElement === compare, 'Closing returns focus to Compare');
-  check(Math.abs(window.scrollY - pageScroll) < 1, 'Closing preserves page scroll');
-  compare.click();
-  await waitFor(() => document.querySelector('[role="dialog"]'));
-  const comparison = document.querySelector<HTMLElement>('[data-case-comparison]')!;
-  await checkExecutionComparison(comparison);
-  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
-    .find((button) => button.textContent === 'Close')!
-    .click();
-  await waitFor(() => !document.querySelector('[role="dialog"]'));
-  check(!compare.disabled, 'Closing preserves selected executions for reopening');
-  compare.click();
-  await waitFor(() => document.querySelector('[data-case-comparison]'));
-  document
-    .querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Remove run-2"]')!
-    .click();
-  await waitFor(() => !document.querySelector('[role="dialog"]'));
-  check(
-    document.activeElement === document.querySelector('[aria-label="Case executions"]'),
-    'Dropping below two selections returns focus to executions',
-  );
-  const runTwoRow = [...table.tBodies[0].rows].find((row) => row.cells[4].textContent === 'run-2')!;
-  runTwoRow.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click();
-  await waitFor(() => !compare.disabled);
+  await checkExecutionComparison(compare);
 
   const grouped = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Grouped by Case Hash',
@@ -619,7 +563,7 @@ async function run() {
     'Rows stay visible while sort data loads',
   );
   check(document.activeElement === pendingSortButton, 'Sort header keeps keyboard focus');
-  check(!document.querySelector('[role="dialog"]'), 'Sorting does not reopen comparison');
+  check(!compare.disabled, 'Comparison selection stays available while sorting');
   finishFetch();
   await waitFor(() => client.getQueryState(runAscKey)?.status === 'success');
   api.defaults.adapter = originalAdapter;
@@ -673,233 +617,143 @@ async function run() {
   await waitFor(() => requests.length === 1);
   check(requests[0].includes('/history'), 'Opening history fetches history only');
   await checkArtifactsScrolling();
-  await checkStandaloneComparison();
   await checkExecutionPlaceholders();
   await checkConfigurationComparison();
 }
 
-async function checkStandaloneComparison() {
-  root.render(
-    <MemoryRouter>
-      <CompareWorkspace
-        selectedExecutionIds={['execution-1', 'execution-2']}
-        selectedExecutions={['execution-1', 'execution-2'].map(
-          (id) => client.getQueryData<ExecutionOut>(catalogQueryKeys.executions.detail(id))!,
-        )}
-        setSelectedExecutionIds={() => {}}
-      />
-    </MemoryRouter>,
-  );
-  await waitFor(() => document.querySelector('h1')?.textContent === 'Cross-Case Compare');
+async function checkExecutionComparison(compareButton: HTMLButtonElement) {
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const workspace = dialog.querySelector<HTMLElement>('[data-case-comparison]')!;
+  const region = workspace.querySelector<HTMLElement>('[aria-label="Execution comparison"]')!;
+  const button = (text: string) =>
+    [...workspace.querySelectorAll('button')].find((item) => item.textContent === text)!;
+  const rows = () =>
+    [...region.querySelectorAll('tbody tr')].filter((row) => row.querySelector('td'));
+  const changed = () => region.querySelectorAll('[data-different="true"]').length;
+  const bounds = dialog.getBoundingClientRect();
+  check(bounds.width <= innerWidth * 0.95 && bounds.left > 0, 'Dialog leaves page context visible');
+  check(bounds.height <= innerHeight * 0.91 && bounds.top > 0, 'Dialog fits inside viewport');
+  check(bounds.height < innerHeight * 0.8, 'Short comparison does not fill viewport');
   check(
-    !document.querySelector('[data-case-comparison]'),
-    'Standalone comparison keeps existing layout',
+    document.activeElement?.textContent === 'Compare case executions',
+    'Initial focus lands on dialog title',
+  );
+  check(document.body.getAttribute('data-scroll-locked'), 'Modal locks background scrolling');
+  check(
+    dialog.getAttribute('aria-labelledby') === dialog.querySelector('h2')?.id,
+    'Dialog has an accessible title',
+  );
+  compareButton.focus();
+  check(
+    dialog.contains(document.activeElement),
+    'Modal contains focus when background control receives focus',
   );
   check(
-    document.body.textContent?.includes('Highlight differences'),
-    'Standalone comparison retains highlight toggle',
+    button('Differences (2)').getAttribute('aria-pressed') === 'true',
+    'Differences selected by default',
   );
-  const summaryButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-    button.textContent?.includes('Highlights'),
+  check(rows().length === 2, 'Only two differing fields appear');
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Use run-1 as reference"]')!.click();
+  await waitFor(() => changed() === 2);
+  const group = [...workspace.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    item.textContent?.includes('Locations'),
   )!;
-  summaryButton.click();
-  await waitFor(() => document.getElementById('compare-change-summary'));
+  group.click();
+  await waitFor(() => rows().length === 1);
+  check(button('Differences (2)'), 'Collapsing a group preserves difference count');
+  group.click();
+  await waitFor(() => rows().length === 2);
+  if (new URLSearchParams(location.search).get('capture') === 'differences') {
+    document.body.dataset.captureReady = 'true';
+    await new Promise(() => {});
+  }
   check(
-    document.getElementById('compare-change-summary')!.textContent?.includes('Change Summary'),
-    'Standalone comparison retains summary',
+    region.textContent?.includes('Differs from reference column.'),
+    'Differences have non-color cue',
   );
+  const copy = region.querySelector<HTMLButtonElement>('[aria-label="Copy path"]')!;
   check(
-    document.querySelector('button[aria-controls="section-configuration"]'),
-    'Standalone comparison retains section toggles',
+    copy && copy.parentElement?.getAttribute('title')?.includes('long-path-segment'),
+    'Full clamped path remains accessible',
   );
-}
-
-async function checkCaseHashFilterVisibility() {
-  const key = catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case');
-  const search = () =>
-    document.querySelector<HTMLInputElement>('[aria-label="Filter Case Hash prefix"]');
-  const missingButton = () =>
-    [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Missing hash',
-    );
-  check(!search() && !missingButton(), 'Single known hash hides case-hash filters');
-  client.setQueryData(key, {
-    ...record,
-    executions: executions.map((execution, index) => ({
-      ...execution,
-      caseHash: index === 0 ? 'other-hash' : 'test-hash',
-    })),
+  let copied = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async (value: string) => {
+        copied = value;
+      },
+    },
   });
-  await waitFor(search);
-  check(missingButton(), 'Multiple hashes show group filters');
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-    search()!,
-    'other',
-  );
-  search()!.dispatchEvent(new Event('input', { bubbles: true }));
-  await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 1);
-  check(search(), 'Filtering to one hash does not hide search');
-  missingButton()!.click();
-  await waitFor(() => document.body.textContent?.includes('Reset filters'));
-  for (const hashes of [
-    ['test-hash', null, null],
-    [null, null, null],
-    ['test-hash', 'test-hash', 'test-hash'],
-  ]) {
-    client.setQueryData(key, {
-      ...record,
-      executions: executions.map((execution, index) => ({ ...execution, caseHash: hashes[index] })),
-    });
-    await waitFor(
-      () =>
-        !search() &&
-        !missingButton() &&
-        document.querySelector('table')?.tBodies[0].rows.length === 3,
-    );
-    check(
-      !search() && !missingButton(),
-      'Fewer than two known hashes hide filters, including missing hashes',
-    );
+  copy.click();
+  check(copied.endsWith('/run') && copied.length > 200, 'Copy retains entire path');
+
+  button('All fields').click();
+  await waitFor(() => rows().length > 20);
+  check(changed() === 2, 'All fields keeps identical values neutral and differences highlighted');
+  if (new URLSearchParams(location.search).get('capture') === 'all') {
+    document.body.dataset.captureReady = 'true';
+    await new Promise(() => {});
   }
-  client.setQueryData(key, record);
+  check(region.scrollHeight > region.clientHeight, 'Long table scrolls within dialog');
+  const corner = region.querySelector<HTMLElement>('thead th')!;
+  region.scrollTop = 180;
+  region.scrollLeft = 500;
   await new Promise((resolve) => setTimeout(resolve, 20));
-}
+  check(
+    Math.abs(corner.getBoundingClientRect().top - region.getBoundingClientRect().top) < 3,
+    'Execution headers stay sticky vertically',
+  );
+  check(
+    Math.abs(corner.getBoundingClientRect().left - region.getBoundingClientRect().left) < 3,
+    'Field header stays sticky horizontally',
+  );
+  check(document.documentElement.scrollWidth <= innerWidth, 'Comparison causes no page overflow');
 
-async function checkExecutionComparison(comparison: HTMLElement) {
-  const table = comparison.querySelector('table')!;
-  const fields = () => [...table.querySelectorAll('th[scope="row"]')];
-  check(
-    !comparison.textContent?.includes('Change Summary'),
-    'Case comparison removes change summary',
-  );
-  check(
-    !comparison.textContent?.includes('Highlight differences'),
-    'Reference diffs need no toggle',
-  );
-  check(
-    comparison.querySelector<HTMLInputElement>('input')!.checked,
-    'Differences only starts enabled',
-  );
-  check(
-    !fields().some((field) => field.textContent === 'Status'),
-    'Equal fields hidden by default',
-  );
-  check(table.querySelector('mark'), 'Differences highlighted immediately');
-  check(!table.querySelector('tbody td:first-of-type mark'), 'Reference values stay unmarked');
-  check(table.querySelector('[aria-label="Copy path"]'), 'Artifact paths retain copy controls');
-  for (const heading of table.querySelectorAll('th')) {
-    check(
-      getComputedStyle(heading).textTransform === 'none',
-      'Comparison headings are not all caps',
-    );
-  }
-  comparison.querySelector<HTMLInputElement>('input')!.click();
-  await waitFor(() => fields().some((field) => field.textContent === 'Status'));
-  check(
-    table.querySelector('a[href="https://github.com/E3SM-Project/E3SM"]'),
-    'Repository link retained',
-  );
-  const grid = fields().find((field) => field.textContent === 'Grid Alias')!.parentElement!;
-  check(grid.textContent?.includes('—'), 'Missing grid value remains visible');
-  check(
-    !fields()
-      .find((field) => field.textContent === 'Status')!
-      .parentElement!.querySelector('mark'),
-    'Equal values remain unmarked',
-  );
-
-  const referenceButton = [...comparison.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === 'Use as reference',
-  )!;
-  const newReference = referenceButton.closest('th')!.querySelector('a')!.textContent!;
-  referenceButton.click();
-  await waitFor(() => table.querySelectorAll('thead th')[1].textContent?.includes(newReference));
-  check(
-    table.querySelectorAll('thead th')[1].textContent?.includes('Reference'),
-    'Reference updates after reordering',
-  );
-  check(!table.querySelector('tbody td:first-of-type mark'), 'New reference stays unmarked');
-  comparison.querySelector<HTMLButtonElement>(`button[aria-label="Hide ${newReference}"]`)!.click();
-  await waitFor(() => comparison.querySelector('[aria-label="Show hidden executions"]'));
-  check(
-    !table.querySelectorAll('thead th')[1].textContent?.includes(newReference),
-    'Hiding reference selects next visible execution',
-  );
-  const show = [...comparison.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === `Show ${newReference}`,
-  )!;
-  show.click();
-  await waitFor(() => !comparison.querySelector('[aria-label="Show hidden executions"]'));
-  const scroller = comparison.querySelector<HTMLElement>('[aria-label="Execution comparison"]')!;
-  if (window.innerWidth < 900) {
-    scroller.scrollLeft = 200;
-    check(scroller.scrollLeft > 0, 'Narrow comparison scrolls horizontally');
-    check(
-      Math.abs(
-        table.querySelector('th')!.getBoundingClientRect().left -
-          scroller.getBoundingClientRect().left,
-      ) <= 1,
-      'Field header stays visible during horizontal scroll',
-    );
-  }
-  scroller.scrollTop = 100;
-  check(scroller.scrollTop > 0, 'Comparison scrolls vertically in one table area');
-  check(
-    Math.abs(
-      table.querySelector('thead')!.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top,
-    ) <= 1,
-    'Execution headers stay visible during vertical scroll',
-  );
-  check(
-    document.documentElement.scrollWidth <= window.innerWidth,
-    'Comparison causes no page-wide overflow',
-  );
-  comparison.querySelector<HTMLInputElement>('input')!.click();
-  await waitFor(() => comparison.querySelector<HTMLInputElement>('input')!.checked);
-  for (const button of comparison.querySelectorAll<HTMLButtonElement>(
-    'button[aria-label^="Hide "]',
-  )) {
-    button.click();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Use run-2 as reference"]')!.click();
   await waitFor(() =>
-    comparison.textContent?.includes('Unhide an execution to restore compare columns.'),
+    region.querySelector('thead th:nth-child(2)')?.textContent?.includes('run-2'),
+  );
+  check(changed() === 3, 'Changing reference updates highlighted values');
+  button('Differences (2)').click();
+  await waitFor(() => rows().length === 2);
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Hide run-2"]')!.click();
+  await waitFor(() => button('Differences (1)'), 'one difference after hide');
+  check(changed() === 1, 'Hiding reference updates count and highlights');
+  button('Show run-2').click();
+  await waitFor(() => button('Differences (2)'), 'two differences after show');
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Remove run-3"]')!.click();
+  await waitFor(() => button('Differences (1)'), 'one difference after remove');
+  check(!region.textContent?.includes('run-3'), 'Remove updates selected columns');
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Hide run-1"]')!.click();
+  await waitFor(() => button('Differences (0)'), 'zero differences with one column');
+  check(
+    button('Differences (0)').disabled &&
+      button('All fields').getAttribute('aria-pressed') === 'true',
+    'Single column shows All fields and disables unavailable difference mode',
   );
   check(
-    comparison.querySelector<HTMLInputElement>('input')!.disabled,
-    'All-hidden state disables difference filter',
+    rows().length > 20 && changed() === 0,
+    'One visible execution retains all fields without false differences',
   );
-  for (const button of comparison.querySelectorAll<HTMLButtonElement>(
-    '[aria-label="Show hidden executions"] button',
-  )) {
-    button.click();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  await waitFor(() => !comparison.querySelector('[aria-label="Show hidden executions"]'));
-  check(
-    comparison.querySelector<HTMLInputElement>('input')!.checked,
-    'Hiding and restoring columns preserves differences-only preference',
+  workspace.querySelector<HTMLButtonElement>('[aria-label="Hide run-2"]')!.click();
+  await waitFor(() => region.textContent?.includes('Unhide an execution'), 'all hidden state');
+  button('Show run-1').click();
+  button('Show run-2').click();
+  await waitFor(() => button('Differences (1)'), 'restored columns');
+
+  dialog.querySelector<HTMLElement>('h2')!.focus();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  document.activeElement!.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
   );
-  const lastHeader = [...table.querySelectorAll<HTMLTableCellElement>('thead th')].find(
-    (header) => header.querySelector('a')?.textContent === 'run-3',
-  )!;
-  [...lastHeader.querySelectorAll<HTMLButtonElement>('button')]
-    .find((button) => button.textContent === 'Use as reference')!
-    .click();
-  await waitFor(
-    () => table.querySelectorAll('thead th')[1].querySelector('a')?.textContent === 'run-3',
-  );
-  comparison.querySelector<HTMLButtonElement>('button[aria-label="Remove run-3"]')!.click();
-  await waitFor(() => !comparison.querySelector('button[aria-label="Remove run-3"]'));
-  check(
-    table.querySelectorAll('thead th')[1].textContent?.includes('Reference'),
-    'Removing reference selects next execution',
-  );
-  check(
-    table.querySelectorAll('thead th').length === 3,
-    'Removing execution updates comparison selection',
-  );
+  await waitFor(() => !document.querySelector('[role="dialog"]'), 'Escape dismissal');
+  check(document.activeElement === compareButton, 'Escape restores focus to Compare button');
+  check(!compareButton.disabled, 'Closing preserves execution selections');
+  compareButton.click();
+  await waitFor(() => document.querySelector('[role="dialog"]'));
+  document.querySelector<HTMLButtonElement>('[role="dialog"] > button')!.click();
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
 }
 
 async function checkConfigurationComparison() {
@@ -1338,10 +1192,6 @@ async function checkArtifactsScrolling() {
   await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 30);
 
   const table = document.querySelector('table')!;
-  const disclosure = table.closest('details')!;
-  check(!disclosure.open && !table.checkVisibility(), 'Artifact table starts collapsed');
-  disclosure.querySelector('summary')!.click();
-  check(disclosure.open && table.checkVisibility(), 'Artifact summary expands table');
   const scroller = table.parentElement!;
   const description =
     document.getElementById('artifacts-heading')!.parentElement!.nextElementSibling!;
@@ -1405,10 +1255,6 @@ async function checkArtifactsScrolling() {
     scroller.clientHeight < limit && scroller.scrollHeight <= scroller.clientHeight,
     'Filtered short tables size naturally',
   );
-  disclosure.querySelector('summary')!.click();
-  check(!table.checkVisibility(), 'Artifact summary collapses table');
-  disclosure.querySelector('summary')!.click();
-  check(table.tBodies[0].rows.length === 1, 'Reopening artifacts preserves current filters');
 
   root.render(
     <CaseArtifactsTable artifacts={[]} totalArtifactCount={0} onFilterExecutionIds={() => {}} />,

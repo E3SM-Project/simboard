@@ -140,24 +140,6 @@ test('configuration token differences preserve values and leave shared tokens un
   assert.deepEqual(getConfigurationDiffParts('', 'A_B'), []);
 });
 
-test('execution comparison normalizes missing values and artifact identities', async () => {
-  const { comparisonValueText } = await server.ssrLoadModule('/src/features/compare/utils.tsx');
-  for (const value of [null, undefined, '', []]) {
-    assert.equal(comparisonValueText(value), '—');
-  }
-  assert.equal(comparisonValueText(0), '0');
-  assert.equal(comparisonValueText(false), 'false');
-  assert.equal(comparisonValueText(['b', 'a']), comparisonValueText(['a', 'b']));
-  assert.equal(
-    comparisonValueText([{ id: 'a', uri: '/output/shared', createdAt: '2026-01-01' }]),
-    comparisonValueText([{ id: 'b', uri: '/output/shared', createdAt: '2026-02-02' }]),
-  );
-  assert.notEqual(
-    comparisonValueText([{ uri: '/output/a' }]),
-    comparisonValueText([{ uri: '/output/b' }]),
-  );
-});
-
 test('configuration table labels its reference and marks only changed values', async () => {
   const { CaseConfigurationDetails } = await server.ssrLoadModule(
     '/src/features/catalog/components/CaseConfiguration.tsx',

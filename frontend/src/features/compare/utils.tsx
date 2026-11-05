@@ -64,19 +64,6 @@ export const toLinkArray = (value: unknown): LinkLike[] => {
   return Array.isArray(value) ? value.flatMap(normalize) : normalize(value);
 };
 
-export const comparisonValueText = (value: unknown): string => {
-  if (!Array.isArray(value)) return norm(value);
-  if (value.length === 0) return '—';
-  const links = toLinkArray(value);
-
-  return links.length > 0
-    ? links
-        .map((link) => `${link.url} (${link.label})`)
-        .sort()
-        .join('\n')
-    : value.map(norm).sort().join(', ');
-};
-
 /** Generate short display label from URI/URL if none provided */
 const makeLabelFromPath = (uri: string) => {
   if (!uri) return '';
@@ -138,12 +125,15 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
                   </a>
                 ) : (
                   // Local URIs (Locations)
-                  <span className="inline-flex max-w-full items-center gap-1 text-gray-700">
-                    <span className="break-all">{l.url}</span>
+                  <span
+                    className="inline-flex min-w-0 max-w-full items-center gap-2 text-gray-700"
+                    title={l.url}
+                  >
+                    <span className="line-clamp-2 min-w-0 break-all">{l.url}</span>
                     <button
                       type="button"
                       onClick={() => copyText(l.url)}
-                      className="p-1 rounded hover:bg-gray-100"
+                      className="shrink-0 p-1 rounded hover:bg-gray-100"
                       aria-label="Copy path"
                       title="Copy full path/URI"
                     >

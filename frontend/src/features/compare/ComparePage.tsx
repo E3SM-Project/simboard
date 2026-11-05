@@ -14,10 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
-import { comparisonValueText, norm, renderCellValue } from '@/features/compare/utils';
+import { norm, renderCellValue } from '@/features/compare/utils';
 import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
-import { getTextDiffParts } from '@/lib/diff';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { ExecutionOut } from '@/types/index';
 import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
@@ -121,9 +120,12 @@ export const CompareWorkspace = ({
   const previousExpandedSections = useRef<Record<string, boolean> | null>(null);
 
   // -------------------- Derived Data --------------------
-  const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedExecutionIds[colIdx]));
+  const visibleOrder = order.filter(
+    (colIdx) =>
+      colIdx < selectedExecutionIds.length && !hidden.includes(selectedExecutionIds[colIdx]),
+  );
   const canCompareDifferences = visibleOrder.length > 1;
-  const normalizeValue = caseComparison ? comparisonValueText : norm;
+  const showDifferencesOnly = diffsOnlyEnabled && canCompareDifferences;
 
   const getExecutionProp = <K extends keyof ExecutionOut>(
     id: string,
@@ -173,10 +175,10 @@ export const CompareWorkspace = ({
 
     if (visibleOrder.length <= 1) return false;
 
-    const first = normalizeValue(row.values[visibleOrder[0]]);
+    const first = norm(row.values[visibleOrder[0]]);
 
     for (let i = 1; i < visibleOrder.length; i++) {
-      if (normalizeValue(row.values[visibleOrder[i]]) !== first) return true;
+      if (norm(row.values[visibleOrder[i]]) !== first) return true;
     }
 
     return false;
@@ -344,7 +346,7 @@ export const CompareWorkspace = ({
   const initialExpandedSections: Record<string, boolean> = {};
 
   allSectionKeys.forEach((section) => {
-    initialExpandedSections[section] = defaultExpanded.includes(section);
+    initialExpandedSections[section] = caseComparison || defaultExpanded.includes(section);
   });
   const [expandedSections, setExpandedSections] =
     useState<Record<string, boolean>>(initialExpandedSections);
@@ -550,58 +552,6 @@ export const CompareWorkspace = ({
     value: unknown,
     colIdx: number,
   ) => {
-    if (caseComparison && sectionKey !== 'locations') {
-      const text = normalizeValue(value);
-      const reference = normalizeValue(row.values[visibleOrder[0]]);
-      const changed = colIdx !== visibleOrder[0] && text !== reference;
-      const parts = changed ? getTextDiffParts(text, reference) : [{ text, changed: false }];
-      const content = (
-        <span
-          className="break-words [overflow-wrap:anywhere]"
-          title={changed ? `Reference value: ${reference}` : undefined}
-        >
-          {changed ? <span className="sr-only">Differs from reference column. </span> : null}
-          {parts.map((part, index) =>
-            part.changed ? (
-              <mark key={index} className="rounded-sm bg-amber-100 font-medium text-amber-950">
-                {part.text}
-              </mark>
-            ) : (
-              <span key={index}>{part.text}</span>
-            ),
-          )}
-        </span>
-      );
-      const execution = getExecutionById(selectedExecutionIds[colIdx]);
-      const href =
-        row.renderMode === 'repository'
-          ? repositoryBrowserUrl(typeof value === 'string' ? value : null)
-          : row.label === 'Case Name' && execution?.machine?.name && execution.hpcUsername
-            ? caseDetailsPath({
-                machineName: execution.machine.name,
-                hpcUsername: execution.hpcUsername,
-                caseName: execution.caseName,
-              })
-            : undefined;
-
-      return href ? (
-        <a
-          href={href}
-          className="text-blue-700 hover:underline"
-          {...(row.renderMode === 'repository'
-            ? { target: '_blank', rel: 'noopener noreferrer' }
-            : {
-                onClick: (event: MouseEvent<HTMLAnchorElement>) =>
-                  handleInternalLinkClick(event, href),
-              })}
-        >
-          {content}
-        </a>
-      ) : (
-        content
-      );
-    }
-
     if (sectionKey === 'configuration' && row.label === 'Case Name') {
       const execution = getExecutionById(selectedExecutionIds[colIdx]);
       const caseHref =
@@ -689,22 +639,39 @@ export const CompareWorkspace = ({
 
   if (caseComparison) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3" data-case-comparison>
+      <div className="flex min-h-0 flex-col gap-4" data-case-comparison>
         {contextNotice}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm">
           <p className="text-slate-600">
-            {visibleColumns.length} executions · {totalChangedRows} differing fields. First visible
-            execution is reference.
+            <span className="font-medium text-slate-900" aria-live="polite">
+              {visibleColumns.length} execution{visibleColumns.length === 1 ? '' : 's'} ·{' '}
+              {totalChangedRows} differing field{totalChangedRows === 1 ? '' : 's'}
+            </span>
+            <span className="ml-3 inline-block">Compared against the reference execution</span>
           </p>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={diffsOnlyEnabled}
+          <div
+            className="inline-flex rounded-lg border bg-slate-50 p-1"
+            role="group"
+            aria-label="Comparison fields"
+          >
+            <Button
+              size="sm"
+              variant={showDifferencesOnly ? 'default' : 'ghost'}
+              aria-pressed={showDifferencesOnly}
               disabled={!canCompareDifferences}
-              onChange={(event) => setDiffsOnlyEnabled(event.target.checked)}
-            />
-            Differences only
-          </label>
+              onClick={() => setDiffsOnlyEnabled(true)}
+            >
+              Differences ({totalChangedRows})
+            </Button>
+            <Button
+              size="sm"
+              variant={!showDifferencesOnly ? 'default' : 'ghost'}
+              aria-pressed={!showDifferencesOnly}
+              onClick={() => setDiffsOnlyEnabled(false)}
+            >
+              All fields
+            </Button>
+          </div>
         </div>
         {hidden.length > 0 ? (
           <div
@@ -720,26 +687,26 @@ export const CompareWorkspace = ({
           </div>
         ) : null}
         <div
-          className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200"
+          className="min-h-0 overflow-auto rounded-lg border border-slate-200"
           tabIndex={0}
           role="region"
           aria-label="Execution comparison"
         >
           <table
             className="w-full table-fixed border-separate border-spacing-0 text-left text-sm"
-            style={{ minWidth: 180 + visibleColumns.length * 240 }}
+            style={{ minWidth: 180 + visibleColumns.length * 260 }}
           >
             <colgroup>
               <col style={{ width: 180 }} />
               {visibleColumns.map((column) => (
-                <col key={column.executionId} style={{ minWidth: 240 }} />
+                <col key={column.executionId} />
               ))}
             </colgroup>
             <thead className="sticky top-0 z-20">
               <tr>
                 <th
                   scope="col"
-                  className="sticky left-0 z-30 border-b border-r bg-slate-100 px-3 py-2 font-medium"
+                  className="sticky left-0 z-30 border-b border-r bg-slate-100 px-3 py-3 font-medium"
                 >
                   Field
                 </th>
@@ -747,7 +714,7 @@ export const CompareWorkspace = ({
                   <th
                     key={column.executionId}
                     scope="col"
-                    className="border-b border-r bg-slate-100 px-3 py-2 align-top font-medium"
+                    className={`border-b border-r bg-slate-100 px-3 py-3 align-top font-medium ${dragOverIdx === column.colIdx ? 'ring-2 ring-inset ring-blue-400' : ''}`}
                     draggable
                     onDragStart={() => handleDragStart(column.colIdx)}
                     onDragOver={(event) => handleDragOver(event, column.colIdx)}
@@ -755,25 +722,18 @@ export const CompareWorkspace = ({
                     onDrop={() => handleDrop(column.colIdx)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <a
-                          href={column.executionHref}
-                          onClick={(event) => handleInternalLinkClick(event, column.executionHref)}
-                          className="break-all font-mono text-blue-700 hover:underline"
-                        >
-                          {column.executionHeader}
-                        </a>
-                        {index === 0 ? (
-                          <span className="mt-1 block text-xs font-medium text-slate-600">
-                            Reference
-                          </span>
-                        ) : null}
-                      </div>
+                      <a
+                        href={column.executionHref}
+                        onClick={(event) => handleInternalLinkClick(event, column.executionHref)}
+                        className="min-w-0 break-all font-mono text-blue-700 hover:underline"
+                      >
+                        {column.executionHeader}
+                      </a>
                       <div className="flex shrink-0 gap-1">
                         <button
                           type="button"
                           aria-label={`Hide ${column.executionHeader}`}
-                          title="Hide execution"
+                          title="Hide execution (keep selected)"
                           className="rounded p-1 hover:bg-slate-200"
                           onClick={() => handleHide(column.colIdx)}
                         >
@@ -782,7 +742,7 @@ export const CompareWorkspace = ({
                         <button
                           type="button"
                           aria-label={`Remove ${column.executionHeader}`}
-                          title="Remove execution"
+                          title="Remove execution from selection"
                           className="rounded p-1 hover:bg-slate-200"
                           onClick={() => handleRemove(column.colIdx)}
                         >
@@ -790,10 +750,15 @@ export const CompareWorkspace = ({
                         </button>
                       </div>
                     </div>
-                    {index > 0 ? (
+                    {index === 0 ? (
+                      <Badge variant="secondary" className="mt-1">
+                        Reference
+                      </Badge>
+                    ) : (
                       <button
                         type="button"
                         className="mt-1 text-xs text-blue-700 hover:underline"
+                        aria-label={`Use ${column.executionHeader} as reference`}
                         onClick={() =>
                           setOrder((current) => [
                             column.colIdx,
@@ -803,15 +768,14 @@ export const CompareWorkspace = ({
                       >
                         Use as reference
                       </button>
-                    ) : null}
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             {compareSections.map((section) => {
-              const rows =
-                diffsOnlyEnabled && canCompareDifferences ? section.diffRows : section.rows;
-              if (rows.length === 0) return null;
+              const rows = showDifferencesOnly ? section.diffRows : section.rows;
+              if (rows.length === 0 || visibleColumns.length === 0) return null;
 
               return (
                 <tbody key={section.key}>
@@ -819,49 +783,64 @@ export const CompareWorkspace = ({
                     <th
                       colSpan={visibleColumns.length + 1}
                       scope="colgroup"
-                      className="border-b bg-slate-50 px-3 py-1.5 font-semibold"
+                      className="border-b bg-slate-50 text-slate-700"
                     >
-                      <span className="sticky left-3">{section.label}</span>
+                      <button
+                        type="button"
+                        className="sticky left-0 inline-flex items-center gap-2 px-3 py-2 text-left"
+                        aria-expanded={expandedSections[section.key]}
+                        onClick={() => toggleSection(section.key)}
+                      >
+                        <ChevronRight
+                          size={14}
+                          className={expandedSections[section.key] ? 'rotate-90' : ''}
+                        />
+                        {section.label}
+                        <span className="text-xs font-normal text-slate-500">
+                          {section.diffCount} difference{section.diffCount === 1 ? '' : 's'}
+                        </span>
+                      </button>
                     </th>
                   </tr>
-                  {rows.map((row) => (
-                    <tr key={row.label}>
-                      <th
-                        scope="row"
-                        className="sticky left-0 z-10 border-b border-r bg-white px-3 py-2 align-top font-medium"
-                      >
-                        {row.label}
-                      </th>
-                      {visibleColumns.map((column) => {
-                        const value = row.values[column.colIdx];
-                        const changed =
-                          column.colIdx !== visibleOrder[0] &&
-                          normalizeValue(value) !== normalizeValue(row.values[visibleOrder[0]]);
+                  {expandedSections[section.key] &&
+                    rows.map((row) => (
+                      <tr key={row.label}>
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 border-b border-r bg-white px-3 py-2 align-top font-medium"
+                        >
+                          {row.label}
+                        </th>
+                        {visibleColumns.map((column) => {
+                          const value = row.values[column.colIdx];
+                          const changed =
+                            row.diffable !== false &&
+                            column.colIdx !== visibleOrder[0] &&
+                            norm(value) !== norm(row.values[visibleOrder[0]]);
 
-                        return (
-                          <td
-                            key={column.executionId}
-                            className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/50' : 'bg-white'}`}
-                          >
-                            {section.key === 'locations' && changed ? (
-                              <span className="sr-only">Differs from reference column. </span>
-                            ) : null}
-                            {renderCompareValue(section.key, row, value, column.colIdx)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                          return (
+                            <td
+                              key={column.executionId}
+                              data-different={changed || undefined}
+                              className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/70' : 'bg-white'}`}
+                            >
+                              {changed ? (
+                                <span className="sr-only">Differs from reference column. </span>
+                              ) : null}
+                              {renderCompareValue(section.key, row, value, column.colIdx)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
                 </tbody>
               );
             })}
           </table>
           {visibleColumns.length === 0 ? (
-            <p className="p-3 text-sm text-slate-600">
-              Unhide an execution to restore compare columns.
-            </p>
+            <p className="p-4 text-slate-600">Unhide an execution to restore compare columns.</p>
           ) : canCompareDifferences && diffsOnlyEnabled && totalChangedRows === 0 ? (
-            <p className="p-3 text-sm text-slate-600">No differences across visible executions.</p>
+            <p className="p-4 text-slate-600">No differences across visible executions.</p>
           ) : null}
         </div>
       </div>

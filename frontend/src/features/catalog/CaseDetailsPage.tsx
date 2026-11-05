@@ -419,6 +419,7 @@ export const CaseDetailsPage = ({
   });
   const location = useLocation();
   const compareButtonRef = useRef<HTMLButtonElement | null>(null);
+  const compareTitleRef = useRef<HTMLHeadingElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('flat');
@@ -490,8 +491,6 @@ export const CaseDetailsPage = ({
     });
   }, [executionGroups]);
   const caseHashGroupCount = rawExecutionGroups.filter((group) => !group.isFallback).length;
-  const showCaseHashFilters = caseHashGroupCount > 1;
-  const effectiveGroupFilterMode = showCaseHashFilters ? groupFilterMode : 'all';
   const missingCaseHashCount =
     rawExecutionGroups.find((group) => group.isFallback)?.executions.length ?? 0;
   const allRunsMissingCaseHash =
@@ -499,7 +498,7 @@ export const CaseDetailsPage = ({
     caseRecord.executions.length > 0 &&
     caseHashGroupCount === 0 &&
     missingCaseHashCount > 0;
-  const normalizedCaseHashQuery = showCaseHashFilters ? caseHashQuery.trim().toLowerCase() : '';
+  const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
   const artifactFilteredExecutionGroups = useMemo(() => {
     if (artifactExecutionIds == null) {
       return sortedExecutionGroups;
@@ -519,7 +518,7 @@ export const CaseDetailsPage = ({
     () =>
       artifactFilteredExecutionGroups
         .filter((group) => {
-          if (!matchesExecutionGroupFilter(group, effectiveGroupFilterMode)) {
+          if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
             return false;
           }
 
@@ -534,7 +533,7 @@ export const CaseDetailsPage = ({
           return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
         })
         .map((group) => ({ ...group, executions: sortCaseExecutions(group.executions, dateSort) })),
-    [artifactFilteredExecutionGroups, effectiveGroupFilterMode, normalizedCaseHashQuery, dateSort],
+    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery, dateSort],
   );
   const filteredFlatExecutions = useMemo(
     () =>
@@ -565,8 +564,7 @@ export const CaseDetailsPage = ({
   const hiddenSelectedCount = selectedCurrentCaseExecutionIds.filter(
     (executionId) => !visibleExecutionIds.has(executionId),
   ).length;
-  const hasActiveGroupFilters =
-    effectiveGroupFilterMode !== 'all' || normalizedCaseHashQuery.length > 0;
+  const hasActiveGroupFilters = groupFilterMode !== 'all' || normalizedCaseHashQuery.length > 0;
   const showGroupActions = filteredExecutionGroups.length > 1;
   const useScrollableGroupsPanel =
     viewMode === 'grouped'
@@ -1325,52 +1323,43 @@ export const CaseDetailsPage = ({
                     </div>
                   </div>
 
-                  {showCaseHashFilters ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-slate-500">Filters</div>
-                      <div className="flex flex-wrap gap-2">
-                        {GROUP_FILTER_OPTIONS.map((option) => (
-                          <Button
-                            key={option.value}
-                            type="button"
-                            size="sm"
-                            variant={groupFilterMode === option.value ? 'default' : 'outline'}
-                            onClick={() => setGroupFilterMode(option.value)}
-                          >
-                            {option.label}
-                          </Button>
-                        ))}
-                        {hasActiveGroupFilters ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={resetGroupFilters}
-                          >
-                            Reset filters
-                          </Button>
-                        ) : null}
-                      </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-slate-500">Filters</div>
+                    <div className="flex flex-wrap gap-2">
+                      {GROUP_FILTER_OPTIONS.map((option) => (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          size="sm"
+                          variant={groupFilterMode === option.value ? 'default' : 'outline'}
+                          onClick={() => setGroupFilterMode(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                      {hasActiveGroupFilters ? (
+                        <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
+                          Reset filters
+                        </Button>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
 
                 <div className="space-y-4">
-                  {showCaseHashFilters ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-slate-500">Search</div>
-                      <div className="relative">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <Input
-                          value={caseHashQuery}
-                          onChange={(event) => setCaseHashQuery(event.target.value)}
-                          placeholder="Filter Case Hash prefix"
-                          className="bg-white pl-9"
-                          aria-label="Filter Case Hash prefix"
-                        />
-                      </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-slate-500">Search</div>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={caseHashQuery}
+                        onChange={(event) => setCaseHashQuery(event.target.value)}
+                        placeholder="Filter Case Hash prefix"
+                        className="bg-white pl-9"
+                        aria-label="Filter Case Hash prefix"
+                      />
                     </div>
-                  ) : null}
+                  </div>
 
                   <div className="space-y-2">
                     <div className="text-xs font-medium text-slate-500">Actions</div>
@@ -1896,7 +1885,13 @@ export const CaseDetailsPage = ({
       <Dialog open={shouldRenderCompare} onOpenChange={setIsCompareVisible}>
         {renderCompareSection ? (
           <DialogContent
-            className="left-0 top-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 data-[state=closed]:!animate-none data-[state=open]:!animate-none sm:rounded-none"
+            className="flex max-h-[90dvh] w-[94vw] max-w-[1600px] flex-col gap-0 overflow-hidden rounded-xl p-0 data-[state=closed]:!animate-none data-[state=open]:!animate-none"
+            overlayClassName="bg-black/40"
+            onInteractOutside={(event) => event.preventDefault()}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              compareTitleRef.current?.focus();
+            }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               const target = compareButtonRef.current?.disabled
@@ -1905,11 +1900,15 @@ export const CaseDetailsPage = ({
               target?.focus({ preventScroll: true });
             }}
           >
-            <div className="shrink-0 border-b px-4 py-3 pr-12">
-              <DialogTitle>Compare case executions</DialogTitle>
-              <DialogDescription className="mt-1 truncate">{caseRecord.name}</DialogDescription>
+            <div className="shrink-0 border-b px-5 py-4 pr-12">
+              <DialogTitle ref={compareTitleRef} tabIndex={-1} className="focus:outline-none">
+                Compare case executions
+              </DialogTitle>
+              <DialogDescription className="mt-1 truncate" title={caseRecord.name}>
+                {caseRecord.name}
+              </DialogDescription>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden p-4">
+            <div className="flex min-h-0 flex-col p-4 sm:p-5">
               {renderCompareSection({
                 caseId: caseRecord.id,
                 onClose: () => setIsCompareVisible(false),
