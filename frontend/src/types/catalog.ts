@@ -93,6 +93,16 @@ export interface SimulationCoverageOut {
   excludedExecutionCount: number;
 }
 
+export interface SimulationDurationOut {
+  days: number | null;
+  months: number | null;
+  years: number | null;
+  calendars: string[];
+  calendarAssumed: boolean;
+  partial: boolean;
+  excludedExecutionCount: number;
+}
+
 export interface ConfigurationObservationOut {
   value: string;
   executionUuid: string;
@@ -119,12 +129,14 @@ export interface CaseHashConfigurationOut {
   executionIds: string[];
   configuration: Record<string, ConfigurationFieldOut>;
   coverage: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
 }
 
 export interface CaseDetailOut extends CaseSummaryOut {
   configurationGroups?: CaseHashConfigurationOut[];
   sharedConfiguration?: Record<string, SharedConfigurationFieldOut>;
   simulationCoverage?: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
   latestExecution?: CaseListItemOut['latestExecution'];
   sourceDirectories?: SourceDirectoryOut[];
   performanceSourceDirectory?: SourceDirectoryOut | null;

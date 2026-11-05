@@ -1,6 +1,12 @@
 import { format } from 'date-fns';
 
-import type { ExecutionListItemOut, ExecutionSummaryOut, SimulationCoverageOut } from '@/types';
+import type {
+  CaseHashConfigurationOut,
+  ExecutionListItemOut,
+  ExecutionSummaryOut,
+  SimulationCoverageOut,
+  SimulationDurationOut,
+} from '@/types';
 import { compareModelDates, formatModelDate } from '@/utils/utils';
 
 export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
@@ -14,6 +20,67 @@ export const formatSimulationCoverage = (coverage?: SimulationCoverageOut) => {
 
   return `${value}${coverage?.partial ? ' (partial)' : ''}`;
 };
+
+export const formatSimulatedDuration = (duration?: SimulationDurationOut) => {
+  let value = duration?.days;
+  let unit = 'day';
+  if (value != null && value >= 7 && (duration?.calendars.length ?? 0) <= 1) {
+    if (duration?.years != null && duration.years >= 1) {
+      value = duration.years;
+      unit = 'year';
+    } else if (duration?.months != null && duration.months >= 1) {
+      value = duration.months;
+      unit = 'month';
+    } else {
+      value /= 7;
+      unit = 'week';
+    }
+  }
+  const formatted =
+    value == null
+      ? 'Unavailable'
+      : new Intl.NumberFormat('en', {
+          style: 'unit',
+          unit,
+          unitDisplay: 'long',
+          maximumFractionDigits: 2,
+        }).format(value);
+
+  return `${formatted}${duration?.partial ? ' (partial)' : ''}`;
+};
+
+export const describeSimulatedDuration = (duration?: SimulationDurationOut) => {
+  const details = [
+    'Cumulative simulated duration of completed executions. Overlaps and retries count separately; gaps do not count.',
+  ];
+  if (duration?.partial) {
+    details.push(
+      `${duration.excludedExecutionCount} execution(s) excluded: unfinished runs, missing or invalid dates, or unsupported calendars.`,
+    );
+  }
+  if (duration?.calendarAssumed) {
+    details.push(
+      'Calendar unavailable for some executions; uses the stored Gregorian date convention.',
+    );
+  }
+  if ((duration?.calendars.length ?? 0) > 1) {
+    details.push(
+      'Mixed model calendars; total shown in model days, not equivalent months or years.',
+    );
+  }
+
+  return details.join(' ');
+};
+
+export const getConfigurationBaseline = (groups: CaseHashConfigurationOut[]) =>
+  [...groups]
+    .filter((group) => group.caseHash != null)
+    .sort(
+      (left, right) =>
+        right.executionIds.length - left.executionIds.length ||
+        (left.caseHash ?? '').localeCompare(right.caseHash ?? '') ||
+        left.key.localeCompare(right.key),
+    )[0];
 
 export interface ExecutionSummaryGroup {
   key: string;

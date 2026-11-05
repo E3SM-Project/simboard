@@ -7,7 +7,7 @@ import { api } from '../../src/api/api';
 import { AuthContext } from '../../src/auth/context';
 import { CaseDetailsPage } from '../../src/features/catalog/CaseDetailsPage';
 import { CasesPage } from '../../src/features/catalog/CasesPage';
-import { formatSimulationCoverage } from '../../src/features/catalog/caseUtils';
+import { describeSimulatedDuration } from '../../src/features/catalog/caseUtils';
 import { CaseArtifactsTable } from '../../src/features/catalog/components/CaseArtifactsTable';
 import {
   CaseConfigurationDetails,
@@ -17,7 +17,7 @@ import { HomePage } from '../../src/features/home/HomePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
-import type { CaseDetailOut, ConfigurationFieldOut } from '../../src/types';
+import type { CaseDetailOut, ConfigurationFieldOut, SimulationDurationOut } from '../../src/types';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -44,6 +44,16 @@ const executions = [1, 2, 3].map((number) => ({
   runStartDate: number === 3 ? null : `2026-10-0${number}T12:00:00Z`,
   runEndDate: number === 3 ? null : `2026-10-0${number}T13:00:00Z`,
 }));
+const duration = (overrides: Partial<SimulationDurationOut> = {}): SimulationDurationOut => ({
+  days: 365,
+  months: 12,
+  years: 1,
+  calendars: ['gregorian'],
+  calendarAssumed: false,
+  partial: false,
+  excludedExecutionCount: 0,
+  ...overrides,
+});
 const record = {
   id: 'case-1',
   name: 'test.case',
@@ -67,6 +77,14 @@ const record = {
     git_tag: { value: 'v3', varies: false, incomplete: false },
   },
   simulationCoverage: { years: 1234.5, partial: true, excludedExecutionCount: 1 },
+  simulatedDuration: duration({
+    days: 730,
+    months: 24,
+    years: 2,
+    partial: true,
+    excludedExecutionCount: 1,
+    calendarAssumed: true,
+  }),
   latestExecution: { executionId: 'run-105', runEndDate: '2026-11-02T12:00:00Z' },
 };
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
@@ -169,9 +187,17 @@ async function run() {
       headings.filter((text) => text === 'Case Metadata').length === 1,
       'One Case Metadata heading',
     );
-    for (const text of ['Simulated years covered', 'Latest execution', 'Machines', 'HPC users']) {
-      const label = [...document.querySelectorAll('div')].find(
-        (element) => element.childElementCount === 0 && element.textContent === text,
+    const summaryLabels = [
+      'Total Simulated Duration',
+      'Latest Execution',
+      'Compset Alias',
+      'Grid Alias',
+      'Machine',
+      'HPC User',
+    ];
+    for (const text of summaryLabels) {
+      const label = [...document.querySelectorAll('dt')].find(
+        (element) => element.textContent === text,
       );
       check(label, `Metadata label exists: ${text}`);
       const style = getComputedStyle(label!);
@@ -185,21 +211,65 @@ async function run() {
       document.body.textContent?.includes('Page updated:'),
       'Page update timestamp near header',
     );
-    const metadata = document.querySelector('[aria-label="Shared configuration"]')!;
+    const metadata = document.querySelector('[aria-label="Case summary"]')!;
+    const descriptiveDetails = [...document.querySelectorAll('h2')]
+      .find((heading) => heading.textContent === 'Case Metadata Details')!
+      .closest('section')!;
+    check(
+      [...descriptiveDetails.querySelectorAll('label')]
+        .map((label) => label.textContent)
+        .join('|') === 'Case Group|Case Classification|Description|Key Features|Known Issues|Notes',
+      'Descriptive metadata preserves requested order',
+    );
+    const featureLabel = [...descriptiveDetails.querySelectorAll('label')].find(
+      (label) => label.textContent === 'Key Features',
+    )!;
+    const issuesLabel = [...descriptiveDetails.querySelectorAll('label')].find(
+      (label) => label.textContent === 'Known Issues',
+    )!;
+    if (window.innerWidth >= 768) {
+      check(
+        Math.abs(
+          featureLabel.getBoundingClientRect().top - issuesLabel.getBoundingClientRect().top,
+        ) < 1,
+        'Features and issues align side by side',
+      );
+    } else {
+      check(
+        featureLabel.getBoundingClientRect().top < issuesLabel.getBoundingClientRect().top,
+        'Features precede issues on mobile',
+      );
+    }
     check(
       metadata.textContent?.includes('SHARED-COMPSET'),
       'Shared alias appears beneath metadata',
     );
     check(metadata.textContent?.includes('SHARED-GRID'), 'Shared grid appears beneath metadata');
-    check(metadata.textContent?.includes('v3'), 'Existing model tag appears in summary');
-    const stats = metadata.nextElementSibling!;
+    check(!metadata.textContent?.includes('v3'), 'Model tag stays out of primary summary');
     check(
-      stats.textContent?.startsWith('Simulated years covered'),
-      'Coverage is first summary statistic',
+      [...metadata.querySelectorAll('dt')].map((label) => label.textContent).join('|') ===
+        summaryLabels.join('|'),
+      'Summary preserves exact reading order',
+    );
+    const fields = [...metadata.children].map((element) => element.getBoundingClientRect());
+    const columns = window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1;
+    fields.forEach((field, index) => {
+      check(Math.abs(field.height - fields[0].height) < 1, 'Summary fields have equal heights');
+      if (index % columns !== 0) {
+        check(Math.abs(field.top - fields[index - 1].top) < 1, 'Summary row labels align');
+        check(field.left > fields[index - 1].left, 'Summary reads left to right');
+      } else if (index > 0) {
+        check(field.top > fields[index - 1].top, 'Summary reads top to bottom');
+      }
+    });
+    const stats = metadata;
+    check(
+      stats.textContent?.startsWith('Total Simulated Duration'),
+      'Duration is first summary statistic',
     );
     check(
-      stats.textContent?.includes('1,234.5 (partial)'),
-      'Use server coverage, not loaded execution intervals',
+      stats.textContent?.includes('2 years (partial)'),
+      'Use server duration, not coverage or loaded execution intervals',
     );
     check(stats.textContent?.includes('2026-11-02'), 'Latest run date differs from page update');
     check(
@@ -208,15 +278,20 @@ async function run() {
     );
     check(!stats.textContent?.includes('Case hash groups'), 'Hash count removed from summary');
     check(!stats.textContent?.includes('Executions'), 'Execution count removed from summary');
+    check(
+      stats.textContent?.includes('Gregorian calendar assumed'),
+      'Calendar assumption is visible',
+    );
     if (role === 'anonymous') {
-      (stats.firstElementChild as HTMLElement).focus();
+      const durationTrigger = stats.querySelector<HTMLElement>('[tabindex="0"]')!;
+      durationTrigger.focus();
       await waitFor(() => document.querySelector('[role="tooltip"]'));
       check(
         document.querySelector('[role="tooltip"]')?.textContent ===
-          'Simulation time covered across all executions. Overlaps count once; gaps do not count.',
-        'Coverage tooltip explains union semantics',
+          describeSimulatedDuration(record.simulatedDuration),
+        'Duration tooltip explains cumulative semantics and exclusions',
       );
-      (stats.firstElementChild as HTMLElement).blur();
+      durationTrigger.blur();
     }
     const notes = [...document.querySelectorAll('label')].find(
       (element) => element.textContent === 'Notes',
@@ -435,6 +510,8 @@ async function checkConfigurationComparison() {
     git_tag: field(null, 'run-1'),
     compset_long_name: field('LONG_'.repeat(100), 'run-1'),
     grid_long_name: field('grid-long', 'run-1'),
+    git_commit_hash: field('model-hash', 'run-1'),
+    source_code_path: field('/model/source', 'run-1'),
   };
   firstConfiguration.grid_alias.differences.push(observation('later-grid', 'run-2', null));
   const configured: CaseDetailOut = {
@@ -463,6 +540,7 @@ async function checkConfigurationComparison() {
         executionIds: ['run-1', 'run-2'],
         configuration: firstConfiguration,
         coverage: { years: 20, partial: false, excludedExecutionCount: 0 },
+        simulatedDuration: duration({ days: 10950, months: 360, years: 30 }),
       },
       {
         key: 'missing:run-3',
@@ -470,6 +548,13 @@ async function checkConfigurationComparison() {
         executionIds: ['run-3'],
         configuration: { ...firstConfiguration, grid_alias: field(null, 'run-3') },
         coverage: { years: null, partial: true, excludedExecutionCount: 1 },
+        simulatedDuration: duration({
+          days: null,
+          months: null,
+          years: null,
+          partial: true,
+          excludedExecutionCount: 1,
+        }),
       },
     ],
   };
@@ -483,10 +568,10 @@ async function checkConfigurationComparison() {
     </MemoryRouter>,
   );
   await waitFor(() => document.querySelector('[data-case-configuration]'));
-  const summary = document.querySelector('[aria-label="Shared configuration"]')!;
+  const summary = document.querySelector('[aria-label="Case summary"]')!;
   check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
   check(summary.textContent?.includes('Varies by Case Hash'), 'Summary flags differing values');
-  check(summary.textContent?.includes('Unavailable'), 'Summary marks missing model tag');
+  check(!summary.textContent?.includes('Model tag'), 'Technical metadata stays out of summary');
   check(
     summary.textContent?.includes('Some executions unavailable'),
     'Summary distinguishes missing observations from disagreement',
@@ -495,41 +580,60 @@ async function checkConfigurationComparison() {
     summary.textContent?.includes('Changes within Case Hash'),
     'Summary flags within-hash differences',
   );
-  const details = document.querySelector<HTMLDetailsElement>('[data-case-configuration]')!;
-  check(!details.open, 'Configuration details start collapsed');
-  details.querySelector('summary')!.click();
-  const comparison = details.querySelector('[data-configuration-differences]')!;
+  const details = document.querySelector('[data-case-configuration]')!;
+  const groups = [...details.querySelectorAll<HTMLDetailsElement>('[data-configuration-group]')];
+  check(groups.length === 2, 'One compact row per hash or missing-hash identity');
+  check(!details.querySelector('table'), 'Dense comparison table removed');
   check(
-    comparison.querySelectorAll('tbody tr').length === 1,
-    'Comparison contains only differing fields',
+    groups.every((group) => !group.open),
+    'Full metadata starts collapsed',
   );
   check(
-    comparison.querySelector('tbody th')?.textContent === 'Grid alias',
-    'Missing values count as a difference',
+    groups.every((group) => !group.querySelector('summary [tabindex="0"]')),
+    'Hash disclosure has no nested focus stops',
+  );
+  const baselineRow = groups[0].querySelector('summary')!;
+  check(baselineRow.textContent?.includes('Baseline'), 'Most common hash is baseline');
+  check(baselineRow.textContent?.includes('30 years'), 'Hash duration is cumulative, not coverage');
+  check(!baselineRow.textContent?.includes('hash-'.repeat(40)), 'Hash is abbreviated');
+  const comparison = baselineRow.querySelector('[data-configuration-differences]')!;
+  check(
+    comparison.textContent?.includes('Grid Alias: grid-one'),
+    'Differing field includes baseline value',
   );
   check(
-    !comparison.textContent?.includes('Compset alias'),
+    !comparison.textContent?.includes('Compset Alias'),
     'Shared fields excluded from comparison',
   );
   check(
-    comparison.textContent?.includes('Missing Case Hash: run-3'),
+    !comparison.textContent?.includes('Duration'),
+    'Duration is separate from configuration differences',
+  );
+  check(
+    groups[1].querySelector('summary')?.textContent?.includes('Missing Case Hash: run-3'),
     'Hashless execution keeps identity',
   );
-  check(comparison.textContent?.includes('Unavailable'), 'Missing value stays explicit');
   check(
-    comparison.querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
-    'Baseline links to its source',
+    groups[1]
+      .querySelector('[data-configuration-differences]')
+      ?.textContent?.includes('Unavailable'),
+    'Missing value stays explicit',
   );
-  const changes = comparison.querySelector<HTMLDetailsElement>('tbody td details')!;
+  const group = groups[0];
+  group.querySelector('summary')!.click();
+  check(group.open, 'Metadata row expands');
+  check(group.textContent?.includes('/model/source'), 'Stored source code path remains available');
+  check(group.textContent?.includes('model-hash'), 'Model hash remains available');
+  check(group.textContent?.includes('Model tag'), 'Model tag is available on demand');
+  const configuration = group.querySelector('dl')!;
+  check(
+    configuration.querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
+    'Configuration links to its execution source',
+  );
+  const changes = configuration.querySelector<HTMLDetailsElement>('details')!;
   changes.querySelector('summary')!.click();
   check(changes.textContent?.includes('later-grid'), 'Later differences remain available');
   check(changes.textContent?.includes('Run date unavailable'), 'Undated provenance stays explicit');
-  const group = details.querySelector<HTMLDetailsElement>('[data-configuration-group]')!;
-  group.querySelector('summary')!.click();
-  check(
-    group.textContent?.includes('Simulated years covered: 20'),
-    'Per-hash coverage remains available',
-  );
   check(
     group.textContent?.includes('LONG_'.repeat(100)),
     'Full shared configuration remains available',
@@ -538,19 +642,7 @@ async function checkConfigurationComparison() {
     document.documentElement.scrollWidth <= window.innerWidth,
     'Expanded config has no page-wide overflow',
   );
-  check(
-    formatSimulationCoverage({ years: 0, partial: false, excludedExecutionCount: 0 }) === '0',
-    'Zero coverage is valid',
-  );
-  check(
-    formatSimulationCoverage({ years: null, partial: true, excludedExecutionCount: 1 }) ===
-      'Unavailable (partial)',
-    'Unknown coverage is not zero',
-  );
-  check(
-    formatSimulationCoverage(undefined) === 'Unavailable',
-    'Older response does not fabricate coverage',
-  );
+  const first = configured.configurationGroups![0];
   const agreeing = {
     ...configured,
     configurationGroups: configured.configurationGroups!.slice(0, 1),
@@ -565,16 +657,22 @@ async function checkConfigurationComparison() {
       <CaseConfigurationDetails record={agreeing} identity={identity} />
     </MemoryRouter>,
   );
-  await waitFor(() => !document.querySelector('[data-configuration-differences]'));
+  await waitFor(() => document.querySelectorAll('[data-configuration-group]').length === 1);
   check(
-    document.body.textContent?.includes('No configuration differences'),
-    'Agreement does not produce a redundant comparison table',
+    document.body.textContent?.includes('Case Configuration'),
+    'Single hash uses simplified presentation',
+  );
+  check(
+    !document
+      .querySelector('[data-configuration-group] > summary')
+      ?.textContent?.includes('Baseline'),
+    'Single hash has no baseline controls',
   );
   check(
     document.querySelector('[data-configuration-group]'),
     'Agreement retains full per-hash details',
   );
-  const agreeingSummary = document.querySelector('[aria-label="Shared configuration"]')!;
+  const agreeingSummary = document.querySelector('[aria-label="Case summary"]')!;
   check(
     agreeingSummary.textContent?.includes('Changes within Case Hash'),
     'Agreeing baselines still flag within-hash changes',
@@ -582,6 +680,29 @@ async function checkConfigurationComparison() {
   check(
     !agreeingSummary.textContent?.includes('Varies by Case Hash'),
     'Within-hash changes do not imply differing baselines',
+  );
+  const identical: CaseDetailOut = {
+    ...agreeing,
+    configurationGroups: [
+      first,
+      { ...first, key: 'two', caseHash: 'second-hash', executionIds: ['run-3'] },
+    ],
+  };
+  root.render(
+    <MemoryRouter>
+      <CaseConfigurationDetails record={identical} identity={identity} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => document.querySelectorAll('[data-configuration-group]').length === 2);
+  check(
+    [...document.querySelectorAll('[data-configuration-differences]')].every(
+      (element) => !element.textContent?.includes('Grid Alias:'),
+    ),
+    'Identical metadata is not repeated',
+  );
+  check(
+    document.body.textContent?.includes('Same as baseline'),
+    'Identical hash reports agreement',
   );
 }
 

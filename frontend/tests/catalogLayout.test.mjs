@@ -32,6 +32,78 @@ after(async () => {
   if (cacheDir) await rm(cacheDir, { recursive: true, force: true });
 });
 
+test('simulated duration chooses units without converting mixed calendars to years', async () => {
+  const { formatSimulatedDuration, describeSimulatedDuration } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const duration = {
+    days: 365,
+    months: 12,
+    years: 1,
+    calendars: ['gregorian'],
+    calendarAssumed: false,
+    partial: false,
+    excludedExecutionCount: 0,
+  };
+  for (const [days, months, years, expected] of [
+    [0, 0, 0, '0 days'],
+    [6, 6 / 31, 6 / 372, '6 days'],
+    [1, 1 / 31, 1 / 372, '1 day'],
+    [7, 7 / 31, 7 / 372, '1 week'],
+    [28, 1, 1 / 12, '1 month'],
+    [365, 12, 1, '1 year'],
+    [730, 24, 2, '2 years'],
+    [14, null, null, '2 weeks'],
+    [10000, null, null, '1,428.57 weeks'],
+  ]) {
+    assert.equal(formatSimulatedDuration({ ...duration, days, months, years }), expected);
+  }
+  assert.equal(formatSimulatedDuration(), 'Unavailable');
+  assert.equal(
+    formatSimulatedDuration({
+      ...duration,
+      days: 10000,
+      months: null,
+      years: null,
+      calendars: ['gregorian', 'noleap'],
+    }),
+    '10,000 days',
+  );
+  assert.equal(
+    formatSimulatedDuration({ ...duration, days: null, partial: true }),
+    'Unavailable (partial)',
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, calendarAssumed: true }),
+    /stored Gregorian date convention/,
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, partial: true, excludedExecutionCount: 2 }),
+    /2 execution\(s\) excluded/,
+  );
+  assert.match(
+    describeSimulatedDuration({ ...duration, calendars: ['gregorian', 'noleap'] }),
+    /Mixed model calendars/,
+  );
+  assert.match(describeSimulatedDuration(duration), /Overlaps and retries count separately/);
+});
+
+test('configuration baseline uses most frequent known hash with deterministic hash ties', async () => {
+  const { getConfigurationBaseline } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const first = { key: 'z-key', caseHash: 'aaa', executionIds: ['1', '2'] };
+  const tied = { key: 'a-key', caseHash: 'zzz', executionIds: ['3', '4'] };
+  const larger = { key: 'b-key', caseHash: 'bbb', executionIds: ['5', '6', '7'] };
+  const missing = { key: 'missing', caseHash: null, executionIds: ['8', '9', '10', '11'] };
+  assert.equal(getConfigurationBaseline([first, tied]), first);
+  assert.equal(getConfigurationBaseline([tied, first]), first);
+  assert.equal(getConfigurationBaseline([first, larger]), larger);
+  assert.equal(getConfigurationBaseline([first, missing]), first);
+  assert.equal(getConfigurationBaseline([missing]), undefined);
+  assert.equal(getConfigurationBaseline([]), undefined);
+});
+
 test('Case Group stays visible without opening or counting as an advanced filter', async () => {
   const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
   const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');

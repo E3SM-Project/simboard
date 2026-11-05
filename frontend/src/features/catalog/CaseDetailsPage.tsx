@@ -49,7 +49,6 @@ import {
   formatCaseDate,
   formatCaseHashLabel,
   formatExecutionDateRange,
-  formatSimulationCoverage,
   getDefaultExpandedGroupKeys,
   getExecutionDateWindow,
   groupExecutionSummaries,
@@ -97,34 +96,6 @@ import type {
   ExternalLinkOut,
 } from '@/types';
 import { formatModelDate } from '@/utils/utils';
-
-const DetailField = ({
-  label,
-  value,
-  mono = false,
-  title,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  title?: string;
-}) => (
-  <div className="min-w-0 space-y-0.5" title={title}>
-    <div className="text-xs font-medium text-slate-500">{label}</div>
-    <div
-      className={`truncate font-semibold text-slate-950 ${mono ? 'font-mono text-xs' : 'text-sm'}`}
-    >
-      {value}
-    </div>
-  </div>
-);
-
-const summarizeValues = (values: string[]) => {
-  if (values.length === 0) return '—';
-  if (values.length === 1) return values[0];
-
-  return `${values[0]} +${values.length - 1}`;
-};
 
 const summarizeDistinctValues = (values: Array<string | null | undefined>) => {
   const uniqueValues = [...new Set(values.filter((value): value is string => Boolean(value)))];
@@ -867,8 +838,6 @@ export const CaseDetailsPage = ({
   const hasUnsavedChanges =
     formState != null &&
     Object.keys(buildUpdatePayload(caseRecord, formState, linkRows)).length > 0;
-  const machineSummary = summarizeValues(caseRecord.machineNames);
-  const hpcUsernameSummary = summarizeValues(caseRecord.hpcUsernames);
   const resourceLinks = caseRecord.links;
   const resourceCount = isEditing ? linkRows.length : caseRecord.links.length;
   const diagnosticsTierLabel = caseRecord.diagnosticsTiers.join(' and ');
@@ -1050,89 +1019,9 @@ export const CaseDetailsPage = ({
       <div>
         <Card className="border-slate-200 bg-slate-50/40 shadow-sm">
           <CardContent className="space-y-4 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
-              <div className="flex flex-wrap gap-2">
-                {caseRecord.caseGroup ? (
-                  <Badge variant="outline">{caseRecord.caseGroup}</Badge>
-                ) : null}
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
 
-            <CaseConfigurationSummary record={caseRecord} />
-
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <TooltipProvider delayDuration={150}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div tabIndex={0}>
-                      <DetailField
-                        label="Simulated years covered"
-                        value={formatSimulationCoverage(caseRecord.simulationCoverage)}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Simulation time covered across all executions. Overlaps count once; gaps do not
-                    count.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <div
-                className="min-w-0"
-                title={
-                  caseRecord.machineNames.length > 1
-                    ? caseRecord.machineNames.join(', ')
-                    : undefined
-                }
-              >
-                <DetailField label="Machines" value={machineSummary} />
-              </div>
-              <div
-                className="min-w-0"
-                title={
-                  caseRecord.hpcUsernames.length > 1
-                    ? caseRecord.hpcUsernames.join(', ')
-                    : undefined
-                }
-              >
-                <DetailField label="HPC users" value={hpcUsernameSummary} />
-              </div>
-              <DetailField
-                label="Latest execution"
-                title="Latest completed execution by run end, with run start fallback."
-                value={
-                  caseRecord.latestExecution ? (
-                    <>
-                      <div>
-                        {caseRecord.latestExecution.runEndDate ||
-                        caseRecord.latestExecution.runStartDate
-                          ? formatCaseDate(
-                              caseRecord.latestExecution.runEndDate ??
-                                caseRecord.latestExecution.runStartDate,
-                            )
-                          : 'Run date unavailable'}
-                      </div>
-                      {readableIdentity ? (
-                        <Link
-                          className="text-xs underline"
-                          to={executionDetailsPath({
-                            ...readableIdentity,
-                            executionId: caseRecord.latestExecution.executionId,
-                          })}
-                        >
-                          {caseRecord.latestExecution.executionId}
-                        </Link>
-                      ) : (
-                        <span className="text-xs">{caseRecord.latestExecution.executionId}</span>
-                      )}
-                    </>
-                  ) : (
-                    'Unavailable'
-                  )
-                }
-              />
-            </div>
+            <CaseConfigurationSummary record={caseRecord} identity={readableIdentity} />
 
             {readableIdentity ? (
               <CaseConfigurationDetails record={caseRecord} identity={readableIdentity} />
@@ -1179,10 +1068,7 @@ export const CaseDetailsPage = ({
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Case Notes</h2>
-                <p className="text-sm text-muted-foreground">
-                  Shared notes for this case identity. Applies across executions in this case.
-                </p>
+                <h2 className="text-lg font-semibold text-slate-950">Case Metadata Details</h2>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
                 {!canEdit ? (
@@ -1224,7 +1110,7 @@ export const CaseDetailsPage = ({
                   </div>
                   <div className="space-y-2">
                     <Label className="block text-xs text-muted-foreground">
-                      Case classification
+                      Case Classification
                     </Label>
                     {isEditing ? (
                       <Select
@@ -1294,7 +1180,7 @@ export const CaseDetailsPage = ({
                   )}
                 </div>
 
-                <div className="grid gap-5 xl:grid-cols-2">
+                <div className="grid items-start gap-5 md:grid-cols-2">
                   <div>
                     {isEditing ? (
                       <MarkdownEditorField
