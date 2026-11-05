@@ -195,6 +195,8 @@ async function run() {
       (element) => element.querySelector('summary')?.textContent === 'Developer Details',
     );
     check(Boolean(developer) === (role === 'admin'), `Developer Details visibility: ${role}`);
+    const artifacts = document.getElementById('artifacts-heading')!.closest('details')!;
+    check(!artifacts.open, 'Case artifacts start collapsed');
     if (developer) {
       check(!developer.open, 'Developer Details must start collapsed');
       developer.querySelector('summary')!.click();
@@ -410,6 +412,7 @@ async function run() {
     );
   }
 
+  await checkCaseHashFilterVisibility();
   const table = document.querySelector('table')!;
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
@@ -634,6 +637,57 @@ async function run() {
   await checkArtifactsScrolling();
   await checkExecutionPlaceholders();
   await checkConfigurationComparison();
+}
+
+async function checkCaseHashFilterVisibility() {
+  const key = catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case');
+  const search = () =>
+    document.querySelector<HTMLInputElement>('[aria-label="Filter Case Hash prefix"]');
+  const missingButton = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Missing hash',
+    );
+  check(!search() && !missingButton(), 'Single known hash hides case-hash filters');
+  client.setQueryData(key, {
+    ...record,
+    executions: executions.map((execution, index) => ({
+      ...execution,
+      caseHash: index === 0 ? 'other-hash' : 'test-hash',
+    })),
+  });
+  await waitFor(search);
+  check(missingButton(), 'Multiple hashes show group filters');
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+    search()!,
+    'other',
+  );
+  search()!.dispatchEvent(new Event('input', { bubbles: true }));
+  await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 1);
+  check(search(), 'Filtering to one hash does not hide search');
+  missingButton()!.click();
+  await waitFor(() => document.body.textContent?.includes('Reset filters'));
+  for (const hashes of [
+    ['test-hash', null, null],
+    [null, null, null],
+    ['test-hash', 'test-hash', 'test-hash'],
+  ]) {
+    client.setQueryData(key, {
+      ...record,
+      executions: executions.map((execution, index) => ({ ...execution, caseHash: hashes[index] })),
+    });
+    await waitFor(
+      () =>
+        !search() &&
+        !missingButton() &&
+        document.querySelector('table')?.tBodies[0].rows.length === 3,
+    );
+    check(
+      !search() && !missingButton(),
+      'Fewer than two known hashes hide filters, including missing hashes',
+    );
+  }
+  client.setQueryData(key, record);
+  await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
 async function checkExecutionComparison(comparison: HTMLElement) {
@@ -1203,6 +1257,10 @@ async function checkArtifactsScrolling() {
   await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 30);
 
   const table = document.querySelector('table')!;
+  const disclosure = table.closest('details')!;
+  check(!disclosure.open && !table.checkVisibility(), 'Artifact table starts collapsed');
+  disclosure.querySelector('summary')!.click();
+  check(disclosure.open && table.checkVisibility(), 'Artifact summary expands table');
   const scroller = table.parentElement!;
   const description =
     document.getElementById('artifacts-heading')!.parentElement!.nextElementSibling!;
@@ -1266,6 +1324,10 @@ async function checkArtifactsScrolling() {
     scroller.clientHeight < limit && scroller.scrollHeight <= scroller.clientHeight,
     'Filtered short tables size naturally',
   );
+  disclosure.querySelector('summary')!.click();
+  check(!table.checkVisibility(), 'Artifact summary collapses table');
+  disclosure.querySelector('summary')!.click();
+  check(table.tBodies[0].rows.length === 1, 'Reopening artifacts preserves current filters');
 
   root.render(
     <CaseArtifactsTable artifacts={[]} totalArtifactCount={0} onFilterExecutionIds={() => {}} />,

@@ -490,6 +490,8 @@ export const CaseDetailsPage = ({
     });
   }, [executionGroups]);
   const caseHashGroupCount = rawExecutionGroups.filter((group) => !group.isFallback).length;
+  const showCaseHashFilters = caseHashGroupCount > 1;
+  const effectiveGroupFilterMode = showCaseHashFilters ? groupFilterMode : 'all';
   const missingCaseHashCount =
     rawExecutionGroups.find((group) => group.isFallback)?.executions.length ?? 0;
   const allRunsMissingCaseHash =
@@ -497,7 +499,7 @@ export const CaseDetailsPage = ({
     caseRecord.executions.length > 0 &&
     caseHashGroupCount === 0 &&
     missingCaseHashCount > 0;
-  const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
+  const normalizedCaseHashQuery = showCaseHashFilters ? caseHashQuery.trim().toLowerCase() : '';
   const artifactFilteredExecutionGroups = useMemo(() => {
     if (artifactExecutionIds == null) {
       return sortedExecutionGroups;
@@ -517,7 +519,7 @@ export const CaseDetailsPage = ({
     () =>
       artifactFilteredExecutionGroups
         .filter((group) => {
-          if (!matchesExecutionGroupFilter(group, groupFilterMode)) {
+          if (!matchesExecutionGroupFilter(group, effectiveGroupFilterMode)) {
             return false;
           }
 
@@ -532,7 +534,7 @@ export const CaseDetailsPage = ({
           return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
         })
         .map((group) => ({ ...group, executions: sortCaseExecutions(group.executions, dateSort) })),
-    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery, dateSort],
+    [artifactFilteredExecutionGroups, effectiveGroupFilterMode, normalizedCaseHashQuery, dateSort],
   );
   const filteredFlatExecutions = useMemo(
     () =>
@@ -563,7 +565,8 @@ export const CaseDetailsPage = ({
   const hiddenSelectedCount = selectedCurrentCaseExecutionIds.filter(
     (executionId) => !visibleExecutionIds.has(executionId),
   ).length;
-  const hasActiveGroupFilters = groupFilterMode !== 'all' || normalizedCaseHashQuery.length > 0;
+  const hasActiveGroupFilters =
+    effectiveGroupFilterMode !== 'all' || normalizedCaseHashQuery.length > 0;
   const showGroupActions = filteredExecutionGroups.length > 1;
   const useScrollableGroupsPanel =
     viewMode === 'grouped'
@@ -1317,43 +1320,52 @@ export const CaseDetailsPage = ({
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">Filters</div>
-                    <div className="flex flex-wrap gap-2">
-                      {GROUP_FILTER_OPTIONS.map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          size="sm"
-                          variant={groupFilterMode === option.value ? 'default' : 'outline'}
-                          onClick={() => setGroupFilterMode(option.value)}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
-                      {hasActiveGroupFilters ? (
-                        <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
-                          Reset filters
-                        </Button>
-                      ) : null}
+                  {showCaseHashFilters ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-500">Filters</div>
+                      <div className="flex flex-wrap gap-2">
+                        {GROUP_FILTER_OPTIONS.map((option) => (
+                          <Button
+                            key={option.value}
+                            type="button"
+                            size="sm"
+                            variant={groupFilterMode === option.value ? 'default' : 'outline'}
+                            onClick={() => setGroupFilterMode(option.value)}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                        {hasActiveGroupFilters ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={resetGroupFilters}
+                          >
+                            Reset filters
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">Search</div>
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={caseHashQuery}
-                        onChange={(event) => setCaseHashQuery(event.target.value)}
-                        placeholder="Filter Case Hash prefix"
-                        className="bg-white pl-9"
-                        aria-label="Filter Case Hash prefix"
-                      />
+                  {showCaseHashFilters ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-500">Search</div>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          value={caseHashQuery}
+                          onChange={(event) => setCaseHashQuery(event.target.value)}
+                          placeholder="Filter Case Hash prefix"
+                          className="bg-white pl-9"
+                          aria-label="Filter Case Hash prefix"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   <div className="space-y-2">
                     <div className="text-xs font-medium text-slate-500">Actions</div>
