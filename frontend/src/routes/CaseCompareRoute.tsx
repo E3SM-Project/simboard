@@ -195,6 +195,7 @@ export const CaseCompareRoute = ({
     <CompareWorkspace
       key={`case-compare:${caseId}`}
       contextNotice={contextNotice}
+      caseComparison
       description="Review selected executions from this case side by side."
       embedded
       emptyStateActionHref={caseDetailsHref}

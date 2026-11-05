@@ -11,11 +11,13 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
-import { norm, renderCellValue } from '@/features/compare/utils';
+import { comparisonValueText, norm, renderCellValue } from '@/features/compare/utils';
 import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
+import { getTextDiffParts } from '@/lib/diff';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
 import type { ExecutionOut } from '@/types/index';
 import { formatDate, formatModelDate, getModelDateDuration } from '@/utils/utils';
@@ -26,6 +28,7 @@ interface CompareWorkspaceProps {
   selectedExecutions: ExecutionOut[];
   backLabel?: string;
   contextNotice?: ReactNode;
+  caseComparison?: boolean;
   description?: string;
   embedded?: boolean;
   emptyStateActionHref?: string;
@@ -68,6 +71,7 @@ const arraysEqual = <T,>(left: T[], right: T[]) =>
 export const CompareWorkspace = ({
   backLabel = 'Back to Case',
   contextNotice,
+  caseComparison = false,
   description = 'Compare selected executions side by side across cases. Drag columns to reorder, hide or remove executions, and expand sections for detailed metrics.',
   embedded = false,
   emptyStateActionHref = '/cases',
@@ -112,13 +116,14 @@ export const CompareWorkspace = ({
   const dragCol = useRef<number | null>(null);
   const previousSelectedExecutionIds = useRef(selectedExecutionIds);
   const [diffsEnabled, setDiffsEnabled] = useState(false);
-  const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(false);
+  const [diffsOnlyEnabled, setDiffsOnlyEnabled] = useState(caseComparison);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const previousExpandedSections = useRef<Record<string, boolean> | null>(null);
 
   // -------------------- Derived Data --------------------
   const visibleOrder = order.filter((colIdx) => !hidden.includes(selectedExecutionIds[colIdx]));
   const canCompareDifferences = visibleOrder.length > 1;
+  const normalizeValue = caseComparison ? comparisonValueText : norm;
 
   const getExecutionProp = <K extends keyof ExecutionOut>(
     id: string,
@@ -168,10 +173,10 @@ export const CompareWorkspace = ({
 
     if (visibleOrder.length <= 1) return false;
 
-    const first = norm(row.values[visibleOrder[0]]);
+    const first = normalizeValue(row.values[visibleOrder[0]]);
 
     for (let i = 1; i < visibleOrder.length; i++) {
-      if (norm(row.values[visibleOrder[i]]) !== first) return true;
+      if (normalizeValue(row.values[visibleOrder[i]]) !== first) return true;
     }
 
     return false;
@@ -545,6 +550,58 @@ export const CompareWorkspace = ({
     value: unknown,
     colIdx: number,
   ) => {
+    if (caseComparison && sectionKey !== 'locations') {
+      const text = normalizeValue(value);
+      const reference = normalizeValue(row.values[visibleOrder[0]]);
+      const changed = colIdx !== visibleOrder[0] && text !== reference;
+      const parts = changed ? getTextDiffParts(text, reference) : [{ text, changed: false }];
+      const content = (
+        <span
+          className="break-words [overflow-wrap:anywhere]"
+          title={changed ? `Reference value: ${reference}` : undefined}
+        >
+          {changed ? <span className="sr-only">Differs from reference column. </span> : null}
+          {parts.map((part, index) =>
+            part.changed ? (
+              <mark key={index} className="rounded-sm bg-amber-100 font-medium text-amber-950">
+                {part.text}
+              </mark>
+            ) : (
+              <span key={index}>{part.text}</span>
+            ),
+          )}
+        </span>
+      );
+      const execution = getExecutionById(selectedExecutionIds[colIdx]);
+      const href =
+        row.renderMode === 'repository'
+          ? repositoryBrowserUrl(typeof value === 'string' ? value : null)
+          : row.label === 'Case Name' && execution?.machine?.name && execution.hpcUsername
+            ? caseDetailsPath({
+                machineName: execution.machine.name,
+                hpcUsername: execution.hpcUsername,
+                caseName: execution.caseName,
+              })
+            : undefined;
+
+      return href ? (
+        <a
+          href={href}
+          className="text-blue-700 hover:underline"
+          {...(row.renderMode === 'repository'
+            ? { target: '_blank', rel: 'noopener noreferrer' }
+            : {
+                onClick: (event: MouseEvent<HTMLAnchorElement>) =>
+                  handleInternalLinkClick(event, href),
+              })}
+        >
+          {content}
+        </a>
+      ) : (
+        content
+      );
+    }
+
     if (sectionKey === 'configuration' && row.label === 'Case Name') {
       const execution = getExecutionById(selectedExecutionIds[colIdx]);
       const caseHref =
@@ -626,6 +683,186 @@ export const CompareWorkspace = ({
         >
           {emptyStateActionLabel}
         </a>
+      </div>
+    );
+  }
+
+  if (caseComparison) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3" data-case-comparison>
+        {contextNotice}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-sm">
+          <p className="text-slate-600">
+            {visibleColumns.length} executions · {totalChangedRows} differing fields. First visible
+            execution is reference.
+          </p>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={diffsOnlyEnabled}
+              disabled={!canCompareDifferences}
+              onChange={(event) => setDiffsOnlyEnabled(event.target.checked)}
+            />
+            Differences only
+          </label>
+        </div>
+        {hidden.length > 0 ? (
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2 text-sm"
+            aria-label="Show hidden executions"
+          >
+            <span>Hidden executions:</span>
+            {hidden.map((id) => (
+              <Button key={id} size="sm" variant="outline" onClick={() => handleShow(id)}>
+                Show {headers[selectedExecutionIds.indexOf(id)] ?? id}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200"
+          tabIndex={0}
+          role="region"
+          aria-label="Execution comparison"
+        >
+          <table
+            className="w-full table-fixed border-separate border-spacing-0 text-left text-sm"
+            style={{ minWidth: 180 + visibleColumns.length * 240 }}
+          >
+            <colgroup>
+              <col style={{ width: 180 }} />
+              {visibleColumns.map((column) => (
+                <col key={column.executionId} style={{ minWidth: 240 }} />
+              ))}
+            </colgroup>
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th
+                  scope="col"
+                  className="sticky left-0 z-30 border-b border-r bg-slate-100 px-3 py-2 font-medium"
+                >
+                  Field
+                </th>
+                {visibleColumns.map((column, index) => (
+                  <th
+                    key={column.executionId}
+                    scope="col"
+                    className="border-b border-r bg-slate-100 px-3 py-2 align-top font-medium"
+                    draggable
+                    onDragStart={() => handleDragStart(column.colIdx)}
+                    onDragOver={(event) => handleDragOver(event, column.colIdx)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={() => handleDrop(column.colIdx)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <a
+                          href={column.executionHref}
+                          onClick={(event) => handleInternalLinkClick(event, column.executionHref)}
+                          className="break-all font-mono text-blue-700 hover:underline"
+                        >
+                          {column.executionHeader}
+                        </a>
+                        {index === 0 ? (
+                          <span className="mt-1 block text-xs font-medium text-slate-600">
+                            Reference
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Hide ${column.executionHeader}`}
+                          title="Hide execution"
+                          className="rounded p-1 hover:bg-slate-200"
+                          onClick={() => handleHide(column.colIdx)}
+                        >
+                          <EyeOff size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${column.executionHeader}`}
+                          title="Remove execution"
+                          className="rounded p-1 hover:bg-slate-200"
+                          onClick={() => handleRemove(column.colIdx)}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    {index > 0 ? (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs text-blue-700 hover:underline"
+                        onClick={() =>
+                          setOrder((current) => [
+                            column.colIdx,
+                            ...current.filter((item) => item !== column.colIdx),
+                          ])
+                        }
+                      >
+                        Use as reference
+                      </button>
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            {compareSections.map((section) => {
+              const rows = diffsOnlyEnabled ? section.diffRows : section.rows;
+              if (rows.length === 0) return null;
+
+              return (
+                <tbody key={section.key}>
+                  <tr>
+                    <th
+                      colSpan={visibleColumns.length + 1}
+                      scope="colgroup"
+                      className="border-b bg-slate-50 px-3 py-1.5 font-semibold"
+                    >
+                      <span className="sticky left-3">{section.label}</span>
+                    </th>
+                  </tr>
+                  {rows.map((row) => (
+                    <tr key={row.label}>
+                      <th
+                        scope="row"
+                        className="sticky left-0 z-10 border-b border-r bg-white px-3 py-2 align-top font-medium"
+                      >
+                        {row.label}
+                      </th>
+                      {visibleColumns.map((column) => {
+                        const value = row.values[column.colIdx];
+                        const changed =
+                          column.colIdx !== visibleOrder[0] &&
+                          normalizeValue(value) !== normalizeValue(row.values[visibleOrder[0]]);
+
+                        return (
+                          <td
+                            key={column.executionId}
+                            className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/50' : 'bg-white'}`}
+                          >
+                            {section.key === 'locations' && changed ? (
+                              <span className="sr-only">Differs from reference column. </span>
+                            ) : null}
+                            {renderCompareValue(section.key, row, value, column.colIdx)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              );
+            })}
+          </table>
+          {visibleColumns.length === 0 ? (
+            <p className="p-3 text-sm text-slate-600">
+              Unhide an execution to restore compare columns.
+            </p>
+          ) : diffsOnlyEnabled && totalChangedRows === 0 ? (
+            <p className="p-3 text-sm text-slate-600">No differences across visible executions.</p>
+          ) : null}
+        </div>
       </div>
     );
   }

@@ -64,6 +64,19 @@ export const toLinkArray = (value: unknown): LinkLike[] => {
   return Array.isArray(value) ? value.flatMap(normalize) : normalize(value);
 };
 
+export const comparisonValueText = (value: unknown): string => {
+  if (!Array.isArray(value)) return norm(value);
+  if (value.length === 0) return '—';
+  const links = toLinkArray(value);
+
+  return links.length > 0
+    ? links
+        .map((link) => `${link.url} (${link.label})`)
+        .sort()
+        .join('\n')
+    : value.map(norm).sort().join(', ');
+};
+
 /** Generate short display label from URI/URL if none provided */
 const makeLabelFromPath = (uri: string) => {
   if (!uri) return '';

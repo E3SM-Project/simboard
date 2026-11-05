@@ -1889,7 +1889,7 @@ export const CaseDetailsPage = ({
               <DialogTitle>Compare case executions</DialogTitle>
               <DialogDescription className="mt-1 truncate">{caseRecord.name}</DialogDescription>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="min-h-0 flex-1 overflow-hidden p-4">
               {renderCompareSection({
                 caseId: caseRecord.id,
                 onClose: () => setIsCompareVisible(false),
