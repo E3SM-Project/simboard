@@ -444,8 +444,34 @@ async function run() {
     (element) => element.textContent === 'Compare Case Executions',
   )!;
   check(!compare.disabled, 'Selection still enables comparison');
+  compare.focus();
+  const pageScroll = window.scrollY;
   compare.click();
   await waitFor(() => document.body.textContent?.includes('Comparison fixture'));
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const dialogBounds = dialog.getBoundingClientRect();
+  check(
+    Math.abs(dialogBounds.width - window.innerWidth) < 1,
+    `Comparison uses full screen width: ${dialogBounds.width} / ${window.innerWidth}`,
+  );
+  check(
+    Math.abs(dialogBounds.height - window.innerHeight) < 1,
+    'Comparison uses full screen height',
+  );
+  check(dialogBounds.left === 0 && dialogBounds.top === 0, 'Comparison starts at viewport origin');
+  check(dialog.contains(document.activeElement), 'Comparison traps initial focus');
+  document.activeElement!.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+  );
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
+  check(document.activeElement === compare, 'Closing returns focus to Compare');
+  check(Math.abs(window.scrollY - pageScroll) < 1, 'Closing preserves page scroll');
+  compare.click();
+  await waitFor(() => document.querySelector('[role="dialog"]'));
+  document.querySelector<HTMLButtonElement>('[role="dialog"] button')!.click();
+  await waitFor(() => !document.querySelector('[role="dialog"]'));
+  check(!compare.disabled, 'Closing preserves selected executions for reopening');
 
   const grouped = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'Grouped by Case Hash',
@@ -526,10 +552,7 @@ async function run() {
     'Rows stay visible while sort data loads',
   );
   check(document.activeElement === pendingSortButton, 'Sort header keeps keyboard focus');
-  check(
-    document.body.textContent?.includes('Comparison fixture'),
-    'Comparison stays visible while sorting',
-  );
+  check(!document.querySelector('[role="dialog"]'), 'Sorting does not reopen comparison');
   finishFetch();
   await waitFor(() => client.getQueryState(runAscKey)?.status === 'success');
   api.defaults.adapter = originalAdapter;

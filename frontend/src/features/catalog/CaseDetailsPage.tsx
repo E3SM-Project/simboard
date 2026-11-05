@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -417,7 +418,7 @@ export const CaseDetailsPage = ({
     sortOrder: dateSort.direction,
   });
   const location = useLocation();
-  const compareSectionRef = useRef<HTMLDivElement | null>(null);
+  const compareButtonRef = useRef<HTMLButtonElement | null>(null);
   const executionsSectionRef = useRef<HTMLElement | null>(null);
   const { user, isAuthenticated, loading: authLoading, loginWithGithub } = useAuth();
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('flat');
@@ -656,17 +657,6 @@ export const CaseDetailsPage = ({
       return areStringArraysEqual(currentKeys, nextKeys) ? currentKeys : nextKeys;
     });
   }, [filteredExecutionGroups]);
-
-  useEffect(() => {
-    if (!shouldRenderCompare) {
-      return;
-    }
-
-    compareSectionRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  }, [shouldRenderCompare]);
 
   useEffect(() => {
     if (!canShowCompare && isCompareVisible) {
@@ -1377,33 +1367,14 @@ export const CaseDetailsPage = ({
                           / {MAX_SELECTION}
                         </div>
                         <Button
+                          ref={compareButtonRef}
                           type="button"
                           size="sm"
-                          onClick={() => {
-                            if (shouldRenderCompare) {
-                              compareSectionRef.current?.scrollIntoView({
-                                behavior: 'smooth',
-                                block: 'start',
-                              });
-                              return;
-                            }
-
-                            setIsCompareVisible(true);
-                          }}
+                          onClick={() => setIsCompareVisible(true)}
                           disabled={isCompareButtonDisabled}
                         >
-                          {shouldRenderCompare ? 'Jump to Compare' : 'Compare Case Executions'}
+                          Compare Case Executions
                         </Button>
-                        {shouldRenderCompare ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsCompareVisible(false)}
-                          >
-                            Hide Compare
-                          </Button>
-                        ) : null}
                         {caseSelectedExecutionCount > 0 ? (
                           <Button
                             type="button"
@@ -1902,40 +1873,31 @@ export const CaseDetailsPage = ({
               onFilterExecutionIds={filterExecutionsForArtifact}
             />
           </div>
+        </div>
+      </section>
 
-          {shouldRenderCompare && renderCompareSection ? (
-            <div
-              ref={compareSectionRef}
-              className="scroll-mt-24 border-t border-slate-200 bg-slate-50/30 px-5 py-5"
-            >
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-semibold text-slate-950">
-                    Selected Executions Comparison
-                  </h3>
-                  <p className="max-w-3xl text-sm text-slate-600">
-                    Review selected executions side by side within this case. Adjust the selection
-                    above to update this comparison.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsCompareVisible(false)}
-                >
-                  Hide Compare
-                </Button>
-              </div>
-
+      <Dialog open={shouldRenderCompare} onOpenChange={setIsCompareVisible}>
+        {renderCompareSection ? (
+          <DialogContent
+            className="left-0 top-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 data-[state=closed]:!animate-none data-[state=open]:!animate-none sm:rounded-none"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              compareButtonRef.current?.focus();
+            }}
+          >
+            <div className="shrink-0 border-b px-4 py-3 pr-12">
+              <DialogTitle>Compare case executions</DialogTitle>
+              <DialogDescription className="mt-1 truncate">{caseRecord.name}</DialogDescription>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
               {renderCompareSection({
                 caseId: caseRecord.id,
                 onClose: () => setIsCompareVisible(false),
               })}
             </div>
-          ) : null}
-        </div>
-      </section>
+          </DialogContent>
+        ) : null}
+      </Dialog>
 
       {!authLoading && user?.is_superuser === true ? (
         <details className="rounded-xl border border-slate-200 p-5">
