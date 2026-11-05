@@ -38,12 +38,6 @@ make backend-upgrade
 For targeted runs, see [Single-Execution Ingestion](../docs/operations/setup-ingestion-operations.md#single-execution-ingestion).
 For model-date sources and storage, see [Ingested Simulation Dates](../docs/architecture/metadata-ingestion.md#ingested-simulation-dates).
 
-Case-detail `simulatedDuration` sums completed execution intervals, including overlaps and retries; `simulationCoverage` remains unique coverage.
-Missing or invalid dates, unfinished runs, and unsupported calendars are excluded and reported as partial totals.
-Stored `extra.simulation_calendar` supports Gregorian, no-leap, and 360-day calculations within the existing model-date input constraints.
-Absent calendar metadata uses the existing Gregorian storage convention and sets `calendarAssumed`; this is not evidence of the model's calendar.
-Mixed-calendar totals expose model days, not equivalent months or years. No calendar or source-path extraction is added.
-
 ## Configuration
 
 Backend env templates live in `.envs/example/backend.env.example`. Local developer values live in `.envs/local/backend.env`.
