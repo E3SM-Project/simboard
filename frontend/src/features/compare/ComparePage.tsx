@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import CompareToolbar from '@/features/compare/components/CompareToolbar';
 import { norm, renderCellValue } from '@/features/compare/utils';
+import { reconcileExecutionOrder } from '@/lib/catalog/executionDiscovery';
 import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath, executionDetailsPath } from '@/lib/catalog/urls';
 import { type ArtifactKind, getArtifactsByKind } from '@/types/artifact';
@@ -94,7 +95,13 @@ export const CompareWorkspace = ({
 
   // -------------------- Global State --------------------
   // -------------------- Local State --------------------
-  const [order, setOrder] = useState(selectedExecutionIds.map((_, i) => i));
+  const [orderedIds, setOrderedIds] = useState(selectedExecutionIds);
+  const displayIds = reconcileExecutionOrder(orderedIds, selectedExecutionIds);
+  const order = displayIds.map((id) => selectedExecutionIds.indexOf(id));
+  const setOrder = (update: number[] | ((current: number[]) => number[])) => {
+    const nextOrder = typeof update === 'function' ? update(order) : update;
+    setOrderedIds(nextOrder.map((index) => selectedExecutionIds[index]));
+  };
 
   const executionHeaders = selectedExecutionIds.map((id) => {
     const execution = selectedExecutions.find((item) => item.id === id);
@@ -122,7 +129,10 @@ export const CompareWorkspace = ({
   // -------------------- Derived Data --------------------
   const visibleOrder = order.filter(
     (colIdx) =>
-      colIdx < selectedExecutionIds.length && !hidden.includes(selectedExecutionIds[colIdx]),
+      colIdx < selectedExecutionIds.length &&
+      !hidden.includes(selectedExecutionIds[colIdx]) &&
+      (!caseComparison ||
+        selectedExecutions.some((execution) => execution.id === selectedExecutionIds[colIdx])),
   );
   const canCompareDifferences = visibleOrder.length > 1;
   const showDifferencesOnly = diffsOnlyEnabled && canCompareDifferences;
@@ -426,10 +436,14 @@ export const CompareWorkspace = ({
     setHeaders((prev) => (arraysEqual(prev, nextHeaders) ? prev : nextHeaders));
 
     if (!arraysEqual(previousSelectedExecutionIds.current, selectedExecutionIds)) {
-      setOrder(selectedExecutionIds.map((_, i) => i));
+      setOrderedIds((previous) =>
+        caseComparison
+          ? reconcileExecutionOrder(previous, selectedExecutionIds)
+          : selectedExecutionIds,
+      );
       previousSelectedExecutionIds.current = selectedExecutionIds;
     }
-  }, [selectedExecutionIds, selectedExecutions]);
+  }, [selectedExecutionIds, selectedExecutions, caseComparison]);
 
   useEffect(() => {
     if (caseComparison || canCompareDifferences || !diffsOnlyEnabled) {
@@ -623,7 +637,7 @@ export const CompareWorkspace = ({
   const tableMinWidth = LABEL_COLUMN_WIDTH + visibleValueWidth;
 
   // -------------------- Render --------------------
-  if (selectedExecutionIds.length === 0) {
+  if (selectedExecutionIds.length === 0 && !caseComparison) {
     return (
       <div className="max-w-screen-2xl mx-auto p-8 text-center text-gray-600">
         <p className="text-lg mb-4">{emptyStateMessage}</p>
@@ -641,6 +655,19 @@ export const CompareWorkspace = ({
     return (
       <div className="flex min-h-0 flex-col gap-4" data-case-comparison>
         {contextNotice}
+        {selectedExecutionIds.length < 2 ? (
+          <p
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            role="status"
+          >
+            Select at least two executions using Edit executions to compare.
+          </p>
+        ) : null}
+        {selectedExecutionIds.length >= 2 && selectedExecutions.length < 2 ? (
+          <p className="text-sm text-slate-600" role="status">
+            Comparison needs details for at least two selected executions.
+          </p>
+        ) : null}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm">
           <p className="text-slate-600">
             <span className="font-medium text-slate-900" aria-live="polite">

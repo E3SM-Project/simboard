@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 
+import { formatCaseHashLabel, MISSING_CASE_HASH_LABEL } from '@/lib/catalog/executionDiscovery';
 import type {
   CaseHashConfigurationOut,
   ExecutionListItemOut,
@@ -7,9 +8,13 @@ import type {
   SimulationCoverageOut,
   SimulationDurationOut,
 } from '@/types';
-import { compareModelDates, formatModelDate } from '@/utils/utils';
+import { compareModelDates } from '@/utils/utils';
 
-export const MISSING_CASE_HASH_LABEL = 'Missing Case Hash';
+export {
+  formatCaseHashLabel,
+  formatExecutionDateRange,
+  MISSING_CASE_HASH_LABEL,
+} from '@/lib/catalog/executionDiscovery';
 
 export const formatSimulationCoverage = (coverage?: SimulationCoverageOut) => {
   const years = coverage?.years;
@@ -167,9 +172,6 @@ export const formatCaseDate = (value?: string | null) => {
   return format(date, 'yyyy-MM-dd');
 };
 
-export const formatExecutionDateRange = (execution: ExecutionSummaryOut) =>
-  `${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(execution.simulationEndDate)}`;
-
 export const getExecutionDateWindow = (executions: ExecutionSummaryOut[]): ExecutionDateWindow => {
   if (executions.length === 0) {
     return { startDate: null, endDate: null };
@@ -243,16 +245,6 @@ const getExecutionRunTime = ({ details }: ExecutionWithDates): number | null => 
   const timestamp = date ? new Date(date).getTime() : NaN;
 
   return Number.isNaN(timestamp) ? null : timestamp;
-};
-
-export const formatCaseHashLabel = (caseHash: string | null, maxLength = 18) => {
-  if (!caseHash) return MISSING_CASE_HASH_LABEL;
-  if (caseHash.length <= maxLength) return caseHash;
-
-  const leadingChars = Math.max(6, Math.floor((maxLength - 1) / 2));
-  const trailingChars = Math.max(4, maxLength - leadingChars - 1);
-
-  return `${caseHash.slice(0, leadingChars)}…${caseHash.slice(-trailingChars)}`;
 };
 
 export const groupExecutionSummaries = (

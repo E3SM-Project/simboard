@@ -92,6 +92,8 @@ export const CaseCompareRoute = ({
   );
   const missingExecutionCount =
     caseSelectedExecutionIds.length - renderableSelectedExecutionIds.length;
+  const loadingExecutionCount = detailQueries.filter((query) => query.isPending).length;
+  const failedDetailQueries = detailQueries.filter((query) => query.isError);
   const handleCaseSelectionChange = (ids: string[]) => {
     if (caseId) {
       setSelectedCaseExecutionIdsForCase(caseId, ids);
@@ -134,7 +136,7 @@ export const CaseCompareRoute = ({
           caseName: caseRecord.name,
         })
       : '/cases';
-  if (renderableSelectedExecutionIds.length < 2) {
+  if (renderableSelectedExecutionIds.length < 2 && !onClose) {
     let message = 'Select at least two executions from this case to compare.';
 
     if (excludedExecutionCount > 0) {
@@ -180,11 +182,26 @@ export const CaseCompareRoute = ({
                 {excludedExecutionCount === 1 ? '' : 's'} from outside this case.
               </p>
             ) : null}
-            {missingExecutionCount > 0 ? (
-              <p>
-                Skipped {missingExecutionCount} case execution
-                {missingExecutionCount === 1 ? '' : 's'} missing from loaded execution details.
+            {loadingExecutionCount > 0 ? (
+              <p role="status">
+                Loading details for {loadingExecutionCount} selected execution
+                {loadingExecutionCount === 1 ? '' : 's'}…
               </p>
+            ) : null}
+            {failedDetailQueries.length > 0 ? (
+              <div role="alert" className="flex flex-wrap items-center gap-2">
+                <p>
+                  Could not load {failedDetailQueries.length} selected execution
+                  {failedDetailQueries.length === 1 ? '' : 's'}.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => failedDetailQueries.forEach((query) => void query.refetch())}
+                >
+                  Retry execution details
+                </Button>
+              </div>
             ) : null}
           </div>
         </div>
@@ -203,7 +220,7 @@ export const CaseCompareRoute = ({
       emptyStateMessage="No case executions selected for comparison."
       hiddenStorageKey={`case_compare_hidden_cols:${caseId}`}
       labelColumnWidth={320}
-      selectedExecutionIds={renderableSelectedExecutionIds}
+      selectedExecutionIds={caseSelectedExecutionIds}
       selectedExecutions={renderableSelectedExecutions}
       setSelectedExecutionIds={handleCaseSelectionChange}
       showHeader={false}

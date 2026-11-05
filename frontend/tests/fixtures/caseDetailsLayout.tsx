@@ -14,10 +14,10 @@ import {
   CaseConfigurationSummary,
 } from '../../src/features/catalog/components/CaseConfiguration';
 import { HomePage } from '../../src/features/home/HomePage';
-import { CompareWorkspace } from '../../src/features/compare/ComparePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
 import { catalogQueryKeys } from '../../src/lib/catalog/queryKeys';
+import { CaseCompareRoute } from '../../src/routes/CaseCompareRoute';
 import type {
   CaseDetailOut,
   ConfigurationFieldOut,
@@ -94,6 +94,29 @@ const record = {
   latestExecution: { executionId: 'run-105', runEndDate: '2026-11-02T12:00:00Z' },
 };
 client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
+client.setQueryData(catalogQueryKeys.cases.detail(record.id), record);
+executions.forEach((execution, index) =>
+  client.setQueryData(catalogQueryKeys.executions.detail(execution.id), {
+    ...execution,
+    caseName: record.name,
+    machine: { name: 'chrysalis' },
+    hpcUsername: 'test.user',
+    simulationStartDate: '0001-01-01',
+    simulationEndDate: '0002-01-01',
+    initializationType: 'hybrid',
+    runStartDate: null,
+    runEndDate: null,
+    compiler: index === 1 ? 'gnu' : null,
+    groupedArtifacts: {},
+    artifacts: [
+      {
+        id: 'output',
+        kind: 'output',
+        uri: `/archive/${'long-path-segment/'.repeat(15)}${index === 2 ? 'alternate' : 'reference'}/run`,
+      },
+    ],
+  }),
+);
 client.setQueryDefaults(['executions', 'case'], {
   initialData: {
     pages: [{ items: executions, total: 3, page: 1, pageSize: 100 }],
@@ -109,33 +132,12 @@ function FixtureCasePage() {
     <CaseDetailsPage
       selectedCaseExecutionIdsByCase={selectedIds}
       setSelectedCaseExecutionIdsForCase={(caseId, ids) => setSelectedIds({ [caseId]: ids })}
-      renderCompareSection={() => (
-        <CompareWorkspace
-          caseComparison
-          selectedExecutionIds={selectedIds[record.id] ?? []}
-          setSelectedExecutionIds={(ids) => setSelectedIds({ [record.id]: ids })}
-          selectedExecutions={
-            executions.map((execution, index) => ({
-              ...execution,
-              caseName: record.name,
-              machine: { name: 'chrysalis' },
-              hpcUsername: 'test.user',
-              simulationStartDate: '0001-01-01',
-              simulationEndDate: '0002-01-01',
-              initializationType: 'hybrid',
-              runStartDate: null,
-              runEndDate: null,
-              compiler: index === 1 ? 'gnu' : null,
-              groupedArtifacts: {},
-              artifacts: [
-                {
-                  id: 'output',
-                  kind: 'output',
-                  uri: `/archive/${'long-path-segment/'.repeat(15)}${index === 2 ? 'alternate' : 'reference'}/run`,
-                },
-              ],
-            })) as unknown as ExecutionOut[]
-          }
+      renderCompareSection={({ caseId, onClose }) => (
+        <CaseCompareRoute
+          caseId={caseId}
+          onClose={onClose}
+          selectedCaseExecutionIdsByCase={selectedIds}
+          setSelectedCaseExecutionIdsForCase={(id, ids) => setSelectedIds({ [id]: ids })}
         />
       )}
     />
@@ -425,17 +427,39 @@ async function run() {
   }
 
   const table = document.querySelector('table')!;
+  const toolbar = document.querySelector<HTMLElement>('[data-execution-toolbar]')!;
+  if (innerWidth >= 900)
+    check(
+      toolbar.getBoundingClientRect().height < 150,
+      'Execution toolbar stays compact on laptops',
+    );
+  check(!toolbar.textContent?.includes('Actions'), 'Toolbar avoids redundant section labels');
   check(
     [...table.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
-      'Select|Simulation dates|Initialization|Run dates|Execution ID|Case Hash',
+      'Select|Simulation dates|Initialization|Run dates|Execution ID',
     'Flat execution column order',
   );
   const row = table.tBodies[0].rows[0];
   check(row.cells[1].textContent === '0001-01-01 → 0002-01-01', 'Simulation dates match column');
   check(row.cells[2].textContent === 'hybrid', 'Initialization value stays unchanged');
-  check(row.cells[3].textContent === '2026-10-01 → 2026-10-01', 'Run dates match column');
-  check(row.cells[4].textContent === 'run-1', 'Oldest simulation stays first');
-  check(row.cells[5].textContent === 'test-hash', 'Hash matches column');
+  check(row.cells[3].textContent === '2026-10-01', 'Same-day run dates remain compact');
+  check(row.cells[4].querySelector('a')?.textContent === 'run-1', 'Oldest simulation stays first');
+  check(
+    ![...document.querySelectorAll('button')].some(
+      (button) => button.textContent === 'Group by Case Hash',
+    ),
+    'Single hash hides grouping controls',
+  );
+  check(
+    row.cells[4].textContent?.includes('Details · Varies'),
+    'Known initialization variation is discoverable',
+  );
+  row.cells[4].querySelector('summary')!.click();
+  check(
+    row.cells[4].textContent?.includes('Machine: —'),
+    'Unavailable metadata uses shared placeholder',
+  );
+  row.cells[4].querySelector('summary')!.click();
   check(
     row.cells[4].querySelector('a')?.getAttribute('href')?.endsWith('/run-1'),
     'Execution link retained',
@@ -450,18 +474,27 @@ async function run() {
   check(!runHeader.hasAttribute('aria-sort'), 'Unsorted run header omits aria-sort');
   check(!table.textContent?.includes('first)'), 'No oldest/latest-first header text');
   simulationHeader.querySelector('button')!.click();
-  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-3');
+  await waitFor(
+    () => table.tBodies[0].rows[0].cells[4].querySelector('a')?.textContent === 'run-3',
+  );
   check(
     simulationHeader.getAttribute('aria-sort') === 'descending',
     'Simulation sort toggles descending',
   );
   runHeader.querySelector('button')!.click();
-  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-1');
+  await waitFor(
+    () => table.tBodies[0].rows[0].cells[4].querySelector('a')?.textContent === 'run-1',
+  );
   check(runHeader.getAttribute('aria-sort') === 'ascending', 'Run sort starts ascending');
   check(!simulationHeader.hasAttribute('aria-sort'), 'Previously sorted header omits aria-sort');
   runHeader.querySelector('button')!.click();
-  await waitFor(() => table.tBodies[0].rows[0].cells[4].textContent === 'run-2');
-  check(table.tBodies[0].rows[2].cells[4].textContent === 'run-3', 'Missing run dates remain last');
+  await waitFor(
+    () => table.tBodies[0].rows[0].cells[4].querySelector('a')?.textContent === 'run-2',
+  );
+  check(
+    table.tBodies[0].rows[2].cells[4].querySelector('a')?.textContent === 'run-3',
+    'Missing run dates remain last',
+  );
   const activeQuery = client
     .getQueryCache()
     .getAll()
@@ -477,19 +510,48 @@ async function run() {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   const compare = [...document.querySelectorAll('button')].find(
-    (element) => element.textContent === 'Compare Case Executions',
+    (element) => element.textContent === 'Compare (3)',
   )!;
   check(!compare.disabled, 'Selection still enables comparison');
   compare.click();
   await waitFor(() => document.querySelector('[data-case-comparison]'));
   await checkExecutionComparison(compare);
+  await checkPickerSelectionLimits();
 
+  const groupedRecord = {
+    ...record,
+    executions: [
+      ...executions,
+      { ...executions[2], id: 'missing-hash', executionId: 'fallback-run', caseHash: null },
+    ],
+  };
+  client.setQueryData(
+    catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case'),
+    groupedRecord,
+  );
+  client.setQueryData(catalogQueryKeys.cases.detail(record.id), groupedRecord);
+  client.setQueryData(catalogQueryKeys.executions.detail('missing-hash'), {
+    ...client.getQueryData<ExecutionOut>(catalogQueryKeys.executions.detail('execution-3')),
+    id: 'missing-hash',
+    executionId: 'fallback-run',
+  });
+  await waitFor(() =>
+    [...document.querySelectorAll('button')].find(
+      (element) => element.textContent === 'Group by Case Hash',
+    ),
+  );
   const grouped = [...document.querySelectorAll('button')].find(
-    (element) => element.textContent === 'Grouped by Case Hash',
+    (element) => element.textContent === 'Group by Case Hash',
   )!;
   grouped.click();
   await waitFor(() => document.querySelector('table table'));
   const groupTable = document.querySelector('table table')!;
+  check(
+    [...document.querySelector('table')!.tHead!.rows[0].cells]
+      .map((cell) => cell.textContent?.trim())
+      .join('|') === 'Case Hash|Executions|Simulation window|Actions',
+    'Hash groups use concise contextual columns',
+  );
   check(
     [...groupTable.querySelectorAll('th')].map((element) => element.textContent).join('|') ===
       'Select|Simulation dates|Initialization|Run dates|Execution ID',
@@ -503,8 +565,55 @@ async function run() {
     groupTable.querySelectorAll('th')[3].getAttribute('aria-sort') === 'descending',
     'Grouping retains run sort',
   );
+  const fallbackGroup = [
+    ...document.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'),
+  ].find((button) => button.textContent?.includes('Missing Case Hash'))!;
+  fallbackGroup.click();
+  await waitFor(() => document.querySelector('[aria-label="Select fallback-run for compare"]'));
+  document
+    .querySelector<HTMLButtonElement>('[aria-label="Select fallback-run for compare"]')!
+    .click();
+  await waitFor(
+    () =>
+      document
+        .querySelector('[aria-label="Select fallback-run for compare"]')
+        ?.getAttribute('aria-checked') === 'true',
+  );
+  [...document.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent === 'Compare (3)')!
+    .click();
+  await waitFor(() => document.querySelector('[aria-label="Remove fallback-run"]'));
+  const hashDialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  [...hashDialog.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent?.includes('Edit executions'))!
+    .click();
+  await waitFor(() => document.querySelector('[aria-label="Compare fallback-run"]'));
+  const hashPicker = document.querySelector<HTMLElement>('[aria-label="Select executions"]')!;
+  check(
+    hashPicker.textContent?.includes('Hash: test-hash') &&
+      hashPicker.textContent?.includes('Missing Case Hash'),
+    'Picker preserves conditional known and fallback hash context',
+  );
+  hashPicker.querySelector<HTMLButtonElement>('[aria-label="Compare fallback-run"]')!.click();
+  await waitFor(() => !hashDialog.querySelector('[aria-label="Remove fallback-run"]'));
+  [...hashPicker.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => button.textContent === 'Done')!
+    .click();
+  await waitFor(
+    () => !document.querySelector('[aria-label="Select executions"][data-state="open"]'),
+  );
+  hashDialog.querySelector<HTMLButtonElement>(':scope > button')!.click();
+  await waitFor(() => !document.querySelector('[data-case-comparison]'));
+  check(
+    document
+      .querySelector('[aria-label="Select fallback-run for compare"]')
+      ?.getAttribute('aria-checked') === 'false',
+    'Cross-group picker edits synchronize table',
+  );
   groupTable.querySelectorAll('th')[1].querySelector('button')!.click();
-  await waitFor(() => groupTable.tBodies[0].rows[0].cells[4].textContent === 'run-1');
+  await waitFor(
+    () => groupTable.tBodies[0].rows[0].cells[4].querySelector('a')?.textContent === 'run-1',
+  );
   const flat = [...document.querySelectorAll('button')].find(
     (element) => element.textContent === 'All executions',
   )!;
@@ -517,6 +626,14 @@ async function run() {
   check(
     document.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
     'Sorting retains selection',
+  );
+  client.setQueryData(['cases', 'readable-detail', 'chrysalis', 'test.user', 'test.case'], record);
+  client.setQueryData(catalogQueryKeys.cases.detail(record.id), record);
+  await waitFor(
+    () =>
+      ![...document.querySelectorAll('button')].some(
+        (element) => element.textContent === 'Group by Case Hash',
+      ),
   );
 
   const runAscKey = [
@@ -742,6 +859,53 @@ async function checkExecutionComparison(compareButton: HTMLButtonElement) {
   button('Show run-2').click();
   await waitFor(() => button('Differences (1)'), 'restored columns');
 
+  const pickerTrigger = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    item.textContent?.includes('Edit executions'),
+  )!;
+  pickerTrigger.click();
+  await waitFor(() => document.querySelector('[aria-label="Search execution candidates"]'));
+  const picker = document.querySelector<HTMLElement>('[aria-label="Select executions"]')!;
+  check(
+    document.activeElement?.getAttribute('aria-label') === 'Search execution candidates',
+    'Picker focuses search',
+  );
+  check(!picker.textContent?.includes('Hash:'), 'Single-hash picker omits hash context');
+  const option = (id: string) =>
+    picker.querySelector<HTMLButtonElement>(`[aria-label="Compare ${id}"]`)!;
+  check(option('run-1').getAttribute('aria-checked') === 'true', 'Picker reflects table selection');
+  option('run-3').click();
+  await waitFor(() => region.textContent?.includes('run-3'));
+  check(
+    region.querySelector('thead th:nth-child(2)')?.textContent?.includes('run-2'),
+    'Adding execution preserves reference',
+  );
+  option('run-2').click();
+  await waitFor(() => !region.textContent?.includes('run-2'));
+  check(
+    region.querySelector('thead th:nth-child(2)')?.textContent?.includes('run-1'),
+    'Removing reference chooses first remaining display column',
+  );
+  option('run-3').click();
+  await waitFor(() => workspace.textContent?.includes('Select at least two executions'));
+  option('run-1').click();
+  await waitFor(() => pickerTrigger.textContent?.includes('(0/5)'));
+  check(dialog.isConnected && picker.isConnected, 'Zero selections keeps dialog and picker open');
+  option('run-1').click();
+  await waitFor(() => pickerTrigger.textContent?.includes('(1/5)'), 'restore first selection');
+  option('run-2').click();
+  await waitFor(() => pickerTrigger.textContent?.includes('(2/5)'), 'restore second selection');
+  picker.querySelector<HTMLInputElement>('input')!.focus();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  document.activeElement!.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+  );
+  await waitFor(
+    () => !document.querySelector('[aria-label="Select executions"][data-state="open"]'),
+    'picker Escape',
+  );
+  check(dialog.isConnected, 'Escape closes picker before dialog');
+  await waitFor(() => document.activeElement === pickerTrigger, 'Picker restores focus to trigger');
+
   dialog.querySelector<HTMLElement>('h2')!.focus();
   await new Promise((resolve) => setTimeout(resolve, 250));
   document.activeElement!.dispatchEvent(
@@ -754,6 +918,182 @@ async function checkExecutionComparison(compareButton: HTMLButtonElement) {
   await waitFor(() => document.querySelector('[role="dialog"]'));
   document.querySelector<HTMLButtonElement>('[role="dialog"] > button')!.click();
   await waitFor(() => !document.querySelector('[role="dialog"]'));
+}
+
+async function checkPickerSelectionLimits() {
+  const extra = Array.from({ length: 123 }, (_, index) => index + 4).map((number) => ({
+    ...executions[0],
+    id: `execution-${number}`,
+    executionId: number <= 6 ? `run-${number}` : `extra-${number}`,
+  }));
+  const expanded = { ...record, executions: [...executions, ...extra] };
+  client.setQueryData(
+    catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case'),
+    expanded,
+  );
+  client.setQueryData(catalogQueryKeys.cases.detail(record.id), expanded);
+  for (const summary of extra) {
+    const details = client.getQueryData<ExecutionOut>(
+      catalogQueryKeys.executions.detail('execution-1'),
+    )!;
+    client.setQueryData(catalogQueryKeys.executions.detail(summary.id), {
+      ...details,
+      id: summary.id,
+      executionId: summary.executionId,
+    });
+  }
+  await waitFor(
+    () =>
+      document.querySelectorAll('table tbody [role="checkbox"]').length ===
+      expanded.executions.length,
+    'all case summaries',
+  );
+  const tableSearch = document.querySelector<HTMLInputElement>('[aria-label="Search executions"]')!;
+  const setInput = (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  setInput(tableSearch, 'run-1');
+  await waitFor(
+    () => document.querySelectorAll('table tbody [role="checkbox"]').length === 1,
+    'table filter',
+  );
+  const compare = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === 'Compare (2)',
+  )!;
+  compare.click();
+  await waitFor(() => document.querySelector('[data-case-comparison]'));
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const trigger = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+    button.textContent?.includes('Edit executions'),
+  )!;
+  trigger.click();
+  await waitFor(() => document.querySelector('[aria-label="Execution candidates"]'));
+  const picker = document.querySelector<HTMLElement>('[aria-label="Select executions"]')!;
+  const option = (id: number) =>
+    picker.querySelector<HTMLButtonElement>(`[aria-label="Compare run-${id}"]`)!;
+  check(
+    picker.querySelectorAll('[role="checkbox"]').length === expanded.executions.length,
+    'Picker includes filtered-out and unloaded-metadata executions',
+  );
+  const candidateList = picker.querySelector<HTMLElement>('[aria-label="Execution candidates"]')!;
+  check(
+    candidateList.scrollHeight > candidateList.clientHeight,
+    'Large picker list scrolls inside bounded popover',
+  );
+  option(1).focus();
+  option(1).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  check(
+    document.activeElement?.getAttribute('role') === 'checkbox' &&
+      document.activeElement !== option(1),
+    'Arrow keys navigate picker candidates',
+  );
+  const pickerSearch = picker.querySelector<HTMLInputElement>('input')!;
+  setInput(pickerSearch, 'run-6');
+  await waitFor(() => picker.querySelectorAll('[role="checkbox"]').length === 1, 'picker search');
+  check(option(6), 'Picker search indexes Execution ID');
+  setInput(pickerSearch, '');
+  await waitFor(
+    () => picker.querySelectorAll('[role="checkbox"]').length === expanded.executions.length,
+  );
+  const detailsSix = client.getQueryData<ExecutionOut>(
+    catalogQueryKeys.executions.detail('execution-6'),
+  )!;
+  client.removeQueries({
+    queryKey: catalogQueryKeys.executions.detail('execution-6'),
+    exact: true,
+  });
+  const originalAdapter = api.defaults.adapter;
+  let rejectDetails: ((error: Error) => void) | undefined;
+  let failOnce = true;
+  api.defaults.adapter = async (config) => {
+    if (!config.url?.endsWith('/execution-6')) throw new Error(`Unexpected request: ${config.url}`);
+    if (failOnce) {
+      failOnce = false;
+      await new Promise((_resolve, reject) => {
+        rejectDetails = reject;
+      });
+    }
+    return { config, status: 200, statusText: 'OK', headers: {}, data: detailsSix };
+  };
+  for (const id of [4, 5, 6]) {
+    option(id).click();
+    await waitFor(() => option(id).getAttribute('aria-checked') === 'true');
+  }
+  await waitFor(
+    () => dialog.textContent?.includes('Loading details for 1 selected execution'),
+    'pending detail request has loading state',
+  );
+  check(
+    !dialog.querySelector('[aria-label="Remove run-6"]'),
+    'Pending details do not produce false comparison values',
+  );
+  rejectDetails!(new Error('Fixture detail request failed'));
+  await waitFor(
+    () => dialog.textContent?.includes('Could not load 1 selected execution'),
+    'failed detail request has error state',
+  );
+  const retry = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === 'Retry execution details',
+  )!;
+  retry.click();
+  await waitFor(
+    () => dialog.querySelector('[aria-label="Remove run-6"]'),
+    'retry restores comparison column',
+  );
+  api.defaults.adapter = originalAdapter;
+  check(trigger.textContent?.includes('(5/5)'), 'Picker reaches five selections');
+  check(option(3).disabled && !option(1).disabled, 'Only unselected candidates disable at five');
+  check(picker.textContent?.includes('Limit: 5 executions.'), 'Picker explains selection cap');
+  option(4).click();
+  await waitFor(() => !option(3).disabled);
+  picker.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+    if (button.textContent === 'Done') button.click();
+  });
+  await waitFor(
+    () => !document.querySelector('[aria-label="Select executions"][data-state="open"]'),
+  );
+  dialog.querySelector<HTMLButtonElement>(':scope > button')!.click();
+  await waitFor(() => !document.querySelector('[data-case-comparison]'));
+  setInput(tableSearch, '');
+  await waitFor(
+    () =>
+      document.querySelectorAll('table tbody [role="checkbox"]').length ===
+      expanded.executions.length,
+  );
+  check(
+    document
+      .querySelector('[aria-label="Select run-6 for compare"]')
+      ?.getAttribute('aria-checked') === 'true',
+    'Picker edits synchronize filtered table selections',
+  );
+  const clear = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === 'Clear selection',
+  )!;
+  clear.click();
+  await waitFor(
+    () =>
+      document
+        .querySelector('[aria-label="Select run-1 for compare"]')
+        ?.getAttribute('aria-checked') === 'false',
+  );
+  for (const id of [1, 2]) {
+    document
+      .querySelector<HTMLButtonElement>(`[aria-label="Select run-${id} for compare"]`)!
+      .click();
+    await waitFor(
+      () =>
+        document
+          .querySelector(`[aria-label="Select run-${id} for compare"]`)
+          ?.getAttribute('aria-checked') === 'true',
+    );
+  }
+  client.setQueryData(
+    catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'test.case'),
+    record,
+  );
+  client.setQueryData(catalogQueryKeys.cases.detail(record.id), record);
+  await waitFor(() => document.querySelectorAll('table tbody [role="checkbox"]').length === 3);
 }
 
 async function checkConfigurationComparison() {

@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingState } from '@/components/ui/loading-state';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -66,6 +67,8 @@ import {
   CaseConfigurationSummary,
 } from '@/features/catalog/components/CaseConfiguration';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
+import { ExecutionMetadataDetails } from '@/features/catalog/components/ExecutionMetadataDetails';
+import { ExecutionPicker } from '@/features/catalog/components/ExecutionPicker';
 import { MarkdownEditorField } from '@/features/catalog/components/MarkdownEditorField';
 import { MetadataHistory } from '@/features/catalog/components/MetadataHistory';
 import { PerformanceSourceDirectories } from '@/features/catalog/components/PerformanceSourceDirectory';
@@ -83,6 +86,15 @@ import {
 } from '@/features/catalog/externalLinkEditing';
 import { useMetadataHistory } from '@/features/catalog/hooks/useMetadataHistory';
 import { toast } from '@/hooks/use-toast';
+import {
+  formatRunDateRange,
+  getExecutionDiscoveryContext,
+  hasCaseHashContext,
+  knownExecutionValue,
+  matchesExecutionSearch,
+  MAX_CASE_EXECUTIONS as MAX_SELECTION,
+  toggleCaseExecution,
+} from '@/lib/catalog/executionDiscovery';
 import { useCaseExecutions } from '@/lib/catalog/hooks/useCaseExecutions';
 import { useReadableCase } from '@/lib/catalog/hooks/useReadableCase';
 import { invalidateCatalog } from '@/lib/catalog/invalidateCatalog';
@@ -97,21 +109,6 @@ import type {
   ExternalLinkOut,
 } from '@/types';
 import { formatModelDate } from '@/utils/utils';
-
-const summarizeDistinctValues = (values: Array<string | null | undefined>) => {
-  const uniqueValues = [...new Set(values.filter((value): value is string => Boolean(value)))];
-
-  if (uniqueValues.length === 0) return '—';
-  if (uniqueValues.length === 1) return uniqueValues[0];
-
-  return `${uniqueValues[0]} +${uniqueValues.length - 1}`;
-};
-
-const formatRunDateRange = (startDate?: string | null, endDate?: string | null) => {
-  if (!startDate && !endDate) return '—';
-
-  return `${startDate?.slice(0, 10) ?? '—'} → ${endDate?.slice(0, 10) ?? '—'}`;
-};
 
 const formatGroupExecutionWindow = (executions: ExecutionSummaryOut[]) => {
   const { startDate, endDate } = getExecutionDateWindow(executions);
@@ -203,7 +200,6 @@ interface CaseDetailsLocationState {
   from?: string;
 }
 
-const MAX_SELECTION = 5;
 const SCROLLABLE_GROUPS_THRESHOLD = 5;
 const SCROLLABLE_FLAT_ROWS_THRESHOLD = 10;
 const CASE_HASH_GROUPING_TOOLTIP =
@@ -213,34 +209,6 @@ const GROUP_FILTER_OPTIONS: Array<{ value: ExecutionSummaryGroupFilter; label: s
   { value: 'multiRun', label: 'Multi-execution' },
   { value: 'missing', label: 'Missing hash' },
 ];
-
-const getGroupRunDateWindow = (executions: GroupExecution[]) => {
-  const datedRuns = executions.filter(
-    ({ details }) => details?.runStartDate != null || details?.runEndDate != null,
-  );
-
-  if (datedRuns.length === 0) {
-    return '—';
-  }
-
-  let earliestStart: string | null = null;
-  let latestEnd: string | null = null;
-
-  for (const { details } of datedRuns) {
-    const runStartDate = details?.runStartDate ?? details?.runEndDate ?? null;
-    const runEndDate = details?.runEndDate ?? details?.runStartDate ?? null;
-
-    if (runStartDate && (earliestStart == null || runStartDate < earliestStart)) {
-      earliestStart = runStartDate;
-    }
-
-    if (runEndDate && (latestEnd == null || runEndDate > latestEnd)) {
-      latestEnd = runEndDate;
-    }
-  }
-
-  return formatRunDateRange(earliestStart, latestEnd);
-};
 
 const countDistinctValues = (values: string[]) => new Set(values).size;
 
@@ -425,6 +393,7 @@ export const CaseDetailsPage = ({
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('flat');
   const [groupFilterMode, setGroupFilterMode] = useState<ExecutionSummaryGroupFilter>('all');
   const [caseHashQuery, setCaseHashQuery] = useState('');
+  const [executionQuery, setExecutionQuery] = useState('');
   const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -461,6 +430,15 @@ export const CaseDetailsPage = ({
       })),
     [rawExecutionGroups, executionDetailsById],
   );
+  const executionCandidates = useMemo(
+    () => executionGroups.flatMap((group) => group.executions),
+    [executionGroups],
+  );
+  const executionDiscovery = useMemo(
+    () => getExecutionDiscoveryContext(executionCandidates),
+    [executionCandidates],
+  );
+  const showCaseHashContext = hasCaseHashContext(caseRecord?.executions ?? []);
   const sortedExecutionGroups = useMemo(() => {
     const getLatestRunTime = (executions: GroupExecution[]) => {
       const timestamps = executions
@@ -490,14 +468,6 @@ export const CaseDetailsPage = ({
       return left.label.localeCompare(right.label);
     });
   }, [executionGroups]);
-  const caseHashGroupCount = rawExecutionGroups.filter((group) => !group.isFallback).length;
-  const missingCaseHashCount =
-    rawExecutionGroups.find((group) => group.isFallback)?.executions.length ?? 0;
-  const allRunsMissingCaseHash =
-    caseRecord != null &&
-    caseRecord.executions.length > 0 &&
-    caseHashGroupCount === 0 &&
-    missingCaseHashCount > 0;
   const normalizedCaseHashQuery = caseHashQuery.trim().toLowerCase();
   const artifactFilteredExecutionGroups = useMemo(() => {
     if (artifactExecutionIds == null) {
@@ -532,8 +502,24 @@ export const CaseDetailsPage = ({
 
           return (group.caseHash ?? '').toLowerCase().startsWith(normalizedCaseHashQuery);
         })
-        .map((group) => ({ ...group, executions: sortCaseExecutions(group.executions, dateSort) })),
-    [artifactFilteredExecutionGroups, groupFilterMode, normalizedCaseHashQuery, dateSort],
+        .map((group) => ({
+          ...group,
+          executions: sortCaseExecutions(
+            group.executions.filter((candidate) =>
+              matchesExecutionSearch(candidate, executionDiscovery, executionQuery),
+            ),
+            dateSort,
+          ),
+        }))
+        .filter((group) => group.executions.length > 0),
+    [
+      artifactFilteredExecutionGroups,
+      groupFilterMode,
+      normalizedCaseHashQuery,
+      dateSort,
+      executionDiscovery,
+      executionQuery,
+    ],
   );
   const filteredFlatExecutions = useMemo(
     () =>
@@ -558,13 +544,15 @@ export const CaseDetailsPage = ({
     caseExecutionIdSet.has(executionId),
   );
   const caseSelectedExecutionCount = caseSelectedExecutionIds.length;
-  const canShowCompare = caseSelectedExecutionCount >= 2;
-  const shouldRenderCompare = canShowCompare && isCompareVisible;
+  const shouldRenderCompare = isCompareVisible;
   const selectedCurrentCaseExecutionIds = caseSelectedExecutionIds;
   const hiddenSelectedCount = selectedCurrentCaseExecutionIds.filter(
     (executionId) => !visibleExecutionIds.has(executionId),
   ).length;
-  const hasActiveGroupFilters = groupFilterMode !== 'all' || normalizedCaseHashQuery.length > 0;
+  const hasActiveGroupFilters =
+    groupFilterMode !== 'all' ||
+    normalizedCaseHashQuery.length > 0 ||
+    executionQuery.trim().length > 0;
   const showGroupActions = filteredExecutionGroups.length > 1;
   const useScrollableGroupsPanel =
     viewMode === 'grouped'
@@ -658,12 +646,6 @@ export const CaseDetailsPage = ({
       return areStringArraysEqual(currentKeys, nextKeys) ? currentKeys : nextKeys;
     });
   }, [filteredExecutionGroups]);
-
-  useEffect(() => {
-    if (!canShowCompare && isCompareVisible) {
-      setIsCompareVisible(false);
-    }
-  }, [canShowCompare, isCompareVisible]);
 
   const handleShareCase = async () => {
     if (!readableIdentity) return;
@@ -865,9 +847,6 @@ export const CaseDetailsPage = ({
   const activeExecutionCount =
     viewMode === 'grouped' ? filteredExecutionGroups.length : filteredExecutionCount;
   const totalExecutionCount = viewMode === 'grouped' ? executionGroups.length : executionTotal;
-  const executionsIntro = allRunsMissingCaseHash
-    ? 'Every execution in this case is missing a Case Hash, so grouped view shows one fallback group.'
-    : 'Grouped view clusters executions by Case Hash. Different hashes under one case name usually mean the case was recreated or cloned, and missing-hash executions stay in a fallback group.';
   const showingFallbackOnlyGroup =
     viewMode === 'grouped' &&
     filteredExecutionGroups.length === 1 &&
@@ -880,28 +859,19 @@ export const CaseDetailsPage = ({
             filteredExecutionCount,
             'execution',
           )}`
-      : `Showing ${activeExecutionCount} of ${totalExecutionCount} executions from ${pluralize(
-          filteredExecutionGroups.filter((group) => !group.isFallback).length,
-          'Case Hash group',
-        )}`;
+      : !showCaseHashContext
+        ? `Showing ${activeExecutionCount} of ${totalExecutionCount} executions`
+        : `Showing ${activeExecutionCount} of ${totalExecutionCount} executions from ${pluralize(
+            filteredExecutionGroups.filter((group) => !group.isFallback).length,
+            'Case Hash group',
+          )}`;
 
   const toggleExecutionSelection = (executionId: string) => {
-    if (caseSelectedExecutionIds.includes(executionId)) {
-      if (caseId) {
-        setSelectedCaseExecutionIdsForCase(
-          caseId,
-          caseSelectedExecutionIds.filter((selectedId) => selectedId !== executionId),
-        );
-      }
-      return;
-    }
-
-    if (caseSelectedExecutionCount >= MAX_SELECTION) {
-      return;
-    }
-
     if (caseId) {
-      setSelectedCaseExecutionIdsForCase(caseId, [...caseSelectedExecutionIds, executionId]);
+      setSelectedCaseExecutionIdsForCase(
+        caseId,
+        toggleCaseExecution(caseSelectedExecutionIds, executionId),
+      );
     }
   };
 
@@ -926,6 +896,7 @@ export const CaseDetailsPage = ({
   const resetGroupFilters = () => {
     setGroupFilterMode('all');
     setCaseHashQuery('');
+    setExecutionQuery('');
   };
 
   const toggleDateSort = (key: ExecutionDateSort['key']) => {
@@ -1291,189 +1262,171 @@ export const CaseDetailsPage = ({
           <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
               <h2 className="text-xl font-semibold">Executions</h2>
-              <p className="max-w-3xl text-sm text-muted-foreground">{executionsIntro}</p>
+              <p className="text-xs text-muted-foreground">Select 2–5 executions to compare.</p>
             </div>
           </div>
 
-          <div className="space-y-4 px-5 py-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)]">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">View</div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-md">
+          <div className="space-y-3 px-5 py-4" data-execution-toolbar>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {showCaseHashContext ? (
+                  <>
+                    <div
+                      className="inline-flex rounded-lg border bg-slate-50 p-1"
+                      role="group"
+                      aria-label="Execution view"
+                    >
                       <Button
-                        type="button"
                         size="sm"
-                        variant={viewMode === 'flat' ? 'default' : 'outline'}
+                        variant={viewMode === 'flat' ? 'default' : 'ghost'}
+                        aria-pressed={viewMode === 'flat'}
                         onClick={() => setViewMode('flat')}
-                        className="justify-center whitespace-nowrap"
                       >
                         All executions
                       </Button>
                       <Button
-                        type="button"
                         size="sm"
-                        variant={viewMode === 'grouped' ? 'default' : 'outline'}
+                        variant={viewMode === 'grouped' ? 'default' : 'ghost'}
+                        aria-pressed={viewMode === 'grouped'}
                         onClick={() => setViewMode('grouped')}
-                        className="justify-center whitespace-nowrap"
                       >
-                        Grouped by Case Hash
+                        Group by Case Hash
                       </Button>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">Filters</div>
-                    <div className="flex flex-wrap gap-2">
-                      {GROUP_FILTER_OPTIONS.map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          size="sm"
-                          variant={groupFilterMode === option.value ? 'default' : 'outline'}
-                          onClick={() => setGroupFilterMode(option.value)}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          Filters{hasActiveGroupFilters ? ' (active)' : ''}
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="space-y-3">
+                        <Label htmlFor="execution-group-filter">Case Hash groups</Label>
+                        <select
+                          id="execution-group-filter"
+                          value={groupFilterMode}
+                          onChange={(event) =>
+                            setGroupFilterMode(event.target.value as ExecutionSummaryGroupFilter)
+                          }
+                          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                         >
-                          {option.label}
-                        </Button>
-                      ))}
-                      {hasActiveGroupFilters ? (
-                        <Button type="button" variant="ghost" size="sm" onClick={resetGroupFilters}>
-                          Reset filters
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">Search</div>
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={caseHashQuery}
-                        onChange={(event) => setCaseHashQuery(event.target.value)}
-                        placeholder="Filter Case Hash prefix"
-                        className="bg-white pl-9"
-                        aria-label="Filter Case Hash prefix"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-500">Actions</div>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-                          Selected case executions{' '}
-                          <span className="font-semibold text-slate-950">
-                            {caseSelectedExecutionCount}
-                          </span>{' '}
-                          / {MAX_SELECTION}
-                        </div>
-                        <Button
-                          ref={compareButtonRef}
-                          type="button"
-                          size="sm"
-                          onClick={() => setIsCompareVisible(true)}
-                          disabled={isCompareButtonDisabled}
-                        >
-                          Compare Case Executions
-                        </Button>
-                        {caseSelectedExecutionCount > 0 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-slate-600 hover:text-slate-900"
-                            onClick={() => {
-                              if (caseId) {
-                                setSelectedCaseExecutionIdsForCase(caseId, []);
-                              }
-                            }}
-                          >
-                            Deselect all
+                          {GROUP_FILTER_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          value={caseHashQuery}
+                          onChange={(event) => setCaseHashQuery(event.target.value)}
+                          placeholder="Filter Case Hash prefix"
+                          aria-label="Filter Case Hash prefix"
+                        />
+                        {hasActiveGroupFilters ? (
+                          <Button variant="ghost" size="sm" onClick={resetGroupFilters}>
+                            Reset filters
                           </Button>
                         ) : null}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div
-                          aria-hidden={viewMode !== 'grouped' || !showGroupActions}
-                          className={`inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1 ${
-                            viewMode === 'grouped' && showGroupActions
-                              ? ''
-                              : 'invisible pointer-events-none'
-                          }`}
-                        >
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={viewMode !== 'grouped' || !showGroupActions}
-                            className="h-7 whitespace-nowrap px-2 text-slate-600 hover:text-slate-900"
-                            onClick={handleExpandAllGroups}
-                          >
-                            Expand all
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={viewMode !== 'grouped' || !showGroupActions}
-                            className="h-7 whitespace-nowrap px-2 text-slate-600 hover:text-slate-900"
-                            onClick={handleCollapseAllGroups}
-                          >
-                            Collapse all
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                ) : (
+                  <span className="text-xs font-medium text-slate-600">All executions</span>
+                )}
               </div>
-
-              {hiddenSelectedCount > 0 ? (
-                <div className="mt-3 text-xs text-slate-500">
-                  {hiddenSelectedCount} selected{' '}
-                  {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
-                  groups.
-                </div>
-              ) : null}
-
-              {artifactExecutionIds != null ? (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                  <p>
-                    Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
-                    artifact.
-                  </p>
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={executionQuery}
+                  onChange={(event) => setExecutionQuery(event.target.value)}
+                  placeholder={
+                    showCaseHashContext
+                      ? 'Search execution ID, date, or hash'
+                      : 'Search execution ID or date'
+                  }
+                  className="pl-9"
+                  aria-label="Search executions"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span>{statusSummary}</span>
+                {viewMode === 'grouped' && showGroupActions ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleExpandAllGroups}
+                    >
+                      Expand all
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleCollapseAllGroups}
+                    >
+                      Collapse all
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {caseSelectedExecutionCount > 0 ? (
                   <Button
-                    type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
-                    onClick={clearArtifactExecutionFilter}
+                    className="h-8 px-2 text-xs text-slate-500"
+                    onClick={() => caseId && setSelectedCaseExecutionIdsForCase(caseId, [])}
                   >
-                    Clear artifact filter
+                    Clear selection
                   </Button>
-                </div>
-              ) : null}
+                ) : null}
+                <span className="text-xs text-slate-500" aria-live="polite">
+                  {caseSelectedExecutionCount} selected
+                </span>
+                <Button
+                  ref={compareButtonRef}
+                  size="sm"
+                  onClick={() => setIsCompareVisible(true)}
+                  disabled={isCompareButtonDisabled}
+                >
+                  Compare ({caseSelectedExecutionCount})
+                </Button>
+              </div>
             </div>
 
-            <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
-              {statusSummary}
-            </div>
+            {hiddenSelectedCount > 0 ? (
+              <div className="mt-3 text-xs text-slate-500">
+                {hiddenSelectedCount} selected{' '}
+                {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
+                groups.
+              </div>
+            ) : null}
+
+            {artifactExecutionIds != null ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+                <p>
+                  Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
+                  artifact.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
+                  onClick={clearArtifactExecutionFilter}
+                >
+                  Clear artifact filter
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-t border-slate-200 px-5 py-4">
-            <div
-              className={
-                useScrollableGroupsPanel
-                  ? 'rounded-xl bg-slate-50/30 p-3 lg:max-h-[70vh] lg:overflow-y-auto'
-                  : ''
-              }
-            >
+            <div className={useScrollableGroupsPanel ? 'lg:max-h-[70vh] lg:overflow-y-auto' : ''}>
               <div className="space-y-4">
                 {(viewMode === 'grouped'
                   ? filteredExecutionGroups.length
@@ -1500,7 +1453,7 @@ export const CaseDetailsPage = ({
                 ) : viewMode === 'flat' ? (
                   <div className="overflow-hidden rounded-xl border border-slate-200 bg-background">
                     <div className="max-h-[28rem] overflow-auto">
-                      <Table>
+                      <Table className="min-w-[640px] text-xs [&_td]:py-2.5 [&_th]:h-10">
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-12">Select</TableHead>
@@ -1518,7 +1471,12 @@ export const CaseDetailsPage = ({
                               onSort={toggleDateSort}
                             />
                             <TableHead>Execution ID</TableHead>
-                            <TableHead>Case Hash</TableHead>
+                            {executionDiscovery.varyingFields.includes('machineName') ? (
+                              <TableHead className="hidden lg:table-cell">Machine</TableHead>
+                            ) : null}
+                            {showCaseHashContext ? (
+                              <TableHead className="hidden xl:table-cell">Case Hash</TableHead>
+                            ) : null}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1535,12 +1493,12 @@ export const CaseDetailsPage = ({
                                   aria-label={`Select ${summary.executionId} for compare`}
                                 />
                               </TableCell>
-                              <TableCell className="align-top">
+                              <TableCell className="whitespace-nowrap align-top">
                                 {formatExecutionDateRange(summary)}
                               </TableCell>
                               <TableCell className="align-top">
                                 <TableCellText
-                                  value={details?.initializationType ?? '—'}
+                                  value={knownExecutionValue(details?.initializationType) ?? '—'}
                                   lines={1}
                                 />
                               </TableCell>
@@ -1556,27 +1514,43 @@ export const CaseDetailsPage = ({
                                 )}
                               </TableCell>
                               <TableCell className="align-top">
-                                <Link
-                                  to={executionDetailsPath({
-                                    ...readableIdentity,
-                                    executionId: summary.executionId,
-                                  })}
-                                  state={{ from: currentPath }}
-                                  className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                                >
-                                  {summary.executionId}
-                                </Link>
+                                <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                                  <Link
+                                    to={executionDetailsPath({
+                                      ...readableIdentity,
+                                      executionId: summary.executionId,
+                                    })}
+                                    state={{ from: currentPath }}
+                                    className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                                  >
+                                    {summary.executionId}
+                                  </Link>
+                                  <ExecutionMetadataDetails
+                                    candidate={{ summary, details }}
+                                    discovery={executionDiscovery}
+                                  />
+                                </div>
                               </TableCell>
-                              <TableCell className="align-top">
-                                <span
-                                  className="font-mono text-xs text-slate-700"
-                                  title={summary.caseHash ?? MISSING_CASE_HASH_LABEL}
-                                >
-                                  {summary.caseHash
-                                    ? formatCaseHashLabel(summary.caseHash)
-                                    : MISSING_CASE_HASH_LABEL}
-                                </span>
-                              </TableCell>
+                              {executionDiscovery.varyingFields.includes('machineName') ? (
+                                <TableCell className="hidden align-top lg:table-cell">
+                                  <TableCellText
+                                    value={knownExecutionValue(details?.machineName)}
+                                    lines={1}
+                                  />
+                                </TableCell>
+                              ) : null}
+                              {showCaseHashContext ? (
+                                <TableCell className="hidden align-top xl:table-cell">
+                                  <span
+                                    className="font-mono text-xs text-slate-700"
+                                    title={summary.caseHash ?? MISSING_CASE_HASH_LABEL}
+                                  >
+                                    {summary.caseHash
+                                      ? formatCaseHashLabel(summary.caseHash)
+                                      : MISSING_CASE_HASH_LABEL}
+                                  </span>
+                                </TableCell>
+                              ) : null}
                             </TableRow>
                           ))}
                         </TableBody>
@@ -1586,10 +1560,10 @@ export const CaseDetailsPage = ({
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-slate-200 bg-background">
                     <div className="max-h-[42rem] overflow-auto">
-                      <Table className="min-w-[980px]">
+                      <Table className="min-w-[600px] text-xs [&_td]:py-3 [&_th]:h-10">
                         <TableHeader className="sticky top-0 z-10 bg-slate-50">
                           <TableRow className="hover:bg-slate-50">
-                            <TableHead className="w-[22rem] bg-slate-50">
+                            <TableHead className="bg-slate-50">
                               <div className="flex items-center gap-1.5">
                                 <span>Case Hash</span>
                                 <TooltipProvider delayDuration={150}>
@@ -1612,8 +1586,7 @@ export const CaseDetailsPage = ({
                             </TableHead>
                             <TableHead className="w-24 bg-slate-50">Executions</TableHead>
                             <TableHead className="bg-slate-50">Simulation window</TableHead>
-                            <TableHead className="bg-slate-50">Initialization</TableHead>
-                            <TableHead className="bg-slate-50">Run dates</TableHead>
+                            <TableHead className="bg-slate-50">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1622,10 +1595,6 @@ export const CaseDetailsPage = ({
                             const groupPanelId = `case-hash-group-panel-${group.key}`;
                             const groupSimulationWindow = formatGroupExecutionWindow(
                               group.executions.map(({ summary }) => summary),
-                            );
-                            const groupRunWindow = getGroupRunDateWindow(group.executions);
-                            const groupInitializationSummary = summarizeDistinctValues(
-                              group.executions.map(({ details }) => details?.initializationType),
                             );
                             const showInitializationColumn =
                               countDistinctValues(
@@ -1659,7 +1628,7 @@ export const CaseDetailsPage = ({
                                     >
                                       <ChevronDown
                                         className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${
-                                          isOpen ? 'rotate-180' : ''
+                                          isOpen ? '' : '-rotate-90'
                                         }`}
                                       />
                                       <div className="min-w-0 space-y-1">
@@ -1672,36 +1641,31 @@ export const CaseDetailsPage = ({
                                               ? MISSING_CASE_HASH_LABEL
                                               : formatCaseHashLabel(group.caseHash, 22)}
                                           </span>
-                                          {group.isFallback ? (
-                                            <Badge variant="secondary">Fallback</Badge>
-                                          ) : null}
                                         </div>
-                                        {group.isFallback ? (
-                                          <p className="text-xs text-slate-500">
-                                            Older ingests without Case Hash stay in fallback group.
-                                          </p>
-                                        ) : null}
                                       </div>
                                     </button>
                                   </TableCell>
                                   <TableCell className="align-top">
-                                    <Badge variant="outline">
-                                      {pluralize(group.executions.length, 'execution')}
-                                    </Badge>
+                                    {group.executions.length}
                                   </TableCell>
-                                  <TableCell className="align-top text-sm text-slate-700">
+                                  <TableCell className="whitespace-nowrap align-top text-xs text-slate-700">
                                     {groupSimulationWindow}
                                   </TableCell>
-                                  <TableCell className="align-top text-sm text-slate-700">
-                                    <TableCellText value={groupInitializationSummary} lines={1} />
-                                  </TableCell>
-                                  <TableCell className="align-top text-sm text-slate-700">
-                                    {groupRunWindow}
+                                  <TableCell className="align-top">
+                                    <button
+                                      type="button"
+                                      className="whitespace-nowrap rounded-sm text-xs font-medium text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      onClick={() => toggleGroupExpansion(group.key, !isOpen)}
+                                      aria-expanded={isOpen}
+                                      aria-controls={groupPanelId}
+                                    >
+                                      {isOpen ? 'Hide executions' : 'View executions'}
+                                    </button>
                                   </TableCell>
                                 </TableRow>
                                 {isOpen ? (
                                   <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                                    <TableCell colSpan={6} className="p-0">
+                                    <TableCell colSpan={4} className="p-0">
                                       <div
                                         id={groupPanelId}
                                         className="border-t border-slate-200 px-4 py-3"
@@ -1716,7 +1680,7 @@ export const CaseDetailsPage = ({
                                         </div>
                                         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                           <div className="max-h-[20rem] overflow-auto">
-                                            <Table>
+                                            <Table className="min-w-[640px] text-xs">
                                               <TableHeader className="sticky top-0 z-10 bg-white">
                                                 <TableRow className="hover:bg-white">
                                                   <TableHead className="w-12 bg-white">
@@ -1779,7 +1743,11 @@ export const CaseDetailsPage = ({
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">
                                                         <TableCellText
-                                                          value={details?.initializationType ?? '—'}
+                                                          value={
+                                                            knownExecutionValue(
+                                                              details?.initializationType,
+                                                            ) ?? '—'
+                                                          }
                                                           lines={1}
                                                         />
                                                       </TableCell>
@@ -1804,16 +1772,22 @@ export const CaseDetailsPage = ({
                                                       </TableCell>
                                                     ) : null}
                                                     <TableCell className="align-top">
-                                                      <Link
-                                                        to={executionDetailsPath({
-                                                          ...readableIdentity,
-                                                          executionId: summary.executionId,
-                                                        })}
-                                                        state={{ from: currentPath }}
-                                                        className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
-                                                      >
-                                                        {summary.executionId}
-                                                      </Link>
+                                                      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                                                        <Link
+                                                          to={executionDetailsPath({
+                                                            ...readableIdentity,
+                                                            executionId: summary.executionId,
+                                                          })}
+                                                          state={{ from: currentPath }}
+                                                          className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
+                                                        >
+                                                          {summary.executionId}
+                                                        </Link>
+                                                        <ExecutionMetadataDetails
+                                                          candidate={{ summary, details }}
+                                                          discovery={executionDiscovery}
+                                                        />
+                                                      </div>
                                                     </TableCell>
                                                   </TableRow>
                                                 ))}
@@ -1854,8 +1828,9 @@ export const CaseDetailsPage = ({
           {hasNextPage ? (
             <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
               <p className="text-sm text-slate-600">
-                Loaded metadata for {allExecutions.length} of {executionTotal} executions. Search
-                and grouping include all case executions.
+                Loaded metadata for {allExecutions.length} of {executionTotal} executions. ID and
+                simulation-date search and grouping include all case executions. Run-date and
+                metadata search use loaded metadata only.
                 {dateSort.key === 'run'
                   ? ' Run-date order is partial until remaining metadata loads.'
                   : ''}
@@ -1900,13 +1875,22 @@ export const CaseDetailsPage = ({
               target?.focus({ preventScroll: true });
             }}
           >
-            <div className="shrink-0 border-b px-5 py-4 pr-12">
-              <DialogTitle ref={compareTitleRef} tabIndex={-1} className="focus:outline-none">
-                Compare case executions
-              </DialogTitle>
-              <DialogDescription className="mt-1 truncate" title={caseRecord.name}>
-                {caseRecord.name}
-              </DialogDescription>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-5 py-4 pr-12">
+              <div className="min-w-0">
+                <DialogTitle ref={compareTitleRef} tabIndex={-1} className="focus:outline-none">
+                  Compare case executions
+                </DialogTitle>
+                <DialogDescription className="mt-1 truncate" title={caseRecord.name}>
+                  {caseRecord.name}
+                </DialogDescription>
+              </div>
+              <ExecutionPicker
+                executions={executionCandidates}
+                selectedIds={caseSelectedExecutionIds}
+                onSelectionChange={(ids) => setSelectedCaseExecutionIdsForCase(caseRecord.id, ids)}
+                loadMore={hasNextPage ? () => void fetchNextPage() : undefined}
+                loadingMore={isFetchingNextPage}
+              />
             </div>
             <div className="flex min-h-0 flex-col p-4 sm:p-5">
               {renderCompareSection({

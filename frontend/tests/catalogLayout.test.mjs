@@ -32,6 +32,81 @@ after(async () => {
   if (cacheDir) await rm(cacheDir, { recursive: true, force: true });
 });
 
+test('execution discovery distinguishes known metadata without inferring changes from hashes', async () => {
+  const {
+    getExecutionDiscoveryContext,
+    getExecutionSummary,
+    matchesExecutionSearch,
+    hasCaseHashContext,
+  } = await server.ssrLoadModule('/src/lib/catalog/executionDiscovery.ts');
+  const candidate = (id, details = {}, caseHash = 'same') => ({
+    summary: {
+      id,
+      executionId: `run-${id}`,
+      caseHash,
+      simulationStartDate: '0001-01-01',
+      simulationEndDate: null,
+    },
+    details,
+  });
+  const first = candidate('1', {
+    machineName: 'Machine A',
+    initializationType: 'branch',
+    compsetAlias: 'COMMON',
+    runStartDate: '2026-10-01T12:00:00Z',
+  });
+  const unknown = candidate('2', { machineName: 'Unknown', initializationType: null });
+  const uniform = getExecutionDiscoveryContext([first, unknown]);
+  assert.deepEqual(uniform.varyingFields, []);
+  assert.equal(getExecutionSummary(first, uniform).context, '');
+  assert.equal(getExecutionSummary(unknown, uniform).simulationPeriod, '0001-01-01 → —');
+  assert.equal(hasCaseHashContext([first.summary, unknown.summary]), false);
+  const second = candidate(
+    '3',
+    {
+      machineName: 'Machine B',
+      initializationType: 'hybrid',
+      compsetAlias: 'COMMON',
+      runStartDate: '2026-10-02T12:00:00Z',
+    },
+    'other',
+  );
+  const missing = candidate('4', {}, null);
+  const discovery = getExecutionDiscoveryContext([first, second, missing]);
+  assert.deepEqual(discovery.varyingFields, ['machineName', 'initializationType']);
+  assert.match(
+    getExecutionSummary(second, discovery).context,
+    /Run: 2026-10-02 → — · Machine: Machine B · Initialization: hybrid · Hash: other/,
+  );
+  assert.equal(getExecutionSummary(missing, discovery).context, 'Missing Case Hash');
+  assert.doesNotMatch(getExecutionSummary(first, discovery).context, /COMMON|configuration/i);
+  for (const query of ['run-3', 'Machine B', 'hybrid', '0001-01-01', 'other']) {
+    assert.equal(matchesExecutionSearch(second, discovery, query), true);
+  }
+  assert.equal(matchesExecutionSearch(missing, discovery, 'missing case hash'), true);
+  assert.equal(matchesExecutionSearch(first, uniform, 'same'), false);
+  assert.deepEqual(getExecutionDiscoveryContext([]).varyingFields, []);
+  assert.equal(hasCaseHashContext([missing.summary]), false);
+  assert.equal(hasCaseHashContext([first.summary, missing.summary]), true);
+});
+
+test('case selection cap and display order preserve reference through edits', async () => {
+  const { toggleCaseExecution, reconcileExecutionOrder } = await server.ssrLoadModule(
+    '/src/lib/catalog/executionDiscovery.ts',
+  );
+  let ids = [];
+  for (const id of ['a', 'b', 'c', 'd', 'e', 'f']) ids = toggleCaseExecution(ids, id);
+  assert.deepEqual(ids, ['a', 'b', 'c', 'd', 'e']);
+  ids = toggleCaseExecution(ids, 'b');
+  ids = toggleCaseExecution(ids, 'f');
+  assert.deepEqual(ids, ['a', 'c', 'd', 'e', 'f']);
+  const order = reconcileExecutionOrder(['c', 'a', 'd', 'e', 'b'], ids);
+  assert.deepEqual(order, ['c', 'a', 'd', 'e', 'f']);
+  assert.deepEqual(reconcileExecutionOrder(order, ['a', 'f']), ['a', 'f']);
+  assert.deepEqual(reconcileExecutionOrder(order, []), []);
+  assert.deepEqual(toggleCaseExecution(['a'], 'a'), []);
+});
+
 test('simulated duration chooses units without converting mixed calendars to years', async () => {
   const { formatSimulatedDuration, describeSimulatedDuration } = await server.ssrLoadModule(
     '/src/features/catalog/caseUtils.ts',
