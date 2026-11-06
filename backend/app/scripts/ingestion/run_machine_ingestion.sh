@@ -6,8 +6,8 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 [[ $# == 1 && ( $1 == true || $1 == false ) ]] || fail 'Expected dry-run mode: true or false'
 requested_dry_run=$1
 case "${machine:-}" in
-  chrysalis|perlmutter) selected_machine=$machine ;;
-  *) fail 'machine must be chrysalis or perlmutter' ;;
+  aurora|chrysalis|perlmutter) selected_machine=$machine ;;
+  *) fail 'machine must be aurora, chrysalis, or perlmutter' ;;
 esac
 [[ ${env:-} == dev || ${env:-} == prod ]] || fail 'env must be dev or prod'
 selected_scan_mode=${scan_mode:-}
@@ -20,8 +20,8 @@ config="$script_dir/sites/configs/$selected_machine.config"
 export DRY_RUN=$requested_dry_run
 export PYTHONUNBUFFERED=1
 export SIMBOARD_ENV_FILE=${env_file:-}
-if [[ $selected_machine == chrysalis ]]; then
-  [[ -n ${SIMBOARD_ROOT:-} ]] || fail 'SIMBOARD_ROOT must be set for chrysalis'
+if [[ $selected_machine != perlmutter ]]; then
+  [[ -n ${SIMBOARD_ROOT:-} ]] || fail "SIMBOARD_ROOT must be set for $selected_machine"
   export SIMBOARD_ENV_FILE=${env_file:-${SIMBOARD_ROOT}/operations/env.${env}.sh}
   export SIMBOARD_SITE_CONFIG=$config
   export SIMBOARD_ENFORCE_RUN_CONTROLS=true

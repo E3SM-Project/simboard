@@ -37,6 +37,7 @@ from app.scripts.ingestion.archive_client import (
     _timeout_request_error,
     _url_request_error,
 )
+from app.scripts.ingestion.archive_discovery import _prune_staging_walk_dirnames
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
     DISCOVERY_RESULT_BATCH_SIZE,
@@ -46,7 +47,6 @@ from app.scripts.ingestion.archive_ingestor_core import (
 )
 from app.scripts.ingestion.archive_ingestor_core import logger as ingestion_logger
 from app.scripts.ingestion.archive_layout import _filter_archive_walk_dirnames
-from app.scripts.ingestion.nersc_archive_ingestor import _prune_staging_walk_dirnames
 from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import (
     CHRYSALIS_ARCHIVE_ROOT,
     V3_ARCHIVE_YEAR_START,
