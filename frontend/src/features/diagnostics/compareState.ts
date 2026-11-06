@@ -60,7 +60,25 @@ export const comparePath = (runs: CompareRun[]): string =>
  * A run label as people see it. A leading ``!`` marks an MPAS case-name
  * override (an IICE convention) and is not shown.
  */
-export const displayLabel = (run: CompareRun): string => run.label.replace(/^!/, '') || run.url;
+export const displayLabel = (run: CompareRun): string => {
+  const label = run.label.replace(/^!/, '');
+  if (label) return label;
+  try {
+    const url = new URL(run.url);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const tool = parts.findIndex((part) => part === 'e3sm_diags' || part === 'mpas_analysis');
+    const name =
+      tool > 0
+        ? parts[tool - 1]
+        : parts.filter((part) => !['viewer', 'index.html', 'html'].includes(part)).at(-1) ||
+          url.hostname;
+    const period = url.pathname.match(/(?:model_vs_(?:obs|model)_|climo_|yrs)(\d+-\d+)/)?.[1];
+    const compact = name.length > 54 ? `${name.slice(0, 30)}…${name.slice(-20)}` : name;
+    return [compact, period && !compact.includes(period) ? period : ''].filter(Boolean).join(' ');
+  } catch {
+    return 'Diagnostic run';
+  }
+};
 
 const pad = (year: number) => String(year).padStart(4, '0');
 

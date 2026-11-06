@@ -14,10 +14,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { compareRuns } from '@/features/diagnostics/api';
 import {
   type BasketEntry,
-  comparePath,
+  COMPARE_PATH,
   type CompareRun,
   compareSearch,
   type CompareState,
@@ -80,7 +87,7 @@ export const ComparePage = () => {
     )
       return 'The comparison tray is full for this diagnostic kind. Remove staged runs or choose fewer runs.';
     setEditing(false);
-    navigate(comparePath(runs));
+    navigate(`${COMPARE_PATH}?${compareSearch({ ...state, runs })}`);
   };
 
   const query = useQuery({
@@ -134,7 +141,17 @@ export const ComparePage = () => {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement | null)?.tagName === 'INPUT') return;
+      if (
+        editing ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.target as HTMLElement | null)?.closest(
+          'input, textarea, select, button, a, [contenteditable="true"], [role="dialog"], [role="combobox"], [role="listbox"], [role="radiogroup"], [role="tablist"]',
+        )
+      )
+        return;
       const delta = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1 }[event.key];
       if (delta) {
         event.preventDefault();
@@ -143,7 +160,7 @@ export const ComparePage = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step]);
+  }, [step, editing]);
 
   const copyLink = async () => {
     try {
@@ -153,16 +170,6 @@ export const ComparePage = () => {
       toast({ title: 'Could not copy the link', variant: 'destructive' });
     }
   };
-
-  if (state.runs.length > MAX_COMPARED_RUNS) {
-    return (
-      <Shell>
-        <p className="text-sm text-red-600">
-          This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time.
-        </p>
-      </Shell>
-    );
-  }
 
   if (state.runs.length === 0) {
     return (
@@ -188,11 +195,16 @@ export const ComparePage = () => {
   return (
     <Shell>
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {state.runs.map((run) => (
-              <Badge key={run.url} variant="secondary" title={run.url}>
+              <Badge
+                key={`${run.url}|${run.label}`}
+                variant="secondary"
+                title={run.url}
+                className="max-w-full break-all"
+              >
                 {displayLabel(run)}
               </Badge>
             ))}
@@ -205,7 +217,10 @@ export const ComparePage = () => {
                 Edit runs
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto">
+            <DialogContent
+              overlayClassName="motion-reduce:animate-none"
+              className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto motion-reduce:animate-none"
+            >
               <DialogHeader>
                 <DialogTitle>Edit diagnostic runs</DialogTitle>
                 <DialogDescription>
@@ -226,7 +241,12 @@ export const ComparePage = () => {
         </div>
       </header>
 
-      {query.isLoading ? (
+      {state.runs.length > MAX_COMPARED_RUNS ? (
+        <Notice>
+          This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time. Use
+          Edit runs to remove some.
+        </Notice>
+      ) : query.isLoading ? (
         <p className="text-sm text-slate-500">Reading each run&apos;s published plots…</p>
       ) : query.isError ? (
         <div className="space-y-2 text-sm text-red-600">
@@ -238,43 +258,50 @@ export const ComparePage = () => {
       ) : data ? (
         <>
           {failed.length > 0 ? (
-            <Notice>Left out, could not be read: {names(failed)}.</Notice>
+            <Notice>
+              Could not be read: {names(failed)}. Use Edit runs to replace or remove these runs.
+            </Notice>
           ) : null}
           {partial.length > 0 ? (
             <Notice>
-              Only partly read, so some shared plots may be missing: {names(partial)}. Reload to try
-              again.
+              Only partly read, so some shared plots may be missing: {names(partial)}.
             </Notice>
+          ) : null}
+          {failed.length || partial.length ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              Retry diagnostics
+            </Button>
           ) : null}
 
           {data.sets.length === 0 ? (
             <p className="text-sm text-slate-500">
               These runs have no plots in common. Compare runs of the same kind, for example
-              model-vs-observations runs with each other.
+              model-vs-observations runs with each other. Use Edit runs to change your selection.
             </p>
           ) : (
             <>
-              <nav
-                aria-label="Plot sets"
-                className="flex flex-wrap gap-1 border-b border-slate-200"
-              >
-                {data.sets.map((set) => (
-                  <button
-                    key={set.name}
-                    type="button"
-                    onClick={() => update({ set: set.name, plot: null })}
-                    aria-current={set.name === detail?.name ? 'page' : undefined}
-                    className={cn(
-                      '-mb-px border-b-2 px-3 py-1.5 text-sm',
-                      set.name === detail?.name
-                        ? 'border-slate-900 font-medium text-slate-950'
-                        : 'border-transparent text-slate-500 hover:text-slate-800',
-                    )}
-                  >
-                    {set.title}
-                  </button>
-                ))}
-              </nav>
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+                <span id="plot-set-label" className="text-sm font-medium">
+                  Diagnostic category
+                </span>
+                <Select value={detail?.name} onValueChange={(set) => update({ set, plot: null })}>
+                  <SelectTrigger aria-labelledby="plot-set-label" className="w-full sm:w-80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data.sets.map((set) => (
+                      <SelectItem key={set.name} value={set.name}>
+                        {set.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
                 <aside className="space-y-2">
@@ -295,18 +322,22 @@ export const ComparePage = () => {
                     {visible.length} variables · ↑/↓ to step
                     {detail?.missing ? ` · ${detail.missing} plots not in every run` : ''}
                   </p>
-                  <ul className="max-h-[70vh] space-y-0.5 overflow-y-auto pr-1">
+                  {!visible.length ? (
+                    <p className="text-sm text-slate-500">No variables match this filter.</p>
+                  ) : null}
+                  <ul className="max-h-60 space-y-0.5 overflow-y-auto pr-1 lg:max-h-[70vh]">
                     {visible.map((group) => (
                       <li key={group.id}>
                         <button
                           type="button"
+                          aria-current={group.id === activeGroup?.id ? 'true' : undefined}
                           onClick={() =>
                             update({
                               plot: pickPlot(group, activePlot?.season, activePlot?.region).key,
                             })
                           }
                           className={cn(
-                            'w-full rounded-md px-2 py-1.5 text-left text-sm',
+                            'w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             group.id === activeGroup?.id
                               ? 'bg-slate-900 text-white'
                               : 'text-slate-700 hover:bg-slate-100',
@@ -330,7 +361,7 @@ export const ComparePage = () => {
                 {detail && activeGroup && activePlot ? (
                   <section className={cn('min-w-0 space-y-3', query.isFetching && 'opacity-70')}>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <div className="flex items-center gap-1">
+                      <div className="flex min-w-0 items-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -339,10 +370,13 @@ export const ComparePage = () => {
                         >
                           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <h2 className="text-base font-semibold text-slate-950">
+                        <h2 className="min-w-0 break-words text-base font-semibold text-slate-950">
                           {activeGroup.title}{' '}
                           <span className="font-normal text-slate-500">
-                            vs {activeGroup.reference}
+                            vs{' '}
+                            {new Set(activePlot.references.filter(Boolean)).size > 1
+                              ? 'per-run references'
+                              : activeGroup.reference}
                           </span>
                         </h2>
                         <Button
@@ -380,6 +414,12 @@ export const ComparePage = () => {
                         />
                       ) : null}
                     </div>
+                    {view === 'diff' && !activePlot.singlePanel ? (
+                      <p className="text-xs text-slate-500">
+                        Difference shows each run minus its own reference, not the difference
+                        between selected simulations. Colors use each published image’s scale.
+                      </p>
+                    ) : null}
                     <Plots data={data} detail={detail} plot={activePlot} view={view} />
                   </section>
                 ) : null}
@@ -399,7 +439,7 @@ const Notice = ({ children }: { children: React.ReactNode }) => (
 );
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="mx-auto w-full max-w-[1600px] space-y-4 px-6 py-6">{children}</div>
+  <div className="mx-auto w-full max-w-[1600px] space-y-4 px-4 py-6 sm:px-6">{children}</div>
 );
 
 interface ChoiceProps {
@@ -419,7 +459,20 @@ const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoicePr
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex rounded-md border border-slate-200 p-0.5"
+      className="inline-flex max-w-full flex-wrap rounded-md border border-slate-200 p-0.5"
+      onKeyDown={(event) => {
+        const delta = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+        if (!delta && event.key !== 'Home' && event.key !== 'End') return;
+        event.preventDefault();
+        const index =
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? options.length - 1
+              : (options.indexOf(value ?? '') + (delta ?? 0) + options.length) % options.length;
+        onChange(options[index]);
+        event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[index]?.focus();
+      }}
     >
       {options.map((option) => (
         <button
@@ -427,9 +480,10 @@ const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoicePr
           type="button"
           role="radio"
           aria-checked={option === value}
+          tabIndex={option === (value ?? options[0]) ? 0 : -1}
           onClick={() => onChange(option)}
           className={cn(
-            'rounded px-2.5 py-1 text-xs font-medium',
+            'rounded px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             option === value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
           )}
         >
@@ -455,12 +509,19 @@ interface PlotsProps {
 const Plots = ({ data, detail, plot, view }: PlotsProps) => {
   const panel = plot.singlePanel ? undefined : detail.panels[view];
   const reference = view === 'test' && !plot.singlePanel ? detail.panels.ref : undefined;
-  const cells = data.runs.flatMap((run, i) => {
+  const cells = data.runs.map((run, i) => {
     const path = plot.paths[i];
-    return path && !run.error
-      ? [{ run, src: imageUrl(run.imageBaseUrl, path), ref: plot.references[i] }]
-      : [];
+    return {
+      run,
+      src: path && !run.error ? imageUrl(run.imageBaseUrl, path) : null,
+      ref: plot.references[i],
+    };
   });
+  const references = cells.filter(
+    (cell, index) =>
+      cell.src &&
+      !cells.slice(0, index).some((previous) => previous.src && previous.ref === cell.ref),
+  );
 
   return (
     <div
@@ -469,46 +530,62 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
         (cells.length > 4 || detail.name === 'polar') && '2xl:grid-cols-3',
       )}
     >
-      {cells.map(({ run, src }) => (
+      {cells.map(({ run, src, ref }) => (
         <figure
-          key={run.url}
+          key={`${run.url}|${run.label}`}
           className="overflow-hidden rounded-lg border border-slate-200 bg-white"
         >
           <figcaption className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5 text-xs">
-            <span className="truncate font-medium text-slate-900" title={run.url}>
+            <span className="min-w-0 break-words font-medium text-slate-900" title={run.url}>
               {displayLabel(run)}
+              {view !== 'test' && ref ? (
+                <span className="block font-normal text-slate-500">Reference: {ref}</span>
+              ) : null}
             </span>
-            <a
-              href={src}
-              target="_blank"
-              rel="noreferrer"
-              className="text-slate-500 hover:text-slate-800"
-              aria-label={`Open the full image for ${displayLabel(run)}`}
-            >
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
+            {src ? (
+              <a
+                href={src}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 rounded p-1 text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Open the full image for ${displayLabel(run)}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            ) : null}
           </figcaption>
-          <PanelImage
-            src={src}
-            alt={`${displayLabel(run)}: ${plot.key}`}
-            panel={panel}
-            width={detail.imageWidth}
-          />
+          {src ? (
+            <PanelImage
+              src={src}
+              alt={`${displayLabel(run)}: ${plot.key}`}
+              panel={panel}
+              width={detail.imageWidth}
+            />
+          ) : (
+            <p className="flex min-h-48 items-center justify-center p-4 text-sm text-slate-500">
+              Plot unavailable for this run. Use Edit runs to replace it.
+            </p>
+          )}
         </figure>
       ))}
-      {reference && cells[0] ? (
-        <figure className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50/50">
-          <figcaption className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
-            Reference · {cells[0].ref}
-          </figcaption>
-          <PanelImage
-            src={cells[0].src}
-            alt={`Reference: ${plot.key}`}
-            panel={reference}
-            width={detail.imageWidth}
-          />
-        </figure>
-      ) : null}
+      {reference
+        ? references.map((cell) => (
+            <figure
+              key={cell.ref ?? cell.src}
+              className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50/50"
+            >
+              <figcaption className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
+                Reference · {cell.ref}
+              </figcaption>
+              <PanelImage
+                src={cell.src!}
+                alt={`Reference: ${plot.key}`}
+                panel={reference}
+                width={detail.imageWidth}
+              />
+            </figure>
+          ))
+        : null}
     </div>
   );
 };
@@ -525,8 +602,37 @@ const PanelImage = ({
   panel?: PanelOut;
   width: number | null;
 }) => {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (failedSrc === src)
+    return (
+      <div
+        role="status"
+        className="flex min-h-48 flex-col items-center justify-center gap-2 p-4 text-center text-sm text-slate-500"
+      >
+        <p>Published image unavailable: {alt}</p>
+        <Button variant="outline" size="sm" onClick={() => setFailedSrc(null)}>
+          Retry image
+        </Button>
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Open original image
+        </a>
+      </div>
+    );
   if (!panel || !width) {
-    return <img src={src} alt={alt} loading="lazy" className="block h-auto w-full" />;
+    return (
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onError={() => setFailedSrc(src)}
+        className="block h-auto w-full"
+      />
+    );
   }
   return (
     <div
@@ -537,6 +643,7 @@ const PanelImage = ({
         src={src}
         alt={alt}
         loading="lazy"
+        onError={() => setFailedSrc(src)}
         className="absolute max-w-none"
         style={{
           width: `${(width / panel.width) * 100}%`,
