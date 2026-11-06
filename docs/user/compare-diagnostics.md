@@ -13,8 +13,11 @@ tool, including its example comparisons and label conventions.
 A case with a [diagnostics link](diagnostics.md) has a **Diagnostics** card above
 **Change History**, expanded when supported runs exist. Runs are grouped by time
 range and retain their exact identifiers. **All**, **Climatology**, and
-**Time Series** show per-case counts; empty diagnostic types are disabled.
+**Time Series** show per-case counts.
 Tool filters show unique counts for **All**, **E3SM Diags**, and **MPAS-Analysis**.
+Both **Tool** and **Analysis** filters remain visible. Counts show unique runs
+matching the other filter; unavailable options are disabled. If case data no
+longer supports an active filter, it resets to **All**.
 MPAS runs use climatology years first, otherwise time-series years, otherwise
 **Unknown time range**. Each run appears once, with both indexed ranges shown
 when available. Filters do not change its primary time-range group.
