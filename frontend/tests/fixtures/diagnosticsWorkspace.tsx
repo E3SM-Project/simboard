@@ -408,7 +408,7 @@ const analysisTab = (text: string) =>
     ),
   ].find((item) => item.textContent?.startsWith(`${text} (`));
 const selectedSummary = () =>
-  [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+  [...document.querySelectorAll<HTMLHeadingElement>('h2')].find((item) =>
     item.textContent?.startsWith('Selected runs ('),
   );
 const toolButton = (text: string) =>
@@ -418,11 +418,9 @@ const toolButton = (text: string) =>
     ),
   ].find((item) => item.textContent?.startsWith(`${text} (`));
 const expandSelections = async () => {
-  if (selectedSummary()?.getAttribute('aria-expanded') === 'false')
-    click(selectedSummary(), 'expand selected-run details');
   await waitFor(
-    () => selectedSummary()?.getAttribute('aria-expanded') === 'true',
-    'selected details expanded',
+    () => document.querySelector('[aria-label="Selected runs"]'),
+    'selected details visible',
   );
 };
 const link = (text: string) =>
@@ -608,7 +606,7 @@ async function testWorkspace() {
     document.getElementById('comparison-tray-selections')?.textContent?.includes('case.alpha'),
     'Cross-case selection retained',
   );
-  click(link('Compare'), 'compare directly');
+  click(button('Compare'), 'compare from tray');
   await waitFor(() => document.querySelectorAll('figure').length === 2, 'populated comparison');
   check(
     !document.querySelector('[aria-label="Diagnostics comparison"]'),
@@ -618,8 +616,8 @@ async function testWorkspace() {
   click(button('Edit runs'), 'run editor');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'editor dialog');
   check(
-    selectedSummary()?.getAttribute('aria-expanded') === 'false',
-    'Selected-run details collapse by default',
+    document.querySelector('button[aria-label="Remove run 1"]'),
+    'Selected-run details are open by default',
   );
   await expandSelections();
   click(
@@ -1203,8 +1201,8 @@ async function testToolFilters() {
     'Workspace uses same climatology-first grouping',
   );
   check(
-    document.querySelectorAll(`a[href="${combinedUrl}"]`).length === 1,
-    'Workspace combined MPAS run stays unique',
+    document.querySelectorAll(`#available-case-diagnostics a[href="${combinedUrl}"]`).length === 1,
+    'Workspace combined MPAS run stays unique in discovery',
   );
   check(
     document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
@@ -1484,6 +1482,18 @@ async function testViewer() {
     () => document.querySelector('[aria-label="Comparison group"]'),
     'automatic tray group',
   );
+  check(
+    document.querySelector('[aria-label="Comparison group"]')?.textContent?.includes('(1/12)'),
+    'Selected group dropdown displays selected count and limit',
+  );
+  check(
+    Boolean(
+      selectedSummary()!.compareDocumentPosition(
+        document.querySelector('[aria-label="Comparison group"]')!,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ),
+    'Selected heading precedes group dropdown',
+  );
   check(!button('Import tray selections'), 'No manual import step');
   await waitFor(
     () => document.body.textContent?.includes('Selected runs (1/'),
@@ -1605,8 +1615,8 @@ async function testUnifiedSelections() {
     'No routine discovery status clutter',
   );
   check(
-    selectedSummary()?.getAttribute('aria-expanded') === 'false',
-    'Selected details stay collapsed after refresh',
+    document.querySelector('button[aria-label="Remove run 1"]'),
+    'Selected details stay open after refresh',
   );
   await expandSelections();
   const selections = document.querySelector('[aria-label="Selected runs"]')!;
@@ -1619,18 +1629,20 @@ async function testUnifiedSelections() {
   );
   check(
     getComputedStyle(button('Compare')!.closest('footer')!).position === 'sticky',
-    'Summary and Compare share sticky footer',
-  );
-  click(selectedSummary(), 'collapse selected details');
-  await waitFor(
-    () => selectedSummary()?.getAttribute('aria-expanded') === 'false',
-    'Selected details collapse',
+    'Compare remains in sticky footer',
   );
   check(
-    !document.querySelector('button[aria-label="Remove run 1"]'),
-    'Collapsed selection hides row controls',
+    !selections.querySelector('button[aria-expanded]') &&
+      selectedSummary()?.parentElement === selections,
+    'Selected heading sits above permanently visible selection controls',
   );
-  check(button('Compare'), 'Compare stays available while details collapse');
+  check(
+    Boolean(
+      selectedSummary()!.compareDocumentPosition(selections.querySelector('a')!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ),
+    'Selected heading precedes selected rows',
+  );
   render(comparePath([{ url: url('alpha'), label: 'Explicit shared selection' }]));
   await waitFor(
     () => document.querySelectorAll('figure').length === 1,
@@ -1883,6 +1895,109 @@ async function testCompatibilityValidation() {
   comparisonDelay = 0;
 }
 
+async function testTrayCompatibility() {
+  const stage = (ids: string[]) => {
+    localStorage.clear();
+    localStorage.setItem(
+      'simboard.diagnostics-comparison',
+      JSON.stringify(
+        ids.map((id) => ({
+          url: url(id),
+          caseId: id,
+          caseName: `case.${id}`,
+          tool: 'e3sm_diags',
+          comparison: 'model_vs_obs',
+          period: '0001-0050',
+          subsection: 'atm_monthly_180x360_aave',
+        })),
+      ),
+    );
+    window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+    render('/case/alpha');
+  };
+  stage(['tray-one', 'tray-two']);
+  await waitFor(
+    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    'tray compatible setup',
+  );
+  const before = compares;
+  comparisonDelay = 100;
+  const compareButton = button('Compare')!;
+  click(compareButton, 'tray compatibility check');
+  compareButton.click();
+  await waitFor(
+    () => document.querySelector('[aria-label="Diagnostics comparison"] button[aria-busy="true"]'),
+    'tray loading state',
+  );
+  check(latest === '/case/alpha', 'Tray waits for validation before navigation');
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 2,
+    'Tray opens every selected compatible run',
+  );
+  check(compares === before + 1, 'Tray duplicate clicks and viewer reuse make one request');
+  comparisonDelay = 0;
+
+  stage(['tray-one', 'unreadable']);
+  await waitFor(
+    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    'tray unreadable setup',
+  );
+  click(button('Compare'), 'tray unreadable validation');
+  await waitFor(() => button('Retry comparison'), 'tray archive failure retry');
+  check(
+    latest === '/case/alpha' && !document.querySelector('figure'),
+    'Unreadable selected run blocks incomplete viewer',
+  );
+  check(
+    document.querySelector('[role="alert"]')?.textContent?.includes('case.unreadable'),
+    'Tray identifies unreadable selected run',
+  );
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 2,
+    'Tray preserves selections on failure',
+  );
+
+  stage(['tray-one', 'incompatible']);
+  await waitFor(() => button('Compare'), 'tray incompatible setup');
+  click(button('Compare'), 'tray no-common-plots validation');
+  await waitFor(
+    () =>
+      document.querySelector('[role="alert"]')?.textContent ===
+      'Selected runs have no plots in common. Choose compatible runs.',
+    'tray specific incompatibility message',
+  );
+  check(latest === '/case/alpha', 'Incompatible tray stays on case page');
+  check(!button('Retry comparison'), 'Incompatibility does not offer network retry');
+
+  stage(['tray-network-one', 'tray-network-two']);
+  await waitFor(() => button('Compare'), 'tray network setup');
+  comparisonFailures = 1;
+  click(button('Compare'), 'tray network error');
+  await waitFor(() => button('Retry comparison'), 'tray network retry available');
+  click(button('Retry comparison'), 'tray retry network');
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 2,
+    'Tray retry opens both runs',
+  );
+
+  stage(['tray-abandon-one', 'tray-abandon-two']);
+  await waitFor(
+    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    'tray abandoned setup',
+  );
+  comparisonDelay = 100;
+  click(button('Compare'), 'start tray validation before leaving');
+  await waitFor(() => document.querySelector('button[aria-busy="true"]'), 'tray request pending');
+  click(link('Beta case'), 'leave case during tray validation');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case beta',
+    'new case after leaving',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  check(latest === '/case/beta', 'Tray result does not override navigation');
+  comparisonDelay = 0;
+}
+
 async function testExampleRetryAndGroupSwitch() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
@@ -1961,7 +2076,7 @@ async function testExampleRetryAndGroupSwitch() {
   group.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   await waitFor(() => document.querySelector('[role="option"]'), 'comparison groups opened');
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (item) => item.textContent === 'MPAS-Analysis',
+    (item) => item.textContent === 'MPAS-Analysis (1/12)',
   )!;
   option.focus();
   option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -2186,6 +2301,7 @@ testWorkspace()
   .then(testUnifiedSelections)
   .then(testDiscoveryWarnings)
   .then(testCompatibilityValidation)
+  .then(testTrayCompatibility)
   .then(testExampleRetryAndGroupSwitch)
   .then(testSelectionScrollStability)
   .then(testDenseBrowser)
