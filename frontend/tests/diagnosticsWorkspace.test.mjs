@@ -53,7 +53,7 @@ test(
                         '/__diagnostics',
                         '<div id="root"></div><script type="module" src="/tests/fixtures/diagnosticsWorkspace.tsx"></script>',
                       )
-                    : `<!doctype html><iframe width="${width}" height="1000" style="border:0" src="/__diagnostics/fixture?width=${width}"></iframe>`;
+                    : `<!doctype html><iframe width="${width}" height="${width < 768 ? 700 : 1000}" style="border:0" src="/__diagnostics/fixture?width=${width}"></iframe>`;
                 response.setHeader('Content-Type', 'text/html');
                 response.end(html);
               } catch (error) {

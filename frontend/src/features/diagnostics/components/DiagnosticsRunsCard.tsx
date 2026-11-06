@@ -13,7 +13,7 @@ import {
   useComparisonBasket,
 } from '@/features/diagnostics/comparisonBasket';
 import { DiagnosticRunList } from '@/features/diagnostics/components/DiagnosticRunList';
-import { diagnosticsId, resourceTarget, sourceId } from '@/features/diagnostics/discoveryState';
+import { diagnosticsId, periodGroups, resourceTarget } from '@/features/diagnostics/discoveryState';
 import type { DiagnosticsRunOut } from '@/features/diagnostics/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -37,7 +37,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
   const location = useLocation();
   const target = location.hash.slice(1);
   const id = diagnosticsId(caseId);
-  const runs = query.data?.sources.flatMap((source) => source.runs) ?? [];
+  const runs = periodGroups(query.data?.sources ?? []).flatMap(([, runs]) => runs);
   const selected = basket.entries.filter((entry) => entry.caseId === caseId).length;
   const sources =
     query.data?.sources ??
@@ -117,7 +117,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
           </CollapsibleTrigger>
         </CardHeader>
         <CollapsibleContent>
-          <CardContent className="space-y-5 border-t p-5">
+          <CardContent className="space-y-3 border-t p-4">
             <p className="text-sm text-muted-foreground">
               Add matching diagnostics from this case or other cases to compare time ranges side by
               side.
@@ -133,18 +133,15 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
                 {query.isFetching ? 'Retrying…' : 'Try again'}
               </Button>
             ) : null}
-            {sources.map((source, index) => (
-              <DiagnosticRunList
-                key={source.rootUrl}
-                source={source}
-                id={sourceId(caseId, index)}
-                target={target}
-                navigationKey={location.key}
-                isAdded={basket.has}
-                onAdd={add}
-                onRemove={basket.remove}
-              />
-            ))}
+            {/* Resource navigation must reveal runs hidden by an analysis filter. */}
+            <DiagnosticRunList
+              key={location.key}
+              sources={sources}
+              id={id}
+              isAdded={basket.has}
+              onAdd={add}
+              onRemove={basket.remove}
+            />
             {query.isSuccess && !runs.length ? (
               <p className="text-sm text-slate-500">
                 No supported runs were found. Original directories may contain other tools or raw
