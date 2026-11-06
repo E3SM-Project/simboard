@@ -7,7 +7,12 @@ import { ExecutionDetailsPage } from '@/features/catalog/ExecutionDetailsPage';
 
 interface CatalogRoutesProps {
   renderCaseCompareSection?: (options: { caseId: string; onClose: () => void }) => ReactNode;
-  renderCaseDiagnostics?: (options: { caseId: string; caseName: string }) => ReactNode;
+  renderCaseDiagnostics?: (options: {
+    caseId: string;
+    caseName: string;
+    directories: { url: string; label: string | null }[];
+  }) => ReactNode;
+  renderDiagnosticsResource?: (options: { caseId: string; url: string }) => ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -15,6 +20,7 @@ interface CatalogRoutesProps {
 export const catalogRoutes = ({
   renderCaseCompareSection,
   renderCaseDiagnostics,
+  renderDiagnosticsResource,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
 }: CatalogRoutesProps): RouteObject[] => [
@@ -28,6 +34,7 @@ export const catalogRoutes = ({
       <CaseDetailsPage
         renderCompareSection={renderCaseCompareSection}
         renderDiagnostics={renderCaseDiagnostics}
+        renderDiagnosticsResource={renderDiagnosticsResource}
         selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
         setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
       />
