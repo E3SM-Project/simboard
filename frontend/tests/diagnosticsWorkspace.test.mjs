@@ -39,6 +39,13 @@ test(
             vite.middlewares.use('/__diagnostics', async (request, response, next) => {
               try {
                 const url = new URL(request.url, 'http://localhost');
+                if (url.pathname.startsWith('/image/')) {
+                  response.setHeader('Content-Type', 'image/svg+xml');
+                  response.end(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600"><rect width="1000" height="600" fill="white"/></svg>',
+                  );
+                  return;
+                }
                 const width = Number(url.searchParams.get('width'));
                 const html =
                   url.pathname === '/fixture'

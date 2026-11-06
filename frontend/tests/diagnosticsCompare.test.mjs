@@ -56,10 +56,20 @@ test('defaults are left out of the URL and restored when read', () => {
   assert.deepEqual(state, { runs: [{ url: 'x', label: '' }], set: null, plot: null, view: 'test' });
 });
 
-test('labels hide the MPAS override mark and fall back to the URL', () => {
+test('labels preserve supplied text and shorten only the unlabeled UI fallback', () => {
   assert.equal(displayLabel({ url: VIEWER, label: '!my.case yrs 1-10' }), 'my.case yrs 1-10');
   assert.equal(displayLabel({ url: VIEWER, label: 'a!b' }), 'a!b');
-  assert.equal(displayLabel({ url: VIEWER, label: '' }), VIEWER);
+  assert.equal(displayLabel({ url: VIEWER, label: '' }), 'case 1985-2014');
+  assert.equal(displayLabel({ url: 'https://example.test/', label: '' }), 'example.test');
+  assert.equal(displayLabel({ url: 'not a URL', label: '' }), 'Diagnostic run');
+  assert.equal(
+    parseCompareState(
+      new URLSearchParams(
+        compareSearch({ runs: [{ url: VIEWER, label: '' }], set: null, plot: null, view: 'test' }),
+      ),
+    ).runs[0].url,
+    VIEWER,
+  );
 });
 
 test('run periods are zero-padded model years', () => {
