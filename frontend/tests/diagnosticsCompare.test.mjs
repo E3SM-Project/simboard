@@ -14,6 +14,7 @@ import {
   runPeriod,
   toEntry,
 } from '../src/features/diagnostics/compareState.ts';
+import { relatedDirectories, resourceTarget } from '../src/features/diagnostics/discoveryState.ts';
 
 const LCRC = 'https://web.lcrc.anl.gov/public/e3sm/diagnostic_output';
 const VIEWER = `${LCRC}/x/case/e3sm_diags/a/model_vs_obs_1985-2014/viewer/`;
@@ -94,4 +95,39 @@ test('runs group by tool and kind; MPAS runs are one group', () => {
   assert.notEqual(groupKey(obs), groupKey(mvm));
   assert.equal(groupKey(mpas), 'mpas_analysis');
   assert.equal(entryLabel(obs), 'v3.LR.historical 1985-2014');
+});
+
+test('resource matching respects origin, path boundaries, and common parent sections', () => {
+  const root = `${LCRC}/x/case/`;
+  const sources = [
+    {
+      rootUrl: root,
+      runs: [
+        run(),
+        run({ tool: 'mpas_analysis', comparison: null, url: `${root}mpas_analysis/ts_0001-0050/` }),
+      ],
+    },
+  ];
+  assert.equal(resourceTarget('c1', root, sources), 'diagnostics-c1-source-0');
+  assert.equal(
+    resourceTarget('c1', VIEWER, sources),
+    'diagnostics-c1-source-0-e3sm_diags:model_vs_obs',
+  );
+  assert.equal(
+    resourceTarget('c1', `${root}mpas_analysis/`, sources),
+    'diagnostics-c1-source-0-mpas_analysis',
+  );
+  assert.equal(resourceTarget('c1', `${root}raw_output/`, sources), null);
+  assert.equal(
+    resourceTarget('c1', `${LCRC}/x/`, [
+      ...sources,
+      { rootUrl: `${LCRC}/x/other/`, runs: [run({ url: `${LCRC}/x/other/viewer/` })] },
+    ]),
+    'diagnostics-c1',
+  );
+  assert.equal(resourceTarget('c1', root, [{ rootUrl: root, runs: [] }]), null);
+  assert.equal(relatedDirectories(root, `${LCRC}/x/case-other/`), false);
+  assert.equal(relatedDirectories(root, root.replace('https:', 'http:')), false);
+  assert.equal(relatedDirectories(root, `${root}?different=1`), false);
+  assert.equal(relatedDirectories('not a URL', root), false);
 });
