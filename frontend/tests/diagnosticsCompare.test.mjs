@@ -12,6 +12,7 @@ import {
   isRunUrl,
   parseCompareState,
   runPeriod,
+  reconcileBasket,
   toEntry,
 } from '../src/features/diagnostics/compareState.ts';
 import { relatedDirectories, resourceTarget } from '../src/features/diagnostics/discoveryState.ts';
@@ -130,4 +131,22 @@ test('resource matching respects origin, path boundaries, and common parent sect
   assert.equal(relatedDirectories(root, root.replace('https:', 'http:')), false);
   assert.equal(relatedDirectories(root, `${root}?different=1`), false);
   assert.equal(relatedDirectories('not a URL', root), false);
+});
+
+test('workspace edits reconcile only explicit known selections and respect basket limits', () => {
+  const a = toEntry(run(), 'c1', 'Case one');
+  const b = toEntry(run({ url: `${LCRC}/b/viewer/` }), 'c2', 'Case two');
+  const c = toEntry(run({ url: `${LCRC}/c/viewer/` }), 'c3', 'Case three');
+  assert.deepEqual(reconcileBasket([a, b], [a.url], [c.url], [c]), [b, c]);
+  assert.deepEqual(reconcileBasket([a, b], [], ['https://external.test/viewer/'], []), [a, b]);
+  assert.deepEqual(reconcileBasket([a], [a.url], [a.url], [a]), [a]);
+  assert.equal(
+    reconcileBasket(
+      Array.from({ length: 6 }, (_, i) => ({ ...a, url: `${LCRC}/${i}/viewer/` })),
+      [],
+      [c.url],
+      [c],
+    ),
+    null,
+  );
 });

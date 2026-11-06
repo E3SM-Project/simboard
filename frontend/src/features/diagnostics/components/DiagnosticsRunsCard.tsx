@@ -52,7 +52,11 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
   useEffect(() => {
     if (target !== id && !target.startsWith(`${id}-source-`)) return;
     setOpen(true);
-    const frame = requestAnimationFrame(() => {
+  }, [id, target, location.key]);
+
+  useEffect(() => {
+    if (!open || (target !== id && !target.startsWith(`${id}-source-`))) return;
+    const timer = setTimeout(() => {
       const section = document.getElementById(target);
       section?.focus({ preventScroll: true });
       section?.scrollIntoView({
@@ -62,8 +66,8 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
         block: 'start',
       });
     });
-    return () => cancelAnimationFrame(frame);
-  }, [id, target, location.key, query.data]);
+    return () => clearTimeout(timer);
+  }, [id, target, location.key, query.data, open]);
 
   const add = (run: DiagnosticsRunOut) => {
     if (!basket.add(toEntry(run, caseId, caseName))) {
@@ -115,7 +119,8 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
         <CollapsibleContent>
           <CardContent className="space-y-5 border-t p-5">
             <p className="text-sm text-muted-foreground">
-              Add runs from this case or other cases to compare tools and time ranges side by side.
+              Add matching diagnostics from this case or other cases to compare time ranges side by
+              side.
             </p>
             {query.isError ||
             query.data?.sources.some((source) => source.error || source.partial) ? (
@@ -134,6 +139,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
                 source={source}
                 id={sourceId(caseId, index)}
                 target={target}
+                navigationKey={location.key}
                 isAdded={basket.has}
                 onAdd={add}
                 onRemove={basket.remove}

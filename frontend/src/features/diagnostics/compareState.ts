@@ -114,3 +114,27 @@ export const toEntry = (run: DiagnosticsRunOut, caseId: string, caseName: string
 
 export const entryLabel = (entry: BasketEntry): string =>
   [entry.caseName, entry.period].filter(Boolean).join(' ');
+
+/** Apply explicit workspace edits without replacing unrelated staged runs. */
+export const reconcileBasket = (
+  entries: BasketEntry[],
+  previousUrls: string[],
+  nextUrls: string[],
+  additions: BasketEntry[],
+): BasketEntry[] | null => {
+  const next = entries.filter(
+    (entry) => !previousUrls.includes(entry.url) || nextUrls.includes(entry.url),
+  );
+  for (const entry of additions) {
+    if (nextUrls.includes(entry.url) && !next.some((item) => item.url === entry.url))
+      next.push(entry);
+  }
+  if (
+    next.some(
+      (entry) =>
+        next.filter((item) => groupKey(item) === groupKey(entry)).length > MAX_RUNS_PER_GROUP,
+    )
+  )
+    return null;
+  return next;
+};
