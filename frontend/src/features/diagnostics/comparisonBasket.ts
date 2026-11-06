@@ -12,6 +12,7 @@ import {
   type BasketEntry,
   groupKey,
   MAX_RUNS_PER_GROUP,
+  reconcileBasket,
 } from '@/features/diagnostics/compareState';
 
 export {
@@ -97,5 +98,15 @@ export const useComparisonBasket = () => {
   const clear = useCallback(() => write([]), []);
   const has = useCallback((url: string) => entries.some((e) => e.url === url), [entries]);
 
-  return { entries, add, remove, clear, has, countIn };
+  const applyComparison = useCallback(
+    (previousUrls: string[], nextUrls: string[], additions: BasketEntry[]) => {
+      const next = reconcileBasket(read(), previousUrls, nextUrls, additions);
+      if (!next) return false;
+      write(next);
+      return true;
+    },
+    [],
+  );
+
+  return { entries, add, remove, clear, has, countIn, applyComparison };
 };

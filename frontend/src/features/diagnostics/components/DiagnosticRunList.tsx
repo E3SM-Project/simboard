@@ -13,13 +13,20 @@ export interface DiagnosticRunListProps {
   source: DiagnosticsSourceOut;
   id: string;
   target?: string;
+  navigationKey?: string;
   isAdded: (url: string) => boolean;
   onAdd: (run: DiagnosticsRunOut) => void;
   onRemove: (url: string) => void;
 }
 
 /** Shared discovery presentation; callers own staging or workspace drafts. */
-export const DiagnosticRunList = ({ source, id, target, ...actions }: DiagnosticRunListProps) => (
+export const DiagnosticRunList = ({
+  source,
+  id,
+  target,
+  navigationKey,
+  ...actions
+}: DiagnosticRunListProps) => (
   <section
     id={id}
     tabIndex={-1}
@@ -57,6 +64,7 @@ export const DiagnosticRunList = ({ source, id, target, ...actions }: Diagnostic
           runs={runs}
           id={`${id}-${group.key}`}
           target={target}
+          navigationKey={navigationKey}
           {...actions}
         />
       ) : null;
@@ -69,6 +77,7 @@ const RunGroup = ({
   runs,
   id,
   target,
+  navigationKey,
   isAdded,
   onAdd,
   onRemove,
@@ -76,7 +85,7 @@ const RunGroup = ({
   const [open, setOpen] = useState(true);
   useEffect(() => {
     if (target === id) setOpen(true);
-  }, [id, target]);
+  }, [id, target, navigationKey]);
   const added = runs.filter((run) => isAdded(run.url)).length;
 
   return (

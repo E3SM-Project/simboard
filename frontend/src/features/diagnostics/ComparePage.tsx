@@ -1,13 +1,24 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { compareRuns } from '@/features/diagnostics/api';
 import {
+  type BasketEntry,
+  comparePath,
+  type CompareRun,
   compareSearch,
   type CompareState,
   displayLabel,
@@ -15,6 +26,8 @@ import {
   MAX_COMPARED_RUNS,
   parseCompareState,
 } from '@/features/diagnostics/compareState';
+import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
+import { RunEditor } from '@/features/diagnostics/components/RunEditor';
 import type {
   ComparedPlotOut,
   CompareOut,
@@ -53,6 +66,22 @@ export const ComparePage = () => {
   const state = useMemo(() => parseCompareState(params), [params]);
   const { toast } = useToast();
   const [filter, setFilter] = useState('');
+  const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
+  const basket = useComparisonBasket();
+
+  const applyRuns = (runs: CompareRun[], additions: BasketEntry[]) => {
+    if (
+      !basket.applyComparison(
+        state.runs.map((run) => run.url),
+        runs.map((run) => run.url),
+        additions,
+      )
+    )
+      return 'The comparison tray is full for this diagnostic kind. Remove staged runs or choose fewer runs.';
+    setEditing(false);
+    navigate(comparePath(runs));
+  };
 
   const query = useQuery({
     queryKey: ['diagnostics', 'compare', state.runs, state.set],
@@ -138,17 +167,16 @@ export const ComparePage = () => {
   if (state.runs.length === 0) {
     return (
       <Shell>
-        <p className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Add runs from{' '}
-          <Link to="/cases" className="underline">
-            case pages
-          </Link>{' '}
-          or{' '}
-          <Link to="/diagnostics" className="underline">
-            paste their addresses
-          </Link>
-          , then choose Compare.
-        </p>
+        <header>
+          <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Browse SimBoard cases or add public diagnostic run URLs. Compare cases or time ranges
+            side by side.
+          </p>
+        </header>
+        <div className="mx-auto max-w-3xl rounded-xl border bg-white p-4 sm:p-6">
+          <RunEditor initialRuns={[]} onApply={applyRuns} />
+        </div>
       </Shell>
     );
   }
@@ -170,10 +198,32 @@ export const ComparePage = () => {
             ))}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={copyLink}>
-          <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-          Copy link
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={editing} onOpenChange={setEditing}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                Edit runs
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit diagnostic runs</DialogTitle>
+                <DialogDescription>
+                  Browse cases or add URLs. Apply changes to update this shareable comparison.
+                </DialogDescription>
+              </DialogHeader>
+              <RunEditor
+                initialRuns={state.runs}
+                onApply={applyRuns}
+                onCancel={() => setEditing(false)}
+              />
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline" size="sm" onClick={copyLink}>
+            <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            Copy link
+          </Button>
+        </div>
       </header>
 
       {query.isLoading ? (
