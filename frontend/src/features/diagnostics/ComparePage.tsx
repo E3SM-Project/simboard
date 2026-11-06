@@ -148,7 +148,7 @@ export const ComparePage = () => {
         event.ctrlKey ||
         event.metaKey ||
         (event.target as HTMLElement | null)?.closest(
-          'input, textarea, select, button, a, [contenteditable="true"], [role="dialog"], [role="combobox"], [role="listbox"], [role="radiogroup"], [role="tablist"]',
+          'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"], [role="listbox"], [role="radiogroup"], [role="tablist"]',
         )
       )
         return;
@@ -520,7 +520,9 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
   const references = cells.filter(
     (cell, index) =>
       cell.src &&
-      !cells.slice(0, index).some((previous) => previous.src && previous.ref === cell.ref),
+      !cells
+        .slice(0, index)
+        .some((previous) => previous.src === cell.src && previous.ref === cell.ref),
   );
 
   return (
@@ -571,11 +573,11 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
       {reference
         ? references.map((cell) => (
             <figure
-              key={cell.ref ?? cell.src}
+              key={`${cell.ref}|${cell.src}`}
               className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50/50"
             >
               <figcaption className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
-                Reference · {cell.ref}
+                Reference · {cell.ref} · {displayLabel(cell.run)}
               </figcaption>
               <PanelImage
                 src={cell.src!}

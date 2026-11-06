@@ -6,6 +6,13 @@ import { listCases } from '@/api/catalog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getCaseDiagnosticsRuns } from '@/features/diagnostics/api';
 import {
@@ -13,12 +20,14 @@ import {
   type CompareRun,
   displayLabel,
   entryLabel,
+  groupKey,
   isRunUrl,
   MAX_COMPARED_RUNS,
   toEntry,
 } from '@/features/diagnostics/compareState';
 import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
 import { DiagnosticRunList } from '@/features/diagnostics/components/DiagnosticRunList';
+import { RUN_GROUPS } from '@/features/diagnostics/discoveryState';
 import type { CaseDiagnosticsOut } from '@/features/diagnostics/types';
 import type { CaseListItemOut } from '@/types';
 
@@ -86,6 +95,15 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
   const [runs, setRuns] = useState<DraftRun[]>(initialRuns);
   const [problem, setProblem] = useState('');
   const [manual, setManual] = useState<CompareRun>({ url: '', label: '' });
+  const [importGroup, setImportGroup] = useState('');
+  const trayGroups = [...new Set(basket.entries.map(groupKey))];
+  const known = runs.find(
+    (run) => run.entry || basket.entries.some((entry) => entry.url === run.url),
+  );
+  const knownEntry = known?.entry ?? basket.entries.find((entry) => entry.url === known?.url);
+  const desiredGroup = importGroup || (knownEntry ? groupKey(knownEntry) : '');
+  const activeImportGroup = trayGroups.includes(desiredGroup) ? desiredGroup : trayGroups[0];
+  const knownKinds = new Set(runs.flatMap((run) => (run.entry ? [groupKey(run.entry)] : [])));
 
   const edit = (index: number, patch: Partial<CompareRun>) =>
     setRuns(
@@ -101,8 +119,10 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
       return setProblem(
         'Use an HTTPS E3SM Diags viewer page or an MPAS-Analysis run directory, not a general resource directory.',
       );
-    if (runs.some((item) => item.url === run.url.trim()))
-      return setProblem('This run is already selected. Choose another case or time range.');
+    if (runs.some((item) => item.url === run.url.trim() && item.label === run.label.trim()))
+      return setProblem(
+        'This run and label are already selected. Choose another case, time range, or IICE case override.',
+      );
     if (runs.length >= MAX_COMPARED_RUNS)
       return setProblem(`Compare at most ${MAX_COMPARED_RUNS} runs at a time.`);
     setRuns([...runs, { ...run, url: run.url.trim(), label: run.label.trim() }]);
@@ -119,8 +139,11 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
       return setProblem(
         'One or more run addresses are invalid. Use a supported HTTPS diagnostic run address.',
       );
-    if (new Set(next.map((run) => run.url.trim())).size !== next.length)
-      return setProblem('Each selected run must have a different address.');
+    if (
+      new Set(next.map((run) => JSON.stringify([run.url.trim(), run.label.trim()]))).size !==
+      next.length
+    )
+      return setProblem('Each selected run must have a different address or label.');
     const error = onApply(
       next.map(({ url, label }) => ({ url: url.trim(), label: label.trim() })),
       next.flatMap((run) => (run.entry ? [run.entry] : [])),
@@ -200,33 +223,60 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
             Selected runs ({runs.length}/{MAX_COMPARED_RUNS})
           </h2>
           {basket.entries.length ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                const selected = [...runs];
-                for (const entry of basket.entries)
-                  if (!selected.some((run) => run.url === entry.url))
-                    selected.push({ url: entry.url, label: entryLabel(entry), entry });
-                if (selected.length > MAX_COMPARED_RUNS)
-                  setProblem(
-                    `Select at most ${MAX_COMPARED_RUNS} runs. Remove some from the tray before importing.`,
-                  );
-                else {
-                  setRuns(selected);
-                  setProblem('');
-                }
-              }}
-            >
-              Import tray selections
-            </Button>
+            <div className="flex max-w-full flex-wrap items-center gap-2">
+              {trayGroups.length > 1 ? (
+                <Select value={activeImportGroup} onValueChange={setImportGroup}>
+                  <SelectTrigger
+                    aria-label="Tray group to import"
+                    className="w-full text-xs sm:w-64"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trayGroups.map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {RUN_GROUPS.find((group) => group.key === key)?.title ?? key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const selected = [...runs];
+                  for (const entry of basket.entries.filter(
+                    (entry) => groupKey(entry) === activeImportGroup,
+                  ))
+                    if (!selected.some((run) => run.url === entry.url))
+                      selected.push({ url: entry.url, label: entryLabel(entry), entry });
+                  if (selected.length > MAX_COMPARED_RUNS)
+                    setProblem(
+                      `Select at most ${MAX_COMPARED_RUNS} runs. Remove some from the tray before importing.`,
+                    );
+                  else {
+                    setRuns(selected);
+                    setProblem('');
+                  }
+                }}
+              >
+                Import tray selections
+              </Button>
+            </div>
           ) : null}
         </div>
         {!runs.length ? (
           <p className="text-sm text-slate-500">
             Choose diagnostics above, import tray selections, or open an example. Only shared plots
             appear in comparisons.
+          </p>
+        ) : null}
+        {knownKinds.size > 1 ? (
+          <p role="status" className="text-sm text-amber-800">
+            These selections include different diagnostic kinds and may have no shared plots.
+            Compare matching tools and comparison types.
           </p>
         ) : null}
         {runs.map((run, index) => (
