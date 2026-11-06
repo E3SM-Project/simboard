@@ -1,4 +1,4 @@
-import type { DiagnosticsRunOut, DiagnosticsSourceOut } from './types';
+import type { DiagnosticsRunOut, DiagnosticsSourceOut, DiagnosticsTool } from './types';
 
 export const RUN_GROUPS = [
   { key: 'e3sm_diags:model_vs_obs', title: 'E3SM Diags · model vs observations' },
@@ -10,16 +10,19 @@ export const runGroup = (run: DiagnosticsRunOut): string =>
   run.tool === 'mpas_analysis' ? run.tool : `${run.tool}:${run.comparison ?? 'model_vs_obs'}`;
 
 export type DiagnosticAnalysis = 'all' | 'climatology' | 'time_series';
+export type DiagnosticToolFilter = 'all' | DiagnosticsTool;
 
 /** Discovery years are authoritative; never guess periods from identifiers. */
 export const diagnosticPeriod = (
   run: DiagnosticsRunOut,
   analysis: DiagnosticAnalysis = 'all',
 ): string => {
-  if (analysis === 'climatology') return diagnosticClimatologyPeriod(run) || 'Unknown period';
-  if (analysis === 'time_series') return diagnosticTimeSeriesPeriod(run) || 'Unknown period';
+  if (analysis === 'climatology') return diagnosticClimatologyPeriod(run) || 'Unknown time range';
+  if (analysis === 'time_series') return diagnosticTimeSeriesPeriod(run) || 'Unknown time range';
 
-  return diagnosticClimatologyPeriod(run) || diagnosticTimeSeriesPeriod(run) || 'Unknown period';
+  return (
+    diagnosticClimatologyPeriod(run) || diagnosticTimeSeriesPeriod(run) || 'Unknown time range'
+  );
 };
 
 export const diagnosticClimatologyPeriod = (run: DiagnosticsRunOut): string =>
@@ -32,23 +35,34 @@ export const diagnosticTimeSeriesPeriod = (run: DiagnosticsRunOut): string =>
 export const periodGroups = (
   sources: DiagnosticsSourceOut[],
   analysis: DiagnosticAnalysis = 'all',
+  tool: DiagnosticToolFilter = 'all',
 ) => {
   const groups = new Map<string, DiagnosticsRunOut[]>();
   const seen = new Set<string>();
   for (const run of sources.flatMap((source) => source.runs)) {
+    if (tool !== 'all' && run.tool !== tool) continue;
     if (analysis === 'climatology' && !diagnosticClimatologyPeriod(run)) continue;
     if (analysis === 'time_series' && !diagnosticTimeSeriesPeriod(run)) continue;
     if (seen.has(run.url)) continue;
     seen.add(run.url);
-    const period = diagnosticPeriod(run, analysis);
+    const period = diagnosticPeriod(run);
     groups.set(period, [...(groups.get(period) ?? []), run]);
   }
 
-  return [...groups].sort(([left], [right]) => {
-    if (left === 'Unknown period') return 1;
-    if (right === 'Unknown period') return -1;
-    return left.localeCompare(right, undefined, { numeric: true });
-  });
+  return [...groups]
+    .sort(([left], [right]) => {
+      if (left === 'Unknown time range') return 1;
+      if (right === 'Unknown time range') return -1;
+      return left.localeCompare(right, undefined, { numeric: true });
+    })
+    .map(([period, runs]): [string, DiagnosticsRunOut[]] => [
+      period,
+      runs.sort(
+        (left, right) =>
+          RUN_GROUPS.findIndex((group) => group.key === runGroup(left)) -
+          RUN_GROUPS.findIndex((group) => group.key === runGroup(right)),
+      ),
+    ]);
 };
 
 export const diagnosticTitle = (run: DiagnosticsRunOut): string => {
@@ -70,7 +84,9 @@ export const diagnosticTitle = (run: DiagnosticsRunOut): string => {
 };
 
 /** Keep scientific identifiers verbatim, including when only the URL supplies one. */
-export const diagnosticIdentifier = (run: DiagnosticsRunOut): string => {
+export const diagnosticIdentifier = (
+  run: Pick<DiagnosticsRunOut, 'subsection' | 'url' | 'tool'>,
+): string => {
   if (run.subsection) return run.subsection;
   try {
     const parts = new URL(run.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);

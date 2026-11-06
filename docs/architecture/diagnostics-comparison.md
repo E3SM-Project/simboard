@@ -48,14 +48,20 @@ links render plots directly. The global tray is hidden inside the workspace.
 
 Case browsing uses existing case search and per-case discovery with bounded
 concurrency and explicit pagination. Only discovered supported cases appear;
+unsupported directories are excluded with debug logging rather than warnings.
 there is no catalog-wide supported-diagnostics index. `DiagnosticRunList` serves
 both case pages and workspace drafts. Resource shortcuts use source/run
 directory relationships without removing original links.
 
-Applying explicit edits reconciles known basket entries without replacing
-unrelated selections. Opening or reloading a comparison never imports the
-basket. Full run URLs and labels retain their existing query encoding; browser
-search state and unfinished drafts are not part of shared comparison state.
+The workspace synchronizes known selections with the basket, one staged kind
+at a time. Browser state and drafts persist locally (`workspaceState.ts`).
+Explicit comparison URLs take precedence and never import unrelated local runs.
+Full run URLs and labels retain their existing query encoding.
+
+**Compare** and **Apply changes** call the viewer's comparison API before
+navigation. Successful checks populate its query cache; incompatible runs or
+failed checks leave selections intact. Direct shared URLs retain viewer-side
+error and compatibility handling.
 
 ## Not yet
 

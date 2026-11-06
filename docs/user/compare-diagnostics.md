@@ -10,9 +10,15 @@ tool, including its example comparisons and label conventions.
 
 ## From case pages
 
-A case with a [diagnostics link](diagnostics.md) has a **Diagnostics** card at
-the bottom of its page listing the runs it published, grouped into E3SM Diags
-model-vs-observations, model-vs-model, and MPAS-Analysis. Select **Add** on runs
+A case with a [diagnostics link](diagnostics.md) has a **Diagnostics** card above
+**Change History**, expanded when supported runs exist. Runs are grouped by time
+range and retain their exact identifiers. **All**, **Climatology**, and
+**Time Series** show per-case counts; empty diagnostic types are disabled.
+Tool filters show unique counts for **All**, **E3SM Diags**, and **MPAS-Analysis**.
+MPAS runs use climatology years first, otherwise time-series years, otherwise
+**Unknown time range**. Each run appears once, with both indexed ranges shown
+when available. Filters do not change its primary time-range group.
+Select **Add** on runs
 from different cases or different periods of one case. Picks persist across
 pages in a compact selection tray. **Expand** reviews or removes selections;
 **Compare** opens plots directly. Choose a compatible group if several tools
@@ -33,9 +39,18 @@ may be unavailable; retry discovery rather than treating those cases as empty.
 
 **Add by URL** accepts E3SM Diags `.../viewer/` pages and MPAS-Analysis run
 directories, with optional labels. It also opens the examples shipped with
-IICE. Both tabs share one selection list. **Import tray selections** explicitly
-adds one selected diagnostic kind; opening a shared link never imports staged
-runs automatically.
+IICE. Case pages, the tray, and the workspace synchronize known selections
+automatically. Choose a comparison group to review another staged diagnostic
+kind without mixing groups automatically.
+
+**Selected runs** sits below discovery. Expand it to edit or remove runs, or use
+**View Case** to return to a linked case. Search, active case, filters, and
+selections persist across navigation and refreshes. Explicit shared URLs take
+precedence over local selections.
+
+**Compare** checks for shared plots only when clicked. Compatible runs open the
+viewer; incompatible selections stay in the workspace. Failed checks preserve
+selections and offer a retry.
 
 In an active comparison, **Edit runs** adds, removes, or replaces runs without
 leaving the viewer. **Apply changes** updates the comparison; **Cancel** keeps

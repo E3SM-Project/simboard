@@ -102,7 +102,7 @@ export const useComparisonBasket = () => {
     (previousUrls: string[], nextUrls: string[], additions: BasketEntry[]) => {
       const next = reconcileBasket(read(), previousUrls, nextUrls, additions);
       if (!next) return false;
-      write(next);
+      if (JSON.stringify(next) !== JSON.stringify(read())) write(next);
       return true;
     },
     [],

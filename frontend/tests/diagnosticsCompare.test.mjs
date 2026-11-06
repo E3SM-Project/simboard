@@ -10,9 +10,11 @@ import {
   groupKey,
   imageUrl,
   isRunUrl,
+  MAX_RUNS_PER_GROUP,
   parseCompareState,
   runPeriod,
   reconcileBasket,
+  syncSelectedRuns,
   toEntry,
 } from '../src/features/diagnostics/compareState.ts';
 import {
@@ -102,10 +104,10 @@ test('discovery groups actual periods across sources and keeps unique runs', () 
   assert.deepEqual(periodGroups([{ runs: [unknown, obs] }, { runs: [model, obs, early] }]), [
     ['0001–0050', [early]],
     ['1985–2014', [obs, model]],
-    ['Unknown period', [unknown]],
+    ['Unknown time range', [unknown]],
   ]);
-  assert.equal(diagnosticPeriod(unknown), 'Unknown period');
-  assert.equal(diagnosticPeriod(run({ startYear: null })), 'Unknown period');
+  assert.equal(diagnosticPeriod(unknown), 'Unknown time range');
+  assert.equal(diagnosticPeriod(run({ startYear: null })), 'Unknown time range');
   assert.deepEqual(periodGroups([]), []);
 });
 
@@ -160,11 +162,11 @@ test('MPAS keeps both analysis periods without inventing comparison categories',
   assert.equal(diagnosticPeriod(timeSeries), '0001–0500');
   assert.equal(diagnosticTitle(timeSeries), 'Time Series');
   const unknown = { ...timeSeries, tsStartYear: null, tsEndYear: null };
-  assert.equal(diagnosticPeriod(unknown), 'Unknown period');
+  assert.equal(diagnosticPeriod(unknown), 'Unknown time range');
   assert.equal(diagnosticTitle(unknown), 'Diagnostic run');
 });
 
-test('analysis filters regroup whole runs using only the matching indexed years', () => {
+test('analysis filters preserve climatology-first grouping for whole runs', () => {
   const obs = run();
   const mpas = run({
     tool: 'mpas_analysis',
@@ -188,25 +190,74 @@ test('analysis filters regroup whole runs using only the matching indexed years'
     ['0001–0100', [timeSeries]],
     ['0051–0100', [mpas]],
     ['1985–2014', [obs]],
-    ['Unknown period', [unknown]],
+    ['Unknown time range', [unknown]],
   ]);
   assert.deepEqual(periodGroups(sources, 'climatology'), [
     ['0051–0100', [mpas]],
     ['1985–2014', [obs]],
   ]);
-  assert.deepEqual(periodGroups(sources, 'time_series'), [['0001–0100', [mpas, timeSeries]]]);
-  assert.equal(periodGroups(sources, 'time_series')[0][1][0], mpas);
+  assert.deepEqual(periodGroups(sources, 'time_series'), [
+    ['0001–0100', [timeSeries]],
+    ['0051–0100', [mpas]],
+  ]);
+  assert.equal(periodGroups(sources, 'time_series')[1][1][0], mpas);
   assert.deepEqual(sources, original);
-  assert.equal(diagnosticPeriod(unknown, 'climatology'), 'Unknown period');
-  assert.equal(diagnosticPeriod(unknown, 'time_series'), 'Unknown period');
+  assert.equal(diagnosticPeriod(unknown, 'climatology'), 'Unknown time range');
+  assert.equal(diagnosticPeriod(unknown, 'time_series'), 'Unknown time range');
 });
 
 test('analysis filters do not classify missing or incomplete periods from names', () => {
   const partial = run({ startYear: null, tsStartYear: 1, tsEndYear: null });
-  assert.deepEqual(periodGroups([{ runs: [partial] }]), [['Unknown period', [partial]]]);
+  assert.deepEqual(periodGroups([{ runs: [partial] }]), [['Unknown time range', [partial]]]);
   assert.deepEqual(periodGroups([{ runs: [partial] }], 'climatology'), []);
   assert.deepEqual(periodGroups([{ runs: [partial] }], 'time_series'), []);
   assert.deepEqual(periodGroups([{ runs: [run()] }], 'time_series'), []);
+});
+
+test('tool filters keep unique supported runs under periods and order kinds within a period', () => {
+  const obs = run({ startYear: 51, endYear: 100 });
+  const model = { ...obs, url: `${LCRC}/model/viewer/`, comparison: 'model_vs_model' };
+  const mpas = {
+    ...obs,
+    url: `${LCRC}/mpas_analysis/ts_0001-0100_climo_0051-0100/`,
+    tool: 'mpas_analysis',
+    comparison: null,
+    subsection: null,
+    tsStartYear: 1,
+    tsEndYear: 100,
+  };
+  const timeSeries = {
+    ...mpas,
+    url: `${LCRC}/mpas_analysis/ts_0001-0100/`,
+    startYear: null,
+    endYear: null,
+  };
+  const unknown = {
+    ...mpas,
+    url: `${LCRC}/mpas_analysis/no-years/`,
+    startYear: null,
+    endYear: null,
+    tsStartYear: null,
+    tsEndYear: null,
+  };
+  const sources = [{ runs: [mpas, model, timeSeries, obs, unknown] }, { runs: [mpas, obs] }];
+  const original = structuredClone(sources);
+  assert.deepEqual(periodGroups(sources), [
+    ['0001–0100', [timeSeries]],
+    ['0051–0100', [obs, model, mpas]],
+    ['Unknown time range', [unknown]],
+  ]);
+  assert.deepEqual(periodGroups(sources, 'all', 'e3sm_diags'), [['0051–0100', [obs, model]]]);
+  assert.deepEqual(periodGroups(sources, 'all', 'mpas_analysis'), [
+    ['0001–0100', [timeSeries]],
+    ['0051–0100', [mpas]],
+    ['Unknown time range', [unknown]],
+  ]);
+  assert.deepEqual(periodGroups(sources, 'time_series', 'mpas_analysis'), [
+    ['0001–0100', [timeSeries]],
+    ['0051–0100', [mpas]],
+  ]);
+  assert.deepEqual(sources, original);
 });
 
 test('isRunUrl accepts the layouts the backend reads', () => {
@@ -284,11 +335,32 @@ test('workspace edits reconcile only explicit known selections and respect baske
   assert.deepEqual(reconcileBasket([a], [a.url], [a.url], [a]), [a]);
   assert.equal(
     reconcileBasket(
-      Array.from({ length: 6 }, (_, i) => ({ ...a, url: `${LCRC}/${i}/viewer/` })),
+      Array.from({ length: MAX_RUNS_PER_GROUP }, (_, i) => ({ ...a, url: `${LCRC}/${i}/viewer/` })),
       [],
       [c.url],
       [c],
     ),
     null,
   );
+});
+
+test('workspace automatically restores one tray kind without duplicates or unrelated runs', () => {
+  const a = toEntry(run(), 'c1', 'Case one');
+  const b = toEntry(run({ url: `${LCRC}/b/viewer/` }), 'c2', 'Case two');
+  const mpas = toEntry(
+    run({ tool: 'mpas_analysis', url: `${LCRC}/mpas/`, comparison: null }),
+    'c3',
+    'MPAS',
+  );
+  const selected = (entry) => ({ url: entry.url, label: entryLabel(entry), entry });
+  assert.deepEqual(syncSelectedRuns([], [a, b, mpas]), [selected(a), selected(b)]);
+  assert.deepEqual(syncSelectedRuns([selected(a)], [a, b, mpas]), [selected(a), selected(b)]);
+  assert.deepEqual(syncSelectedRuns([selected(a)], [mpas], groupKey(a)), []);
+  assert.deepEqual(syncSelectedRuns([], [mpas], groupKey(a)), []);
+  assert.deepEqual(syncSelectedRuns([selected(a), selected(mpas)], [a, b, mpas]), [
+    selected(a),
+    selected(mpas),
+  ]);
+  const manual = { url: `${LCRC}/external/viewer/`, label: '!Case override' };
+  assert.deepEqual(syncSelectedRuns([manual], [a]), [{ ...manual, entry: undefined }]);
 });

@@ -30,7 +30,12 @@ export const AppRoutes = (props: RoutesProps) => {
     ...catalogRoutes({
       ...props,
       renderCaseDiagnostics: ({ caseId, caseName, directories }) => (
-        <DiagnosticsRunsCard caseId={caseId} caseName={caseName} directories={directories} />
+        <DiagnosticsRunsCard
+          key={caseId}
+          caseId={caseId}
+          caseName={caseName}
+          directories={directories}
+        />
       ),
       renderDiagnosticsResource: (options) => <DiagnosticsResourceLink {...options} />,
     }),

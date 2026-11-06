@@ -100,8 +100,8 @@ export const imageUrl = (base: string, path: string): string =>
 // Runs picked on case pages (see comparisonBasket.ts for the store)
 // ----------------------------------------------------------------------------
 
-/** The most runs that stay legible side by side. */
-export const MAX_RUNS_PER_GROUP = 6;
+/** Keep tray and workspace selection limits consistent with the comparison API. */
+export const MAX_RUNS_PER_GROUP = MAX_COMPARED_RUNS;
 
 export interface BasketEntry {
   url: string;
@@ -111,7 +111,42 @@ export interface BasketEntry {
   comparison: DiagnosticsRunOut['comparison'];
   period: string;
   subsection: string | null;
+  casePath?: string;
 }
+
+export interface SelectedRun extends CompareRun {
+  entry?: BasketEntry;
+}
+
+/** Restore one staged kind automatically, without merging unrelated comparisons. */
+export const syncSelectedRuns = (
+  runs: SelectedRun[],
+  entries: BasketEntry[],
+  selectedGroup?: string,
+): SelectedRun[] => {
+  const retained = runs
+    .filter((run) => !run.entry || entries.some((entry) => entry.url === run.url))
+    .map((run) => ({ ...run, entry: entries.find((entry) => entry.url === run.url) ?? run.entry }));
+  const kinds = new Set(retained.flatMap((run) => (run.entry ? [groupKey(run.entry)] : [])));
+  const kind =
+    kinds.size > 1
+      ? null
+      : (selectedGroup ??
+        (kinds.size === 1
+          ? [...kinds][0]
+          : !retained.length && entries[0]
+            ? groupKey(entries[0])
+            : null));
+  if (kind) {
+    for (const entry of entries.filter((entry) => groupKey(entry) === kind)) {
+      if (retained.length >= MAX_COMPARED_RUNS) break;
+      if (!retained.some((run) => run.url === entry.url))
+        retained.push({ url: entry.url, label: entryLabel(entry), entry });
+    }
+  }
+
+  return retained;
+};
 
 /**
  * Runs of different tools or kinds share no plots, so each kind is its own
@@ -120,7 +155,12 @@ export interface BasketEntry {
 export const groupKey = (entry: Pick<BasketEntry, 'tool' | 'comparison'>): string =>
   entry.tool === 'mpas_analysis' ? entry.tool : `${entry.tool}:${entry.comparison}`;
 
-export const toEntry = (run: DiagnosticsRunOut, caseId: string, caseName: string): BasketEntry => ({
+export const toEntry = (
+  run: DiagnosticsRunOut,
+  caseId: string,
+  caseName: string,
+  casePath?: string,
+): BasketEntry => ({
   url: run.url,
   caseId,
   caseName,
@@ -128,6 +168,7 @@ export const toEntry = (run: DiagnosticsRunOut, caseId: string, caseName: string
   comparison: run.comparison,
   period: runPeriod(run),
   subsection: run.subsection,
+  ...(casePath ? { casePath } : {}),
 });
 
 export const entryLabel = (entry: BasketEntry): string =>
