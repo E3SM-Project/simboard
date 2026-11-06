@@ -37,6 +37,14 @@ style.textContent =
 document.head.append(style);
 let latest = '';
 let compares = 0;
+let comparisonDelay = 0;
+let comparisonFailures = 0;
+const discoveryLogs: unknown[][] = [];
+const originalDebug = console.debug;
+console.debug = (...args) => {
+  discoveryLogs.push(args);
+  originalDebug(...args);
+};
 let unavailableChecks = 0;
 let copiedLink = '';
 Object.defineProperty(navigator, 'clipboard', {
@@ -52,11 +60,14 @@ api.defaults.adapter = async (config) => {
   let data: unknown;
   if (endpoint === '/cases') {
     const search = String(config.params.get('search') ?? '');
+    if (search === 'search-failed') throw new Error('Case search unavailable');
     const records = ['alpha', 'beta', 'raw-only'].filter((id) => id.includes(search));
     data = {
       items: records.map((id) => ({
         id,
         name: `case.${id}`,
+        machineName: 'chrysalis',
+        hpcUsername: 'scientist',
         latestExecution: { executionId: 'execution-1' },
       })),
       page: 1,
@@ -81,9 +92,16 @@ api.defaults.adapter = async (config) => {
         pageSize: 6,
         total: 1,
       };
+    if (['partial', 'rejected', 'request-failed', 'mixed', 'ranges'].includes(search))
+      data = { items: [{ id: search, name: `case.${search}` }], page: 1, pageSize: 6, total: 1 };
     if (search === 'analysis')
       data = {
-        items: ['metadata', 'beta'].map((id) => ({ id, name: `case.${id}` })),
+        items: ['metadata', 'beta'].map((id) => ({
+          id,
+          name: `case.${id}`,
+          machineName: 'chrysalis',
+          hpcUsername: 'scientist',
+        })),
         page: 1,
         pageSize: 6,
         total: 2,
@@ -102,6 +120,7 @@ api.defaults.adapter = async (config) => {
     }
   } else if (endpoint.includes('/diagnostics/runs')) {
     const id = endpoint.split('/')[2];
+    if (id === 'request-failed') throw new Error('Case diagnostics unavailable');
     data = {
       caseId: id,
       caseName: `case.${id}`,
@@ -123,6 +142,83 @@ api.defaults.adapter = async (config) => {
           { rootUrl: `${base}/${id}/`, runs: [], partial: false, error: 'archive_unavailable' },
         ],
       };
+    if (id === 'partial' || id === 'rejected')
+      data = {
+        caseId: id,
+        caseName: `case.${id}`,
+        sources: [
+          {
+            rootUrl: `${base}/${id}/`,
+            runs: id === 'partial' ? [run(id)] : [],
+            partial: id === 'partial',
+            error: id === 'rejected' ? 'url_not_allowed' : null,
+          },
+        ],
+      };
+    if (id === 'mixed')
+      data = {
+        caseId: id,
+        caseName: `case.${id}`,
+        sources: [
+          {
+            rootUrl: `${base}/${id}/`,
+            label: 'Public output',
+            runs: [run(id)],
+            partial: false,
+            error: null,
+          },
+          {
+            rootUrl: 'https://unsupported.test/diagnostics/',
+            label: 'Unsupported output',
+            runs: [],
+            partial: false,
+            error: 'url_not_allowed',
+          },
+        ],
+      };
+    if (id === 'ranges') {
+      const combined = {
+        ...run(id, 51, 100),
+        tool: 'mpas_analysis',
+        comparison: null,
+        subsection: null,
+        tsStartYear: 1,
+        tsEndYear: 100,
+        url: `${base}/${id}/mpas_analysis/ts_0001-0100_climo_0051-0100/`,
+      };
+      data = {
+        caseId: id,
+        caseName: `case.${id}`,
+        sources: [
+          {
+            rootUrl: `${base}/${id}/`,
+            runs: [
+              combined,
+              run(id, 51, 100),
+              {
+                ...combined,
+                startYear: null,
+                endYear: null,
+                tsStartYear: 101,
+                tsEndYear: 200,
+                url: `${base}/${id}/mpas_analysis/ts_0101-0200/`,
+              },
+              {
+                ...combined,
+                startYear: null,
+                endYear: null,
+                tsStartYear: null,
+                tsEndYear: null,
+                url: `${base}/${id}/mpas_analysis/unknown_9000-9999/`,
+              },
+            ],
+            partial: false,
+            error: null,
+          },
+          { rootUrl: `${base}/${id}/duplicate/`, runs: [combined], partial: false, error: null },
+        ],
+      };
+    }
     if (id === 'metadata') {
       const model = {
         ...run(id),
@@ -179,6 +275,11 @@ api.defaults.adapter = async (config) => {
   } else if (endpoint === '/diagnostics/compare') {
     compares++;
     const body = JSON.parse(config.data);
+    if (comparisonDelay) await new Promise((resolve) => setTimeout(resolve, comparisonDelay));
+    if (comparisonFailures > 0) {
+      comparisonFailures--;
+      throw new Error('Compatibility service unavailable');
+    }
     const composite = body.runs.some((item: { url: string }) => item.url.includes('/composite-'));
     const incompatible = body.runs.some((item: { url: string }) =>
       item.url.includes('/incompatible/'),
@@ -231,12 +332,16 @@ api.defaults.adapter = async (config) => {
         })),
       },
     };
+  } else if (endpoint.startsWith('/cases/')) {
+    const id = endpoint.split('/')[2];
+    data = { id, name: `case.${id}`, machineNames: ['chrysalis'], hpcUsernames: ['scientist'] };
   } else throw new Error(`Unexpected request ${endpoint}`);
   return { config, data, status: 200, statusText: 'OK', headers: {} };
 };
 
 const Case = () => {
-  const { id = 'alpha' } = useParams();
+  const { id: routeId = 'alpha' } = useParams();
+  const id = routeId.replace(/^case\./, '');
   return (
     <>
       <h1>Case {id}</h1>
@@ -273,6 +378,7 @@ const render = (path: string) =>
         <Probe />
         <Routes>
           <Route path="/case/:id" element={<Case />} />
+          <Route path="/cases/:machine/:user/:id" element={<Case />} />
           <Route path="/diagnostics" element={<ComparePage />} />
           <Route path="/diagnostics/compare" element={<ComparePage />} />
         </Routes>
@@ -300,7 +406,25 @@ const analysisTab = (text: string) =>
     ...document.querySelectorAll<HTMLButtonElement>(
       '[aria-label="Filter diagnostics by analysis"] [role="tab"]',
     ),
-  ].find((item) => item.textContent === text);
+  ].find((item) => item.textContent?.startsWith(`${text} (`));
+const selectedSummary = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    item.textContent?.startsWith('Selected runs ('),
+  );
+const toolButton = (text: string) =>
+  [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[aria-label="Filter diagnostics by tool"] button',
+    ),
+  ].find((item) => item.textContent?.startsWith(`${text} (`));
+const expandSelections = async () => {
+  if (selectedSummary()?.getAttribute('aria-expanded') === 'false')
+    click(selectedSummary(), 'expand selected-run details');
+  await waitFor(
+    () => selectedSummary()?.getAttribute('aria-expanded') === 'true',
+    'selected details expanded',
+  );
+};
 const link = (text: string) =>
   [...document.querySelectorAll<HTMLAnchorElement>('a')].find(
     (item) => item.textContent?.trim() === text,
@@ -320,12 +444,16 @@ async function testWorkspace() {
   localStorage.clear();
   render('/case/metadata');
   await waitFor(() => button('Diagnostics (4)4 supported runs'), 'metadata case loaded');
-  click(
-    [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
-      item.textContent?.includes('Diagnostics (4)'),
-    ),
-    'expand metadata diagnostics',
+  check(
+    button('Diagnostics (4)4 supported runs')?.getAttribute('aria-expanded') === 'true',
+    'Supported diagnostics expand by default',
   );
+  click(button('Diagnostics (4)4 supported runs'), 'collapse diagnostics');
+  await waitFor(
+    () => button('Diagnostics (4)4 supported runs')?.getAttribute('aria-expanded') === 'false',
+    'Manual collapse remains available',
+  );
+  click(button('Diagnostics (4)4 supported runs'), 'reopen diagnostics');
   await waitFor(() => document.querySelectorAll('h4').length === 1, 'single shared period');
   check(document.querySelector('h4')?.textContent?.startsWith('0001–0050'), 'Period-first header');
   for (const identifier of [
@@ -376,8 +504,8 @@ async function testWorkspace() {
   );
   check(document.activeElement === analysisTab('Time Series'), 'Analysis arrow key moves focus');
   await waitFor(
-    () => document.querySelector('h4')?.textContent?.startsWith('0001–0500'),
-    'time-series period grouping',
+    () => document.querySelector('h4')?.textContent?.startsWith('0001–0050'),
+    'time-series filter preserves climatology-first grouping',
   );
   check(
     document.querySelectorAll('a[aria-label^="Open "]').length === 1,
@@ -468,12 +596,6 @@ async function testWorkspace() {
   check(!document.getElementById('comparison-tray-selections'), 'Tray starts collapsed');
   click(link('Beta case'), 'second case');
   await waitFor(() => document.querySelector('h1')?.textContent === 'Case beta', 'second case');
-  click(
-    [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
-      item.textContent?.includes('Diagnostics ('),
-    ),
-    'expand beta diagnostics',
-  );
   await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'beta runs');
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'),
@@ -495,6 +617,11 @@ async function testWorkspace() {
   const original = latest;
   click(button('Edit runs'), 'run editor');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'editor dialog');
+  check(
+    selectedSummary()?.getAttribute('aria-expanded') === 'false',
+    'Selected-run details collapse by default',
+  );
+  await expandSelections();
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label="Remove run 1"]'),
     'draft remove',
@@ -504,6 +631,8 @@ async function testWorkspace() {
   check(document.activeElement === button('Edit runs'), 'Cancel restores editor trigger focus');
   check(latest === original, 'Cancel preserves comparison URL');
   click(button('Edit runs'), 'reopen editor');
+  await waitFor(() => document.querySelector('[role="dialog"]'), 'editor reopened');
+  await expandSelections();
   await waitFor(() => document.querySelector('button[aria-label="Remove run 1"]'), 'draft reset');
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label="Remove run 1"]'),
@@ -527,6 +656,8 @@ async function testWorkspace() {
   render(shared);
   await waitFor(() => document.querySelectorAll('figure').length === 1, 'reload without basket');
   check(latest.includes(encodeURIComponent(url('beta'))), 'Full underlying run URL retained');
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(
     () =>
@@ -534,10 +665,7 @@ async function testWorkspace() {
       'Browse SimBoard',
     'default browser',
   );
-  await waitFor(
-    () => document.body.textContent?.includes('2 supported cases found'),
-    'supported-only results',
-  );
+  await waitFor(() => button('case.beta · 2 runs'), 'supported-only results');
   check(!button('case.raw-only · 0 runs'), 'Raw resources are not supported cases');
   click(button('case.alpha · 2 runs'), 'browse indexed case');
   await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'browser runs');
@@ -558,8 +686,8 @@ async function testWorkspace() {
     'same-case periods',
   );
   check(
-    document.querySelectorAll('#available-case-diagnostics button[aria-pressed="true"]').length ===
-      2,
+    document.querySelectorAll('#available-case-diagnostics li button[aria-pressed="true"]')
+      .length === 2,
     'Added states reflect both selected periods',
   );
   const betaCase = button('case.beta · 2 runs')!;
@@ -575,6 +703,7 @@ async function testWorkspace() {
   await new Promise((resolve) => setTimeout(resolve, 350));
   check(betaCase.getAttribute('aria-pressed') === 'true', 'Selected-case state');
   check(button('case.alpha · 2 runs'), 'Case list remains visible');
+  await expandSelections();
   check(
     document.querySelector('[aria-label="Selected runs"]')?.textContent?.includes('case.alpha'),
     'Inactive-case selections remain visible',
@@ -589,7 +718,7 @@ async function testWorkspace() {
   click(button('case.alpha · 2 runs'), 'return to first case');
   await waitFor(
     () =>
-      document.querySelectorAll('#available-case-diagnostics button[aria-pressed="true"]')
+      document.querySelectorAll('#available-case-diagnostics li button[aria-pressed="true"]')
         .length === 2,
     'Added states survive case changes',
   );
@@ -600,6 +729,21 @@ async function testWorkspace() {
   );
   render('/diagnostics');
   await waitFor(() => button('Add by URL'), 'manual entry tab');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (3/'),
+    'Workspace selections restore after navigation',
+  );
+  await expandSelections();
+  for (let remaining = 3; remaining > 0; remaining--) {
+    click(
+      document.querySelector<HTMLButtonElement>('button[aria-label="Remove run 1"]'),
+      'clear previous selection',
+    );
+    await waitFor(
+      () => document.body.textContent?.includes(`Selected runs (${remaining - 1}/`),
+      'selection removed immediately',
+    );
+  }
   click(button('Add by URL'), 'manual tab');
   await waitFor(() => document.getElementById('manual-run-url'), 'manual form');
   input(document.getElementById('manual-run-url') as HTMLInputElement, `${base}/raw/`);
@@ -640,13 +784,19 @@ async function testWorkspace() {
   render('/diagnostics');
   await waitFor(() => button('Add by URL'), 'example setup');
   click(button('Add by URL'), 'example tab');
-  await waitFor(() => document.querySelector('summary'), 'examples disclosure');
-  click(document.querySelector('summary'), 'open examples');
-  check(
-    document.querySelector('details')?.querySelectorAll('li').length === 4,
-    'All IICE examples retained',
+  await waitFor(
+    () =>
+      [...document.querySelectorAll('summary')].find((item) =>
+        item.textContent?.includes('IICE example comparisons'),
+      ),
+    'examples disclosure',
   );
-  click(document.querySelector('details li button') as HTMLButtonElement, 'open IICE example');
+  const examples = [...document.querySelectorAll('summary')]
+    .find((item) => item.textContent?.includes('IICE example comparisons'))!
+    .closest('details')!;
+  click(examples.querySelector('summary'), 'open examples');
+  check(examples.querySelectorAll('li').length === 4, 'All IICE examples retained');
+  click(examples.querySelector('li button') as HTMLButtonElement, 'open IICE example');
   await waitFor(
     () => document.querySelectorAll('figure').length === 4,
     'example opens directly into plots',
@@ -654,6 +804,8 @@ async function testWorkspace() {
 }
 
 async function testAnalysisFilters() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(
     () => document.getElementById('diagnostic-case-search'),
@@ -662,10 +814,19 @@ async function testAnalysisFilters() {
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'analysis');
   await waitFor(() => button('case.metadata · 4 runs'), 'mixed-analysis case found');
   check(analysisTab('All')?.getAttribute('aria-selected') === 'true', 'Workspace defaults to All');
+  check(analysisTab('All')?.textContent === 'All (4)', 'All count deduplicates supported runs');
+  check(
+    analysisTab('Climatology')?.textContent === 'Climatology (4)',
+    'Climatology count for active case',
+  );
+  check(
+    analysisTab('Time Series')?.textContent === 'Time Series (1)',
+    'Time-series count for active case',
+  );
   click(analysisTab('Time Series'), 'workspace time-series filter');
   await waitFor(
-    () => document.querySelector('h4')?.textContent?.startsWith('0001–0500'),
-    'workspace time-series grouping',
+    () => document.querySelector('h4')?.textContent?.startsWith('0001–0050'),
+    'workspace time-series filter preserves climatology-first grouping',
   );
   click(
     document.querySelector<HTMLButtonElement>(
@@ -711,27 +872,48 @@ async function testAnalysisFilters() {
     () => document.body.textContent?.includes('Selected runs (2/'),
     'mixed selections retained',
   );
-  click(analysisTab('Time Series'), 'case with no indexed time series');
+  check(analysisTab('Time Series')?.disabled, 'Case with no indexed time series disables filter');
+  check(
+    analysisTab('Time Series')?.textContent === 'Time Series (0)',
+    'Unavailable filter stays visible with zero count',
+  );
+  click(analysisTab('Time Series'), 'disabled time-series filter');
+  check(
+    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
+    'Disabled filter cannot activate',
+  );
+  analysisTab('Climatology')!.focus();
+  analysisTab('Climatology')!.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+  );
   await waitFor(
-    () => document.body.textContent?.includes('No runs have indexed time-series years.'),
-    'empty analysis feedback',
+    () => analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    'Keyboard navigation skips disabled filter',
   );
-  check(
-    document.body.textContent?.includes('Check All for other runs.'),
-    'Empty filter does not claim other analysis periods are unknown',
+  click(button('case.metadata · 4 runs'), 'return to mixed analyses');
+  await waitFor(
+    () => !analysisTab('Time Series')?.disabled,
+    'Time Series enables for supported case',
   );
-  check(
-    !document.querySelector('#available-case-diagnostics a[aria-label^="Open "]'),
-    'Empty filter shows no misleading rows',
+  click(analysisTab('Time Series'), 'activate available time-series filter');
+  await waitFor(
+    () => analysisTab('Time Series')?.getAttribute('aria-selected') === 'true',
+    'Time Series selected',
   );
+  click(button('case.beta · 2 runs'), 'switch to unavailable active filter');
+  await waitFor(
+    () => analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    'Unavailable active filter falls back to All',
+  );
+  check(analysisTab('Time Series')?.disabled, 'Fallback leaves unavailable filter disabled');
   check(
     document.body.textContent?.includes('Selected runs (2/'),
-    'Filtering never removes hidden selections',
+    'Automatic fallback never removes selections',
   );
   click(button('case.metadata · 4 runs'), 'return to combined run');
   await waitFor(
     () => document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
-    'MPAS remains selected in Time Series',
+    'MPAS remains selected after automatic fallback',
   );
   click(analysisTab('All'), 'restore all analyses');
   await waitFor(
@@ -757,33 +939,220 @@ async function testAnalysisFilters() {
   check(sharedRuns[0].label === 'case.metadata 0001-0050', 'Existing comparison label unchanged');
   render('/case/raw-only');
   await waitFor(() => button('Diagnostics (0)0 supported runs'), 'case without supported runs');
+  check(
+    button('Diagnostics (0)0 supported runs')?.getAttribute('aria-expanded') === 'false',
+    'Empty diagnostics stay collapsed',
+  );
   click(button('Diagnostics (0)0 supported runs'), 'expand empty diagnostics');
   await waitFor(() => analysisTab('Time Series'), 'empty diagnostics filters');
-  click(analysisTab('Time Series'), 'filter empty diagnostics');
-  await waitFor(
-    () => analysisTab('Time Series')?.getAttribute('aria-selected') === 'true',
-    'empty filter selected',
+  check(
+    analysisTab('Time Series')?.disabled && analysisTab('Climatology')?.disabled,
+    'Empty case disables both diagnostic types',
+  );
+  check(
+    !analysisTab('All')?.disabled && analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    'All remains available as empty-case fallback',
   );
   check(
     !document.body.textContent?.includes('Check All for other runs.'),
     'Empty sources do not suggest hidden runs',
   );
+  render('/case/metadata');
+  await waitFor(
+    () => analysisTab('Time Series') && !analysisTab('Time Series')!.disabled,
+    'case data update setup',
+  );
+  click(analysisTab('Time Series'), 'select case time series before update');
+  await waitFor(
+    () => analysisTab('Time Series')?.getAttribute('aria-selected') === 'true',
+    'case time series active',
+  );
+  const original = client.getQueryData(['diagnostics', 'case-runs', 'metadata']);
+  client.setQueryData(['diagnostics', 'case-runs', 'metadata'], {
+    caseId: 'metadata',
+    caseName: 'case.metadata',
+    sources: [
+      { rootUrl: `${base}/metadata/`, runs: [run('metadata')], error: null, partial: false },
+    ],
+  });
+  await waitFor(
+    () =>
+      analysisTab('Time Series')?.disabled &&
+      analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    'Case Details falls back when data changes',
+  );
+  check(
+    analysisTab('Climatology')?.textContent === 'Climatology (1)',
+    'Counts update with diagnostic data',
+  );
+  client.setQueryData(['diagnostics', 'case-runs', 'metadata'], original);
+}
+
+async function testToolFilters() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/case/ranges');
+  await waitFor(() => toolButton('All')?.textContent === 'All (4)', 'unique case tool counts');
+  check(toolButton('E3SM Diags')?.textContent === 'E3SM Diags (1)', 'Case E3SM count');
+  check(
+    toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (3)',
+    'Case MPAS count deduplicates sources',
+  );
+  const combinedUrl = `${base}/ranges/mpas_analysis/ts_0001-0100_climo_0051-0100/`;
+  const combined = document
+    .querySelector<HTMLAnchorElement>(`a[href="${combinedUrl}"]`)!
+    .closest('li')!;
+  check(
+    combined.closest('section')?.querySelector('h4')?.textContent?.startsWith('0051–0100'),
+    'MPAS groups by climatology range',
+  );
+  check(
+    combined.textContent?.includes('Climatology: 0051–0100 · Time Series: 0001–0100'),
+    'MPAS row keeps both time ranges',
+  );
+  check(combined.textContent?.includes('ts_0001-0100_climo_0051-0100'), 'MPAS identifier complete');
+  check(
+    document.querySelectorAll(`a[href="${combinedUrl}"]`).length === 1,
+    'MPAS appears once across duplicate sources',
+  );
+  check(
+    [...document.querySelectorAll('h4')].some((item) => item.textContent?.startsWith('0101–0200')),
+    'Time-series-only run uses its time range',
+  );
+  check(
+    [...document.querySelectorAll('h4')].some((item) =>
+      item.textContent?.startsWith('Unknown time range'),
+    ),
+    'Missing metadata stays unknown despite identifier years',
+  );
+  click(toolButton('MPAS-Analysis'), 'filter case MPAS runs');
+  await waitFor(
+    () => document.querySelectorAll('a[aria-label^="Open "]').length === 3,
+    'case MPAS filter',
+  );
+  click(analysisTab('Time Series'), 'filter MPAS time series');
+  await waitFor(
+    () => document.querySelectorAll('a[aria-label^="Open "]').length === 2,
+    'MPAS time-series subset',
+  );
+  check(
+    document.querySelector('h4')?.textContent?.startsWith('0051–0100'),
+    'Analysis filter does not regroup combined MPAS run by time series',
+  );
+  click(
+    document
+      .querySelector<HTMLAnchorElement>(`a[href="${combinedUrl}"]`)!
+      .closest('li')!
+      .querySelector<HTMLButtonElement>('button[aria-label^="Add MPAS"]'),
+    'select combined run after filtering',
+  );
+  await waitFor(
+    () => document.querySelector('button[aria-label^="Remove MPAS"]'),
+    'filtered MPAS selected',
+  );
+  click(analysisTab('All'), 'show all MPAS analyses');
+  click(toolButton('All'), 'show all tools');
+  await waitFor(
+    () => document.querySelectorAll('a[aria-label^="Open "]').length === 4,
+    'all case tools restored',
+  );
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 1,
+    'Tool filters preserve one selected URL',
+  );
+  click(toolButton('MPAS-Analysis'), 'active MPAS before data change');
+  const original = client.getQueryData(['diagnostics', 'case-runs', 'ranges']);
+  client.setQueryData(['diagnostics', 'case-runs', 'ranges'], {
+    caseId: 'ranges',
+    caseName: 'case.ranges',
+    sources: [
+      { rootUrl: `${base}/ranges/`, runs: [run('ranges', 51, 100)], error: null, partial: false },
+    ],
+  });
+  await waitFor(
+    () =>
+      toolButton('MPAS-Analysis')?.disabled &&
+      toolButton('All')?.getAttribute('aria-pressed') === 'true',
+    'Missing active tool falls back to All on case data update',
+  );
+  check(
+    toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (0)',
+    'Zero-count tool stays visible and disabled',
+  );
+  client.setQueryData(['diagnostics', 'case-runs', 'ranges'], original);
+  click(link('Diagnostics workspace'), 'workspace tool filters');
+  await waitFor(
+    () => document.getElementById('diagnostic-case-search'),
+    'workspace browser for ranges',
+  );
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'ranges');
+  await waitFor(() => toolButton('All')?.textContent === 'All (4)', 'workspace unique tool counts');
+  click(toolButton('MPAS-Analysis'), 'workspace MPAS filter');
+  click(analysisTab('Time Series'), 'workspace MPAS time-series filter');
+  await waitFor(
+    () =>
+      document.querySelectorAll('#available-case-diagnostics a[aria-label^="Open "]').length === 2,
+    'workspace MPAS subset',
+  );
+  check(
+    document.querySelector('h4')?.textContent?.startsWith('0051–0100'),
+    'Workspace uses same climatology-first grouping',
+  );
+  check(
+    document.querySelectorAll(`a[href="${combinedUrl}"]`).length === 1,
+    'Workspace combined MPAS run stays unique',
+  );
+  check(
+    document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
+    'Cross-page Added state survives tool filtering',
+  );
+  render('/case/alpha');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case alpha',
+    'leave workspace tool filter',
+  );
+  render('/diagnostics');
+  await waitFor(
+    () => toolButton('MPAS-Analysis')?.getAttribute('aria-pressed') === 'true',
+    'Workspace tool filter persists across navigation',
+  );
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'beta');
+  await waitFor(
+    () =>
+      toolButton('MPAS-Analysis')?.disabled &&
+      toolButton('All')?.getAttribute('aria-pressed') === 'true',
+    'Workspace switches unavailable tool to All for next case',
+  );
+  check(
+    analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      analysisTab('Time Series')?.disabled,
+    'Unavailable analysis also resets with case switch',
+  );
 }
 
 async function testViewer() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(() => document.getElementById('diagnostic-case-search'), 'search browser');
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'paged');
   await waitFor(
-    () => document.body.textContent?.includes('No supported cases in checked results'),
+    () => document.body.textContent?.includes('No supported cases found on this page'),
     'bounded discovery empty page',
   );
   click(button('Load more cases'), 'load more supported cases');
   await waitFor(() => button('case.alpha · 2 runs'), 'supported case on next page');
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'unavailable');
   await waitFor(() => button('Retry discovery'), 'archive failure feedback');
+  check(
+    document.body.textContent?.includes(
+      'Could not load diagnostics for case.unavailable. Results are incomplete.',
+    ),
+    'Archive failure names affected case and incompleteness',
+  );
   click(button('Retry discovery'), 'retry failed archive');
   await waitFor(() => button('case.unavailable · 2 runs'), 'retry bypasses failed discovery cache');
+  check(!button('Retry discovery'), 'Successful retry clears discovery warning');
   render(comparePath([{ url: url('incompatible'), label: 'Incompatible' }]));
   await waitFor(
     () => document.body.textContent?.includes('These runs have no plots in common'),
@@ -847,6 +1216,7 @@ async function testViewer() {
   const original = latest;
   click(button('Edit runs'), 'edit without resetting plot settings');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'editor open');
+  await expandSelections();
   click(
     document.querySelector('[role="dialog"] details summary'),
     'expand address and label editor',
@@ -999,16 +1369,19 @@ async function testViewer() {
     },
   ];
   localStorage.setItem('simboard.diagnostics-comparison', JSON.stringify(staged));
+  localStorage.removeItem('simboard.diagnostics-workspace');
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
+  await waitFor(() => selectedSummary(), 'synchronized selection summary');
+  await expandSelections();
   await waitFor(
-    () => document.querySelector('[aria-label="Tray group to import"]'),
-    'explicit tray group',
+    () => document.querySelector('[aria-label="Comparison group"]'),
+    'automatic tray group',
   );
-  click(button('Import tray selections'), 'import one kind');
+  check(!button('Import tray selections'), 'No manual import step');
   await waitFor(
     () => document.body.textContent?.includes('Selected runs (1/'),
-    'grouped import selection',
+    'automatic grouped selection',
   );
   check(
     !document.querySelector('[aria-label="Selected runs"]')?.textContent?.includes('Staged MPAS'),
@@ -1016,29 +1389,538 @@ async function testViewer() {
   );
 }
 
+async function testUnifiedSelections() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/case/alpha');
+  await waitFor(
+    () => document.querySelector('button[aria-label^="Add E3SM"]'),
+    'case selection setup',
+  );
+  click(
+    document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'),
+    'stage case diagnostic',
+  );
+  await waitFor(() => button('Expand'), 'case selection staged');
+  click(link('Diagnostics workspace'), 'open synchronized workspace');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'Case selection automatically available',
+  );
+  check(!button('Import tray selections'), 'No import action required');
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'analysis');
+  await waitFor(() => button('case.metadata · 4 runs'), 'persistent search setup');
+  click(button('case.beta · 2 runs'), 'choose beta');
+  click(analysisTab('Climatology'), 'set persistent analysis filter');
+  await waitFor(
+    () => document.querySelector('#available-case-diagnostics button[aria-label^="Add E3SM"]'),
+    'beta diagnostics',
+  );
+  click(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    ),
+    'select beta',
+  );
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (2/'),
+    'workspace selected beta',
+  );
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 2,
+    'Workspace Add updates tray immediately',
+  );
+  await expandSelections();
+  const backlink = document.querySelector<HTMLAnchorElement>('[aria-label="View Case case.beta"]');
+  check(
+    backlink?.getAttribute('href') === '/cases/chrysalis/scientist/case.beta#diagnostics-beta',
+    'Backlink uses readable case route',
+  );
+  click(backlink, 'View Case backlink');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case beta',
+    'backlink destination',
+  );
+  await waitFor(
+    () => document.querySelector('button[aria-label^="Remove E3SM"]'),
+    'Case Details reflects workspace selection',
+  );
+  click(
+    document.querySelector<HTMLButtonElement>('button[aria-label^="Remove E3SM"]'),
+    'remove from case',
+  );
+  await waitFor(
+    () => document.body.textContent?.includes('1 selected'),
+    'case removal updates tray',
+  );
+  click(link('Diagnostics workspace'), 'return to workspace');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'Case removal updates workspace',
+  );
+  check(
+    (document.getElementById('diagnostic-case-search') as HTMLInputElement).value === 'analysis',
+    'Search survives backlink navigation',
+  );
+  await waitFor(
+    () => button('case.beta · 2 runs')?.getAttribute('aria-pressed') === 'true',
+    'Selected case survives navigation',
+  );
+  check(
+    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
+    'Analysis filter survives navigation',
+  );
+  click(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    ),
+    'reselect beta',
+  );
+  await waitFor(() => document.body.textContent?.includes('Selected runs (2/'), 'beta reselected');
+  render('/case/raw-only');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case raw-only',
+    'unmount workspace for refresh',
+  );
+  client.clear();
+  render('/diagnostics');
+  await waitFor(
+    () => button('case.beta · 2 runs')?.getAttribute('aria-pressed') === 'true',
+    'Selected case restored without query cache',
+  );
+  check(document.body.textContent?.includes('Selected runs (2/'), 'Selections survive refresh');
+  check(
+    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
+    'Analysis filter survives refresh',
+  );
+  check(
+    !document.body.textContent?.includes('supported cases found in checked results'),
+    'No routine discovery status clutter',
+  );
+  check(
+    selectedSummary()?.getAttribute('aria-expanded') === 'false',
+    'Selected details stay collapsed after refresh',
+  );
+  await expandSelections();
+  const selections = document.querySelector('[aria-label="Selected runs"]')!;
+  check(
+    Boolean(
+      document.getElementById('available-case-diagnostics')!.compareDocumentPosition(selections) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ),
+    'Selected entries follow discovery panels',
+  );
+  check(
+    getComputedStyle(button('Compare')!.closest('footer')!).position === 'sticky',
+    'Summary and Compare share sticky footer',
+  );
+  click(selectedSummary(), 'collapse selected details');
+  await waitFor(
+    () => selectedSummary()?.getAttribute('aria-expanded') === 'false',
+    'Selected details collapse',
+  );
+  check(
+    !document.querySelector('button[aria-label="Remove run 1"]'),
+    'Collapsed selection hides row controls',
+  );
+  check(button('Compare'), 'Compare stays available while details collapse');
+  render(comparePath([{ url: url('alpha'), label: 'Explicit shared selection' }]));
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 1,
+    'Shared URL overrides local selections',
+  );
+  check(
+    !document.body.textContent?.includes('case.beta'),
+    'No unrelated local run in shared comparison',
+  );
+  click(button('Edit runs'), 'edit explicit selection');
+  await waitFor(() => document.querySelector('[role="dialog"]'), 'shared editor');
+  check(
+    document.querySelector('[role="dialog"]')?.textContent?.includes('Selected runs (1/'),
+    'Shared editor does not merge local runs',
+  );
+  click(button('Cancel'), 'cancel shared edits');
+}
+
+async function testDiscoveryWarnings() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => document.getElementById('diagnostic-case-search'), 'warning test setup');
+  for (const [search, message] of [
+    ['partial', 'Run discovery is incomplete for case.partial. Some runs may be missing.'],
+    [
+      'request-failed',
+      'Could not load diagnostics for case.request-failed. Results are incomplete.',
+    ],
+    ['search-failed', 'Case search failed. Results may be incomplete.'],
+  ]) {
+    input(document.getElementById('diagnostic-case-search') as HTMLInputElement, search);
+    await waitFor(() => document.body.textContent?.includes(message), `${search} specific warning`);
+    check(
+      !document.body.textContent?.includes('Some results could not be read'),
+      'No vague warning',
+    );
+    check(button('Retry discovery'), 'Transient failure can be retried');
+    if (search === 'partial')
+      check(button('case.partial · 1 runs'), 'Partial discovery keeps available runs');
+  }
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'raw-only');
+  await waitFor(
+    () => document.body.textContent?.includes('No supported cases found.'),
+    'benign empty directory',
+  );
+  check(!button('Retry discovery'), 'Empty unsupported directory does not trigger a warning');
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'rejected');
+  await waitFor(
+    () =>
+      latest === '/diagnostics' &&
+      client.getQueryState(['diagnostics', 'supported-cases', 'rejected'])?.status === 'success' &&
+      JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).search === 'rejected' &&
+      !document.querySelector('[aria-label="Browse cases"] li') &&
+      document.body.textContent?.includes('No supported cases found.'),
+    'unsupported-only case excluded',
+  );
+  check(!button('Retry discovery'), 'Unsupported directories are silently excluded');
+  check(
+    !document.body.textContent?.includes('not on a supported public server'),
+    'No unsupported-directory warning',
+  );
+  check(
+    discoveryLogs.some(
+      (args) => args[0] === 'Diagnostics discovery excluded unsupported directories',
+    ),
+    'Excluded sources retain troubleshooting logs',
+  );
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'mixed');
+  await waitFor(
+    () => button('case.mixed · 1 runs'),
+    'Case with both supported and unsupported directories',
+  );
+  check(
+    !document.body.textContent?.includes('Unsupported output'),
+    'Unsupported source omitted from available diagnostics',
+  );
+  check(
+    !document.body.textContent?.includes('not on a supported public diagnostics server'),
+    'No unsupported warning in available diagnostics',
+  );
+  const info = document.querySelector<HTMLButtonElement>(
+    '[aria-label="About supported diagnostics"]',
+  )!;
+  info.focus();
+  await waitFor(
+    () =>
+      document.querySelector('[role="tooltip"]')?.textContent ===
+      'Only publicly accessible E3SM Diags and MPAS-Analysis runs supported by the comparison viewer are listed.',
+    'Supported diagnostic info tooltip available by keyboard',
+  );
+  (document.getElementById('diagnostic-case-search') as HTMLInputElement).focus();
+}
+
+async function testCompatibilityValidation() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => button('case.alpha · 2 runs'), 'compatibility setup');
+  check(button('Compare')?.disabled, 'Compare disabled without a run');
+  const before = compares;
+  click(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    ),
+    'select first supported run',
+  );
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'minimum selection',
+  );
+  check(!button('Compare')?.disabled, 'Compare enabled at API minimum of one run');
+  click(button('case.beta · 2 runs'), 'select second case for validation');
+  await waitFor(
+    () =>
+      document.getElementById('available-case-diagnostics')?.getAttribute('aria-label') ===
+      'Diagnostics for case.beta',
+    'second validation case',
+  );
+  click(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    ),
+    'select second supported run',
+  );
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (2/'),
+    'two supported selections',
+  );
+  check(compares === before, 'Selection does not validate compatibility');
+  comparisonDelay = 100;
+  const compare = button('Compare')!;
+  click(compare, 'validate on Compare');
+  compare.click();
+  await waitFor(
+    () => document.querySelector('button[aria-busy="true"]'),
+    'Compatibility loading state',
+  );
+  check(
+    document.querySelector<HTMLButtonElement>('button[aria-busy="true"]')?.disabled,
+    'Pending Compare disabled',
+  );
+  check(
+    document.querySelector<HTMLFieldSetElement>('fieldset')?.disabled,
+    'Selections cannot change during validation',
+  );
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 2,
+    'Compatible runs navigate to viewer',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  check(compares === before + 1, 'Duplicate clicks and viewer reuse do not duplicate validation');
+  comparisonDelay = 0;
+
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => button('Add by URL'), 'incompatible setup');
+  click(button('Add by URL'), 'manual compatibility tab');
+  await waitFor(() => document.getElementById('manual-run-url'), 'manual compatibility input');
+  input(document.getElementById('manual-run-url') as HTMLInputElement, url('incompatible'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Add run'), 'select incompatible run');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'incompatible selection accepted',
+  );
+  const beforeIncompatible = compares;
+  check(!button('Compare')?.disabled, 'Supported selection remains comparable until checked');
+  check(!document.querySelector('[role="alert"]'), 'No compatibility warning during selection');
+  click(button('Compare'), 'check incompatible plots');
+  await waitFor(
+    () =>
+      document.querySelector('[role="alert"]')?.textContent ===
+      'Selected runs have no plots in common. Choose compatible runs.',
+    'Specific no-common-plots message',
+  );
+  check(
+    latest === '/diagnostics' && !document.querySelector('figure'),
+    'Incompatible selection stays on setup page',
+  );
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).runs[0].url ===
+      url('incompatible'),
+    'Failed compatibility preserves selection',
+  );
+  check(compares === beforeIncompatible + 1, 'One compatibility request for no shared plots');
+  await expandSelections();
+  click(
+    document.querySelector<HTMLButtonElement>('button[aria-label="Remove run 1"]'),
+    'replace incompatible run',
+  );
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (0/'),
+    'removed incompatible run',
+  );
+  input(document.getElementById('manual-run-url') as HTMLInputElement, url('network-fail'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Add run'), 'select run before network error');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'network run selected',
+  );
+  comparisonFailures = 1;
+  click(button('Compare'), 'trigger network validation failure');
+  await waitFor(() => button('Retry comparison'), 'Actionable validation retry');
+  check(
+    document
+      .querySelector('[role="alert"]')
+      ?.textContent?.includes('Check your connection and try again.'),
+    'Network failure has actionable message',
+  );
+  check(latest === '/diagnostics', 'Network error does not navigate');
+  check(
+    document.body.textContent?.includes('Selected runs (1/'),
+    'Network error preserves selections',
+  );
+  click(button('Retry comparison'), 'retry compatibility');
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 1,
+    'Retry opens compatible viewer',
+  );
+
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => button('Add by URL'), 'abandoned validation setup');
+  click(button('Add by URL'), 'abandoned manual tab');
+  await waitFor(() => document.getElementById('manual-run-url'), 'abandoned manual input');
+  input(document.getElementById('manual-run-url') as HTMLInputElement, url('abandoned'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Add run'), 'select run before navigation');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'abandoned run selected',
+  );
+  comparisonDelay = 100;
+  click(button('Compare'), 'start abandoned validation');
+  await waitFor(
+    () => document.querySelector('button[aria-busy="true"]'),
+    'abandoned request pending',
+  );
+  click(link('Alpha case'), 'leave setup while validating');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case alpha',
+    'case after abandoning validation',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  check(latest === '/case/alpha', 'Completed request does not navigate after leaving setup');
+  comparisonDelay = 0;
+}
+
+async function testExampleRetryAndGroupSwitch() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => button('Add by URL'), 'example retry setup');
+  click(button('Add by URL'), 'example retry tab');
+  await waitFor(() => document.getElementById('manual-run-url'), 'example retry form');
+  const examples = [...document.querySelectorAll('summary')]
+    .find((item) => item.textContent?.includes('IICE example comparisons'))!
+    .closest('details')!;
+  click(examples.querySelector('summary'), 'show examples for failed check');
+  comparisonFailures = 1;
+  click(
+    examples.querySelector<HTMLButtonElement>('li button'),
+    'open example with transient failure',
+  );
+  await waitFor(() => button('Retry comparison'), 'example validation retry offered');
+  check(
+    document.body.textContent?.includes('Selected runs (0/'),
+    'Failed example does not replace current selections',
+  );
+  click(button('Retry comparison'), 'retry original example');
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 4,
+    'Retry opens all original example runs',
+  );
+  check(
+    parseCompareState(new URLSearchParams(latest.split('?')[1])).runs[0].label ===
+      'E3SMv2 historical',
+    'Retry uses example runs, not empty draft',
+  );
+
+  const staged = [
+    {
+      url: url('staged-obs'),
+      caseId: 'obs',
+      caseName: 'Staged observations',
+      tool: 'e3sm_diags',
+      comparison: 'model_vs_obs',
+      period: '0001-0050',
+      subsection: 'atm_monthly_180x360_aave',
+    },
+    {
+      url: `${base}/staged-mpas/mpas_analysis/ts_0001-0050_climo_0001-0050/`,
+      caseId: 'mpas',
+      caseName: 'Staged MPAS',
+      tool: 'mpas_analysis',
+      comparison: null,
+      period: '0001-0050',
+      subsection: null,
+    },
+  ];
+  localStorage.clear();
+  localStorage.setItem('simboard.diagnostics-comparison', JSON.stringify(staged));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(
+    () => selectedSummary()?.textContent?.includes('Selected runs (1/'),
+    'staged group switch setup',
+  );
+  click(button('Add by URL'), 'manual run before group switch');
+  await waitFor(() => document.getElementById('manual-run-url'), 'manual group-switch input');
+  input(document.getElementById('manual-run-url') as HTMLInputElement, url('manual-group-switch'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Add run'), 'add manual run to staged group');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (2/'),
+    'manual and staged runs selected',
+  );
+  comparisonFailures = 1;
+  click(button('Compare'), 'fail check before changing group');
+  await waitFor(() => button('Retry comparison'), 'group switch starts with retry error');
+  await expandSelections();
+  const beforeSwitch = compares;
+  const group = document.querySelector<HTMLButtonElement>('[aria-label="Comparison group"]')!;
+  group.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  await waitFor(() => document.querySelector('[role="option"]'), 'comparison groups opened');
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (item) => item.textContent === 'MPAS-Analysis',
+  )!;
+  option.focus();
+  option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await waitFor(
+    () =>
+      document.querySelector('[aria-label="Selected runs"]')?.textContent?.includes('Staged MPAS'),
+    'new staged group selected',
+  );
+  check(
+    document.querySelector(`[aria-label="Selected runs"] a[href="${url('manual-group-switch')}"]`),
+    'Group switch retains manually added URL',
+  );
+  check(
+    document.body.textContent?.includes('Selected runs (2/'),
+    'Group switch retains manual and new indexed run',
+  );
+  check(
+    !document.querySelector('[role="alert"]') && !button('Retry comparison'),
+    'Changing groups clears stale validation error and retry',
+  );
+  check(compares === beforeSwitch, 'Changing groups does not validate compatibility');
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 2,
+    'Switching groups preserves unrelated staged selections',
+  );
+}
+
 async function testDenseBrowser() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await new Promise((resolve) => setTimeout(resolve, 10));
   await waitFor(() => document.getElementById('diagnostic-case-search'), 'dense browser setup');
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'dense');
   await waitFor(
-    () => document.body.textContent?.includes('6 supported cases found'),
+    () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 6,
     'first dense page',
   );
   click(button('Load more cases'), 'second dense page');
   await waitFor(
-    () => document.body.textContent?.includes('12 supported cases found'),
+    () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 12,
     'second dense page loaded',
   );
   click(button('Load more cases'), 'third dense page');
   await waitFor(
-    () => document.body.textContent?.includes('18 supported cases found'),
+    () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 18,
     'third dense page loaded',
   );
   const cases = document.querySelector<HTMLElement>('[aria-label="Browse cases"]')!;
   const diagnostics = document.getElementById('available-case-diagnostics')!;
   const caseScroll = cases.querySelector('ul')!.parentElement!;
   const runScroll = diagnostics.lastElementChild as HTMLElement;
+  check(
+    Math.abs(cases.getBoundingClientRect().height - diagnostics.getBoundingClientRect().height) < 2,
+    'Discovery panels have matching heights',
+  );
+  const scrollBounds = caseScroll.getBoundingClientRect();
+  const visibleCases = [...cases.querySelectorAll('li')].filter(
+    (item) =>
+      item.getBoundingClientRect().top >= scrollBounds.top &&
+      item.getBoundingClientRect().bottom <= scrollBounds.bottom,
+  ).length;
+  check(
+    visibleCases >= 8 && visibleCases <= 10,
+    `Discovery shows 8–10 cases before scrolling, saw ${visibleCases}`,
+  );
   check(caseScroll.scrollHeight > caseScroll.clientHeight, 'Cases scroll independently');
   check(runScroll.scrollHeight > runScroll.clientHeight, 'Diagnostics scroll independently');
   if (window.innerWidth >= 768) {
@@ -1104,7 +1986,12 @@ async function testDenseBrowser() {
 
 testWorkspace()
   .then(testAnalysisFilters)
+  .then(testToolFilters)
   .then(testViewer)
+  .then(testUnifiedSelections)
+  .then(testDiscoveryWarnings)
+  .then(testCompatibilityValidation)
+  .then(testExampleRetryAndGroupSwitch)
   .then(testDenseBrowser)
   .then(() => {
     const output = document.createElement('output');

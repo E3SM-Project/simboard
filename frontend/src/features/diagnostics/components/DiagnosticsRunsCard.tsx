@@ -33,11 +33,12 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
   });
   const basket = useComparisonBasket();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const location = useLocation();
   const target = location.hash.slice(1);
   const id = diagnosticsId(caseId);
   const runs = periodGroups(query.data?.sources ?? []).flatMap(([, runs]) => runs);
+  const open = expanded ?? runs.length > 0;
   const selected = basket.entries.filter((entry) => entry.caseId === caseId).length;
   const sources =
     query.data?.sources ??
@@ -51,7 +52,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
 
   useEffect(() => {
     if (target !== id && !target.startsWith(`${id}-source-`)) return;
-    setOpen(true);
+    setExpanded(true);
   }, [id, target, location.key]);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
   }, [id, target, location.key, query.data, open]);
 
   const add = (run: DiagnosticsRunOut) => {
-    if (!basket.add(toEntry(run, caseId, caseName))) {
+    if (!basket.add(toEntry(run, caseId, caseName, location.pathname))) {
       toast({
         title: `Compare up to ${MAX_RUNS_PER_GROUP} runs of one kind at a time`,
         description: 'Remove one from the comparison tray first.',
@@ -84,7 +85,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
       id={id}
       tabIndex={-1}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={setExpanded}
       className="scroll-mt-20 rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card>
@@ -92,7 +93,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-xl p-5 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="min-w-0 flex-1">
                 <CardTitle className="text-base">
@@ -117,13 +118,11 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
           </CollapsibleTrigger>
         </CardHeader>
         <CollapsibleContent>
-          <CardContent className="space-y-3 border-t p-4">
-            <p className="text-sm text-muted-foreground">
-              Add matching diagnostics from this case or other cases to compare time ranges side by
-              side.
-            </p>
+          <CardContent className="max-h-[min(65dvh,36rem)] space-y-3 overflow-y-auto border-t p-3 sm:p-4">
             {query.isError ||
-            query.data?.sources.some((source) => source.error || source.partial) ? (
+            query.data?.sources.some(
+              (source) => (source.error && source.error !== 'url_not_allowed') || source.partial,
+            ) ? (
               <Button
                 variant="outline"
                 size="sm"

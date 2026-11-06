@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -29,11 +28,13 @@ import {
   compareSearch,
   type CompareState,
   displayLabel,
+  groupKey,
   imageUrl,
   MAX_COMPARED_RUNS,
   parseCompareState,
 } from '@/features/diagnostics/compareState';
 import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
+import { CaseBacklink } from '@/features/diagnostics/components/CaseBacklink';
 import { RunEditor } from '@/features/diagnostics/components/RunEditor';
 import type {
   ComparedPlotOut,
@@ -44,6 +45,7 @@ import type {
   PanelView,
   SetDetailOut,
 } from '@/features/diagnostics/types';
+import { readWorkspace, saveWorkspace } from '@/features/diagnostics/workspaceState';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -72,10 +74,43 @@ export const ComparePage = () => {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseCompareState(params), [params]);
   const { toast } = useToast();
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => readWorkspace().filter);
   const [editing, setEditing] = useState(false);
   const navigate = useNavigate();
   const basket = useComparisonBasket();
+  const { entries: basketEntries, applyComparison } = basket;
+  const activatedRuns = useRef('');
+  const selectedRuns = useMemo(
+    () =>
+      state.runs.map((run) => ({
+        ...run,
+        entry:
+          basket.entries.find((entry) => entry.url === run.url) ??
+          readWorkspace().runs.find((item) => item.url === run.url)?.entry,
+      })),
+    [state.runs, basket.entries],
+  );
+
+  useEffect(() => saveWorkspace({ filter }), [filter]);
+
+  useEffect(() => {
+    if (!state.runs.length) {
+      activatedRuns.current = '';
+      return;
+    }
+    // An explicit URL owns this comparison; never import other local runs into it.
+    saveWorkspace({ runs: selectedRuns });
+    const signature = JSON.stringify(state.runs);
+    if (activatedRuns.current === signature) return;
+    activatedRuns.current = signature;
+    const entries = selectedRuns.flatMap((run) => (run.entry ? [run.entry] : []));
+    const kinds = new Set(entries.map(groupKey));
+    applyComparison(
+      basketEntries.filter((entry) => kinds.has(groupKey(entry))).map((entry) => entry.url),
+      state.runs.map((run) => run.url),
+      entries,
+    );
+  }, [state.runs, selectedRuns, basketEntries, applyComparison]);
 
   const applyRuns = (runs: CompareRun[], additions: BasketEntry[]) => {
     if (
@@ -176,12 +211,8 @@ export const ComparePage = () => {
       <Shell>
         <header>
           <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Browse SimBoard cases or add public diagnostic run URLs. Compare cases or time ranges
-            side by side.
-          </p>
         </header>
-        <div className="rounded-xl border bg-white p-4 sm:p-6">
+        <div className="rounded-xl border bg-white p-3 sm:p-4">
           <RunEditor initialRuns={[]} onApply={applyRuns} />
         </div>
       </Shell>
@@ -198,7 +229,7 @@ export const ComparePage = () => {
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {state.runs.map((run) => (
+            {selectedRuns.map((run) => (
               <Badge
                 key={`${run.url}|${run.label}`}
                 variant="secondary"
@@ -206,6 +237,7 @@ export const ComparePage = () => {
                 className="max-w-full break-all"
               >
                 {displayLabel(run)}
+                {run.entry ? <CaseBacklink entry={run.entry} /> : null}
               </Badge>
             ))}
           </div>
@@ -220,16 +252,15 @@ export const ComparePage = () => {
             <DialogContent
               overlayClassName="motion-reduce:animate-none"
               className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-6xl overflow-y-auto motion-reduce:animate-none"
+              aria-describedby={undefined}
             >
               <DialogHeader>
                 <DialogTitle>Edit diagnostic runs</DialogTitle>
-                <DialogDescription>
-                  Browse cases or add URLs. Apply changes to update this shareable comparison.
-                </DialogDescription>
               </DialogHeader>
               <RunEditor
                 initialRuns={state.runs}
                 onApply={applyRuns}
+                comparisonSet={state.set}
                 onCancel={() => setEditing(false)}
               />
             </DialogContent>
@@ -319,8 +350,7 @@ export const ComparePage = () => {
                     />
                   </div>
                   <p className="text-xs text-slate-500">
-                    {visible.length} variables · ↑/↓ to step
-                    {detail?.missing ? ` · ${detail.missing} plots not in every run` : ''}
+                    {detail?.missing ? `${detail.missing} plots not in every run` : null}
                   </p>
                   {!visible.length ? (
                     <p className="text-sm text-slate-500">No variables match this filter.</p>

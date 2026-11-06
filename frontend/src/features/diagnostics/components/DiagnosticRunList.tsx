@@ -1,13 +1,16 @@
 import { Check, ExternalLink, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  type DiagnosticAnalysis,
   diagnosticClimatologyPeriod,
   diagnosticIdentifier,
   diagnosticPeriod,
   diagnosticTimeSeriesPeriod,
   diagnosticTitle,
+  type DiagnosticToolFilter,
   periodGroups,
   RUN_GROUPS,
   runGroup,
@@ -16,13 +19,15 @@ import type { DiagnosticsRunOut, DiagnosticsSourceOut } from '@/features/diagnos
 import { cn } from '@/lib/utils';
 
 const ANALYSES = [
-  {
-    key: 'all',
-    label: 'All',
-    description: 'Grouped by climatology years when available; otherwise time-series years.',
-  },
-  { key: 'climatology', label: 'Climatology', description: 'Grouped by climatology years.' },
-  { key: 'time_series', label: 'Time Series', description: 'Grouped by time-series years.' },
+  { key: 'all', label: 'All' },
+  { key: 'climatology', label: 'Climatology' },
+  { key: 'time_series', label: 'Time Series' },
+] as const;
+
+const TOOLS = [
+  { key: 'all', label: 'All' },
+  { key: 'e3sm_diags', label: 'E3SM Diags' },
+  { key: 'mpas_analysis', label: 'MPAS-Analysis' },
 ] as const;
 
 export interface DiagnosticRunListProps {
@@ -31,91 +36,159 @@ export interface DiagnosticRunListProps {
   isAdded: (url: string) => boolean;
   onAdd: (run: DiagnosticsRunOut) => void;
   onRemove: (url: string) => void;
+  analysis?: DiagnosticAnalysis;
+  onAnalysisChange?: (analysis: DiagnosticAnalysis) => void;
+  tool?: DiagnosticToolFilter;
+  onToolChange?: (tool: DiagnosticToolFilter) => void;
 }
 
 /** Shared discovery presentation; callers own staging or workspace drafts. */
-export const DiagnosticRunList = ({ sources, id, ...actions }: DiagnosticRunListProps) => (
-  <div className="min-w-0 space-y-3">
-    <div className="space-y-2">
-      {sources.map((source, index) => (
-        <section
-          key={source.rootUrl}
-          id={`${id}-source-${index}`}
-          tabIndex={-1}
-          className="scroll-mt-20 rounded focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {/* Preserve existing resource shortcuts and bookmarked tool-group anchors. */}
-          {[...new Set(source.runs.map(runGroup))].map((group) => (
-            <span
-              key={group}
-              id={`${id}-source-${index}-${group}`}
-              tabIndex={-1}
-              role="group"
-              aria-label={`${RUN_GROUPS.find((item) => item.key === group)?.title ?? group} in ${source.label || 'diagnostics directory'}; runs grouped by period below`}
-              className="block scroll-mt-20 rounded focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          ))}
-          <a
-            href={source.rootUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={source.rootUrl}
-            className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-slate-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-              {source.label || 'Browse diagnostics directory'}
-            </span>
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-          {source.error ? (
-            <p className="text-sm text-amber-800">
-              {source.error === 'url_not_allowed'
-                ? 'This directory is not on a supported public diagnostics server.'
-                : 'This directory could not be read. Browse the original output or try again.'}
-            </p>
-          ) : null}
-          {source.partial ? (
-            <p className="text-xs text-amber-700">
-              Some runs may be missing: part of the archive could not be read.
-            </p>
-          ) : null}
-        </section>
-      ))}
-    </div>
-    <Tabs defaultValue="all">
-      <TabsList
-        aria-label="Filter diagnostics by analysis"
-        className="grid w-full max-w-sm grid-cols-3"
-      >
-        {ANALYSES.map((analysis) => (
-          <TabsTrigger key={analysis.key} value={analysis.key} className="px-2 text-xs">
-            {analysis.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {ANALYSES.map((analysis) => {
-        const groups = periodGroups(sources, analysis.key);
+export const DiagnosticRunList = ({
+  sources,
+  id,
+  analysis: selectedAnalysis,
+  onAnalysisChange,
+  tool: selectedTool,
+  onToolChange,
+  ...actions
+}: DiagnosticRunListProps) => {
+  const [localAnalysis, setLocalAnalysis] = useState<DiagnosticAnalysis>('all');
+  const [localTool, setLocalTool] = useState<DiagnosticToolFilter>('all');
+  const tools = TOOLS.map((tool) => ({
+    ...tool,
+    count: periodGroups(sources, 'all', tool.key).reduce(
+      (count, [, runs]) => count + runs.length,
+      0,
+    ),
+  }));
+  const requestedTool = selectedTool ?? localTool;
+  const activeTool = tools.find((tool) => tool.key === requestedTool)?.count
+    ? requestedTool
+    : 'all';
+  const filters = ANALYSES.map((analysis) => ({
+    ...analysis,
+    groups: periodGroups(sources, analysis.key, activeTool),
+  }));
+  const requestedAnalysis = selectedAnalysis ?? localAnalysis;
+  const activeAnalysis = filters.find((analysis) => analysis.key === requestedAnalysis)?.groups
+    .length
+    ? requestedAnalysis
+    : 'all';
 
-        return (
-          <TabsContent key={analysis.key} value={analysis.key} className="space-y-3">
-            <p className="text-xs text-slate-500">
-              {analysis.description} Selecting a run includes all its analyses.
-            </p>
-            {!groups.length &&
-            analysis.key !== 'all' &&
-            sources.some((source) => source.runs.length) ? (
-              <p role="status" className="text-sm text-slate-500">
-                No runs have indexed{' '}
-                {analysis.key === 'climatology' ? 'climatology' : 'time-series'} years. Check All
-                for other runs.
+  useEffect(() => {
+    if (requestedAnalysis === activeAnalysis) return;
+    setLocalAnalysis(activeAnalysis);
+    onAnalysisChange?.(activeAnalysis);
+  }, [requestedAnalysis, activeAnalysis, onAnalysisChange]);
+
+  useEffect(() => {
+    if (requestedTool === activeTool) return;
+    setLocalTool(activeTool);
+    onToolChange?.(activeTool);
+  }, [requestedTool, activeTool, onToolChange]);
+
+  return (
+    <div className="min-w-0 max-w-3xl space-y-2">
+      <div className="space-y-2">
+        {sources.map((source, index) => (
+          <section
+            key={source.rootUrl}
+            id={`${id}-source-${index}`}
+            tabIndex={-1}
+            className="scroll-mt-20 rounded focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {/* Preserve existing resource shortcuts and bookmarked tool-group anchors. */}
+            {[...new Set(source.runs.map(runGroup))].map((group) => (
+              <span
+                key={group}
+                id={`${id}-source-${index}-${group}`}
+                tabIndex={-1}
+                role="group"
+                aria-label={`${RUN_GROUPS.find((item) => item.key === group)?.title ?? group} in ${source.label || 'diagnostics directory'}; runs grouped by period below`}
+                className="block scroll-mt-20 rounded focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            ))}
+            <a
+              href={source.rootUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={source.rootUrl}
+              className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-slate-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                {source.label || 'Browse diagnostics directory'}
+              </span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+            {source.error ? (
+              <p className="text-sm text-amber-800">
+                {source.error === 'url_not_allowed'
+                  ? 'This directory is not on a supported public diagnostics server.'
+                  : 'This directory could not be read. Browse the original output or try again.'}
               </p>
             ) : null}
-            {groups.map(([period, runs], index) => (
+            {source.partial ? (
+              <p className="text-xs text-amber-700">
+                Run discovery is incomplete. Open the directory or retry to check for missing runs.
+              </p>
+            ) : null}
+          </section>
+        ))}
+      </div>
+      <div
+        role="group"
+        aria-label="Filter diagnostics by tool"
+        className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-lg bg-muted p-1"
+      >
+        {tools.map((tool) => (
+          <Button
+            key={tool.key}
+            type="button"
+            variant={activeTool === tool.key ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            aria-pressed={activeTool === tool.key}
+            disabled={tool.key !== 'all' && !tool.count}
+            onClick={() => {
+              setLocalTool(tool.key);
+              onToolChange?.(tool.key);
+            }}
+          >
+            {tool.label} <span>({tool.count})</span>
+          </Button>
+        ))}
+      </div>
+      <Tabs
+        value={activeAnalysis}
+        onValueChange={(value) => {
+          setLocalAnalysis(value as DiagnosticAnalysis);
+          onAnalysisChange?.(value as DiagnosticAnalysis);
+        }}
+      >
+        <TabsList
+          aria-label="Filter diagnostics by analysis"
+          className="grid w-full max-w-sm grid-cols-3"
+        >
+          {filters.map((analysis) => (
+            <TabsTrigger
+              key={analysis.key}
+              value={analysis.key}
+              disabled={analysis.key !== 'all' && !analysis.groups.length}
+              className="gap-1 px-2 text-xs"
+            >
+              {analysis.label}{' '}
+              <span>({analysis.groups.reduce((count, [, runs]) => count + runs.length, 0)})</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {filters.map((analysis) => (
+          <TabsContent key={analysis.key} value={analysis.key} className="space-y-3">
+            {analysis.groups.map(([period, runs], index) => (
               <section key={period} aria-labelledby={`${id}-${analysis.key}-period-${index}`}>
                 <h4
                   id={`${id}-${analysis.key}-period-${index}`}
-                  className="mb-1.5 flex items-center gap-2 border-b pb-1.5 text-sm font-semibold text-slate-900"
+                  className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-slate-900"
                 >
                   {period}
                   <span className="text-xs font-normal text-slate-500">{runs.length} runs</span>
@@ -128,11 +201,11 @@ export const DiagnosticRunList = ({ sources, id, ...actions }: DiagnosticRunList
               </section>
             ))}
           </TabsContent>
-        );
-      })}
-    </Tabs>
-  </div>
-);
+        ))}
+      </Tabs>
+    </div>
+  );
+};
 
 const DiagnosticRunRow = ({
   run,
@@ -155,19 +228,19 @@ const DiagnosticRunRow = ({
   return (
     <li
       className={cn(
-        'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-2 text-sm',
+        'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 text-sm',
         selected ? 'border-slate-400 bg-slate-50' : 'border-slate-200 bg-white',
       )}
     >
       <div className="min-w-0 flex-1 basis-48">
-        <p className="font-medium text-slate-900">{title}</p>
+        <p className="text-xs font-medium text-slate-900">{title}</p>
         <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
           {tool} · <span>{identifier}</span>
         </p>
         {combinedPeriods ? <p className="text-xs text-slate-500">{combinedPeriods}</p> : null}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+        <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
           <a
             href={run.url}
             target="_blank"
@@ -182,7 +255,7 @@ const DiagnosticRunRow = ({
           type="button"
           variant={selected ? 'secondary' : 'outline'}
           size="sm"
-          className="h-8 w-20 px-2"
+          className="h-7 w-[4.5rem] px-2 text-xs"
           aria-pressed={selected}
           aria-label={`${selected ? 'Remove' : 'Add'} ${label}`}
           onClick={() => (selected ? onRemove(run.url) : onAdd(run))}

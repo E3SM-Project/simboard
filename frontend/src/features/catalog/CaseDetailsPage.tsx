@@ -1566,6 +1566,16 @@ export const CaseDetailsPage = ({
         </details>
       ) : null}
 
+      {renderDiagnostics && caseRecord.links.some((link) => link.kind === 'diagnostic')
+        ? renderDiagnostics({
+            caseId: caseRecord.id,
+            caseName: caseRecord.name,
+            directories: caseRecord.links
+              .filter((link) => link.kind === 'diagnostic')
+              .map(({ url, label }) => ({ url, label: label ?? null })),
+          })
+        : null}
+
       <section>
         <MetadataHistory
           entries={history.data}
@@ -1579,16 +1589,6 @@ export const CaseDetailsPage = ({
           onOpenChange={setIsHistoryOpen}
         />
       </section>
-
-      {renderDiagnostics && caseRecord.links.some((link) => link.kind === 'diagnostic')
-        ? renderDiagnostics({
-            caseId: caseRecord.id,
-            caseName: caseRecord.name,
-            directories: caseRecord.links
-              .filter((link) => link.kind === 'diagnostic')
-              .map(({ url, label }) => ({ url, label: label ?? null })),
-          })
-        : null}
     </div>
   );
 };
