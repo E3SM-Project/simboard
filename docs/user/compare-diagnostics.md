@@ -34,7 +34,8 @@ may be unavailable; retry discovery rather than treating those cases as empty.
 **Add by URL** accepts E3SM Diags `.../viewer/` pages and MPAS-Analysis run
 directories, with optional labels. It also opens the examples shipped with
 IICE. Both tabs share one selection list. **Import tray selections** explicitly
-adds staged case runs; opening a shared link never imports them automatically.
+adds one selected diagnostic kind; opening a shared link never imports staged
+runs automatically.
 
 In an active comparison, **Edit runs** adds, removes, or replaces runs without
 leaving the viewer. **Apply changes** updates the comparison; **Cancel** keeps

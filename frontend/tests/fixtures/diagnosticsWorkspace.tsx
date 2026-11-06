@@ -121,7 +121,9 @@ api.defaults.adapter = async (config) => {
       runs: body.runs.map((item: { url: string; label: string }) => ({
         ...item,
         tool: 'e3sm_diags',
-        imageBaseUrl: composite ? '/__diagnostics/image/' : '/missing-images/',
+        imageBaseUrl: composite
+          ? `/__diagnostics/image/${encodeURIComponent(item.url)}/`
+          : '/missing-images/',
         error: item.url.includes('/unreadable/') ? 'archive_unavailable' : null,
         partial: false,
       })),
@@ -148,8 +150,10 @@ api.defaults.adapter = async (config) => {
             paths: body.runs.map((run: { url: string }) =>
               run.url.includes('/unreadable/') ? null : 'plot.png',
             ),
-            references: body.runs.map((_: unknown, index: number) =>
-              composite && index ? 'Reference model' : 'Observations',
+            references: body.runs.map((item: { url: string }, index: number) =>
+              composite && index && !item.url.includes('/composite-same-')
+                ? 'Reference model'
+                : 'Observations',
             ),
           })),
         })),
@@ -558,7 +562,10 @@ async function testViewer() {
   );
   input(filter, '');
   await new Promise((resolve) => setTimeout(resolve, 10));
-  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+  const variableButton = document.querySelector<HTMLButtonElement>('aside button')!;
+  click(variableButton, 'select variable before keyboard stepping');
+  variableButton.focus();
+  variableButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   await waitFor(() => latest.includes('precipitation'), 'variable keyboard stepping');
   const restored = latest;
   localStorage.setItem(
@@ -585,6 +592,79 @@ async function testViewer() {
   check(
     document.documentElement.scrollWidth <= window.innerWidth + 1,
     'Viewer has no mobile overflow',
+  );
+  render(
+    comparePath([
+      { url: url('composite-same-one'), label: 'First period' },
+      { url: url('composite-same-two'), label: 'Second period' },
+    ]),
+  );
+  await waitFor(
+    () =>
+      document.querySelectorAll('figure').length === 4 &&
+      document.querySelector('figure')?.textContent?.includes('First period'),
+    'same-name references retain distinct published images',
+  );
+  check(
+    [...document.querySelectorAll('figcaption')].filter((caption) =>
+      caption.textContent?.startsWith('Reference · Observations'),
+    ).length === 2,
+    'No reference equivalence inferred from names',
+  );
+  const overrides = [
+    { url: `${base}/shared/mpas_analysis/ts_1-10/`, label: '!Case A' },
+    { url: `${base}/shared/mpas_analysis/ts_1-10/`, label: '!Case B' },
+  ];
+  render(comparePath(overrides));
+  await waitFor(
+    () =>
+      document.querySelectorAll('figure').length === 2 &&
+      document.querySelector('figure')?.textContent?.includes('Case A'),
+    'same directory with IICE overrides',
+  );
+  click(button('Edit runs'), 'edit IICE overrides');
+  await waitFor(() => document.querySelector('[role="dialog"]'), 'override editor');
+  click(button('Apply changes'), 'apply distinct same-directory overrides');
+  await waitFor(() => !document.querySelector('[role="dialog"]'), 'override edits accepted');
+  check(
+    parseCompareState(new URLSearchParams(latest.split('?')[1])).runs[1].label === '!Case B',
+    'IICE override remains in shared URL',
+  );
+
+  const staged = [
+    {
+      url: url('staged-one'),
+      label: 'unused',
+      caseId: 'one',
+      caseName: 'Staged one',
+      period: '0001-0050',
+      tool: 'e3sm_diags',
+      comparison: 'model_vs_obs',
+    },
+    {
+      url: `${base}/mpas/mpas_analysis/ts_1-10/`,
+      caseId: 'mpas',
+      caseName: 'Staged MPAS',
+      period: '0001-0010',
+      tool: 'mpas_analysis',
+      comparison: null,
+    },
+  ];
+  localStorage.setItem('simboard.diagnostics-comparison', JSON.stringify(staged));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(
+    () => document.querySelector('[aria-label="Tray group to import"]'),
+    'explicit tray group',
+  );
+  click(button('Import tray selections'), 'import one kind');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (1/'),
+    'grouped import selection',
+  );
+  check(
+    !document.querySelector('[aria-label="Selected runs"]')?.textContent?.includes('Staged MPAS'),
+    'Import does not silently mix diagnostic kinds',
   );
 }
 

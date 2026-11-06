@@ -999,7 +999,10 @@ export const CaseDetailsPage = ({
                     {resourceLinks.map((link) => (
                       <div key={link.id} className="flex min-w-0 max-w-full flex-wrap items-center">
                         {renderResourceLink(link)}
-                        {renderDiagnosticsResource?.({ caseId: caseRecord.id, url: link.url })}
+                        {renderDiagnostics &&
+                        caseRecord.links.some((resource) => resource.kind === 'diagnostic')
+                          ? renderDiagnosticsResource?.({ caseId: caseRecord.id, url: link.url })
+                          : null}
                       </div>
                     ))}
                   </div>
