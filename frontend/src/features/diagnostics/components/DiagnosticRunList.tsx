@@ -54,17 +54,8 @@ export const DiagnosticRunList = ({
 }: DiagnosticRunListProps) => {
   const [localAnalysis, setLocalAnalysis] = useState<DiagnosticAnalysis>('all');
   const [localTool, setLocalTool] = useState<DiagnosticToolFilter>('all');
-  const tools = TOOLS.map((tool) => ({
-    ...tool,
-    count: periodGroups(sources, 'all', tool.key).reduce(
-      (count, [, runs]) => count + runs.length,
-      0,
-    ),
-  }));
   const requestedTool = selectedTool ?? localTool;
-  const activeTool = tools.find((tool) => tool.key === requestedTool)?.count
-    ? requestedTool
-    : 'all';
+  const activeTool = periodGroups(sources, 'all', requestedTool).length ? requestedTool : 'all';
   const filters = ANALYSES.map((analysis) => ({
     ...analysis,
     groups: periodGroups(sources, analysis.key, activeTool),
@@ -74,6 +65,13 @@ export const DiagnosticRunList = ({
     .length
     ? requestedAnalysis
     : 'all';
+  const tools = TOOLS.map((tool) => ({
+    ...tool,
+    count: periodGroups(sources, activeAnalysis, tool.key).reduce(
+      (count, [, runs]) => count + runs.length,
+      0,
+    ),
+  }));
 
   useEffect(() => {
     if (requestedAnalysis === activeAnalysis) return;
@@ -86,6 +84,29 @@ export const DiagnosticRunList = ({
     setLocalTool(activeTool);
     onToolChange?.(activeTool);
   }, [requestedTool, activeTool, onToolChange]);
+
+  const groupedRuns = (
+    <div className="space-y-3">
+      {filters
+        .find((analysis) => analysis.key === activeAnalysis)
+        ?.groups.map(([period, runs], index) => (
+          <section key={period} aria-labelledby={`${id}-${activeAnalysis}-period-${index}`}>
+            <h4
+              id={`${id}-${activeAnalysis}-period-${index}`}
+              className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-slate-900"
+            >
+              {period}
+              <span className="text-xs font-normal text-slate-500">{runs.length} runs</span>
+            </h4>
+            <ul className="space-y-1">
+              {runs.map((run) => (
+                <DiagnosticRunRow key={run.url} run={run} {...actions} />
+              ))}
+            </ul>
+          </section>
+        ))}
+    </div>
+  );
 
   return (
     <div className="min-w-0 max-w-3xl space-y-2">
@@ -136,28 +157,38 @@ export const DiagnosticRunList = ({
           </section>
         ))}
       </div>
-      <div
-        role="group"
-        aria-label="Filter diagnostics by tool"
-        className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-lg bg-muted p-1"
-      >
-        {tools.map((tool) => (
-          <Button
-            key={tool.key}
-            type="button"
-            variant={activeTool === tool.key ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            aria-pressed={activeTool === tool.key}
-            disabled={tool.key !== 'all' && !tool.count}
-            onClick={() => {
-              setLocalTool(tool.key);
-              onToolChange?.(tool.key);
-            }}
-          >
-            {tool.label} <span>({tool.count})</span>
-          </Button>
-        ))}
+      <div className="space-y-1">
+        <p id={`${id}-tool-label`} className="text-xs font-medium text-muted-foreground">
+          Tool
+        </p>
+        <div
+          role="group"
+          aria-label="Filter diagnostics by tool"
+          aria-labelledby={`${id}-tool-label`}
+          className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-lg bg-muted p-1"
+        >
+          {tools.map((tool) => (
+            <Button
+              key={tool.key}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'h-7 gap-1 px-2 text-xs',
+                activeTool === tool.key &&
+                  'bg-background text-foreground shadow hover:bg-background',
+              )}
+              aria-pressed={activeTool === tool.key}
+              disabled={tool.key !== 'all' && !tool.count}
+              onClick={() => {
+                setLocalTool(tool.key);
+                onToolChange?.(tool.key);
+              }}
+            >
+              {tool.label} <span>({tool.count})</span>
+            </Button>
+          ))}
+        </div>
       </div>
       <Tabs
         value={activeAnalysis}
@@ -166,8 +197,12 @@ export const DiagnosticRunList = ({
           onAnalysisChange?.(value as DiagnosticAnalysis);
         }}
       >
+        <p id={`${id}-analysis-label`} className="mb-1 text-xs font-medium text-muted-foreground">
+          Analysis
+        </p>
         <TabsList
           aria-label="Filter diagnostics by analysis"
+          aria-labelledby={`${id}-analysis-label`}
           className="grid w-full max-w-sm grid-cols-3"
         >
           {filters.map((analysis) => (
@@ -182,26 +217,7 @@ export const DiagnosticRunList = ({
             </TabsTrigger>
           ))}
         </TabsList>
-        {filters.map((analysis) => (
-          <TabsContent key={analysis.key} value={analysis.key} className="space-y-3">
-            {analysis.groups.map(([period, runs], index) => (
-              <section key={period} aria-labelledby={`${id}-${analysis.key}-period-${index}`}>
-                <h4
-                  id={`${id}-${analysis.key}-period-${index}`}
-                  className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-slate-900"
-                >
-                  {period}
-                  <span className="text-xs font-normal text-slate-500">{runs.length} runs</span>
-                </h4>
-                <ul className="space-y-1">
-                  {runs.map((run) => (
-                    <DiagnosticRunRow key={run.url} run={run} {...actions} />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </TabsContent>
-        ))}
+        <TabsContent value={activeAnalysis}>{groupedRuns}</TabsContent>
       </Tabs>
     </div>
   );

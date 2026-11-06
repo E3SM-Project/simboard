@@ -859,8 +859,9 @@ async function testAnalysisFilters() {
     'beta selected with filter',
   );
   check(
-    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
-    'Analysis filter persists between cases',
+    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true' &&
+      toolButton('MPAS-Analysis')?.disabled,
+    'Single-tool case retains available analysis and disables missing tool',
   );
   click(
     document.querySelector<HTMLButtonElement>(
@@ -872,28 +873,15 @@ async function testAnalysisFilters() {
     () => document.body.textContent?.includes('Selected runs (2/'),
     'mixed selections retained',
   );
-  check(analysisTab('Time Series')?.disabled, 'Case with no indexed time series disables filter');
   check(
-    analysisTab('Time Series')?.textContent === 'Time Series (0)',
-    'Unavailable filter stays visible with zero count',
-  );
-  click(analysisTab('Time Series'), 'disabled time-series filter');
-  check(
-    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
-    'Disabled filter cannot activate',
-  );
-  analysisTab('Climatology')!.focus();
-  analysisTab('Climatology')!.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
-  );
-  await waitFor(
-    () => analysisTab('All')?.getAttribute('aria-selected') === 'true',
-    'Keyboard navigation skips disabled filter',
+    analysisTab('Time Series')?.disabled &&
+      analysisTab('Time Series')?.textContent === 'Time Series (0)',
+    'Unavailable analysis stays visible with zero count',
   );
   click(button('case.metadata · 4 runs'), 'return to mixed analyses');
   await waitFor(
-    () => !analysisTab('Time Series')?.disabled,
-    'Time Series enables for supported case',
+    () => analysisTab('Time Series') && !analysisTab('Time Series')!.disabled,
+    'Time Series returns for a mixed-analysis case',
   );
   click(analysisTab('Time Series'), 'activate available time-series filter');
   await waitFor(
@@ -902,10 +890,12 @@ async function testAnalysisFilters() {
   );
   click(button('case.beta · 2 runs'), 'switch to unavailable active filter');
   await waitFor(
-    () => analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    () =>
+      analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).analysis === 'all',
     'Unavailable active filter falls back to All',
   );
-  check(analysisTab('Time Series')?.disabled, 'Fallback leaves unavailable filter disabled');
+  check(analysisTab('Time Series')?.disabled, 'Fallback disables unavailable analysis');
   check(
     document.body.textContent?.includes('Selected runs (2/'),
     'Automatic fallback never removes selections',
@@ -944,14 +934,16 @@ async function testAnalysisFilters() {
     'Empty diagnostics stay collapsed',
   );
   click(button('Diagnostics (0)0 supported runs'), 'expand empty diagnostics');
-  await waitFor(() => analysisTab('Time Series'), 'empty diagnostics filters');
-  check(
-    analysisTab('Time Series')?.disabled && analysisTab('Climatology')?.disabled,
-    'Empty case disables both diagnostic types',
+  await waitFor(
+    () => button('Diagnostics (0)0 supported runs')?.getAttribute('aria-expanded') === 'true',
+    'empty diagnostics expanded',
   );
   check(
-    !analysisTab('All')?.disabled && analysisTab('All')?.getAttribute('aria-selected') === 'true',
-    'All remains available as empty-case fallback',
+    analysisTab('All')?.textContent === 'All (0)' &&
+      toolButton('All')?.textContent === 'All (0)' &&
+      analysisTab('Time Series')?.disabled &&
+      toolButton('MPAS-Analysis')?.disabled,
+    'Empty case keeps both labeled rows with disabled zero-count options',
   );
   check(
     !document.body.textContent?.includes('Check All for other runs.'),
@@ -977,27 +969,46 @@ async function testAnalysisFilters() {
   });
   await waitFor(
     () =>
-      analysisTab('Time Series')?.disabled &&
-      analysisTab('All')?.getAttribute('aria-selected') === 'true',
+      analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      toolButton('All')?.getAttribute('aria-pressed') === 'true' &&
+      document.querySelectorAll('a[aria-label^="Open "]').length === 1,
     'Case Details falls back when data changes',
   );
-  check(
-    analysisTab('Climatology')?.textContent === 'Climatology (1)',
-    'Counts update with diagnostic data',
-  );
   client.setQueryData(['diagnostics', 'case-runs', 'metadata'], original);
+  await waitFor(
+    () => analysisTab('All')?.getAttribute('aria-selected') === 'true',
+    'Restored data keeps reset All analysis',
+  );
 }
 
 async function testToolFilters() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/case/ranges');
-  await waitFor(() => toolButton('All')?.textContent === 'All (4)', 'unique case tool counts');
+  await waitFor(
+    () =>
+      document.querySelector('h1')?.textContent === 'Case ranges' &&
+      toolButton('All')?.textContent === 'All (4)',
+    'unique case tool counts',
+  );
   check(toolButton('E3SM Diags')?.textContent === 'E3SM Diags (1)', 'Case E3SM count');
   check(
     toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (3)',
     'Case MPAS count deduplicates sources',
   );
+  check(
+    document.querySelector('[id$="-tool-label"]')?.textContent === 'Tool' &&
+      document.querySelector('[id$="-analysis-label"]')?.textContent === 'Analysis',
+    'Both filter rows have subtle hierarchy labels',
+  );
+  for (const kind of ['tool', 'analysis']) {
+    const controls = document.querySelector(`[aria-label="Filter diagnostics by ${kind}"]`)!;
+    check(
+      document.getElementById(controls.getAttribute('aria-labelledby')!)?.textContent ===
+        (kind === 'tool' ? 'Tool' : 'Analysis'),
+      'Visible labels name their filter controls',
+    );
+  }
   const combinedUrl = `${base}/ranges/mpas_analysis/ts_0001-0100_climo_0051-0100/`;
   const combined = document
     .querySelector<HTMLAnchorElement>(`a[href="${combinedUrl}"]`)!
@@ -1025,6 +1036,28 @@ async function testToolFilters() {
     ),
     'Missing metadata stays unknown despite identifier years',
   );
+  click(toolButton('E3SM Diags'), 'filter single-analysis tool');
+  await waitFor(
+    () => document.querySelectorAll('a[aria-label^="Open "]').length === 1,
+    'E3SM-only subset',
+  );
+  check(
+    toolButton('All') &&
+      analysisTab('Time Series')?.disabled &&
+      analysisTab('All')?.textContent === 'All (1)',
+    'Selected tool updates analysis counts and disables missing analysis',
+  );
+  check(
+    getComputedStyle(toolButton('E3SM Diags')!).backgroundColor !==
+      getComputedStyle(toolButton('All')!).backgroundColor &&
+      getComputedStyle(toolButton('E3SM Diags')!).boxShadow !== 'none',
+    'Active Tool filter has distinct background and shadow',
+  );
+  check(
+    document.querySelector('[id$="-tool-label"]')?.textContent === 'Tool' &&
+      document.querySelector('[id$="-analysis-label"]')?.textContent === 'Analysis',
+    'Both filter labels remain visible',
+  );
   click(toolButton('MPAS-Analysis'), 'filter case MPAS runs');
   await waitFor(
     () => document.querySelectorAll('a[aria-label^="Open "]').length === 3,
@@ -1050,6 +1083,32 @@ async function testToolFilters() {
     () => document.querySelector('button[aria-label^="Remove MPAS"]'),
     'filtered MPAS selected',
   );
+  check(
+    toolButton('E3SM Diags')?.disabled &&
+      toolButton('E3SM Diags')?.textContent === 'E3SM Diags (0)',
+    'Time Series disables tools with no matching runs',
+  );
+  check(
+    toolButton('All')?.textContent === 'All (2)' &&
+      toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (2)',
+    'Tool counts follow selected analysis without duplicates',
+  );
+  click(analysisTab('All'), 'clear analysis before switching tool');
+  await waitFor(() => !toolButton('E3SM Diags')?.disabled, 'All analysis enables E3SM tool');
+  click(toolButton('E3SM Diags'), 'switch to available tool');
+  await waitFor(
+    () =>
+      analysisTab('All')?.textContent === 'All (1)' &&
+      document.querySelectorAll('a[aria-label^="Open "]').length === 1,
+    'Tool change updates analysis counts',
+  );
+  click(toolButton('MPAS-Analysis'), 'restore MPAS after analysis reset');
+  await waitFor(
+    () =>
+      analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      document.querySelectorAll('a[aria-label^="Open "]').length === 3,
+    'Tool switch keeps All analysis and includes unknown ranges',
+  );
   click(analysisTab('All'), 'show all MPAS analyses');
   click(toolButton('All'), 'show all tools');
   await waitFor(
@@ -1071,13 +1130,53 @@ async function testToolFilters() {
   });
   await waitFor(
     () =>
+      toolButton('All')?.getAttribute('aria-pressed') === 'true' &&
       toolButton('MPAS-Analysis')?.disabled &&
-      toolButton('All')?.getAttribute('aria-pressed') === 'true',
+      document.querySelectorAll('a[aria-label^="Open "]').length === 1,
     'Missing active tool falls back to All on case data update',
   );
+  const combinedRun = {
+    ...run('ranges', 51, 100),
+    tool: 'mpas_analysis',
+    comparison: null,
+    subsection: null,
+    tsStartYear: 1,
+    tsEndYear: 100,
+    url: combinedUrl,
+  };
+  client.setQueryData(['diagnostics', 'case-runs', 'ranges'], {
+    caseId: 'ranges',
+    caseName: 'case.ranges',
+    sources: [
+      { rootUrl: `${base}/ranges/`, runs: [combinedRun, combinedRun], error: null, partial: false },
+    ],
+  });
+  await waitFor(
+    () =>
+      toolButton('All')?.textContent === 'All (1)' &&
+      analysisTab('All')?.textContent === 'All (1)' &&
+      analysisTab('Time Series')?.textContent === 'Time Series (1)',
+    'One combined MPAS run keeps unique counts in both filter rows',
+  );
   check(
-    toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (0)',
-    'Zero-count tool stays visible and disabled',
+    analysisTab('Climatology')?.textContent === 'Climatology (1)' &&
+      analysisTab('Time Series')?.textContent === 'Time Series (1)',
+    'Combined analyses count one unique run each',
+  );
+  check(
+    toolButton('E3SM Diags')?.disabled &&
+      document.querySelector('[id$="-tool-label"]')?.textContent === 'Tool',
+    'Single-tool case keeps Tool label and disables unavailable tool',
+  );
+  click(analysisTab('Time Series'), 'filter single combined MPAS run');
+  await waitFor(
+    () => analysisTab('Time Series')?.getAttribute('aria-selected') === 'true',
+    'single MPAS time-series filter active',
+  );
+  check(
+    document.querySelectorAll(`a[href="${combinedUrl}"]`).length === 1 &&
+      document.querySelector('h4')?.textContent?.startsWith('0051–0100'),
+    'Single combined MPAS run keeps unique climatology-first grouping',
   );
   client.setQueryData(['diagnostics', 'case-runs', 'ranges'], original);
   click(link('Diagnostics workspace'), 'workspace tool filters');
@@ -1087,6 +1186,11 @@ async function testToolFilters() {
   );
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'ranges');
   await waitFor(() => toolButton('All')?.textContent === 'All (4)', 'workspace unique tool counts');
+  check(
+    document.querySelector('[id$="-tool-label"]')?.textContent === 'Tool' &&
+      document.querySelector('[id$="-analysis-label"]')?.textContent === 'Analysis',
+    'Workspace uses same labeled filter hierarchy',
+  );
   click(toolButton('MPAS-Analysis'), 'workspace MPAS filter');
   click(analysisTab('Time Series'), 'workspace MPAS time-series filter');
   await waitFor(
@@ -1119,13 +1223,15 @@ async function testToolFilters() {
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'beta');
   await waitFor(
     () =>
-      toolButton('MPAS-Analysis')?.disabled &&
-      toolButton('All')?.getAttribute('aria-pressed') === 'true',
+      document.querySelector('#available-case-diagnostics')?.getAttribute('aria-label') ===
+        'Diagnostics for case.beta' &&
+      toolButton('All')?.getAttribute('aria-pressed') === 'true' &&
+      analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).tool === 'all',
     'Workspace switches unavailable tool to All for next case',
   );
   check(
-    analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
-      analysisTab('Time Series')?.disabled,
+    JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).analysis === 'all',
     'Unavailable analysis also resets with case switch',
   );
 }
@@ -1411,7 +1517,6 @@ async function testUnifiedSelections() {
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'analysis');
   await waitFor(() => button('case.metadata · 4 runs'), 'persistent search setup');
   click(button('case.beta · 2 runs'), 'choose beta');
-  click(analysisTab('Climatology'), 'set persistent analysis filter');
   await waitFor(
     () => document.querySelector('#available-case-diagnostics button[aria-label^="Add E3SM"]'),
     'beta diagnostics',
@@ -1467,8 +1572,9 @@ async function testUnifiedSelections() {
     'Selected case survives navigation',
   );
   check(
-    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
-    'Analysis filter survives navigation',
+    analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).analysis === 'all',
+    'Single-analysis case keeps All filter across navigation',
   );
   click(
     document.querySelector<HTMLButtonElement>(
@@ -1490,8 +1596,9 @@ async function testUnifiedSelections() {
   );
   check(document.body.textContent?.includes('Selected runs (2/'), 'Selections survive refresh');
   check(
-    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
-    'Analysis filter survives refresh',
+    analysisTab('All')?.getAttribute('aria-selected') === 'true' &&
+      JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).analysis === 'all',
+    'Single-analysis case keeps All filter across refresh',
   );
   check(
     !document.body.textContent?.includes('supported cases found in checked results'),
@@ -1882,6 +1989,94 @@ async function testExampleRetryAndGroupSwitch() {
   );
 }
 
+async function testSelectionScrollStability() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  const container = document.getElementById('root')!;
+  container.style.paddingTop = '900px';
+  container.style.paddingBottom = '900px';
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+  const toggleWithoutJump = async (row: HTMLButtonElement, panel: HTMLElement, label: string) => {
+    row.scrollIntoView({ block: 'center' });
+    row.focus();
+    await settle();
+    const pageTop = window.scrollY;
+    const panelTop = panel.scrollTop;
+    const rowTop = row.getBoundingClientRect().top;
+    const wasAdded = row.getAttribute('aria-pressed');
+    click(row, label);
+    await waitFor(() => row.getAttribute('aria-pressed') !== wasAdded, label);
+    await settle();
+    check(document.activeElement === row, `${label} retains row focus`);
+    check(
+      Math.abs(window.scrollY - pageTop) <= 1,
+      `${label} keeps page scroll: ${pageTop} to ${window.scrollY}`,
+    );
+    check(
+      Math.abs(panel.scrollTop - panelTop) <= 1,
+      `${label} keeps diagnostic scroll: ${panelTop} to ${panel.scrollTop}`,
+    );
+    check(
+      Math.abs(row.getBoundingClientRect().top - rowTop) <= 1,
+      `${label} keeps row position: ${rowTop} to ${row.getBoundingClientRect().top}`,
+    );
+  };
+  try {
+    render('/case/dense-0');
+    await waitFor(() => button('Diagnostics (30)30 supported runs'), 'scrolling case setup');
+    const card = document.getElementById('diagnostics-dense-0')!;
+    const panel = card.querySelector<HTMLElement>('.overflow-y-auto')!;
+    const row = card.querySelectorAll<HTMLButtonElement>('li button[aria-pressed]')[12];
+    await toggleWithoutJump(row, panel, 'Case Add');
+    const paddingChanges: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => paddingChanges.push(...records));
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style'],
+      attributeOldValue: true,
+    });
+    try {
+      const secondRow = card.querySelectorAll<HTMLButtonElement>('li button[aria-pressed]')[13];
+      await toggleWithoutJump(secondRow, panel, 'Case Add with existing tray');
+      await toggleWithoutJump(secondRow, panel, 'Case Added with existing tray');
+      check(
+        paddingChanges.every((record) => record.oldValue?.includes('padding-bottom')),
+        'Changing selection count never clears existing tray padding',
+      );
+    } finally {
+      observer.disconnect();
+    }
+    await toggleWithoutJump(row, panel, 'Case Added');
+    click(link('Diagnostics workspace'), 'scrolling workspace setup');
+    await waitFor(
+      () => document.getElementById('diagnostic-case-search'),
+      'scrolling case browser',
+    );
+    input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'dense');
+    await waitFor(
+      () =>
+        document.querySelectorAll('#available-case-diagnostics li button[aria-pressed]').length ===
+        30,
+      'dense workspace runs',
+    );
+    const available = document.getElementById('available-case-diagnostics')!;
+    const workspacePanel = available.lastElementChild as HTMLElement;
+    const workspaceRow =
+      available.querySelectorAll<HTMLButtonElement>('li button[aria-pressed]')[12];
+    await toggleWithoutJump(workspaceRow, workspacePanel, 'Workspace Add');
+    await expandSelections();
+    await toggleWithoutJump(
+      workspaceRow,
+      workspacePanel,
+      'Workspace Added with expanded selections',
+    );
+  } finally {
+    container.style.paddingTop = '';
+    container.style.paddingBottom = '';
+    window.scrollTo(0, 0);
+  }
+}
+
 async function testDenseBrowser() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
@@ -1992,6 +2187,7 @@ testWorkspace()
   .then(testDiscoveryWarnings)
   .then(testCompatibilityValidation)
   .then(testExampleRetryAndGroupSwitch)
+  .then(testSelectionScrollStability)
   .then(testDenseBrowser)
   .then(() => {
     const output = document.createElement('output');

@@ -36,6 +36,7 @@ export const ComparisonBar = () => {
   const [selectedGroup, setSelectedGroup] = useState('');
   const { pathname } = useLocation();
   const inWorkspace = pathname === '/diagnostics' || pathname === '/diagnostics/compare';
+  const visible = entries.length > 0 && !inWorkspace;
   const barRef = useRef<HTMLDivElement | null>(null);
 
   // The bar is fixed to the viewport; pad the page so it never hides content.
@@ -50,7 +51,7 @@ export const ComparisonBar = () => {
       observer.disconnect();
       document.body.style.paddingBottom = '';
     };
-  }, [entries.length, inWorkspace]);
+  }, [visible]);
 
   const groups = useMemo(() => {
     const byKey = new Map<string, BasketEntry[]>();
